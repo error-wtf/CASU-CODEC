@@ -8,8 +8,8 @@ from .core import LinoCodecError, analyze, play
 
 
 def parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="casu", description="Casu Codec: conservative legacy-compatible MP4/MP3 segmented-state layer")
-    p.add_argument("--version", action="version", version="Casu Codec 0.1.0")
+    p = argparse.ArgumentParser(prog="casu", description="Casu — Codec All Segmented Unity: legacy-compatible MP4/MP3 segmented-state layer")
+    p.add_argument("--version", action="version", version="Casu Codec All Segmented Unity 0.1.0")
     sub = p.add_subparsers(dest="command", required=True)
     a = sub.add_parser("analyze", help="write an SSC-compatible temporal-state sidecar")
     a.add_argument("input", type=Path)

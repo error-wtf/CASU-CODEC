@@ -166,7 +166,7 @@ def analyze(path: Path, analysis_fps: float = 10.0) -> dict[str, Any]:
     probe = ffprobe(path)
     fmt = probe.get("format", {})
     return {
-        "casu": {"name": "Casu Codec", "short_name": "Casu", "sidecar_extension": ".casu", "version": __version__,
+        "casu": {"name": "Casu Codec", "acronym": "Codec All Segmented Unity", "short_name": "Casu", "sidecar_extension": ".casu", "version": __version__,
                         "compatibility": "legacy media remains canonical; sidecar is optional"},
         "source": {"filename": path.name, "path": str(path), "size_bytes": path.stat().st_size,
                    "format_name": fmt.get("format_name"), "duration_s": duration(probe)},

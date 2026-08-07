@@ -1,6 +1,11 @@
 # Casu Codec
 
-**Casu** is a conservative, legacy-compatible segmented-state media layer. The `.casu` sidecar name is a Sardinian “cheese” reference: a compact, memorable media companion format, not a replacement for the original MP4/MP3 stream. The future VLC-/Winamp-inspired player built on this codec will be called **MPCASU**.
+**Casu** means **Codec All Segmented Unity** in this project. It is also the
+author's surname, making the name both personal provenance and a technical
+acronym. Casu is a conservative, legacy-compatible segmented-state media
+layer. The `.casu` sidecar is a compact media companion format, not a
+replacement for the original MP4/MP3 stream. The future VLC-/Winamp-inspired
+player built on this codec will be called **MPCASU**.
 It accepts ordinary MP4 and MP3 files, keeps the original media as the source of
 truth, and adds an optional temporal-state sidecar for future schedulers,
 compositors and segmented displays.

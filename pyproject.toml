@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "casu-codec"
 version = "0.1.0"
-description = "Casu: conservative legacy-compatible segmented-state media layer for MP4 and MP3"
+description = "Casu (Codec All Segmented Unity): legacy-compatible segmented-state media layer for MP4 and MP3"
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.24"]
 
