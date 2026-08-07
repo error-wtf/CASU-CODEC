@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from casu.core import CasuError, analyze, resolve_casu_source
+from casu.core import CasuError, analyze, resolve_casu_source, rle
+from casu.schema import validate_manifest
 
 
 VIDEO = Path(os.environ.get("CASU_TEST_VIDEO", "test_media/lino_lol_test_pattern.mp4"))
@@ -32,6 +33,21 @@ def test_manifest_json_roundtrip(tmp_path):
     target = tmp_path / "state.json"
     target.write_text(json.dumps(payload), encoding="utf-8")
     assert json.loads(target.read_text(encoding="utf-8")) == payload
+
+
+def test_rle_clamps_final_partial_interval_to_source_duration():
+    segments = rle(["active", "active", "silence"], 0.2, end_s=0.5)
+    assert segments[-1]["end_s"] == 0.5
+    assert segments[-1]["duration_s"] == 0.1
+
+
+def test_manifest_rejects_non_hex_digest():
+    manifest = {
+        "casu": {"name": "CASU", "container_extension": ".casu"},
+        "source": {"filename": "sample.mp4", "duration_s": 1, "sha256": "z" * 64},
+        "integrity": {"timestamps_are_source_of_truth": True},
+    }
+    assert any("hex digest" in error for error in validate_manifest(manifest))
 
 
 @pytest.mark.skipif(not VIDEO.exists() or not shutil.which("ffmpeg"), reason="test video/ffmpeg unavailable")

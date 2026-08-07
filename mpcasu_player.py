@@ -10,7 +10,6 @@ from __future__ import annotations
 import signal
 import subprocess
 import sys
-import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -182,6 +181,7 @@ class MPCASUPlayer(tk.Tk):
             return
         self.stop()
         self.process = subprocess.Popen(["ffplay", "-hide_banner", "-autoexit", "-ss", f"{offset:.3f}", "-window_title", "MPCASU — " + source.name, str(source)], text=True)
+        self._paused = False
 
     def _poll(self):
         if self.process and self.process.poll() is not None:
