@@ -5,6 +5,16 @@ preserves the author's surname and is the `.casu` container/sidecar identity.
 CASU is a conservative, legacy-compatible segmented-state codec/container, not
 a replacement for the original MP4/MP3 stream. **MPCASU** is reserved for the
 future VLC-/Winamp-inspired media player built on CASU.
+
+The core abstraction is:
+
+\[
+\boxed{\text{State}+\text{Segment}+\text{Change}+\text{Timing}}
+\]
+
+rather than treating a media stream as only `Frame + Frame + Frame`. The
+legacy decoded stream remains authoritative; CASU records where a state holds,
+what changed and which source timestamps govern presentation.
 It accepts ordinary MP4 and MP3 files, keeps the original media as the source of
 truth, and adds an optional temporal-state sidecar for future schedulers,
 compositors and segmented displays.
@@ -68,6 +78,7 @@ reproducible rather than silently committed.
    the legacy path is independently validated.
 
 See [`docs/FORMAT_SPEC.md`](docs/FORMAT_SPEC.md),
+[`docs/CASU_FORMAT_SPEC.md`](docs/CASU_FORMAT_SPEC.md),
 [`docs/LEGACY_MEDIA_REQUIREMENTS.md`](docs/LEGACY_MEDIA_REQUIREMENTS.md) and
 [`docs/DEVELOPMENT_PATH.md`](docs/DEVELOPMENT_PATH.md).
 
