@@ -8,8 +8,8 @@ from .core import CasuError, analyze, play
 
 
 def parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="mpc", description="MPCASU (MPC) — Codec All Segmented Unity: legacy-compatible MP4/MP3 segmented-state layer")
-    p.add_argument("--version", action="version", version="MPCASU (MPC) 0.1.0")
+    p = argparse.ArgumentParser(prog="casu", description="CASU — Codec for All Segmented Units: legacy-compatible MP4/MP3 segmented-state layer")
+    p.add_argument("--version", action="version", version="CASU Codec for All Segmented Units 0.1.0")
     sub = p.add_subparsers(dest="command", required=True)
     a = sub.add_parser("analyze", help="write an SSC-compatible temporal-state sidecar")
     a.add_argument("input", type=Path)

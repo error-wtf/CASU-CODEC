@@ -1,9 +1,10 @@
-# MPCASU (MPC)
+# CASU Codec / Container
 
-**MPCASU (MPC)** means **Codec All Segmented Unity** in this project. “Casu”
-also preserves the author's surname and is the `.casu` container/sidecar
-identity. MPCASU is a conservative, legacy-compatible segmented-state media
-layer, not a replacement for the original MP4/MP3 stream.
+**CASU** means **Codec for All Segmented Units** in this project. “Casu” also
+preserves the author's surname and is the `.casu` container/sidecar identity.
+CASU is a conservative, legacy-compatible segmented-state codec/container, not
+a replacement for the original MP4/MP3 stream. **MPCASU** is reserved for the
+future VLC-/Winamp-inspired media player built on CASU.
 It accepts ordinary MP4 and MP3 files, keeps the original media as the source of
 truth, and adds an optional temporal-state sidecar for future schedulers,
 compositors and segmented displays.
@@ -17,12 +18,13 @@ are copied into `docs/` for provenance and are not modified.
 
 ```bash
 python3 -m pip install -e .
-mpc analyze /path/to/movie.mp4
-mpc analyze /path/to/song.mp3
-mpc play /path/to/movie.mp4
-mpc play /path/to/song.mp3
+casu analyze /path/to/movie.mp4
+casu analyze /path/to/song.mp3
+casu play /path/to/movie.mp4
+casu play /path/to/song.mp3
 
-The historical `casu` command remains an equivalent compatibility alias.
+The `mpc` command remains a compatibility alias while the future MPCASU player
+is developed separately.
 ```
 
 `play` delegates to FFplay and does not transcode, retimestamp, stretch, or

@@ -5,13 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "casu-codec"
 version = "0.1.0"
-description = "MPCASU (MPC): Codec All Segmented Unity, a legacy-compatible segmented-state media layer for MP4 and MP3"
+description = "CASU (Codec for All Segmented Units): legacy-compatible segmented-state codec/container for MP4 and MP3"
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.24"]
 
 [project.scripts]
-mpc = "casu.cli:main"
 casu = "casu.cli:main"
+mpc = "casu.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["casu*"]
