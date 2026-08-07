@@ -22,6 +22,8 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
         errors.append("casu.name must be CASU")
     if identity.get("container_extension") != ".casu":
         errors.append("casu.container_extension must be .casu")
+    if identity.get("analysis_mode") is not None and identity.get("analysis_mode") not in {"strict", "visually_lossless", "adaptive"}:
+        errors.append("casu.analysis_mode is not a supported CASU mode")
     source = manifest.get("source") or {}
     if not isinstance(source.get("filename"), str) or not source.get("filename"):
         errors.append("source.filename must be a non-empty string")
@@ -72,6 +74,13 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
             previous_end = max(previous_end, end)
             if not segment.get("state"):
                 errors.append(f"{media_key}.segments[{index}] lacks state")
+            for timing_key in ("valid_until_s", "deadline_s"):
+                if timing_key in segment:
+                    try:
+                        if abs(float(segment[timing_key]) - end) > 1e-5:
+                            errors.append(f"{media_key}.segments[{index}].{timing_key} must equal end_s")
+                    except (TypeError, ValueError):
+                        errors.append(f"{media_key}.segments[{index}].{timing_key} must be numeric")
     integrity = manifest.get("integrity") or {}
     if integrity.get("timestamps_are_source_of_truth") is not True:
         errors.append("integrity.timestamps_are_source_of_truth must be true")

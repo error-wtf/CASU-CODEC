@@ -35,7 +35,14 @@ casu play /path/to/movie.mp4
 casu play /path/to/song.mp3
 casu play movie.casu
 casu validate movie.casu
+casu validate --verify-source movie.casu
 ```
+
+Conversion supports three explicit analysis policies:
+`--mode strict` (the reference/default policy), `--mode visually_lossless`, and
+`--mode adaptive`. All three remain advisory state analyses; only `strict`
+is suitable for reference comparisons, and none permits a decoder to alter
+source timestamps or claim pixel identity without a separate comparison.
 
 The `mpc` command remains a compatibility alias while the future MPCASU player
 is developed separately.
@@ -73,7 +80,11 @@ continues normally. `analyze` decodes a small inspection stream and writes
 
 The current analyzer uses decoded luma activity for video and decoded PCM RMS
 windows for audio. These are conservative temporal hints, not perceptual truth
-and not a replacement for the source timestamps.
+and not a replacement for the source timestamps. Each segment records
+`start_s`, `end_s`, `valid_until_s`, `deadline_s`, `priority` and `change_type`,
+so a future scheduler has explicit timing data and never has to infer a
+deadline from a frame rate. `casu validate --verify-source` additionally
+resolves the recorded media and checks its SHA-256 digest.
 
 ## Test video
 

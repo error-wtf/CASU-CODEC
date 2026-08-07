@@ -16,6 +16,9 @@ class CasuError(RuntimeError):
     pass
 
 
+ANALYSIS_MODES = frozenset({"strict", "visually_lossless", "adaptive"})
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as source_file:
@@ -100,15 +103,23 @@ def rle(states: list[str], step: float, end_s: float | None = None) -> list[dict
     if end_s is not None and result:
         result[-1]["end_s"] = round(min(result[-1]["end_s"], end_s), 6)
         result[-1]["duration_s"] = round(max(0.0, result[-1]["end_s"] - result[-1]["start_s"]), 6)
+        result[-1]["valid_until_s"] = result[-1]["end_s"]
+        result[-1]["deadline_s"] = result[-1]["end_s"]
     return result
 
 
 def _interval(start: int, end: int, state: str, step: float) -> dict[str, Any]:
+    start_s = round(start * step, 6)
+    end_s = round(end * step, 6)
     return {
-        "start_s": round(start * step, 6),
-        "end_s": round(end * step, 6),
-        "duration_s": round((end - start) * step, 6),
+        "start_s": start_s,
+        "end_s": end_s,
+        "duration_s": round(end_s - start_s, 6),
         "state": state,
+        "valid_until_s": end_s,
+        "deadline_s": end_s,
+        "priority": 0,
+        "change_type": "state_change" if start else "initial_state",
     }
 
 
@@ -197,7 +208,9 @@ def analyze_audio(path: Path, probe: dict[str, Any], sample_rate: int = 16000,
     }
 
 
-def analyze(path: Path, analysis_fps: float = 10.0) -> dict[str, Any]:
+def analyze(path: Path, analysis_fps: float = 10.0, mode: str = "strict") -> dict[str, Any]:
+    if mode not in ANALYSIS_MODES:
+        raise CasuError(f"unknown analysis mode: {mode}; choose one of {sorted(ANALYSIS_MODES)}")
     path = path.expanduser().resolve()
     if not path.is_file():
         raise CasuError(f"input not found: {path}")
@@ -207,7 +220,7 @@ def analyze(path: Path, analysis_fps: float = 10.0) -> dict[str, Any]:
     digest = sha256_file(path)
     return {
         "format": {"magic": "MPCASU\\0", "kind": "CASU sidecar manifest", "schema": "0.2"},
-        "casu": {"name": "CASU", "acronym": "Codec for All Segmented Units", "short_name": "CASU", "container_extension": ".casu", "version": __version__,
+        "casu": {"name": "CASU", "acronym": "Codec for All Segmented Units", "short_name": "CASU", "container_extension": ".casu", "version": __version__, "analysis_mode": mode,
                         "compatibility": "legacy media remains canonical; sidecar is optional"},
         "source": {"filename": path.name, "path": str(path), "size_bytes": stat.st_size,
                    "sha256": digest,
@@ -216,7 +229,7 @@ def analyze(path: Path, analysis_fps: float = 10.0) -> dict[str, Any]:
                     for item in probe.get("streams", [])],
         "video": analyze_video(path, probe, analysis_fps=analysis_fps),
         "audio": analyze_audio(path, probe),
-        "integrity": {"timestamps_are_source_of_truth": True, "optimization_is_hint_only": True,
+        "integrity": {"timestamps_are_source_of_truth": True, "optimization_is_hint_only": True, "mode_is_not_quality_proof": True,
                       "fallback": "full-frame/full-fidelity legacy playback"},
     }
 

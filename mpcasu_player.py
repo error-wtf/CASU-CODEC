@@ -14,7 +14,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from casu.core import CasuError, resolve_casu_source
+from casu.core import CasuError, require_tool, resolve_casu_source
 from casu.schema import validate_manifest
 
 
@@ -116,8 +116,22 @@ class MPCASUPlayer(tk.Tk):
         sidecar = path if path.suffix.lower() == ".casu" else self._sidecar(path)
         state = "CASU manifest selected" if path.suffix.lower() == ".casu" else ("CASU sidecar found" if sidecar.exists() else "legacy fallback — no CASU sidecar")
         self.status.set(f"{path.name} · {state}")
-        self.process = subprocess.Popen(["ffplay", "-hide_banner", "-autoexit", "-window_title", "MPCASU — " + source.name, str(source)], text=True)
+        try:
+            self.process = self._launch(source)
+        except (CasuError, OSError) as exc:
+            self.process = None
+            self.status.set("Cannot play — FFplay could not be started")
+            messagebox.showerror("MPCASU", f"Could not start FFplay: {exc}")
+            return
         self._paused = False
+
+    def _launch(self, source: Path, offset: float | None = None) -> subprocess.Popen[str]:
+        require_tool("ffplay")
+        command = ["ffplay", "-hide_banner", "-autoexit"]
+        if offset is not None:
+            command.extend(["-ss", f"{offset:.3f}"])
+        command.extend(["-window_title", "MPCASU — " + source.name, str(source)])
+        return subprocess.Popen(command, text=True)
 
     def _source_for(self, path: Path) -> Path:
         if path.suffix.lower() != ".casu":
@@ -180,7 +194,11 @@ class MPCASUPlayer(tk.Tk):
             self.status.set(str(exc))
             return
         self.stop()
-        self.process = subprocess.Popen(["ffplay", "-hide_banner", "-autoexit", "-ss", f"{offset:.3f}", "-window_title", "MPCASU — " + source.name, str(source)], text=True)
+        try:
+            self.process = self._launch(source, offset)
+        except (CasuError, OSError) as exc:
+            self.status.set(f"Cannot seek — FFplay could not be started: {exc}")
+            return
         self._paused = False
 
     def _poll(self):

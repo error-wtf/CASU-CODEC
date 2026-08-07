@@ -6,7 +6,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from .core import CasuError, analyze, play
+from .core import ANALYSIS_MODES, CasuError, analyze, play, resolve_casu_source
 from .schema import validate_manifest
 
 
@@ -18,16 +18,22 @@ def parser() -> argparse.ArgumentParser:
     a.add_argument("input", type=Path)
     a.add_argument("-o", "--output", type=Path)
     a.add_argument("--analysis-fps", type=float, default=10.0)
+    a.add_argument("--mode", choices=sorted(ANALYSIS_MODES), default="strict",
+                   help="state-analysis policy; strict is the reference mode")
     c = sub.add_parser("convert", help="convert legacy media to a CASU manifest without changing the source")
     c.add_argument("input", type=Path)
     c.add_argument("-o", "--output", type=Path)
     c.add_argument("--analysis-fps", type=float, default=10.0)
+    c.add_argument("--mode", choices=sorted(ANALYSIS_MODES), default="strict",
+                   help="state-analysis policy; strict is the reference mode")
     c.add_argument("--force", action="store_true", help="replace an existing output atomically")
     v = sub.add_parser("play", help="play legacy media through FFplay without changing it")
     v.add_argument("input", type=Path)
     v.add_argument("ffplay_args", nargs=argparse.REMAINDER)
     x = sub.add_parser("validate", help="validate a .casu manifest")
     x.add_argument("manifest", type=Path)
+    x.add_argument("--verify-source", action="store_true",
+                   help="also resolve the recorded source and verify its SHA-256 digest")
     return p
 
 
@@ -37,7 +43,7 @@ def main() -> int:
         if args.command in {"analyze", "convert"}:
             if args.analysis_fps <= 0:
                 raise CasuError("analysis FPS must be positive")
-            result = analyze(args.input, args.analysis_fps)
+            result = analyze(args.input, args.analysis_fps, args.mode)
             output = args.output or args.input.with_suffix(args.input.suffix + ".casu")
             output = output.expanduser().resolve()
             output.parent.mkdir(parents=True, exist_ok=True)
@@ -56,7 +62,8 @@ def main() -> int:
                     os.unlink(temporary)
             print(json.dumps({"manifest": str(output), "duration_s": result["source"]["duration_s"],
                               "video_segments": len(result["video"].get("segments", [])),
-                              "audio_segments": len(result["audio"].get("segments", []))}, indent=2))
+                              "audio_segments": len(result["audio"].get("segments", [])),
+                              "mode": result["casu"]["analysis_mode"]}, indent=2))
             return 0
         if args.command == "play":
             play(args.input, args.ffplay_args)
@@ -68,6 +75,13 @@ def main() -> int:
                 for error in errors:
                     print(f"INVALID: {error}")
                 return 1
+            if args.verify_source:
+                try:
+                    source = resolve_casu_source(args.manifest)
+                except CasuError as exc:
+                    print(f"INVALID: {exc}")
+                    return 1
+                print(f"VERIFIED source: {source}")
             print(f"VALID CASU manifest: {args.manifest}")
             return 0
         raise CasuError("unknown command")
