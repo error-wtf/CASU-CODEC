@@ -11,14 +11,14 @@ import numpy as np
 from . import __version__
 
 
-class LinoCodecError(RuntimeError):
+class CasuError(RuntimeError):
     pass
 
 
 def require_tool(name: str) -> str:
     value = shutil.which(name)
     if not value:
-        raise LinoCodecError(f"required tool not found: {name}")
+        raise CasuError(f"required tool not found: {name}")
     return value
 
 
@@ -31,7 +31,7 @@ def run(command: list[str], *, capture: bool = False) -> subprocess.CompletedPro
         )
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or "").strip() if capture else str(exc)
-        raise LinoCodecError(detail) from exc
+        raise CasuError(detail) from exc
 
 
 def ffprobe(path: Path) -> dict[str, Any]:
@@ -88,7 +88,7 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
     ]
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if process.stdout is None:
-        raise LinoCodecError("could not open FFmpeg video output")
+        raise CasuError("could not open FFmpeg video output")
     size = width * height
     previous = None
     deltas: list[float] = []
@@ -105,7 +105,7 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
         previous = frame
     error = process.stderr.read().decode("utf-8", errors="replace") if process.stderr else ""
     if process.wait() != 0:
-        raise LinoCodecError(f"video analysis failed: {error.strip()}")
+        raise CasuError(f"video analysis failed: {error.strip()}")
     total = max(1, len(states))
     counts = {name: states.count(name) for name in ("static", "low_motion", "motion")}
     return {
@@ -135,7 +135,7 @@ def analyze_audio(path: Path, probe: dict[str, Any], sample_rate: int = 16000,
     try:
         result = subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     except subprocess.CalledProcessError as exc:
-        raise LinoCodecError(f"audio analysis failed: {exc.stderr.decode(errors='replace').strip()}") from exc
+        raise CasuError(f"audio analysis failed: {exc.stderr.decode(errors='replace').strip()}") from exc
     samples = np.frombuffer(result.stdout, dtype=np.float32)
     window = max(1, int(sample_rate * window_ms / 1000))
     count = len(samples) // window
@@ -162,7 +162,7 @@ def analyze_audio(path: Path, probe: dict[str, Any], sample_rate: int = 16000,
 def analyze(path: Path, analysis_fps: float = 10.0) -> dict[str, Any]:
     path = path.expanduser().resolve()
     if not path.is_file():
-        raise LinoCodecError(f"input not found: {path}")
+        raise CasuError(f"input not found: {path}")
     probe = ffprobe(path)
     fmt = probe.get("format", {})
     return {
@@ -183,5 +183,5 @@ def play(path: Path, extra: list[str] | None = None) -> None:
     require_tool("ffplay")
     path = path.expanduser().resolve()
     if not path.is_file():
-        raise LinoCodecError(f"media not found: {path}")
+        raise CasuError(f"media not found: {path}")
     run(["ffplay", "-autoexit", "-hide_banner", *(extra or []), str(path)])

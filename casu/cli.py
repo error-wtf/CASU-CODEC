@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from .core import LinoCodecError, analyze, play
+from .core import CasuError, analyze, play
 
 
 def parser() -> argparse.ArgumentParser:
@@ -26,7 +26,7 @@ def main() -> int:
     try:
         if args.command == "analyze":
             if args.analysis_fps <= 0:
-                raise LinoCodecError("analysis FPS must be positive")
+                raise CasuError("analysis FPS must be positive")
             result = analyze(args.input, args.analysis_fps)
             output = args.output or args.input.with_suffix(args.input.suffix + ".casu")
             output = output.expanduser().resolve()
@@ -39,8 +39,8 @@ def main() -> int:
         if args.command == "play":
             play(args.input, args.ffplay_args)
             return 0
-        raise LinoCodecError("unknown command")
-    except LinoCodecError as exc:
+        raise CasuError("unknown command")
+    except CasuError as exc:
         print(f"casu: error: {exc}")
         return 2
 
