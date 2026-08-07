@@ -221,6 +221,8 @@ def analyze(path: Path, analysis_fps: float = 10.0, mode: str = "strict") -> dic
     path = path.expanduser().resolve()
     if not path.is_file():
         raise CasuError(f"input not found: {path}")
+    if path.suffix.lower() == ".casu":
+        raise CasuError("input is already a CASU manifest; convert the original MP4/MP3 media instead")
     probe = ffprobe(path)
     fmt = probe.get("format", {})
     stat = path.stat()

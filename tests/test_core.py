@@ -56,6 +56,13 @@ def test_manifest_validator_fails_closed_for_malformed_shapes(value):
     assert errors
 
 
+def test_converter_rejects_nested_casu_input(tmp_path):
+    source = tmp_path / "already.casu"
+    source.write_text("{}", encoding="utf-8")
+    with pytest.raises(CasuError, match="already a CASU manifest"):
+        analyze(source)
+
+
 @pytest.mark.skipif(not VIDEO.exists() or not shutil.which("ffmpeg"), reason="test video/ffmpeg unavailable")
 def test_casu_manifest_resolves_original_media(tmp_path):
     manifest = analyze(VIDEO, analysis_fps=1.0)
