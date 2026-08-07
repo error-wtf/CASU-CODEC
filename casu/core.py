@@ -87,7 +87,7 @@ def duration(probe: dict[str, Any]) -> float:
         return 0.0
 
 
-def rle(states: list[str], step: float) -> list[dict[str, Any]]:
+def rle(states: list[str], step: float, end_s: float | None = None) -> list[dict[str, Any]]:
     if not states:
         return []
     result: list[dict[str, Any]] = []
@@ -97,6 +97,9 @@ def rle(states: list[str], step: float) -> list[dict[str, Any]]:
             result.append(_interval(start, index, current, step))
             start, current = index, state
     result.append(_interval(start, len(states), current, step))
+    if end_s is not None and result:
+        result[-1]["end_s"] = round(min(result[-1]["end_s"], end_s), 6)
+        result[-1]["duration_s"] = round(max(0.0, result[-1]["end_s"] - result[-1]["start_s"]), 6)
     return result
 
 
@@ -153,7 +156,7 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
         "activity_ratio": {key: round(value / total, 6) for key, value in counts.items()},
         "mean_frame_delta": round(float(np.mean(deltas)) if deltas else 0.0, 8),
         "p95_frame_delta": round(float(np.percentile(deltas, 95)) if deltas else 0.0, 8),
-        "segments": rle(states, 1.0 / analysis_fps),
+        "segments": rle(states, 1.0 / analysis_fps, duration(probe)),
         "state_is_hint_only": True,
     }
 
@@ -171,10 +174,12 @@ def analyze_audio(path: Path, probe: dict[str, Any], sample_rate: int = 16000,
         raise CasuError(f"audio analysis failed: {exc.stderr.decode(errors='replace').strip()}") from exc
     samples = np.frombuffer(result.stdout, dtype=np.float32)
     window = max(1, int(sample_rate * window_ms / 1000))
-    count = len(samples) // window
+    count = (len(samples) + window - 1) // window
     if not count:
         return {"source_codec": audio.get("codec_name"), "segments": []}
-    samples = samples[:count * window].reshape(count, window)
+    padded = np.zeros(count * window, dtype=np.float32)
+    padded[:len(samples)] = samples
+    samples = padded.reshape(count, window)
     db = 20.0 * np.log10(np.sqrt(np.mean(samples * samples, axis=1) + 1e-12) + 1e-12)
     states = np.where(db < -55.0, "silence", np.where(db < -38.0, "low_level", "active")).tolist()
     counts = {name: states.count(name) for name in ("silence", "low_level", "active")}
@@ -187,7 +192,7 @@ def analyze_audio(path: Path, probe: dict[str, Any], sample_rate: int = 16000,
         "sample_windows": count,
         "activity_ratio": {key: round(value / total, 6) for key, value in counts.items()},
         "mean_dbfs": round(float(np.mean(db)), 3),
-        "segments": rle(states, window_ms / 1000),
+        "segments": rle(states, window_ms / 1000, duration(probe)),
         "state_is_hint_only": True,
     }
 
