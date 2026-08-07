@@ -21,3 +21,8 @@ The clean-room boundary is intentional: MPCASU may learn from general player
 concepts such as playlists, transport controls, skins and library views, but
 all CASU integration, manifest validation, source-resolution and fallback code
 is authored independently in this repository.
+
+The built-in visualizer is an explanatory decoded-activity animation. It is
+not presented as a waveform, a perceptual-quality score or an energy-saving
+measurement. CASU state labels remain hints, while FFmpeg/FFplay remains the
+canonical full-fidelity playback path.

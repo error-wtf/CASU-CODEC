@@ -11,6 +11,8 @@ import signal
 import subprocess
 import sys
 import time
+import json
+import math
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -36,6 +38,8 @@ class MPCASUPlayer(tk.Tk):
         self._paused = False
         self._started_at = 0.0
         self._start_offset = 0.0
+        self._visual_phase = 0.0
+        self._visual_state = "idle"
         self._build()
         if initial:
             self.add_files([initial])
@@ -60,7 +64,9 @@ class MPCASUPlayer(tk.Tk):
         self.canvas = tk.Canvas(right, background="#101418", highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
         self.canvas.create_text(20, 20, anchor="nw", text="MPCASU", fill="#d8e7f3", font=("TkDefaultFont", 24, "bold"), tags="title")
-        self.canvas.create_text(20, 58, anchor="nw", text="Decoding is delegated to FFmpeg/FFplay; CASU controls state and provenance.", fill="#9eb2c2", tags="subtitle")
+        self.canvas.create_text(20, 58, anchor="nw", text="FFmpeg decoding · CASU state/provenance · legacy-safe playback", fill="#9eb2c2", tags="subtitle")
+        self.canvas.create_text(20, 92, anchor="nw", text="Visualizer · decoded activity hint (not a waveform or quality meter)", fill="#6f91a6", tags="viz-label")
+        self.canvas.bind("<Configure>", lambda _event: self._draw_visualizer())
         self.timeline = ttk.Scale(right, from_=0, to=1, variable=self.position, command=self.seek_preview)
         self.timeline.pack(fill="x", pady=(10, 0))
         self.timeline.bind("<ButtonPress-1>", lambda _event: setattr(self, "_dragging", True))
@@ -77,6 +83,7 @@ class MPCASUPlayer(tk.Tk):
         self.bind("<Left>", lambda _event: self.seek_by(-10))
         self.bind("<Right>", lambda _event: self.seek_by(10))
         self.after(500, self._poll)
+        self.after(50, self._visual_tick)
 
     def add_dialog(self):
         paths = filedialog.askopenfilenames(filetypes=[("Media", " ".join(f"*{x}" for x in sorted(MEDIA))), ("All files", "*.*")])
@@ -86,6 +93,44 @@ class MPCASUPlayer(tk.Tk):
         for path in paths:
             if path.exists() and path.suffix.lower() in MEDIA and str(path) not in self.library.get(0, "end"):
                 self.library.insert("end", str(path))
+
+    def _load_visual_state(self, path: Path):
+        self._visual_state = "legacy"
+        if path.suffix.lower() != ".casu":
+            return
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            self._visual_state = "CASU state map" if manifest.get("video", {}).get("segments") or manifest.get("audio", {}).get("segments") else "CASU empty map"
+        except (OSError, ValueError, TypeError):
+            self._visual_state = "invalid CASU"
+
+    def _draw_visualizer(self):
+        width = max(120, self.canvas.winfo_width())
+        height = max(160, self.canvas.winfo_height())
+        self.canvas.delete("viz")
+        baseline = height - 54
+        bars = 32
+        gap = 4
+        bar_width = max(3, (width - 40 - gap * (bars - 1)) / bars)
+        for index in range(bars):
+            wave = 0.5 + 0.5 * math.sin(self._visual_phase + index * 0.43)
+            envelope = 0.25 + 0.75 * wave
+            if self._visual_state.startswith("CASU"):
+                envelope *= 0.9
+            bar_height = 12 + envelope * min(150, height * 0.34)
+            x0 = 20 + index * (bar_width + gap)
+            self.canvas.create_rectangle(x0, baseline - bar_height, x0 + bar_width, baseline,
+                                         fill="#4aa3c7" if index % 3 else "#d3a84c",
+                                         outline="", tags="viz")
+        self.canvas.create_line(20, baseline, width - 20, baseline, fill="#29495a", tags="viz")
+        self.canvas.create_text(20, baseline + 14, anchor="nw", text=self._visual_state,
+                                fill="#8ca8b8", tags="viz")
+
+    def _visual_tick(self):
+        if self.process and not self._paused:
+            self._visual_phase += 0.16
+        self._draw_visualizer()
+        self.after(50, self._visual_tick)
 
     def remove_selected(self):
         selected = list(self.library.curselection())
@@ -108,6 +153,7 @@ class MPCASUPlayer(tk.Tk):
             return
         self.stop()
         self.current = path
+        self._load_visual_state(path)
         try:
             source = self._source_for(path)
         except CasuError as exc:
