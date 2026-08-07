@@ -16,8 +16,10 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+from casu.core import resolve_casu_source
 
-MEDIA = {".mp4", ".mp3", ".mkv", ".m4v", ".mov", ".flac", ".wav", ".ogg", ".webm"}
+
+MEDIA = {".mp4", ".mp3", ".mkv", ".m4v", ".mov", ".flac", ".wav", ".ogg", ".webm", ".casu"}
 
 
 class MPCASUPlayer(tk.Tk):
@@ -98,12 +100,16 @@ class MPCASUPlayer(tk.Tk):
             return
         self.stop()
         self.current = path
-        self.duration = self._probe_duration(path)
+        source = self._source_for(path)
+        self.duration = self._probe_duration(source)
         self.timeline.configure(to=max(self.duration, 1.0))
-        sidecar = self._sidecar(path)
-        state = "CASU sidecar found" if sidecar.exists() else "legacy fallback — no CASU sidecar"
+        sidecar = path if path.suffix.lower() == ".casu" else self._sidecar(path)
+        state = "CASU manifest selected" if path.suffix.lower() == ".casu" else ("CASU sidecar found" if sidecar.exists() else "legacy fallback — no CASU sidecar")
         self.status.set(f"{path.name} · {state}")
-        self.process = subprocess.Popen(["ffplay", "-hide_banner", "-autoexit", "-window_title", "MPCASU — " + path.name, str(path)], text=True)
+        self.process = subprocess.Popen(["ffplay", "-hide_banner", "-autoexit", "-window_title", "MPCASU — " + source.name, str(source)], text=True)
+
+    def _source_for(self, path: Path) -> Path:
+        return resolve_casu_source(path) if path.suffix.lower() == ".casu" else path
 
     def _probe_duration(self, path: Path) -> float:
         try:

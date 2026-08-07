@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from casu.core import analyze
+from casu.core import analyze, resolve_casu_source
 
 
 VIDEO = Path(os.environ.get("CASU_TEST_VIDEO", "test_media/lino_lol_test_pattern.mp4"))
@@ -32,6 +32,14 @@ def test_manifest_json_roundtrip(tmp_path):
     target = tmp_path / "state.json"
     target.write_text(json.dumps(payload), encoding="utf-8")
     assert json.loads(target.read_text(encoding="utf-8")) == payload
+
+
+@pytest.mark.skipif(not VIDEO.exists() or not shutil.which("ffmpeg"), reason="test video/ffmpeg unavailable")
+def test_casu_manifest_resolves_original_media(tmp_path):
+    manifest = analyze(VIDEO, analysis_fps=1.0)
+    sidecar = tmp_path / "video.casu"
+    sidecar.write_text(json.dumps(manifest), encoding="utf-8")
+    assert resolve_casu_source(sidecar) == VIDEO.resolve()
 
 
 @pytest.mark.skipif(not AUDIO.exists() or not shutil.which("ffmpeg"), reason="test audio/ffmpeg unavailable")

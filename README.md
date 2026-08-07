@@ -30,8 +30,12 @@ are copied into `docs/` for provenance and are not modified.
 python3 -m pip install -e .
 casu analyze /path/to/movie.mp4
 casu analyze /path/to/song.mp3
+casu convert /path/to/movie.mp4 --output movie.casu
 casu play /path/to/movie.mp4
 casu play /path/to/song.mp3
+casu play movie.casu
+casu validate movie.casu
+```
 
 The `mpc` command remains a compatibility alias while the future MPCASU player
 is developed separately.
@@ -51,7 +55,6 @@ The player is deliberately a separate application layer:
 ```text
 film.casu → CASU codec/container → MPCASU player → audio/video output
 legacy MP4/MP3/MKV ───────────────────────────────→ MPCASU fallback
-```
 ```
 
 `play` delegates to FFplay and does not transcode, retimestamp, stretch, or
@@ -96,12 +99,13 @@ reproducible rather than silently committed.
 
 See [`docs/FORMAT_SPEC.md`](docs/FORMAT_SPEC.md),
 [`docs/CASU_FORMAT_SPEC.md`](docs/CASU_FORMAT_SPEC.md),
+[`docs/CASU_CONVERTER.md`](docs/CASU_CONVERTER.md),
 [`docs/LEGACY_MEDIA_REQUIREMENTS.md`](docs/LEGACY_MEDIA_REQUIREMENTS.md) and
 [`docs/DEVELOPMENT_PATH.md`](docs/DEVELOPMENT_PATH.md).
 
 ## Status
 
-`PROTOTYPE · LEGACY PLAYBACK AND ANALYSIS SLICE · REVIEW OPEN`
+`PROTOTYPE · LEGACY PLAYBACK, CONVERSION AND ANALYSIS SLICE · REVIEW OPEN`
 
 This is a media-systems experiment. A passing analyzer test is not evidence of
 display-power savings or a physical claim about human perception.

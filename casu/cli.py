@@ -16,6 +16,10 @@ def parser() -> argparse.ArgumentParser:
     a.add_argument("input", type=Path)
     a.add_argument("-o", "--output", type=Path)
     a.add_argument("--analysis-fps", type=float, default=10.0)
+    c = sub.add_parser("convert", help="convert legacy media to a CASU manifest without changing the source")
+    c.add_argument("input", type=Path)
+    c.add_argument("-o", "--output", type=Path)
+    c.add_argument("--analysis-fps", type=float, default=10.0)
     v = sub.add_parser("play", help="play legacy media through FFplay without changing it")
     v.add_argument("input", type=Path)
     v.add_argument("ffplay_args", nargs=argparse.REMAINDER)
@@ -27,7 +31,7 @@ def parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = parser().parse_args()
     try:
-        if args.command == "analyze":
+        if args.command in {"analyze", "convert"}:
             if args.analysis_fps <= 0:
                 raise CasuError("analysis FPS must be positive")
             result = analyze(args.input, args.analysis_fps)

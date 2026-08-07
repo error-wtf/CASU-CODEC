@@ -13,6 +13,9 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
     if not isinstance(manifest, dict):
         return ["manifest must be an object"]
     identity = manifest.get("casu") or {}
+    format_info = manifest.get("format") or {}
+    if format_info and format_info.get("magic") not in (None, "MPCASU\\0"):
+        errors.append("format.magic must be MPCASU\\0 when present")
     if identity.get("name") != "CASU":
         errors.append("casu.name must be CASU")
     if identity.get("container_extension") != ".casu":
@@ -22,6 +25,10 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
         if key not in source:
             errors.append(f"source.{key} is required")
     duration = float(source.get("duration_s") or 0)
+    if source.get("size_bytes") is not None and float(source.get("size_bytes") or 0) < 0:
+        errors.append("source.size_bytes must be non-negative")
+    if source.get("sha256") is not None and (not isinstance(source.get("sha256"), str) or len(source["sha256"]) != 64):
+        errors.append("source.sha256 must be a 64-character hex digest when present")
     for media_key in ("video", "audio"):
         section = manifest.get(media_key) or {}
         for index, segment in enumerate(section.get("segments", [])):
@@ -38,4 +45,3 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
     if integrity.get("timestamps_are_source_of_truth") is not True:
         errors.append("integrity.timestamps_are_source_of_truth must be true")
     return errors
-
