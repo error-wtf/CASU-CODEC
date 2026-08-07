@@ -11,6 +11,9 @@ from casu.core import analyze
 VIDEO = Path(os.environ.get("CASU_TEST_VIDEO", "test_media/lino_lol_test_pattern.mp4"))
 if not VIDEO.is_absolute():
     VIDEO = Path(__file__).resolve().parents[1] / VIDEO
+AUDIO = Path(os.environ.get("CASU_TEST_AUDIO", "test_media/lino_casu_error.mp3"))
+if not AUDIO.is_absolute():
+    AUDIO = Path(__file__).resolve().parents[1] / AUDIO
 
 
 @pytest.mark.skipif(not VIDEO.exists() or not shutil.which("ffmpeg"), reason="test video/ffmpeg unavailable")
@@ -29,3 +32,12 @@ def test_manifest_json_roundtrip(tmp_path):
     target = tmp_path / "state.json"
     target.write_text(json.dumps(payload), encoding="utf-8")
     assert json.loads(target.read_text(encoding="utf-8")) == payload
+
+
+@pytest.mark.skipif(not AUDIO.exists() or not shutil.which("ffmpeg"), reason="test audio/ffmpeg unavailable")
+def test_reference_mp3_manifest_preserves_audio_stream():
+    manifest = analyze(AUDIO, analysis_fps=1.0)
+    assert manifest["source"]["duration_s"] > 270
+    assert any(item.get("codec_type") == "audio" and item.get("codec_name") == "mp3" for item in manifest["streams"])
+    assert manifest["audio"]["segments"]
+    assert manifest["integrity"]["timestamps_are_source_of_truth"] is True

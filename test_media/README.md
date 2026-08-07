@@ -20,3 +20,15 @@ yt-dlp -f 18 --merge-output-format mp4 \
 
 Override the test asset with `CASU_TEST_VIDEO=/path/to/file.mp4`.
 
+## Audio reference
+
+The MP3 fixture is copied from `/home/error/Musik/Lino Casu - ERROR.mp3`:
+
+- Local fixture: `lino_casu_error.mp3`
+- Codec: MP3, 48 kHz, stereo, approximately 183.752 kb/s
+- Duration: `276.639979` seconds
+- SHA-256: `21881d98108bf9038d8f9bb539cf94047e00dc0f2b28cf5d7849ce16886a99b4`
+- The file contains an embedded PNG cover-art stream; CASU analyses the MP3
+  audio stream and preserves the source metadata boundary.
+
+Override it with `CASU_TEST_AUDIO=/path/to/file.mp3`.
