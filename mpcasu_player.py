@@ -173,7 +173,8 @@ class MPCASUPlayer(tk.Tk):
             return
         self.stop()
         self.current = path
-        self._load_visual_state(path)
+        sidecar = path if path.suffix.lower() == ".casu" else self._sidecar(path)
+        self._load_visual_state(sidecar if sidecar.exists() else path)
         try:
             source = self._source_for(path)
         except CasuError as exc:
@@ -182,7 +183,6 @@ class MPCASUPlayer(tk.Tk):
             return
         self.duration = self._probe_duration(source)
         self.timeline.configure(to=max(self.duration, 1.0))
-        sidecar = path if path.suffix.lower() == ".casu" else self._sidecar(path)
         state = "CASU manifest selected" if path.suffix.lower() == ".casu" else ("CASU sidecar found" if sidecar.exists() else "legacy fallback — no CASU sidecar")
         self.status.set(f"{path.name} · {state}")
         try:
