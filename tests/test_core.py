@@ -74,6 +74,17 @@ def test_casu_manifest_rejects_changed_source_digest(tmp_path):
         resolve_casu_source(sidecar)
 
 
+@pytest.mark.skipif(not VIDEO.exists() or not shutil.which("ffmpeg"), reason="test video/ffmpeg unavailable")
+def test_casu_manifest_rejects_changed_source_size(tmp_path):
+    manifest = analyze(VIDEO, analysis_fps=1.0)
+    manifest["source"]["sha256"] = None
+    manifest["source"]["size_bytes"] += 1
+    sidecar = tmp_path / "changed-size.casu"
+    sidecar.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(CasuError, match="size mismatch"):
+        resolve_casu_source(sidecar)
+
+
 @pytest.mark.skipif(not AUDIO.exists() or not shutil.which("ffmpeg"), reason="test audio/ffmpeg unavailable")
 def test_reference_mp3_manifest_preserves_audio_stream():
     manifest = analyze(AUDIO, analysis_fps=1.0)

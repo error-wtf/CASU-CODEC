@@ -42,6 +42,13 @@ def resolve_casu_source(path: Path) -> Path:
             if not candidate.is_file():
                 raise CasuError(f"CASU source media not found: {path}")
             candidate = candidate.resolve()
+        expected_size = manifest.get("source", {}).get("size_bytes")
+        if expected_size is not None:
+            try:
+                if candidate.stat().st_size != int(expected_size):
+                    raise CasuError(f"CASU source size mismatch: {candidate}")
+            except (TypeError, ValueError):
+                raise CasuError(f"CASU source size is invalid: {path}")
         expected = manifest.get("source", {}).get("sha256")
         if expected and sha256_file(candidate) != expected:
             raise CasuError(f"CASU source integrity mismatch: {candidate}")
