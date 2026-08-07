@@ -100,6 +100,7 @@ reproducible rather than silently committed.
 See [`docs/FORMAT_SPEC.md`](docs/FORMAT_SPEC.md),
 [`docs/CASU_FORMAT_SPEC.md`](docs/CASU_FORMAT_SPEC.md),
 [`docs/CASU_CONVERTER.md`](docs/CASU_CONVERTER.md),
+[`docs/PLAYER_PROVENANCE.md`](docs/PLAYER_PROVENANCE.md),
 [`docs/LEGACY_MEDIA_REQUIREMENTS.md`](docs/LEGACY_MEDIA_REQUIREMENTS.md) and
 [`docs/DEVELOPMENT_PATH.md`](docs/DEVELOPMENT_PATH.md).
 

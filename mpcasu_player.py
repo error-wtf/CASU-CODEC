@@ -7,7 +7,6 @@ not reimplement mature MP4/MP3 decoders.
 """
 from __future__ import annotations
 
-import json
 import signal
 import subprocess
 import sys
@@ -16,7 +15,8 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from casu.core import resolve_casu_source
+from casu.core import CasuError, resolve_casu_source
+from casu.schema import validate_manifest
 
 
 MEDIA = {".mp4", ".mp3", ".mkv", ".m4v", ".mov", ".flac", ".wav", ".ogg", ".webm", ".casu"}
@@ -60,6 +60,8 @@ class MPCASUPlayer(tk.Tk):
         self.canvas.create_text(20, 58, anchor="nw", text="Decoding is delegated to FFmpeg/FFplay; CASU controls state and provenance.", fill="#9eb2c2", tags="subtitle")
         self.timeline = ttk.Scale(right, from_=0, to=1, variable=self.position, command=self.seek_preview)
         self.timeline.pack(fill="x", pady=(10, 0))
+        self.timeline.bind("<ButtonPress-1>", lambda _event: setattr(self, "_dragging", True))
+        self.timeline.bind("<ButtonRelease-1>", lambda _event: (setattr(self, "_dragging", False), self.seek_restart()))
         bar = ttk.Frame(right)
         bar.pack(fill="x", pady=8)
         ttk.Button(bar, text="Play", command=self.play_selected).pack(side="left")
@@ -68,6 +70,9 @@ class MPCASUPlayer(tk.Tk):
         ttk.Button(bar, text="−10 s", command=lambda: self.seek_by(-10)).pack(side="left", padx=(18, 2))
         ttk.Button(bar, text="+10 s", command=lambda: self.seek_by(10)).pack(side="left")
         ttk.Label(right, textvariable=self.status).pack(anchor="w")
+        self.bind("<space>", lambda _event: self.pause())
+        self.bind("<Left>", lambda _event: self.seek_by(-10))
+        self.bind("<Right>", lambda _event: self.seek_by(10))
         self.after(500, self._poll)
 
     def add_dialog(self):
@@ -100,7 +105,12 @@ class MPCASUPlayer(tk.Tk):
             return
         self.stop()
         self.current = path
-        source = self._source_for(path)
+        try:
+            source = self._source_for(path)
+        except CasuError as exc:
+            messagebox.showerror("MPCASU", str(exc))
+            self.status.set("Cannot play — safe fallback refused an invalid CASU manifest")
+            return
         self.duration = self._probe_duration(source)
         self.timeline.configure(to=max(self.duration, 1.0))
         sidecar = path if path.suffix.lower() == ".casu" else self._sidecar(path)
@@ -109,7 +119,18 @@ class MPCASUPlayer(tk.Tk):
         self.process = subprocess.Popen(["ffplay", "-hide_banner", "-autoexit", "-window_title", "MPCASU — " + source.name, str(source)], text=True)
 
     def _source_for(self, path: Path) -> Path:
-        return resolve_casu_source(path) if path.suffix.lower() == ".casu" else path
+        if path.suffix.lower() != ".casu":
+            return path
+        source = resolve_casu_source(path)
+        try:
+            import json
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            errors = validate_manifest(manifest)
+        except (OSError, ValueError, TypeError) as exc:
+            raise CasuError(f"invalid CASU manifest: {path}") from exc
+        if errors:
+            raise CasuError(f"invalid CASU manifest: {errors[0]}")
+        return source
 
     def _probe_duration(self, path: Path) -> float:
         try:
@@ -145,8 +166,13 @@ class MPCASUPlayer(tk.Tk):
             return
         path = self.current
         offset = self.position.get()
+        try:
+            source = self._source_for(path)
+        except CasuError as exc:
+            self.status.set(str(exc))
+            return
         self.stop()
-        self.process = subprocess.Popen(["ffplay", "-hide_banner", "-autoexit", "-ss", f"{offset:.3f}", "-window_title", "MPCASU — " + path.name, str(path)], text=True)
+        self.process = subprocess.Popen(["ffplay", "-hide_banner", "-autoexit", "-ss", f"{offset:.3f}", "-window_title", "MPCASU — " + source.name, str(source)], text=True)
 
     def _poll(self):
         if self.process and self.process.poll() is not None:
