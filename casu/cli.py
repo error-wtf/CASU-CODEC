@@ -8,8 +8,8 @@ from .core import LinoCodecError, analyze, play
 
 
 def parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="lino-codec", description="Conservative legacy-compatible MP4/MP3 segmented-state layer")
-    p.add_argument("--version", action="version", version="Lino Codec 0.1.0")
+    p = argparse.ArgumentParser(prog="casu", description="Casu Codec: conservative legacy-compatible MP4/MP3 segmented-state layer")
+    p.add_argument("--version", action="version", version="Casu Codec 0.1.0")
     sub = p.add_subparsers(dest="command", required=True)
     a = sub.add_parser("analyze", help="write an SSC-compatible temporal-state sidecar")
     a.add_argument("input", type=Path)
@@ -28,7 +28,7 @@ def main() -> int:
             if args.analysis_fps <= 0:
                 raise LinoCodecError("analysis FPS must be positive")
             result = analyze(args.input, args.analysis_fps)
-            output = args.output or args.input.with_suffix(args.input.suffix + ".lino.json")
+            output = args.output or args.input.with_suffix(args.input.suffix + ".casu")
             output = output.expanduser().resolve()
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -41,10 +41,9 @@ def main() -> int:
             return 0
         raise LinoCodecError("unknown command")
     except LinoCodecError as exc:
-        print(f"lino-codec: error: {exc}")
+        print(f"casu: error: {exc}")
         return 2
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

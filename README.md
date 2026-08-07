@@ -1,6 +1,6 @@
-# Lino Codec
+# Casu Codec
 
-Lino Codec is a conservative, legacy-compatible segmented-state media layer.
+**Casu** is a conservative, legacy-compatible segmented-state media layer. The `.casu` sidecar name is a Sardinian “cheese” reference: a compact, memorable media companion format, not a replacement for the original MP4/MP3 stream. The future VLC-/Winamp-inspired player built on this codec will be called **MPCASU**.
 It accepts ordinary MP4 and MP3 files, keeps the original media as the source of
 truth, and adds an optional temporal-state sidecar for future schedulers,
 compositors and segmented displays.
@@ -14,16 +14,16 @@ are copied into `docs/` for provenance and are not modified.
 
 ```bash
 python3 -m pip install -e .
-lino-codec analyze /path/to/movie.mp4
-lino-codec analyze /path/to/song.mp3
-lino-codec play /path/to/movie.mp4
-lino-codec play /path/to/song.mp3
+casu analyze /path/to/movie.mp4
+casu analyze /path/to/song.mp3
+casu play /path/to/movie.mp4
+casu play /path/to/song.mp3
 ```
 
 `play` delegates to FFplay and does not transcode, retimestamp, stretch, or
 otherwise modify the input. If a sidecar is missing or invalid, legacy playback
 continues normally. `analyze` decodes a small inspection stream and writes
-`movie.mp4.lino.json` or `song.mp3.lino.json`.
+`movie.mp4.casu` or `song.mp3.casu`.
 
 ## Compatibility contract
 
@@ -44,8 +44,8 @@ The supplied `/home/error/Videos/giancarlo.mp4` is the first validation asset.
 It is intentionally not copied into Git: run
 
 ```bash
-python3 -m lino_codec analyze /home/error/Videos/giancarlo.mp4 \
-  --output artifacts/giancarlo.mp4.lino.json
+python3 -m casu analyze /home/error/Videos/giancarlo.mp4 \
+  --output artifacts/giancarlo.mp4.casu
 ```
 
 The generated artifact is ignored by Git because media-derived caches should be
@@ -70,4 +70,3 @@ See [`docs/FORMAT_SPEC.md`](docs/FORMAT_SPEC.md),
 
 This is a media-systems experiment. A passing analyzer test is not evidence of
 display-power savings or a physical claim about human perception.
-

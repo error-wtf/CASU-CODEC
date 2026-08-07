@@ -5,5 +5,4 @@ __pycache__/
 artifacts/*.mp4
 artifacts/*.mp3
 artifacts/*.opus
-artifacts/*.lino.json
-
+artifacts/*.casu

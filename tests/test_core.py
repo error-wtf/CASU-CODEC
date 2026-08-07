@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from lino_codec.core import analyze
+from casu.core import analyze
 
 
 VIDEO = Path("/home/error/Videos/giancarlo.mp4")
@@ -26,4 +26,3 @@ def test_manifest_json_roundtrip(tmp_path):
     target = tmp_path / "state.json"
     target.write_text(json.dumps(payload), encoding="utf-8")
     assert json.loads(target.read_text(encoding="utf-8")) == payload
-
