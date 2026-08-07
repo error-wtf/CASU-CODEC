@@ -10,6 +10,7 @@ from __future__ import annotations
 import signal
 import subprocess
 import sys
+import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -18,7 +19,7 @@ from casu.core import CasuError, require_tool, resolve_casu_source
 from casu.schema import validate_manifest
 
 
-MEDIA = {".mp4", ".mp3", ".mkv", ".m4v", ".mov", ".flac", ".wav", ".ogg", ".webm", ".casu"}
+MEDIA = {".mp4", ".mp3", ".mkv", ".m4v", ".mov", ".flac", ".wav", ".ogg", ".webm", ".m4a", ".aac", ".opus", ".aiff", ".alac", ".casu"}
 
 
 class MPCASUPlayer(tk.Tk):
@@ -33,6 +34,8 @@ class MPCASUPlayer(tk.Tk):
         self.status = tk.StringVar(value="Ready — CASU and legacy media")
         self._dragging = False
         self._paused = False
+        self._started_at = 0.0
+        self._start_offset = 0.0
         self._build()
         if initial:
             self.add_files([initial])
@@ -131,7 +134,10 @@ class MPCASUPlayer(tk.Tk):
         if offset is not None:
             command.extend(["-ss", f"{offset:.3f}"])
         command.extend(["-window_title", "MPCASU — " + source.name, str(source)])
-        return subprocess.Popen(command, text=True)
+        process = subprocess.Popen(command, text=True)
+        self._start_offset = offset or 0.0
+        self._started_at = time.monotonic()
+        return process
 
     def _source_for(self, path: Path) -> Path:
         if path.suffix.lower() != ".casu":
@@ -159,8 +165,11 @@ class MPCASUPlayer(tk.Tk):
             if self._paused:
                 self.process.send_signal(signal.SIGCONT)
                 self._paused = False
+                self._start_offset = self.position.get()
+                self._started_at = time.monotonic()
                 self.status.set("Playing — source timing is preserved")
             else:
+                self._sync_position()
                 self.process.send_signal(signal.SIGSTOP)
                 self._paused = True
                 self.status.set("Paused — source timing is preserved")
@@ -174,6 +183,8 @@ class MPCASUPlayer(tk.Tk):
                 self.process.kill()
         self.process = None
         self._paused = False
+        self._started_at = 0.0
+        self._start_offset = 0.0
 
     def seek_by(self, seconds: float):
         self.position.set(max(0.0, min(self.duration, self.position.get() + seconds)))
@@ -201,9 +212,16 @@ class MPCASUPlayer(tk.Tk):
             return
         self._paused = False
 
+    def _sync_position(self):
+        if self.process and not self._paused and self.process.poll() is None:
+            elapsed = max(0.0, time.monotonic() - self._started_at)
+            self.position.set(min(self.duration, self._start_offset + elapsed))
+
     def _poll(self):
         if self.process and self.process.poll() is not None:
             self.process = None
+        elif self.process and not self._dragging and not self._paused:
+            self._sync_position()
         self.after(500, self._poll)
 
 
