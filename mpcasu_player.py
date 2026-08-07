@@ -40,6 +40,7 @@ class MPCASUPlayer(tk.Tk):
         self._start_offset = 0.0
         self._visual_phase = 0.0
         self._visual_state = "idle"
+        self._visual_segments: list[dict] = []
         self._build()
         if initial:
             self.add_files([initial])
@@ -96,13 +97,25 @@ class MPCASUPlayer(tk.Tk):
 
     def _load_visual_state(self, path: Path):
         self._visual_state = "legacy"
+        self._visual_segments = []
         if path.suffix.lower() != ".casu":
             return
         try:
             manifest = json.loads(path.read_text(encoding="utf-8"))
-            self._visual_state = "CASU state map" if manifest.get("video", {}).get("segments") or manifest.get("audio", {}).get("segments") else "CASU empty map"
+            sections = [manifest.get("video", {}).get("segments", []), manifest.get("audio", {}).get("segments", [])]
+            self._visual_segments = [segment for section in sections for segment in section if isinstance(segment, dict)]
+            self._visual_state = "CASU state map" if self._visual_segments else "CASU empty map"
         except (OSError, ValueError, TypeError):
             self._visual_state = "invalid CASU"
+
+    def _state_at_position(self) -> str:
+        for segment in self._visual_segments:
+            try:
+                if float(segment["start_s"]) <= self.position.get() < float(segment["end_s"]):
+                    return str(segment.get("state", "unknown"))
+            except (KeyError, TypeError, ValueError):
+                continue
+        return self._visual_state
 
     def _draw_visualizer(self):
         width = max(120, self.canvas.winfo_width())
@@ -112,18 +125,25 @@ class MPCASUPlayer(tk.Tk):
         bars = 32
         gap = 4
         bar_width = max(3, (width - 40 - gap * (bars - 1)) / bars)
+        state = self._state_at_position()
         for index in range(bars):
             wave = 0.5 + 0.5 * math.sin(self._visual_phase + index * 0.43)
             envelope = 0.25 + 0.75 * wave
-            if self._visual_state.startswith("CASU"):
-                envelope *= 0.9
+            if state in {"static", "silence"}:
+                envelope *= 0.22
+            elif state in {"low_motion", "low_level"}:
+                envelope *= 0.55
+            elif state in {"motion", "active"}:
+                envelope *= 1.0
+            elif self._visual_state == "legacy":
+                envelope *= 0.7
             bar_height = 12 + envelope * min(150, height * 0.34)
             x0 = 20 + index * (bar_width + gap)
             self.canvas.create_rectangle(x0, baseline - bar_height, x0 + bar_width, baseline,
                                          fill="#4aa3c7" if index % 3 else "#d3a84c",
                                          outline="", tags="viz")
         self.canvas.create_line(20, baseline, width - 20, baseline, fill="#29495a", tags="viz")
-        self.canvas.create_text(20, baseline + 14, anchor="nw", text=self._visual_state,
+        self.canvas.create_text(20, baseline + 14, anchor="nw", text=f"{self._visual_state} · {self._state_at_position()}",
                                 fill="#8ca8b8", tags="viz")
 
     def _visual_tick(self):
