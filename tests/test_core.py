@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -7,11 +8,13 @@ import pytest
 from casu.core import analyze
 
 
-VIDEO = Path("/home/error/Videos/giancarlo.mp4")
+VIDEO = Path(os.environ.get("CASU_TEST_VIDEO", "test_media/lino_lol_test_pattern.mp4"))
+if not VIDEO.is_absolute():
+    VIDEO = Path(__file__).resolve().parents[1] / VIDEO
 
 
 @pytest.mark.skipif(not VIDEO.exists() or not shutil.which("ffmpeg"), reason="test video/ffmpeg unavailable")
-def test_giancarlo_manifest_preserves_source_metadata(tmp_path):
+def test_reference_video_manifest_preserves_source_metadata(tmp_path):
     manifest = analyze(VIDEO, analysis_fps=2.0)
     assert manifest["source"]["duration_s"] > 100
     assert manifest["streams"][0]["codec_type"] == "video"
