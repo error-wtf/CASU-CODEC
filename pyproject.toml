@@ -12,9 +12,13 @@ dependencies = ["numpy>=1.24"]
 [project.scripts]
 casu = "casu.cli:main"
 mpc = "casu.cli:main"
+mpcasu = "mpcasu_player:main"
 
 [tool.setuptools.packages.find]
 include = ["casu*"]
+
+[tool.setuptools]
+py-modules = ["mpcasu_player"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

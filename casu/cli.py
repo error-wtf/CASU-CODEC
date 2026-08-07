@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from .core import CasuError, analyze, play
+from .schema import validate_manifest
 
 
 def parser() -> argparse.ArgumentParser:
@@ -18,6 +19,8 @@ def parser() -> argparse.ArgumentParser:
     v = sub.add_parser("play", help="play legacy media through FFplay without changing it")
     v.add_argument("input", type=Path)
     v.add_argument("ffplay_args", nargs=argparse.REMAINDER)
+    x = sub.add_parser("validate", help="validate a .casu manifest")
+    x.add_argument("manifest", type=Path)
     return p
 
 
@@ -38,6 +41,15 @@ def main() -> int:
             return 0
         if args.command == "play":
             play(args.input, args.ffplay_args)
+            return 0
+        if args.command == "validate":
+            manifest = json.loads(args.manifest.expanduser().read_text(encoding="utf-8"))
+            errors = validate_manifest(manifest)
+            if errors:
+                for error in errors:
+                    print(f"INVALID: {error}")
+                return 1
+            print(f"VALID CASU manifest: {args.manifest}")
             return 0
         raise CasuError("unknown command")
     except CasuError as exc:

@@ -35,6 +35,23 @@ casu play /path/to/song.mp3
 
 The `mpc` command remains a compatibility alias while the future MPCASU player
 is developed separately.
+
+Launch the first MPCASU player prototype:
+
+```bash
+mpcasu /path/to/movie.mp4
+```
+
+It provides a library list, play/pause/stop, seek controls, CASU sidecar
+detection and a safe legacy fallback. Decoding remains delegated to FFplay;
+this prevents a new UI layer from silently replacing mature MP4/MP3 decoders.
+
+The player is deliberately a separate application layer:
+
+```text
+film.casu → CASU codec/container → MPCASU player → audio/video output
+legacy MP4/MP3/MKV ───────────────────────────────→ MPCASU fallback
+```
 ```
 
 `play` delegates to FFplay and does not transcode, retimestamp, stretch, or
