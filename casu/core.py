@@ -249,5 +249,13 @@ def play(path: Path, extra: list[str] | None = None) -> None:
     if not path.is_file():
         raise CasuError(f"media not found: {path}")
     if path.suffix.lower() == ".casu":
+        try:
+            from .schema import validate_manifest
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            errors = validate_manifest(manifest)
+        except (OSError, json.JSONDecodeError, TypeError) as exc:
+            raise CasuError(f"invalid CASU manifest: {path}") from exc
+        if errors:
+            raise CasuError(f"invalid CASU manifest: {errors[0]}")
         path = resolve_casu_source(path)
     run(["ffplay", "-autoexit", "-hide_banner", *(extra or []), str(path)])

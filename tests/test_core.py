@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from casu.core import CasuError, analyze, resolve_casu_source, rle
+from casu.core import CasuError, analyze, play, resolve_casu_source, rle
 from casu.schema import validate_manifest
 
 
@@ -61,6 +61,13 @@ def test_converter_rejects_nested_casu_input(tmp_path):
     source.write_text("{}", encoding="utf-8")
     with pytest.raises(CasuError, match="already a CASU manifest"):
         analyze(source)
+
+
+def test_play_rejects_malformed_casu_before_launch(tmp_path):
+    source = tmp_path / "broken.casu"
+    source.write_text("{}", encoding="utf-8")
+    with pytest.raises(CasuError, match="invalid CASU manifest"):
+        play(source)
 
 
 @pytest.mark.skipif(not VIDEO.exists() or not shutil.which("ffmpeg"), reason="test video/ffmpeg unavailable")
