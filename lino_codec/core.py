@@ -1,0 +1,187 @@
+from __future__ import annotations
+
+import json
+import shutil
+import subprocess
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+from . import __version__
+
+
+class LinoCodecError(RuntimeError):
+    pass
+
+
+def require_tool(name: str) -> str:
+    value = shutil.which(name)
+    if not value:
+        raise LinoCodecError(f"required tool not found: {name}")
+    return value
+
+
+def run(command: list[str], *, capture: bool = False) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(
+            command, check=True, text=True,
+            stdout=subprocess.PIPE if capture else None,
+            stderr=subprocess.PIPE if capture else None,
+        )
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or "").strip() if capture else str(exc)
+        raise LinoCodecError(detail) from exc
+
+
+def ffprobe(path: Path) -> dict[str, Any]:
+    require_tool("ffprobe")
+    result = run([
+        "ffprobe", "-v", "error", "-show_streams", "-show_format",
+        "-of", "json", str(path),
+    ], capture=True)
+    return json.loads(result.stdout)
+
+
+def stream(probe: dict[str, Any], kind: str) -> dict[str, Any] | None:
+    return next((item for item in probe.get("streams", []) if item.get("codec_type") == kind), None)
+
+
+def duration(probe: dict[str, Any]) -> float:
+    try:
+        return float(probe.get("format", {}).get("duration") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def rle(states: list[str], step: float) -> list[dict[str, Any]]:
+    if not states:
+        return []
+    result: list[dict[str, Any]] = []
+    start, current = 0, states[0]
+    for index, state in enumerate(states[1:], 1):
+        if state != current:
+            result.append(_interval(start, index, current, step))
+            start, current = index, state
+    result.append(_interval(start, len(states), current, step))
+    return result
+
+
+def _interval(start: int, end: int, state: str, step: float) -> dict[str, Any]:
+    return {
+        "start_s": round(start * step, 6),
+        "end_s": round(end * step, 6),
+        "duration_s": round((end - start) * step, 6),
+        "state": state,
+    }
+
+
+def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
+                  width: int = 160, height: int = 90) -> dict[str, Any]:
+    video = stream(probe, "video")
+    if not video:
+        return {}
+    command = [
+        "ffmpeg", "-v", "error", "-i", str(path), "-map", "0:v:0", "-an",
+        "-vf", f"fps={analysis_fps},scale={width}:{height}:flags=area,format=gray",
+        "-f", "rawvideo", "-pix_fmt", "gray", "pipe:1",
+    ]
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if process.stdout is None:
+        raise LinoCodecError("could not open FFmpeg video output")
+    size = width * height
+    previous = None
+    deltas: list[float] = []
+    states: list[str] = []
+    while True:
+        raw = process.stdout.read(size)
+        if len(raw) != size:
+            break
+        frame = np.frombuffer(raw, dtype=np.uint8).astype(np.int16)
+        delta = 1.0 if previous is None else float(np.abs(frame - previous).mean() / 255.0)
+        state = "motion" if delta >= 0.010 else "low_motion" if delta >= 0.0015 else "static"
+        deltas.append(delta)
+        states.append(state)
+        previous = frame
+    error = process.stderr.read().decode("utf-8", errors="replace") if process.stderr else ""
+    if process.wait() != 0:
+        raise LinoCodecError(f"video analysis failed: {error.strip()}")
+    total = max(1, len(states))
+    counts = {name: states.count(name) for name in ("static", "low_motion", "motion")}
+    return {
+        "method": "decoded grayscale temporal activity hint",
+        "analysis_fps": analysis_fps,
+        "analysis_resolution": [width, height],
+        "source_width": video.get("width"),
+        "source_height": video.get("height"),
+        "source_codec": video.get("codec_name"),
+        "source_time_base": video.get("time_base"),
+        "sample_count": len(states),
+        "activity_ratio": {key: round(value / total, 6) for key, value in counts.items()},
+        "mean_frame_delta": round(float(np.mean(deltas)) if deltas else 0.0, 8),
+        "p95_frame_delta": round(float(np.percentile(deltas, 95)) if deltas else 0.0, 8),
+        "segments": rle(states, 1.0 / analysis_fps),
+        "state_is_hint_only": True,
+    }
+
+
+def analyze_audio(path: Path, probe: dict[str, Any], sample_rate: int = 16000,
+                  window_ms: int = 20) -> dict[str, Any]:
+    audio = stream(probe, "audio")
+    if not audio:
+        return {}
+    command = ["ffmpeg", "-v", "error", "-i", str(path), "-map", "0:a:0", "-vn",
+               "-ac", "1", "-ar", str(sample_rate), "-f", "f32le", "pipe:1"]
+    try:
+        result = subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as exc:
+        raise LinoCodecError(f"audio analysis failed: {exc.stderr.decode(errors='replace').strip()}") from exc
+    samples = np.frombuffer(result.stdout, dtype=np.float32)
+    window = max(1, int(sample_rate * window_ms / 1000))
+    count = len(samples) // window
+    if not count:
+        return {"source_codec": audio.get("codec_name"), "segments": []}
+    samples = samples[:count * window].reshape(count, window)
+    db = 20.0 * np.log10(np.sqrt(np.mean(samples * samples, axis=1) + 1e-12) + 1e-12)
+    states = np.where(db < -55.0, "silence", np.where(db < -38.0, "low_level", "active")).tolist()
+    counts = {name: states.count(name) for name in ("silence", "low_level", "active")}
+    total = max(1, len(states))
+    return {
+        "method": "decoded PCM RMS activity hint",
+        "source_codec": audio.get("codec_name"),
+        "sample_rate": sample_rate,
+        "window_ms": window_ms,
+        "sample_windows": count,
+        "activity_ratio": {key: round(value / total, 6) for key, value in counts.items()},
+        "mean_dbfs": round(float(np.mean(db)), 3),
+        "segments": rle(states, window_ms / 1000),
+        "state_is_hint_only": True,
+    }
+
+
+def analyze(path: Path, analysis_fps: float = 10.0) -> dict[str, Any]:
+    path = path.expanduser().resolve()
+    if not path.is_file():
+        raise LinoCodecError(f"input not found: {path}")
+    probe = ffprobe(path)
+    fmt = probe.get("format", {})
+    return {
+        "lino_codec": {"name": "Lino Codec", "version": __version__,
+                        "compatibility": "legacy media remains canonical; sidecar is optional"},
+        "source": {"filename": path.name, "path": str(path), "size_bytes": path.stat().st_size,
+                   "format_name": fmt.get("format_name"), "duration_s": duration(probe)},
+        "streams": [{key: item.get(key) for key in ("index", "codec_type", "codec_name", "width", "height", "sample_rate", "channels", "time_base")}
+                    for item in probe.get("streams", [])],
+        "video": analyze_video(path, probe, analysis_fps=analysis_fps),
+        "audio": analyze_audio(path, probe),
+        "integrity": {"timestamps_are_source_of_truth": True, "optimization_is_hint_only": True,
+                      "fallback": "full-frame/full-fidelity legacy playback"},
+    }
+
+
+def play(path: Path, extra: list[str] | None = None) -> None:
+    require_tool("ffplay")
+    path = path.expanduser().resolve()
+    if not path.is_file():
+        raise LinoCodecError(f"media not found: {path}")
+    run(["ffplay", "-autoexit", "-hide_banner", *(extra or []), str(path)])

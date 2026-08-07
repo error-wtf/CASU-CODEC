@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lino-codec"
+version = "0.1.0"
+description = "Conservative legacy-compatible segmented-state media layer for MP4 and MP3"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24"]
+
+[project.scripts]
+lino-codec = "lino_codec.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["lino_codec*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
