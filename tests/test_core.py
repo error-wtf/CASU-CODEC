@@ -50,6 +50,12 @@ def test_manifest_rejects_non_hex_digest():
     assert any("hex digest" in error for error in validate_manifest(manifest))
 
 
+@pytest.mark.parametrize("value", [None, [], {"source": []}, {"source": {}, "casu": []}])
+def test_manifest_validator_fails_closed_for_malformed_shapes(value):
+    errors = validate_manifest(value)
+    assert errors
+
+
 @pytest.mark.skipif(not VIDEO.exists() or not shutil.which("ffmpeg"), reason="test video/ffmpeg unavailable")
 def test_casu_manifest_resolves_original_media(tmp_path):
     manifest = analyze(VIDEO, analysis_fps=1.0)

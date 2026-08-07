@@ -16,6 +16,12 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
         return ["manifest must be an object"]
     identity = manifest.get("casu") or {}
     format_info = manifest.get("format") or {}
+    if not isinstance(identity, dict):
+        errors.append("casu must be an object")
+        identity = {}
+    if not isinstance(format_info, dict):
+        errors.append("format must be an object")
+        format_info = {}
     if format_info and format_info.get("magic") not in (None, "MPCASU\\0"):
         errors.append("format.magic must be MPCASU\\0 when present")
     if identity.get("name") != "CASU":
@@ -25,6 +31,9 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
     if identity.get("analysis_mode") is not None and identity.get("analysis_mode") not in {"strict", "visually_lossless", "adaptive"}:
         errors.append("casu.analysis_mode is not a supported CASU mode")
     source = manifest.get("source") or {}
+    if not isinstance(source, dict):
+        errors.append("source must be an object")
+        source = {}
     if not isinstance(source.get("filename"), str) or not source.get("filename"):
         errors.append("source.filename must be a non-empty string")
     if "duration_s" not in source:
@@ -82,6 +91,9 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
                     except (TypeError, ValueError):
                         errors.append(f"{media_key}.segments[{index}].{timing_key} must be numeric")
     integrity = manifest.get("integrity") or {}
+    if not isinstance(integrity, dict):
+        errors.append("integrity must be an object")
+        integrity = {}
     if integrity.get("timestamps_are_source_of_truth") is not True:
         errors.append("integrity.timestamps_are_source_of_truth must be true")
     return errors
