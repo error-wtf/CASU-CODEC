@@ -16,6 +16,14 @@ class CasuError(RuntimeError):
     pass
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source_file:
+        for chunk in iter(lambda: source_file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def resolve_casu_source(path: Path) -> Path:
     """Resolve a CASU manifest to its original media without changing it."""
     path = path.expanduser().resolve()
@@ -25,10 +33,16 @@ def resolve_casu_source(path: Path) -> Path:
         manifest = json.loads(path.read_text(encoding="utf-8"))
         source = Path(manifest["source"]["path"]).expanduser()
         if source.is_file():
-            return source.resolve()
-        fallback = path.parent / manifest["source"]["filename"]
-        if fallback.is_file():
-            return fallback.resolve()
+            candidate = source.resolve()
+        else:
+            candidate = path.parent / manifest["source"]["filename"]
+            if not candidate.is_file():
+                raise CasuError(f"CASU source media not found: {path}")
+            candidate = candidate.resolve()
+        expected = manifest.get("source", {}).get("sha256")
+        if expected and sha256_file(candidate) != expected:
+            raise CasuError(f"CASU source integrity mismatch: {candidate}")
+        return candidate
     except (OSError, json.JSONDecodeError, KeyError, TypeError):
         pass
     raise CasuError(f"CASU source media not found: {path}")
@@ -185,16 +199,13 @@ def analyze(path: Path, analysis_fps: float = 10.0) -> dict[str, Any]:
     probe = ffprobe(path)
     fmt = probe.get("format", {})
     stat = path.stat()
-    digest = hashlib.sha256()
-    with path.open("rb") as source_file:
-        for chunk in iter(lambda: source_file.read(1024 * 1024), b""):
-            digest.update(chunk)
+    digest = sha256_file(path)
     return {
         "format": {"magic": "MPCASU\\0", "kind": "CASU sidecar manifest", "schema": "0.2"},
         "casu": {"name": "CASU", "acronym": "Codec for All Segmented Units", "short_name": "CASU", "container_extension": ".casu", "version": __version__,
                         "compatibility": "legacy media remains canonical; sidecar is optional"},
         "source": {"filename": path.name, "path": str(path), "size_bytes": stat.st_size,
-                   "sha256": digest.hexdigest(),
+                   "sha256": digest,
                    "format_name": fmt.get("format_name"), "duration_s": duration(probe)},
         "streams": [{key: item.get(key) for key in ("index", "codec_type", "codec_name", "width", "height", "sample_rate", "channels", "time_base")}
                     for item in probe.get("streams", [])],

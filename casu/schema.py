@@ -24,13 +24,18 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
     for key in ("filename", "duration_s"):
         if key not in source:
             errors.append(f"source.{key} is required")
-    duration = float(source.get("duration_s") or 0)
+    try:
+        duration = float(source.get("duration_s") or 0)
+    except (TypeError, ValueError):
+        errors.append("source.duration_s must be numeric")
+        duration = 0.0
     if source.get("size_bytes") is not None and float(source.get("size_bytes") or 0) < 0:
         errors.append("source.size_bytes must be non-negative")
     if source.get("sha256") is not None and (not isinstance(source.get("sha256"), str) or len(source["sha256"]) != 64):
         errors.append("source.sha256 must be a 64-character hex digest when present")
     for media_key in ("video", "audio"):
         section = manifest.get(media_key) or {}
+        previous_end = 0.0
         for index, segment in enumerate(section.get("segments", [])):
             try:
                 start, end = float(segment["start_s"]), float(segment["end_s"])
@@ -39,6 +44,9 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
                 continue
             if start < 0 or end < start or end > duration + 0.5:
                 errors.append(f"{media_key}.segments[{index}] is outside source duration")
+            if start < previous_end - 1e-6:
+                errors.append(f"{media_key}.segments[{index}] overlaps the preceding segment")
+            previous_end = max(previous_end, end)
             if not segment.get("state"):
                 errors.append(f"{media_key}.segments[{index}] lacks state")
     integrity = manifest.get("integrity") or {}

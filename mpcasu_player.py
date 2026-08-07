@@ -33,6 +33,7 @@ class MPCASUPlayer(tk.Tk):
         self.position = tk.DoubleVar(value=0.0)
         self.status = tk.StringVar(value="Ready — CASU and legacy media")
         self._dragging = False
+        self._paused = False
         self._build()
         if initial:
             self.add_files([initial])
@@ -117,6 +118,7 @@ class MPCASUPlayer(tk.Tk):
         state = "CASU manifest selected" if path.suffix.lower() == ".casu" else ("CASU sidecar found" if sidecar.exists() else "legacy fallback — no CASU sidecar")
         self.status.set(f"{path.name} · {state}")
         self.process = subprocess.Popen(["ffplay", "-hide_banner", "-autoexit", "-window_title", "MPCASU — " + source.name, str(source)], text=True)
+        self._paused = False
 
     def _source_for(self, path: Path) -> Path:
         if path.suffix.lower() != ".casu":
@@ -141,8 +143,14 @@ class MPCASUPlayer(tk.Tk):
 
     def pause(self):
         if self.process and self.process.poll() is None:
-            self.process.send_signal(signal.SIGSTOP)
-            self.status.set("Paused — source timing is preserved")
+            if self._paused:
+                self.process.send_signal(signal.SIGCONT)
+                self._paused = False
+                self.status.set("Playing — source timing is preserved")
+            else:
+                self.process.send_signal(signal.SIGSTOP)
+                self._paused = True
+                self.status.set("Paused — source timing is preserved")
 
     def stop(self):
         if self.process and self.process.poll() is None:
@@ -152,6 +160,7 @@ class MPCASUPlayer(tk.Tk):
             except subprocess.TimeoutExpired:
                 self.process.kill()
         self.process = None
+        self._paused = False
 
     def seek_by(self, seconds: float):
         self.position.set(max(0.0, min(self.duration, self.position.get() + seconds)))

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import tempfile
 from pathlib import Path
 
 from .core import CasuError, analyze, play
@@ -20,6 +22,7 @@ def parser() -> argparse.ArgumentParser:
     c.add_argument("input", type=Path)
     c.add_argument("-o", "--output", type=Path)
     c.add_argument("--analysis-fps", type=float, default=10.0)
+    c.add_argument("--force", action="store_true", help="replace an existing output atomically")
     v = sub.add_parser("play", help="play legacy media through FFplay without changing it")
     v.add_argument("input", type=Path)
     v.add_argument("ffplay_args", nargs=argparse.REMAINDER)
@@ -38,7 +41,19 @@ def main() -> int:
             output = args.output or args.input.with_suffix(args.input.suffix + ".casu")
             output = output.expanduser().resolve()
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            if output.exists() and args.command == "convert" and not args.force:
+                raise CasuError(f"output exists (use --force): {output}")
+            payload = json.dumps(result, indent=2, ensure_ascii=False) + "\n"
+            fd, temporary = tempfile.mkstemp(prefix=f".{output.name}.", dir=output.parent, text=True)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    handle.write(payload)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(temporary, output)
+            finally:
+                if os.path.exists(temporary):
+                    os.unlink(temporary)
             print(json.dumps({"manifest": str(output), "duration_s": result["source"]["duration_s"],
                               "video_segments": len(result["video"].get("segments", [])),
                               "audio_segments": len(result["audio"].get("segments", []))}, indent=2))

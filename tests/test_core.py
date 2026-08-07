@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from casu.core import analyze, resolve_casu_source
+from casu.core import CasuError, analyze, resolve_casu_source
 
 
 VIDEO = Path(os.environ.get("CASU_TEST_VIDEO", "test_media/lino_lol_test_pattern.mp4"))
@@ -40,6 +40,16 @@ def test_casu_manifest_resolves_original_media(tmp_path):
     sidecar = tmp_path / "video.casu"
     sidecar.write_text(json.dumps(manifest), encoding="utf-8")
     assert resolve_casu_source(sidecar) == VIDEO.resolve()
+
+
+@pytest.mark.skipif(not VIDEO.exists() or not shutil.which("ffmpeg"), reason="test video/ffmpeg unavailable")
+def test_casu_manifest_rejects_changed_source_digest(tmp_path):
+    manifest = analyze(VIDEO, analysis_fps=1.0)
+    manifest["source"]["sha256"] = "0" * 64
+    sidecar = tmp_path / "changed.casu"
+    sidecar.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(CasuError, match="integrity mismatch"):
+        resolve_casu_source(sidecar)
 
 
 @pytest.mark.skipif(not AUDIO.exists() or not shutil.which("ffmpeg"), reason="test audio/ffmpeg unavailable")
