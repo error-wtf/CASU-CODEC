@@ -12,8 +12,8 @@ from casu.schema import validate_manifest
 from casu.scheduler import CasuScheduler
 from casu.native import NativeCasuError, read_native, write_native
 from casu.native_v2 import (ChunkType, NativeChunk, NativeV2Error, TileStateCache,
-                            encode_key_state, encode_tile_update, read_native_v2,
-                            write_native_v2)
+                            decode_audio_block, encode_audio_block, encode_key_state,
+                            encode_tile_update, read_native_v2, write_native_v2)
 from casu.tiles import (TileStateError, compare_tile_frames, state_map_from_frames,
                         tile_regions)
 from casu.cli import atomic_write_text
@@ -297,6 +297,18 @@ def test_native_v2_recovery_points_and_reader_limits(tmp_path):
     assert all(point["key_state_offsets"] for point in container.recovery_points)
     with pytest.raises(NativeV2Error, match="size limit"):
         read_native_v2(target, max_file_bytes=1)
+
+
+def test_native_v2_audio_block_roundtrip_preserves_pcm_and_timing():
+    pcm = bytes(range(64))
+    payload = encode_audio_block(pcm=pcm, pts=480, time_base_num=1, time_base_den=48000,
+                                 sample_rate=48000, channels=2, channel_layout="stereo",
+                                 sample_format="s16le", sample_count=16)
+    block = decode_audio_block(payload)
+    assert block.pcm == pcm
+    assert block.pts == 480
+    assert block.channel_layout == "stereo"
+    assert block.sample_count == 16
 
 
 def test_cli_verify_accepts_native_container(tmp_path, monkeypatch, capsys):

@@ -40,6 +40,9 @@ Still open for PASS: audio/subtitle/chapter chunk semantics, recovery-point
 recovery validation across truncated files, native player/audio sinks and
 end-to-end codec roundtrip fixtures against real media.
 
+Lossless timestamped CASUNAT2 audio blocks are now implemented with explicit
+sample rate, channel layout, sample format, sample count and PTS metadata.
+
 ### Gate 6 — Integrity/recovery/resource limits: PARTIAL
 
 CASUNAT2 now writes periodic recovery-point chunks and the reader enforces
