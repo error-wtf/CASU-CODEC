@@ -152,6 +152,8 @@ def main() -> int:
                     "streams": manifest.get("streams", []),
                     "video_segments": len(manifest.get("video", {}).get("segments", [])),
                     "audio_segments": len(manifest.get("audio", {}).get("segments", [])),
+                    "seek_index_entries": len(manifest.get("seek_index", {}).get("entries", [])),
+                    "native_payload": manifest.get("seek_index", {}).get("native_key_states", False),
                     "integrity": manifest.get("integrity", {}),
                 }, indent=2, ensure_ascii=False))
                 return 0
