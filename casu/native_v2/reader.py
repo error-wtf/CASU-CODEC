@@ -22,6 +22,7 @@ class NativeV2Container:
     offsets: tuple[int, ...]
     seek_entries: tuple[SeekEntry, ...]
     integrity_verified: bool
+    recovery_points: tuple[dict, ...] = ()
 
     def chunks_at_or_after(self, pts: int, stream_id: int | None = None):
         return tuple(chunk for chunk in self.chunks
@@ -30,8 +31,11 @@ class NativeV2Container:
 
 def read_native_v2(path: str | Path, *, max_manifest_bytes: int = 64 * 1024 * 1024,
                    max_chunk_bytes: int = 512 * 1024 * 1024,
-                   max_chunks: int = 10_000_000) -> NativeV2Container:
+                   max_chunks: int = 10_000_000,
+                   max_file_bytes: int = 4 * 1024 * 1024 * 1024) -> NativeV2Container:
     source = Path(path)
+    if source.stat().st_size > max_file_bytes:
+        raise NativeV2Error("CASUNAT2 file exceeds configured size limit")
     raw = source.read_bytes()
     if len(raw) < HEADER.size:
         raise NativeV2Error("truncated CASUNAT2 header")
@@ -51,6 +55,7 @@ def read_native_v2(path: str | Path, *, max_manifest_bytes: int = 64 * 1024 * 10
     seek_entries: tuple[SeekEntry, ...] = ()
     integrity_expected: str | None = None
     integrity_offset: int | None = None
+    recovery_points: list[dict] = []
     while pos < len(raw):
         if len(chunks) >= max_chunks or pos + CHUNK_HEADER.size > len(raw):
             raise NativeV2Error("truncated or excessive CASUNAT2 chunks")
@@ -78,6 +83,14 @@ def read_native_v2(path: str | Path, *, max_manifest_bytes: int = 64 * 1024 * 10
                 integrity_expected = str(json.loads(payload)["sha256_before_integrity"])
             except (KeyError, TypeError, json.JSONDecodeError) as exc:
                 raise NativeV2Error("invalid CASUNAT2 integrity table") from exc
+        elif chunk_type == ChunkType.RECOVERY_POINT:
+            try:
+                recovery = json.loads(payload)
+                if not isinstance(recovery, dict) or int(recovery.get("last_complete_chunk_offset", -1)) >= offset:
+                    raise ValueError("invalid recovery offset")
+                recovery_points.append(recovery)
+            except (TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise NativeV2Error("invalid CASUNAT2 recovery point") from exc
         if chunk_type == ChunkType.END:
             break
     if not chunks or chunks[-1].chunk_type != ChunkType.END:
@@ -87,5 +100,5 @@ def read_native_v2(path: str | Path, *, max_manifest_bytes: int = 64 * 1024 * 10
         verified = hashlib.sha256(raw[:integrity_offset]).hexdigest() == integrity_expected
         if not verified:
             raise NativeV2Error("CASUNAT2 integrity verification failed")
-    return NativeV2Container(source, manifest, tuple(chunks), tuple(offsets), seek_entries, verified)
-
+    return NativeV2Container(source, manifest, tuple(chunks), tuple(offsets), seek_entries, verified,
+                             tuple(recovery_points))

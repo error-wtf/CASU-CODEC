@@ -11,8 +11,9 @@ from casu.core import CasuCancelled, CasuError, analyze, play, resolve_casu_sour
 from casu.schema import validate_manifest
 from casu.scheduler import CasuScheduler
 from casu.native import NativeCasuError, read_native, write_native
-from casu.native_v2 import (ChunkType, NativeChunk, TileStateCache, encode_key_state,
-                            encode_tile_update, read_native_v2, write_native_v2)
+from casu.native_v2 import (ChunkType, NativeChunk, NativeV2Error, TileStateCache,
+                            encode_key_state, encode_tile_update, read_native_v2,
+                            write_native_v2)
 from casu.tiles import (TileStateError, compare_tile_frames, state_map_from_frames,
                         tile_regions)
 from casu.cli import atomic_write_text
@@ -285,6 +286,17 @@ def test_native_v2_key_state_and_tile_update_reconstruct_subsampled_planes():
     result = cache.apply_tile_update(encode_tile_update(changed, x=4, y=0, width=4, height=4))
     assert result.planes[0][1, 5] == 99
     assert result.planes[1][0, 2] == 77
+
+
+def test_native_v2_recovery_points_and_reader_limits(tmp_path):
+    target = tmp_path / "recoverable.casu"
+    chunks = [NativeChunk(ChunkType.VIDEO_KEY_STATE, 0, i, bytes([i])) for i in range(3)]
+    write_native_v2(target, {"format": "CASUNAT2"}, chunks, recovery_interval=1)
+    container = read_native_v2(target)
+    assert len(container.recovery_points) == 3
+    assert all(point["key_state_offsets"] for point in container.recovery_points)
+    with pytest.raises(NativeV2Error, match="size limit"):
+        read_native_v2(target, max_file_bytes=1)
 
 
 def test_cli_verify_accepts_native_container(tmp_path, monkeypatch, capsys):

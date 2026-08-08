@@ -37,5 +37,12 @@ subsampled-plane tile updates, with a reconstruction cache. The source file is
 not required to read the written chunks.
 
 Still open for PASS: audio/subtitle/chapter chunk semantics, recovery-point
-writing/recovery, native player/audio sinks and end-to-end codec roundtrip
-fixtures against real media.
+recovery validation across truncated files, native player/audio sinks and
+end-to-end codec roundtrip fixtures against real media.
+
+### Gate 6 — Integrity/recovery/resource limits: PARTIAL
+
+CASUNAT2 now writes periodic recovery-point chunks and the reader enforces
+manifest, chunk-count, chunk-size and total-file limits while validating
+truncation, chunk types, recovery offsets and SHA-256 integrity. Fuzzing and a
+complete corrupt-file corpus remain open.

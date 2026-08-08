@@ -35,7 +35,8 @@ def _index_payload(entries: list[SeekEntry]) -> bytes:
 
 
 def write_native_v2(path: str | Path, manifest: dict, chunks: Iterable[NativeChunk], *,
-                    max_chunk_bytes: int = 512 * 1024 * 1024) -> Path:
+                    max_chunk_bytes: int = 512 * 1024 * 1024,
+                    recovery_interval: int = 32) -> Path:
     """Write a deterministic standalone CASUNAT2 file atomically."""
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -52,21 +53,35 @@ def write_native_v2(path: str | Path, manifest: dict, chunks: Iterable[NativeChu
             handle.write(manifest_bytes)
             key_states: dict[int, tuple[int, int]] = {}
             pending_updates: dict[int, int] = {}
-            for chunk in values:
+            if recovery_interval < 0:
+                raise ValueError("recovery_interval must be non-negative")
+            key_offsets: dict[int, int] = {}
+            audio_offsets: dict[int, int] = {}
+            for ordinal, chunk in enumerate(values, start=1):
                 if len(chunk.payload) > max_chunk_bytes:
                     raise ValueError("chunk exceeds CASUNAT2 limit")
                 offset = handle.tell()
                 handle.write(_pack_chunk(chunk))
                 if chunk.chunk_type == ChunkType.VIDEO_KEY_STATE:
                     key_states[chunk.stream_id] = (chunk.pts, offset)
+                    key_offsets[chunk.stream_id] = offset
                     pending_updates.pop(chunk.stream_id, None)
                 elif chunk.chunk_type == ChunkType.VIDEO_TILE_UPDATE:
                     pending_updates.setdefault(chunk.stream_id, offset)
+                elif chunk.chunk_type == ChunkType.AUDIO_BLOCK:
+                    audio_offsets[chunk.stream_id] = offset
                 if chunk.chunk_type in (ChunkType.VIDEO_KEY_STATE, ChunkType.VIDEO_TILE_UPDATE):
                     key = key_states.get(chunk.stream_id)
                     if key:
                         seek.append(SeekEntry(chunk.stream_id, chunk.pts, key[0], key[1],
                                               pending_updates.get(chunk.stream_id, offset)))
+                if recovery_interval and ordinal % recovery_interval == 0:
+                    recovery = {"version": 1, "last_complete_chunk_offset": offset,
+                                "key_state_offsets": dict(sorted(key_offsets.items())),
+                                "audio_block_offsets": dict(sorted(audio_offsets.items()))}
+                    handle.write(_pack_chunk(NativeChunk(
+                        ChunkType.RECOVERY_POINT, 0, chunk.pts,
+                        json.dumps(recovery, sort_keys=True, separators=(",", ":")).encode("utf-8"))))
             # Keep one deterministic entry per key state/stream.
             unique = {(entry.stream_id, entry.key_state_offset): entry for entry in seek}
             index_offset = handle.tell()
@@ -87,4 +102,3 @@ def write_native_v2(path: str | Path, manifest: dict, chunks: Iterable[NativeChu
             raise
     os.replace(temporary, target)
     return target
-
