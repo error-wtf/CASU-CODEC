@@ -100,6 +100,9 @@ def main() -> int:
             result = analyze(args.input, args.analysis_fps, args.mode)
             output = args.output or args.input.with_suffix(args.input.suffix + ".casu")
             output = output.expanduser().resolve()
+            source_path = args.input.expanduser().resolve()
+            if output == source_path:
+                raise CasuError("output must differ from the source media; refusing to overwrite input")
             output.parent.mkdir(parents=True, exist_ok=True)
             if output.exists() and args.command == "convert" and not args.force:
                 raise CasuError(f"output exists (use --force): {output}")

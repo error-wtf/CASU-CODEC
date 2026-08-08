@@ -11,6 +11,7 @@ from casu.core import CasuError, analyze, play, resolve_casu_source, rle
 from casu.schema import validate_manifest
 from casu.scheduler import CasuScheduler
 from casu.cli import atomic_write_text
+from casu.cli import main as casu_cli_main
 from mpcasu_backend import LibVLCBackend
 from mpcasu_playback import ControllerState, PlaybackController
 from mpcasu_player import presentation_mode
@@ -56,6 +57,15 @@ def test_cli_atomic_write_text_replaces_destination(tmp_path):
     atomic_write_text(target, "new\\n")
     assert target.read_text(encoding="utf-8") == "new\\n"
     assert not list(tmp_path.glob(".report.json.*"))
+
+
+def test_cli_refuses_output_equal_to_source(tmp_path, monkeypatch):
+    source = tmp_path / "source.bin"
+    source.write_bytes(b"source")
+    monkeypatch.setattr("sys.argv", ["casu", "analyze", str(source), "-o", str(source)])
+    monkeypatch.setattr("casu.cli.analyze", lambda *_args: {"source": {"duration_s": 1}})
+    assert casu_cli_main() == 2
+    assert source.read_bytes() == b"source"
 
 
 def test_rle_clamps_final_partial_interval_to_source_duration():

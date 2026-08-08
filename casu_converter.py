@@ -121,6 +121,13 @@ class CASUConverter(tk.Tk):
         output = Path(self.output.get()).expanduser()
         if not source.is_file():
             messagebox.showerror("CASU", "Choose an existing source media file first."); return
+        try:
+            if output.resolve() == source.resolve():
+                messagebox.showerror("CASU", "The output must differ from the source media.")
+                return
+        except OSError:
+            messagebox.showerror("CASU", "The source or output path could not be resolved.")
+            return
         if output.exists() and not messagebox.askyesno("Replace output?", f"Replace {output.name}?"): return
         try:
             fps = float(self.fps.get())
