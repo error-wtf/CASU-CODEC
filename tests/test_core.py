@@ -203,3 +203,10 @@ def test_presentation_mode_is_stream_derived():
     assert presentation_mode({"streams": [{"codec_type": "video"}, {"codec_type": "audio"}]}) == "VIDEO"
     assert presentation_mode({"streams": [{"codec_type": "audio"}]}) == "AUDIO"
     assert presentation_mode({"streams": []}) == "ERROR"
+
+
+def test_presentation_mode_ignores_attached_cover_art():
+    assert presentation_mode({"streams": [
+        {"codec_type": "video", "disposition": {"attached_pic": 1}},
+        {"codec_type": "audio"},
+    ]}) == "AUDIO"

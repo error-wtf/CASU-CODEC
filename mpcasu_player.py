@@ -40,8 +40,15 @@ MUTED = "#686E75"
 
 
 def presentation_mode(probe: dict) -> str:
-    """Return a stream-derived presentation mode without inspecting suffixes."""
-    kinds = {item.get("codec_type") for item in probe.get("streams", []) if isinstance(item, dict)}
+    """Return a stream-derived presentation mode without mistaking cover art for video."""
+    kinds = {
+        item.get("codec_type")
+        for item in probe.get("streams", [])
+        if isinstance(item, dict)
+        # MP3/M4A cover art is exposed by ffprobe as an attached PNG/JPEG
+        # video stream, but it must not replace the audio presentation mode.
+        and not (item.get("codec_type") == "video" and item.get("disposition", {}).get("attached_pic"))
+    }
     if "video" in kinds:
         return "VIDEO"
     if "audio" in kinds:
