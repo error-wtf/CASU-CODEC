@@ -81,6 +81,7 @@ class LibVLCBackend:
         self._event_callback_type = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p)
         self._event_callbacks: list[tuple[int, Any]] = []
         self._event_api = False
+        self.on_event = None
         self._install("libvlc_media_new_path", ctypes.c_void_p, [ctypes.c_void_p, ctypes.c_char_p])
         self._install("libvlc_media_player_new_from_media", ctypes.c_void_p, [ctypes.c_void_p])
         self._install("libvlc_media_player_release", None, [ctypes.c_void_p])
@@ -223,6 +224,14 @@ class LibVLCBackend:
         for event_type, state in event_states.items():
             def callback(_event, _user_data, state=state):
                 self._state = state
+                listener = self.on_event
+                if listener is not None:
+                    try:
+                        listener(state)
+                    except Exception:
+                        # Backend callbacks must never bring down libVLC's
+                        # worker thread because a UI listener failed.
+                        pass
             callback_ref = self._event_callback_type(callback)
             if self.libvlc_event_attach(manager, event_type, callback_ref, None) == 0:
                 self._event_callbacks.append((event_type, callback_ref))

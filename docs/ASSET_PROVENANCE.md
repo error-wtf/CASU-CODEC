@@ -7,8 +7,11 @@ The supplied PNGs are the source of truth for product branding:
 |---|---|---|
 | CASU codec | `assets/casu_codec_logo.png` | codec/format branding |
 | CASU converter | `assets/casu_converter_icon.png` | converter icon and desktop entry |
-| MPCASU player | `assets/mpcasu_player_logo.png` | player logo and application icon |
+| MPCASU player | `assets/mpcasu_player_logo.png`, `assets/mpcasu_player_icon.png` | player logo and application icon |
 
-The converter icon is the supplied `ChatGPT Image 8. Aug. 2026, 12_41_04.png`;
-the player logo is the supplied `ChatGPT Image 8. Aug. 2026, 11_11_50 (2).png`.
-Assets are copied byte-for-byte; packaging does not redraw or replace them.
+The supplied `ChatGPT Image 8. Aug. 2026, 12_41_04.png` is currently used
+byte-for-byte for both the converter icon and the explicitly designated player
+icon. A distinct converter source can replace only the converter asset later;
+the player icon must not be silently substituted. The player logo is the
+supplied `ChatGPT Image 8. Aug. 2026, 11_11_50 (2).png`. Packaging does not
+redraw or replace these assets.

@@ -216,7 +216,7 @@ class MPCASUPlayer(tk.Tk):
         ttk.Button(bar, text="Video", style="MPC.TButton", command=self.cycle_video_track).pack(side="right", padx=3)
         ttk.Button(bar, text="Subtitles", style="MPC.TButton", command=self.cycle_subtitle_track).pack(side="right", padx=3)
         ttk.Button(bar, text="Info", style="MPC.TButton", command=self.show_media_info).pack(side="right", padx=3)
-        ttk.Button(bar, text="Fullscreen", style="MPC.TButton", command=lambda: self.attributes("-fullscreen", not self.attributes("-fullscreen"))).pack(side="right", padx=3)
+        ttk.Button(bar, text="Fullscreen", style="MPC.TButton", command=self.toggle_fullscreen).pack(side="right", padx=3)
         tk.Label(center, textvariable=self.status, bg=PANEL, fg=SECONDARY, anchor="w").pack(fill="x", padx=14, pady=(0, 8))
 
         right = tk.Frame(body, bg=PANEL, width=285); right.pack(side="right", fill="y", padx=(10, 0)); right.pack_propagate(False)
@@ -387,6 +387,7 @@ class MPCASUPlayer(tk.Tk):
         self.now_playing.configure(text=source)
         try:
             self.backend = LibVLCBackend(self.canvas)
+            self.backend.on_event = self._backend_event
             self.backend.open_source(source)
             self.controller.attach(self.backend, source)
             self.controller.play()
@@ -630,6 +631,7 @@ class MPCASUPlayer(tk.Tk):
         self.status.set(f"{path.name} · {state}")
         try:
             self.backend = CasuBackend(self.canvas) if path.suffix.lower() == ".casu" else LibVLCBackend(self.canvas)
+            self.backend.on_event = self._backend_event
             if path.suffix.lower() == ".casu": self.backend.open_casu(path)
             else: self.backend.open(source)
             self.controller.attach(self.backend, path)
@@ -652,6 +654,30 @@ class MPCASUPlayer(tk.Tk):
             return
         self._paused = False
         self._update_presentation(path)
+
+    def _backend_event(self, state: PlaybackState) -> None:
+        """Receive libVLC events without touching Tk from its worker thread."""
+        try:
+            self.after(0, lambda state=state: self._apply_backend_event(state))
+        except tk.TclError:
+            # Shutdown can race an asynchronous backend callback.
+            pass
+
+    def _apply_backend_event(self, state: PlaybackState) -> None:
+        if state == PlaybackState.PLAYING:
+            self._paused = False
+        elif state == PlaybackState.PAUSED:
+            self._paused = True
+        elif state == PlaybackState.ERROR:
+            self.status.set("Playback error — decoder or output failed")
+            self._set_diagnostics(support="backend error; inspect media information/logs")
+        elif state == PlaybackState.ENDED and not self._advancing and not self._end_handled:
+            self._end_handled = True
+            self._advancing = True
+            try:
+                self.play_next()
+            finally:
+                self._advancing = False
 
     def _check_playback_start(self):
         if not self.backend or not self.current or self._paused:
