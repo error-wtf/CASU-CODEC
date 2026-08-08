@@ -37,6 +37,8 @@ def resolve_casu_source(path: Path) -> Path:
     try:
         manifest = json.loads(path.read_text(encoding="utf-8"))
         source = Path(manifest["source"]["path"]).expanduser()
+        if source.name != manifest["source"].get("filename"):
+            raise CasuError(f"CASU source path does not match recorded filename: {path}")
         if source.is_file():
             candidate = source.resolve()
         else:
