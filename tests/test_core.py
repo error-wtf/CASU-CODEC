@@ -9,6 +9,7 @@ import pytest
 
 from casu.core import CasuError, analyze, play, resolve_casu_source, rle
 from casu.schema import validate_manifest
+from mpcasu_backend import LibVLCBackend
 
 
 VIDEO = Path(os.environ.get("CASU_TEST_VIDEO", "test_media/lino_lol_test_pattern.mp4"))
@@ -137,3 +138,9 @@ def test_reference_mp3_manifest_preserves_audio_stream():
     assert any(item.get("codec_type") == "audio" and item.get("codec_name") == "mp3" for item in manifest["streams"])
     assert manifest["audio"]["segments"]
     assert manifest["integrity"]["timestamps_are_source_of_truth"] is True
+
+
+def test_libvlc_backend_source_capability_detection():
+    assert LibVLCBackend.supports("https://example.invalid/video.m3u8")
+    assert LibVLCBackend.supports("rtsp://example.invalid/live")
+    assert not LibVLCBackend.supports("gopher://example.invalid/media")
