@@ -10,8 +10,8 @@ The local test asset is downloaded from the owner's YouTube publication:
 - Duration: `1056.461497` seconds
 - SHA-256: `e8d757b6f088bb719976e910e6ebe1fa907ebfcfaacb1bf4337bd71095285a72`
 
-The media file is intentionally ignored by Git because it is a reproducible
-test fixture, not source code. Download it again with:
+The media file is included as an owner-authorized reference fixture. Download
+it again with the command below if a clean checkout needs to reproduce it:
 
 ```bash
 yt-dlp -f 18 --merge-output-format mp4 \

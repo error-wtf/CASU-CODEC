@@ -52,6 +52,35 @@ def test_manifest_rejects_non_hex_digest():
     assert any("hex digest" in error for error in validate_manifest(manifest))
 
 
+def test_manifest_rejects_inconsistent_segment_duration_and_state():
+    manifest = {
+        "format": {"magic": "MPCASU\\0"},
+        "casu": {"name": "CASU", "container_extension": ".casu"},
+        "source": {"filename": "sample.mp4", "duration_s": 2},
+        "video": {"segments": [{"start_s": 0, "end_s": 1, "duration_s": 0.5, "state": 7}]},
+        "integrity": {"timestamps_are_source_of_truth": True},
+    }
+    errors = validate_manifest(manifest)
+    assert any("duration_s must equal" in error for error in errors)
+    assert any("state must be a non-empty string" in error for error in errors)
+
+
+def test_manifest_rejects_nonfinite_deadline():
+    manifest = {
+        "format": {"magic": "MPCASU\\0"},
+        "casu": {"name": "CASU", "container_extension": ".casu"},
+        "source": {"filename": "sample.mp4", "duration_s": 2},
+        "audio": {"segments": [{"start_s": 0, "end_s": 1, "duration_s": 1, "state": "active", "deadline_s": "NaN"}]},
+        "integrity": {"timestamps_are_source_of_truth": True},
+    }
+    assert any("deadline_s must be finite" in error for error in validate_manifest(manifest))
+
+
+def test_analysis_rejects_invalid_fps():
+    with pytest.raises(CasuError, match="analysis FPS"):
+        analyze(VIDEO, analysis_fps=0)
+
+
 @pytest.mark.parametrize("value", [None, [], {"source": []}, {"source": {}, "casu": []}])
 def test_manifest_validator_fails_closed_for_malformed_shapes(value):
     errors = validate_manifest(value)

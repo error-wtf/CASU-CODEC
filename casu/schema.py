@@ -80,15 +80,27 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
                 continue
             if not math.isfinite(start) or not math.isfinite(end) or start < 0 or end < start or end > duration + 0.5:
                 errors.append(f"{media_key}.segments[{index}] is outside source duration")
+            if "duration_s" in segment:
+                try:
+                    segment_duration = float(segment["duration_s"])
+                    if not math.isfinite(segment_duration) or segment_duration < 0:
+                        errors.append(f"{media_key}.segments[{index}].duration_s must be finite and non-negative")
+                    elif abs(segment_duration - (end - start)) > 1e-5:
+                        errors.append(f"{media_key}.segments[{index}].duration_s must equal end_s-start_s")
+                except (TypeError, ValueError):
+                    errors.append(f"{media_key}.segments[{index}].duration_s must be numeric")
             if start < previous_end - 1e-6:
                 errors.append(f"{media_key}.segments[{index}] overlaps the preceding segment")
             previous_end = max(previous_end, end)
-            if not segment.get("state"):
-                errors.append(f"{media_key}.segments[{index}] lacks state")
+            if not isinstance(segment.get("state"), str) or not segment.get("state", "").strip():
+                errors.append(f"{media_key}.segments[{index}].state must be a non-empty string")
             for timing_key in ("valid_until_s", "deadline_s"):
                 if timing_key in segment:
                     try:
-                        if abs(float(segment[timing_key]) - end) > 1e-5:
+                        timing = float(segment[timing_key])
+                        if not math.isfinite(timing) or timing < start:
+                            errors.append(f"{media_key}.segments[{index}].{timing_key} must be finite and >= start_s")
+                        elif abs(timing - end) > 1e-5:
                             errors.append(f"{media_key}.segments[{index}].{timing_key} must equal end_s")
                     except (TypeError, ValueError):
                         errors.append(f"{media_key}.segments[{index}].{timing_key} must be numeric")

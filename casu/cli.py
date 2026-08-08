@@ -10,13 +10,14 @@ from pathlib import Path
 
 from .core import ANALYSIS_MODES, CasuError, analyze, play, resolve_casu_source
 from .schema import validate_manifest
+from . import __version__
 
 
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="casu", description="CASU — Codec for All Segmented Units: legacy-compatible MP4/MP3 segmented-state layer")
-    p.add_argument("--version", action="version", version="CASU Codec for All Segmented Units 0.1.0")
+    p.add_argument("--version", action="version", version=f"CASU Codec for All Segmented Units {__version__}")
     sub = p.add_subparsers(dest="command", required=True)
-    a = sub.add_parser("analyze", help="write an SSC-compatible temporal-state sidecar")
+    a = sub.add_parser("analyze", help="write a CASU temporal-state sidecar")
     a.add_argument("input", type=Path)
     a.add_argument("-o", "--output", type=Path)
     a.add_argument("--analysis-fps", type=float, default=10.0)
@@ -71,7 +72,10 @@ def main() -> int:
             play(args.input, args.ffplay_args)
             return 0
         if args.command == "validate":
-            manifest = json.loads(args.manifest.expanduser().read_text(encoding="utf-8"))
+            try:
+                manifest = json.loads(args.manifest.expanduser().read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise CasuError(f"could not read manifest {args.manifest}: {exc}") from exc
             errors = validate_manifest(manifest)
             if errors:
                 for error in errors:

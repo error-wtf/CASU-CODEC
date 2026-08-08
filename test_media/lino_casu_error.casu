@@ -1,0 +1,240 @@
+{
+  "format": {
+    "magic": "MPCASU\\0",
+    "kind": "CASU sidecar manifest",
+    "schema": "0.2"
+  },
+  "casu": {
+    "name": "CASU",
+    "acronym": "Codec for All Segmented Units",
+    "short_name": "CASU",
+    "container_extension": ".casu",
+    "version": "0.2.0",
+    "analysis_mode": "strict",
+    "compatibility": "legacy media remains canonical; sidecar is optional"
+  },
+  "source": {
+    "filename": "lino_casu_error.mp3",
+    "path": "/home/error/Lino-Codec/test_media/lino_casu_error.mp3",
+    "size_bytes": 8939520,
+    "sha256": "21881d98108bf9038d8f9bb539cf94047e00dc0f2b28cf5d7849ce16886a99b4",
+    "format_name": "mp3",
+    "duration_s": 276.639979
+  },
+  "streams": [
+    {
+      "index": 0,
+      "codec_type": "audio",
+      "codec_name": "mp3",
+      "width": null,
+      "height": null,
+      "sample_rate": "48000",
+      "channels": 2,
+      "time_base": "1/14112000"
+    },
+    {
+      "index": 1,
+      "codec_type": "video",
+      "codec_name": "png",
+      "width": 1254,
+      "height": 1254,
+      "sample_rate": null,
+      "channels": null,
+      "time_base": "1/90000"
+    }
+  ],
+  "video": {
+    "method": "decoded grayscale temporal activity hint",
+    "analysis_fps": 1.0,
+    "analysis_resolution": [
+      160,
+      90
+    ],
+    "source_width": 1254,
+    "source_height": 1254,
+    "source_codec": "png",
+    "source_time_base": "1/90000",
+    "sample_count": 0,
+    "activity_ratio": {
+      "static": 0.0,
+      "low_motion": 0.0,
+      "motion": 0.0
+    },
+    "mean_frame_delta": 0.0,
+    "p95_frame_delta": 0.0,
+    "segments": [],
+    "state_is_hint_only": true
+  },
+  "audio": {
+    "method": "decoded PCM RMS activity hint",
+    "source_codec": "mp3",
+    "sample_rate": 16000,
+    "window_ms": 20,
+    "sample_windows": 13832,
+    "activity_ratio": {
+      "silence": 0.000145,
+      "low_level": 0.00282,
+      "active": 0.997036
+    },
+    "mean_dbfs": -12.816,
+    "segments": [
+      {
+        "start_s": 0.0,
+        "end_s": 195.34,
+        "duration_s": 195.34,
+        "state": "active",
+        "valid_until_s": 195.34,
+        "deadline_s": 195.34,
+        "priority": 0,
+        "change_type": "initial_state"
+      },
+      {
+        "start_s": 195.34,
+        "end_s": 195.36,
+        "duration_s": 0.02,
+        "state": "low_level",
+        "valid_until_s": 195.36,
+        "deadline_s": 195.36,
+        "priority": 0,
+        "change_type": "state_change"
+      },
+      {
+        "start_s": 195.36,
+        "end_s": 198.12,
+        "duration_s": 2.76,
+        "state": "active",
+        "valid_until_s": 198.12,
+        "deadline_s": 198.12,
+        "priority": 0,
+        "change_type": "state_change"
+      },
+      {
+        "start_s": 198.12,
+        "end_s": 198.14,
+        "duration_s": 0.02,
+        "state": "low_level",
+        "valid_until_s": 198.14,
+        "deadline_s": 198.14,
+        "priority": 0,
+        "change_type": "state_change"
+      },
+      {
+        "start_s": 198.14,
+        "end_s": 275.54,
+        "duration_s": 77.4,
+        "state": "active",
+        "valid_until_s": 275.54,
+        "deadline_s": 275.54,
+        "priority": 0,
+        "change_type": "state_change"
+      },
+      {
+        "start_s": 275.54,
+        "end_s": 275.58,
+        "duration_s": 0.04,
+        "state": "low_level",
+        "valid_until_s": 275.58,
+        "deadline_s": 275.58,
+        "priority": 0,
+        "change_type": "state_change"
+      },
+      {
+        "start_s": 275.58,
+        "end_s": 275.64,
+        "duration_s": 0.06,
+        "state": "active",
+        "valid_until_s": 275.64,
+        "deadline_s": 275.64,
+        "priority": 0,
+        "change_type": "state_change"
+      },
+      {
+        "start_s": 275.64,
+        "end_s": 275.66,
+        "duration_s": 0.02,
+        "state": "low_level",
+        "valid_until_s": 275.66,
+        "deadline_s": 275.66,
+        "priority": 0,
+        "change_type": "state_change"
+      },
+      {
+        "start_s": 275.66,
+        "end_s": 275.84,
+        "duration_s": 0.18,
+        "state": "active",
+        "valid_until_s": 275.84,
+        "deadline_s": 275.84,
+        "priority": 0,
+        "change_type": "state_change"
+      },
+      {
+        "start_s": 275.84,
+        "end_s": 275.94,
+        "duration_s": 0.1,
+        "state": "low_level",
+        "valid_until_s": 275.94,
+        "deadline_s": 275.94,
+        "priority": 0,
+        "change_type": "state_change"
+      },
+      {
+        "start_s": 275.94,
+        "end_s": 275.98,
+        "duration_s": 0.04,
+        "state": "active",
+        "valid_until_s": 275.98,
+        "deadline_s": 275.98,
+        "priority": 0,
+        "change_type": "state_change"
+      },
+      {
+        "start_s": 275.98,
+        "end_s": 276.08,
+        "duration_s": 0.1,
+        "state": "low_level",
+        "valid_until_s": 276.08,
+        "deadline_s": 276.08,
+        "priority": 0,
+        "change_type": "state_change"
+      },
+      {
+        "start_s": 276.08,
+        "end_s": 276.12,
+        "duration_s": 0.04,
+        "state": "active",
+        "valid_until_s": 276.12,
+        "deadline_s": 276.12,
+        "priority": 0,
+        "change_type": "state_change"
+      },
+      {
+        "start_s": 276.12,
+        "end_s": 276.6,
+        "duration_s": 0.48,
+        "state": "low_level",
+        "valid_until_s": 276.6,
+        "deadline_s": 276.6,
+        "priority": 0,
+        "change_type": "state_change"
+      },
+      {
+        "start_s": 276.6,
+        "end_s": 276.639979,
+        "duration_s": 0.039979,
+        "state": "silence",
+        "valid_until_s": 276.639979,
+        "deadline_s": 276.639979,
+        "priority": 0,
+        "change_type": "state_change"
+      }
+    ],
+    "state_is_hint_only": true
+  },
+  "integrity": {
+    "timestamps_are_source_of_truth": true,
+    "optimization_is_hint_only": true,
+    "mode_is_not_quality_proof": true,
+    "fallback": "full-frame/full-fidelity legacy playback"
+  }
+}
