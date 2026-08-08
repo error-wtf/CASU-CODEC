@@ -77,6 +77,8 @@ class MPCASUPlayer(tk.Tk):
         self._volume = 100
         self._muted = False
         self._diagnostic_vars: dict[str, tk.StringVar] = {}
+        self._diagnostic_cards: list[tk.Frame] = []
+        self._layout_mode = "wide"
         self._session_file = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "mpcasu" / "session.json"
         self._build()
         self._restore_session()
@@ -129,6 +131,7 @@ class MPCASUPlayer(tk.Tk):
 
         body = tk.Frame(root, bg=BG); body.pack(fill="both", expand=True, padx=18)
         left_shell = tk.Frame(body, bg=PANEL, width=220); left_shell.pack(side="left", fill="y", padx=(0, 10)); left_shell.pack_propagate(False)
+        self.left_shell = left_shell
         left_canvas = tk.Canvas(left_shell, bg=PANEL, highlightthickness=0, borderwidth=0)
         left_scroll = ttk.Scrollbar(left_shell, orient="vertical", command=left_canvas.yview)
         left_canvas.configure(yscrollcommand=left_scroll.set)
@@ -176,6 +179,7 @@ class MPCASUPlayer(tk.Tk):
         tk.Label(center, textvariable=self.status, bg=PANEL, fg=SECONDARY, anchor="w").pack(fill="x", padx=14, pady=(0, 8))
 
         right = tk.Frame(body, bg=PANEL, width=285); right.pack(side="right", fill="y", padx=(10, 0)); right.pack_propagate(False)
+        self.right_shell = right
         playlist_header = tk.Frame(right, bg=PANEL); playlist_header.pack(fill="x", padx=12, pady=(14, 8))
         tk.Label(playlist_header, text="PLAYLIST", bg=PANEL, fg=TEXT, font=("TkDefaultFont", 11, "bold"), anchor="w").pack(anchor="w")
         tk.Label(playlist_header, text="Queue · source metadata", bg=PANEL, fg=MUTED, font=("TkDefaultFont", 8), anchor="w").pack(anchor="w", pady=(2, 0))
@@ -184,13 +188,16 @@ class MPCASUPlayer(tk.Tk):
         tk.Label(right, text="QUEUE · SHUFFLE · REPEAT", bg=PANEL, fg=MUTED, font=("TkDefaultFont", 8)).pack(anchor="w", padx=12, pady=(0, 12))
 
         diagnostics = tk.Frame(root, bg=BG); diagnostics.pack(fill="x", padx=18, pady=(10, 4))
+        self.diagnostics = diagnostics
         for title, text in (("SEGMENTED PLAYBACK", "unavailable"), ("ENERGY SAVE", "unavailable"), ("INTEGRITY MODE", "unavailable"), ("CASU SUPPORT", "Legacy backend")):
             card = tk.Frame(diagnostics, bg=PANEL_ALT, padx=12, pady=8); card.pack(side="left", fill="x", expand=True, padx=(0, 8))
+            self._diagnostic_cards.append(card)
             tk.Label(card, text=title, bg=PANEL_ALT, fg=RED, font=("TkDefaultFont", 8, "bold")).pack(anchor="w")
             variable = tk.StringVar(value=text)
             self._diagnostic_vars[title] = variable
             tk.Label(card, textvariable=variable, bg=PANEL_ALT, fg=SECONDARY, font=("TkDefaultFont", 9)).pack(anchor="w", pady=(3, 0))
         statusbar = tk.Frame(root, bg=BG); statusbar.pack(fill="x", padx=18, pady=(4, 10))
+        self.statusbar = statusbar
         tk.Label(statusbar, text="MPCASU 1.0.0  ● Ready", bg=BG, fg=SECONDARY).pack(side="left")
         tk.Label(statusbar, text="Optimized for performance and integrity", bg=BG, fg=MUTED).pack(side="left", padx=28)
         tk.Label(statusbar, text="CPU/RAM telemetry unavailable", bg=BG, fg=MUTED).pack(side="right")
@@ -210,6 +217,7 @@ class MPCASUPlayer(tk.Tk):
         self.bind("S", lambda _event: self.stop())
         self.bind("<Escape>", lambda _event: self.attributes("-fullscreen", False))
         self.canvas.bind("<Double-Button-1>", lambda _event: self.toggle_fullscreen())
+        self.bind("<Configure>", self._responsive_layout)
         self.after(500, self._poll)
         self.after(50, self._visual_tick)
 
@@ -223,6 +231,40 @@ class MPCASUPlayer(tk.Tk):
             text_label.pack(side="left", padx=6)
             for widget in (row, label, text_label):
                 widget.bind("<Button-1>", lambda _event, name=entry: self.status.set(f"{name}: view not available in this release"))
+
+    def _responsive_layout(self, event=None):
+        """Keep the video viewport usable instead of clipping side panels."""
+        width = int(getattr(event, "width", self.winfo_width()))
+        height = int(getattr(event, "height", self.winfo_height()))
+        if width >= 1280:
+            mode = "wide"
+        elif width >= 1080:
+            mode = "medium"
+        else:
+            mode = "compact"
+        if mode != self._layout_mode:
+            self._layout_mode = mode
+            if mode == "wide":
+                if not self.right_shell.winfo_ismapped():
+                    self.right_shell.pack(side="right", fill="y", padx=(10, 0))
+                if not self.left_shell.winfo_ismapped():
+                    self.left_shell.pack(side="left", fill="y", padx=(0, 10), before=self.canvas.master)
+            elif mode == "medium":
+                if self.right_shell.winfo_ismapped():
+                    self.right_shell.pack_forget()
+                if not self.left_shell.winfo_ismapped():
+                    self.left_shell.pack(side="left", fill="y", padx=(0, 10), before=self.canvas.master)
+            else:
+                if self.right_shell.winfo_ismapped():
+                    self.right_shell.pack_forget()
+                if self.left_shell.winfo_ismapped():
+                    self.left_shell.pack_forget()
+        # At low heights the diagnostics row is collapsed rather than clipped.
+        if height < 700:
+            if self.diagnostics.winfo_ismapped():
+                self.diagnostics.pack_forget()
+        elif not self.diagnostics.winfo_ismapped():
+            self.diagnostics.pack(fill="x", padx=18, pady=(10, 4), before=self.statusbar)
 
     def _set_diagnostics(self, *, support: str | None = None, integrity: str | None = None,
                          segmented: str | None = None, energy: str | None = None) -> None:
