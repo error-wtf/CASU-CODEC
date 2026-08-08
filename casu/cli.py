@@ -41,13 +41,15 @@ def parser() -> argparse.ArgumentParser:
     a.add_argument("--analysis-fps", type=float, default=10.0)
     a.add_argument("--mode", choices=sorted(ANALYSIS_MODES), default="strict",
                    help="state-analysis policy; strict is the reference mode")
-    c = sub.add_parser("convert", help="convert legacy media to a CASU manifest without changing the source")
+    c = sub.add_parser("convert", help="convert legacy media to CASU output without changing the source")
     c.add_argument("input", type=Path, nargs="+")
     c.add_argument("-o", "--output", type=Path)
     c.add_argument("--report", type=Path, help="write the machine-readable batch report to this path")
     c.add_argument("--analysis-fps", type=float, default=10.0)
     c.add_argument("--mode", choices=sorted(ANALYSIS_MODES), default="strict",
                    help="state-analysis policy; strict is the reference mode")
+    c.add_argument("--container", choices=("sidecar", "native"), default="sidecar",
+                   help="output format: sidecar manifest (default) or standalone lossless native envelope")
     c.add_argument("--force", action="store_true", help="replace an existing output atomically")
     n = sub.add_parser("pack", help="write a standalone native CASU container with a lossless source payload")
     n.add_argument("input", type=Path)
@@ -183,12 +185,17 @@ def main() -> int:
                     if target.exists() and not args.force:
                         raise CasuError(f"output exists (use --force): {target}")
                     result = analyze(source, args.analysis_fps, args.mode)
-                    atomic_write_text(target, json.dumps(result, indent=2, ensure_ascii=False) + "\n")
+                    if args.container == "native":
+                        write_native(target, source, result)
+                    else:
+                        atomic_write_text(target, json.dumps(result, indent=2, ensure_ascii=False) + "\n")
                     report.append({"source": str(source), "output": str(target), "status": "converted",
+                                   "container": args.container,
                                    "duration_s": result["source"].get("duration_s")})
                 except (CasuError, OSError, ValueError) as exc:
                     report.append({"source": str(source), "output": str(target), "status": "failed", "error": str(exc)})
-            payload = json.dumps({"version": 1, "mode": args.mode, "analysis_fps": args.analysis_fps,
+            payload = json.dumps({"version": 1, "mode": args.mode, "container": args.container,
+                                  "analysis_fps": args.analysis_fps,
                                   "files": report}, indent=2, ensure_ascii=False) + "\n"
             if args.report:
                 atomic_write_text(args.report, payload)

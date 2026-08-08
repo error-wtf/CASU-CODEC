@@ -101,6 +101,27 @@ def test_cli_convert_expands_directories_and_writes_report(tmp_path, monkeypatch
     assert json.loads(report_path.read_text(encoding="utf-8"))["files"][0]["status"] == "converted"
 
 
+def test_cli_convert_native_container_mode_is_explicit(tmp_path, monkeypatch, capsys):
+    source = tmp_path / "clip.mp4"; source.write_bytes(b"clip")
+    output_dir = tmp_path / "out"
+    monkeypatch.setattr("casu.cli.analyze", lambda *_args: {
+        "source": {"duration_s": 2}, "video": {"segments": []}, "audio": {"segments": []}
+    })
+    calls = []
+    def fake_write(output, source_path, _manifest):
+        calls.append((output, source_path))
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"native")
+        return output
+    monkeypatch.setattr("casu.cli.write_native", fake_write)
+    monkeypatch.setattr("sys.argv", ["casu", "convert", str(source), "-o", str(output_dir), "--container", "native"])
+    assert casu_cli_main() == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["container"] == "native"
+    assert report["files"][0]["container"] == "native"
+    assert calls and (output_dir / "clip.casu").read_bytes() == b"native"
+
+
 def test_cli_pack_uses_native_writer(tmp_path, monkeypatch, capsys):
     source = tmp_path / "clip.mp4"; source.write_bytes(b"clip")
     target = tmp_path / "clip.casu"

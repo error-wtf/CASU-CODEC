@@ -8,6 +8,7 @@ the same explicit options and runs the converter without changing the source.
 from __future__ import annotations
 
 import json
+import math
 import os
 import tempfile
 import threading
@@ -16,6 +17,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from casu.core import ANALYSIS_MODES, CasuCancelled, CasuError, analyze, ffprobe, duration
+from casu.native import NativeCasuError, write_native
 
 BG = "#090B0D"
 PANEL = "#111418"
@@ -47,6 +49,9 @@ class CASUConverter(tk.Tk):
         self.output = tk.StringVar()
         self._sources: list[Path] = []
         self.mode = tk.StringVar(value="strict")
+        # Sidecar remains the safe default until the native envelope is wired
+        # into the player's CASU reader; users can explicitly opt into it.
+        self.native_output = tk.BooleanVar(value=False)
         self.fps = tk.DoubleVar(value=10.0)
         self.status = tk.StringVar(value="Choose an MP4 or MP3 source.")
         self.source_info = tk.StringVar(value="No source inspected")
@@ -96,6 +101,7 @@ class CASUConverter(tk.Tk):
         ttk.Combobox(options, textvariable=self.mode, values=sorted(ANALYSIS_MODES), state="readonly", width=18).pack(side="left", padx=8)
         ttk.Label(options, text="FPS").pack(side="left")
         ttk.Spinbox(options, from_=0.1, to=120.0, increment=0.5, textvariable=self.fps, width=8).pack(side="left", padx=8)
+        ttk.Checkbutton(options, text="Standalone native CASU (experimental)", variable=self.native_output).pack(side="left", padx=12)
         self.progress = ttk.Progressbar(root, mode="determinate", maximum=100.0)
         self.progress.pack(fill="x", pady=(8, 4))
         tk.Label(root, textvariable=self.status, wraplength=680, bg=BG, fg=SECONDARY, anchor="w", justify="left").pack(fill="x", pady=5)
@@ -175,7 +181,7 @@ class CASUConverter(tk.Tk):
             fps = float(self.fps.get())
         except (TypeError, ValueError):
             messagebox.showerror("CASU", "FPS must be a finite positive number."); return
-        if fps <= 0:
+        if not math.isfinite(fps) or fps <= 0:
             messagebox.showerror("CASU", "FPS must be positive."); return
         mode = self.mode.get()
         self._cancel_event.clear()
@@ -183,9 +189,9 @@ class CASUConverter(tk.Tk):
         self.cancel_button.configure(state="normal")
         self.progress.configure(value=0.0)
         self.status.set("Analyzing decoded source activity…")
-        threading.Thread(target=self._worker, args=(sources, output_dir, fps, mode), daemon=True).start()
+        threading.Thread(target=self._worker, args=(sources, output_dir, fps, mode, self.native_output.get()), daemon=True).start()
 
-    def _worker(self, sources: list[Path], output_dir: Path, fps: float, mode: str) -> None:
+    def _worker(self, sources: list[Path], output_dir: Path, fps: float, mode: str, native: bool) -> None:
         try:
             total = len(sources)
             results: list[dict[str, object]] = []
@@ -202,22 +208,29 @@ class CASUConverter(tk.Tk):
                     payload = json.dumps(result, indent=2, ensure_ascii=False) + "\n"
                     fd, temporary = tempfile.mkstemp(prefix=f".{output.name}.", dir=output.parent, text=True)
                     try:
-                        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                            handle.write(payload); handle.flush(); os.fsync(handle.fileno())
-                        os.replace(temporary, output)
+                        if native:
+                            os.close(fd)
+                            os.unlink(temporary)
+                            write_native(output, source, result)
+                        else:
+                            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                                handle.write(payload); handle.flush(); os.fsync(handle.fileno())
+                            os.replace(temporary, output)
                     finally:
                         if os.path.exists(temporary): os.unlink(temporary)
                     results.append({"source": str(source), "output": str(output), "status": "converted",
+                                    "container": "native" if native else "sidecar",
                                     "duration_s": result["source"].get("duration_s")})
                 except CasuCancelled:
                     raise
-                except (CasuError, OSError, ValueError) as exc:
+                except (CasuError, NativeCasuError, OSError, ValueError) as exc:
                     # One unsupported/corrupt file must not discard successful
                     # conversions from the same folder job.
                     results.append({"source": str(source), "output": str(output),
                                     "status": "failed", "error": str(exc)})
             report_path = output_dir / "casu_batch_report.json"
             report_path.write_text(json.dumps({"version": 1, "mode": mode,
+                                               "container": "native" if native else "sidecar",
                                                "analysis_fps": fps, "files": results},
                                               indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
             converted = sum(item["status"] == "converted" for item in results)
@@ -227,7 +240,7 @@ class CASUConverter(tk.Tk):
             ))
         except CasuCancelled:
             self.after(0, lambda: self._done("Conversion cancelled; no incomplete CASU output was kept.", error=False, cancelled=True))
-        except (CasuError, OSError, ValueError) as exc:
+        except (CasuError, NativeCasuError, OSError, ValueError) as exc:
             self.after(0, lambda: self._done(f"Conversion failed: {exc}", error=True))
 
     def cancel(self) -> None:
