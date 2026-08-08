@@ -23,6 +23,7 @@ if not AUDIO.is_absolute():
     AUDIO = Path(__file__).resolve().parents[1] / AUDIO
 
 
+@pytest.mark.media
 @pytest.mark.skipif(not VIDEO.exists() or not shutil.which("ffmpeg"), reason="test video/ffmpeg unavailable")
 def test_reference_video_manifest_preserves_source_metadata(tmp_path):
     manifest = analyze(VIDEO, analysis_fps=2.0)
@@ -122,6 +123,7 @@ def test_play_rejects_malformed_casu_before_launch(tmp_path):
         play(source)
 
 
+@pytest.mark.media
 @pytest.mark.skipif(not VIDEO.exists() or not shutil.which("ffmpeg"), reason="test video/ffmpeg unavailable")
 def test_casu_manifest_resolves_original_media(tmp_path):
     manifest = analyze(VIDEO, analysis_fps=1.0)
@@ -130,6 +132,7 @@ def test_casu_manifest_resolves_original_media(tmp_path):
     assert resolve_casu_source(sidecar) == VIDEO.resolve()
 
 
+@pytest.mark.media
 @pytest.mark.skipif(not VIDEO.exists() or not shutil.which("ffmpeg"), reason="test video/ffmpeg unavailable")
 def test_casu_manifest_rejects_changed_source_digest(tmp_path):
     manifest = analyze(VIDEO, analysis_fps=1.0)
@@ -140,6 +143,7 @@ def test_casu_manifest_rejects_changed_source_digest(tmp_path):
         resolve_casu_source(sidecar)
 
 
+@pytest.mark.media
 @pytest.mark.skipif(not VIDEO.exists() or not shutil.which("ffmpeg"), reason="test video/ffmpeg unavailable")
 def test_casu_manifest_rejects_changed_source_size(tmp_path):
     manifest = analyze(VIDEO, analysis_fps=1.0)
@@ -151,6 +155,7 @@ def test_casu_manifest_rejects_changed_source_size(tmp_path):
         resolve_casu_source(sidecar)
 
 
+@pytest.mark.media
 @pytest.mark.skipif(not AUDIO.exists() or not shutil.which("ffmpeg"), reason="test audio/ffmpeg unavailable")
 def test_reference_mp3_manifest_preserves_audio_stream():
     manifest = analyze(AUDIO, analysis_fps=1.0)

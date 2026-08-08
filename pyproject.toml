@@ -36,3 +36,6 @@ py-modules = ["mpcasu_player", "mpcasu_backend", "mpcasu_playback", "casu_conver
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+markers = [
+  "media: exercises real FFmpeg-decoded media fixtures and may take longer",
+]
