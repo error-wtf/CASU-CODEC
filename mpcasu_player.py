@@ -489,12 +489,22 @@ class MPCASUPlayer(tk.Tk):
             self.status.set("No local media selected for information")
             return
         try:
-            probe = ffprobe(path)
-            lines = [f"File: {path.name}", f"Container: {probe.get('format', {}).get('format_name', 'unknown')}", f"Duration: {probe.get('format', {}).get('duration', 'unknown')} s"]
+            source = self._source_for(path)
+            probe = ffprobe(source)
+            lines = [f"File: {path.name}", f"Source: {source.name}",
+                     f"Container: {probe.get('format', {}).get('format_name', 'unknown')}",
+                     f"Duration: {probe.get('format', {}).get('duration', 'unknown')} s",
+                     f"Size: {probe.get('format', {}).get('size', 'unknown')} bytes"]
+            if path.suffix.lower() == ".casu":
+                lines.extend(["CASU: validated manifest", f"Segment hints: {len(self._visual_segments)}"])
             for index, stream in enumerate(probe.get("streams", [])):
                 details = [f"stream {index}: {stream.get('codec_type', 'unknown')}", str(stream.get('codec_name', 'unknown'))]
+                if stream.get("tags", {}).get("language"):
+                    details.append(f"language={stream['tags']['language']}")
                 if stream.get("width") and stream.get("height"): details.append(f"{stream['width']}×{stream['height']}")
                 if stream.get("sample_rate"): details.append(f"{stream['sample_rate']} Hz")
+                if stream.get("channels"): details.append(f"{stream['channels']} channels")
+                if stream.get("avg_frame_rate") and stream.get("avg_frame_rate") != "0/0": details.append(f"fps={stream['avg_frame_rate']}")
                 lines.append(" · ".join(details))
             dialog = tk.Toplevel(self); dialog.title("Media information"); dialog.configure(bg=BG); dialog.transient(self)
             text = tk.Text(dialog, width=76, height=max(8, len(lines) + 2), bg=PANEL_ALT, fg=TEXT, relief="flat", wrap="word")
