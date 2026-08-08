@@ -10,6 +10,7 @@ source is opened by the same in-process media pipeline.
 from __future__ import annotations
 
 import ctypes
+import os
 import sys
 from enum import Enum
 from pathlib import Path
@@ -33,12 +34,22 @@ class LibVLCBackend:
     """Minimal, real in-process libVLC backend for the MPCASU window."""
 
     def __init__(self, video_widget):
+        # Python/ctypes does not inherit the plugin-path setup that the VLC
+        # launcher normally performs. Point libVLC at its installed modules so
+        # H.264/AAC and other codecs are discovered by the in-process player.
+        plugin_path = "/usr/lib/x86_64-linux-gnu/vlc/plugins"
+        if os.path.isdir(plugin_path):
+            os.environ.setdefault("VLC_PLUGIN_PATH", plugin_path)
         try:
             self.lib = ctypes.CDLL("libvlc.so.5")
         except OSError as exc:
             raise BackendError("libVLC shared library is unavailable") from exc
         self.widget = video_widget
-        self.instance = self._call("libvlc_new", ctypes.c_void_p, [ctypes.c_int, ctypes.POINTER(ctypes.c_char_p)])(0, None)
+        options = [b"--no-video-title-show"]
+        if os.path.isdir(plugin_path):
+            options.append(("--plugin-path=" + plugin_path).encode())
+        argv = (ctypes.c_char_p * len(options))(*options)
+        self.instance = self._call("libvlc_new", ctypes.c_void_p, [ctypes.c_int, ctypes.POINTER(ctypes.c_char_p)])(len(options), argv)
         if not self.instance:
             raise BackendError("libVLC could not be initialized")
         self.media = None; self.player = None; self.path: Path | None = None
