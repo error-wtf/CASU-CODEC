@@ -213,6 +213,7 @@ class MPCASUPlayer(tk.Tk):
         ttk.Button(bar, text="Mute", style="MPC.TButton", command=self.toggle_mute).pack(side="right", padx=3)
         ttk.Button(bar, text="1×", style="MPC.TButton", command=self.cycle_rate).pack(side="right", padx=3)
         ttk.Button(bar, text="Audio", style="MPC.TButton", command=self.cycle_audio_track).pack(side="right", padx=3)
+        ttk.Button(bar, text="Video", style="MPC.TButton", command=self.cycle_video_track).pack(side="right", padx=3)
         ttk.Button(bar, text="Subtitles", style="MPC.TButton", command=self.cycle_subtitle_track).pack(side="right", padx=3)
         ttk.Button(bar, text="Info", style="MPC.TButton", command=self.show_media_info).pack(side="right", padx=3)
         ttk.Button(bar, text="Fullscreen", style="MPC.TButton", command=lambda: self.attributes("-fullscreen", not self.attributes("-fullscreen"))).pack(side="right", padx=3)
@@ -733,6 +734,24 @@ class MPCASUPlayer(tk.Tk):
             labels = self.backend.audio_track_descriptions()
             label = next((name for identifier, name in labels if identifier == next_track), f"Track {next_track + 1}")
             self.status.set(f"Audio: {label} ({next_track + 1}/{count})")
+        except BackendError as exc:
+            self.status.set(str(exc))
+
+    def cycle_video_track(self):
+        if not self.backend:
+            self.status.set("No active media backend")
+            return
+        try:
+            count = self.backend.video_track_count()
+            if count <= 0:
+                self.status.set("No selectable video tracks reported by libVLC")
+                return
+            current = self.backend.video_track()
+            next_track = (current + 1) % count
+            self.backend.set_video_track(next_track)
+            labels = self.backend.video_track_descriptions()
+            label = next((name for identifier, name in labels if identifier == next_track), f"Track {next_track + 1}")
+            self.status.set(f"Video: {label} ({next_track + 1}/{count})")
         except BackendError as exc:
             self.status.set(str(exc))
 
