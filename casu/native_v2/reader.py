@@ -110,10 +110,11 @@ def read_native_v2(path: str | Path, *, max_manifest_bytes: int = 64 * 1024 * 10
     if not chunks or chunks[-1].chunk_type != ChunkType.END:
         raise NativeV2Error("CASUNAT2 is missing END chunk")
     verified = False
-    if integrity_expected is not None and integrity_offset is not None:
-        verified = hashlib.sha256(raw[:integrity_offset]).hexdigest() == integrity_expected
-        if not verified:
-            raise NativeV2Error("CASUNAT2 integrity verification failed")
+    if integrity_expected is None or integrity_offset is None:
+        raise NativeV2Error("CASUNAT2 is missing integrity table")
+    verified = hashlib.sha256(raw[:integrity_offset]).hexdigest() == integrity_expected
+    if not verified:
+        raise NativeV2Error("CASUNAT2 integrity verification failed")
     return NativeV2Container(source, manifest, tuple(chunks), tuple(offsets), seek_entries, verified,
                              tuple(recovery_points))
 
