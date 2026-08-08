@@ -10,6 +10,8 @@ import pytest
 from casu.core import CasuError, analyze, play, resolve_casu_source, rle
 from casu.schema import validate_manifest
 from casu.scheduler import CasuScheduler
+from casu.tiles import (TileStateError, compare_tile_frames, state_map_from_frames,
+                        tile_regions)
 from casu.cli import atomic_write_text
 from casu.cli import main as casu_cli_main
 from mpcasu_backend import LibVLCBackend
@@ -90,6 +92,36 @@ def test_rle_clamps_final_partial_interval_to_source_duration():
     assert segments[-1]["duration_s"] == 0.1
     assert segments[0]["segment_id"] == "segment-000000"
     assert segments[0]["lifecycle"] == "CREATE"
+
+
+def test_strict_tile_comparison_requires_exact_canonical_bytes():
+    first = __import__("numpy").zeros((4, 4, 3), dtype="uint8")
+    second = first.copy()
+    second[0, 0, 0] = 1
+    held = compare_tile_frames(first, first, tile_width=2, tile_height=2)
+    changed = compare_tile_frames(first, second, tile_width=2, tile_height=2)
+    assert all(item["state"] == "HOLD" for item in held)
+    assert any(item["state"] == "UPDATE" for item in changed)
+    assert all(item["fidelity_class"] == "LOSSLESS_REALTIME" for item in changed)
+
+
+def test_state_map_contains_spatial_coordinates_and_time_bounds():
+    np = __import__("numpy")
+    frames = [(0.0, np.zeros((2, 4), dtype="uint8")),
+              (1.0, np.zeros((2, 4), dtype="uint8"))]
+    states = state_map_from_frames(frames, tile_width=2, tile_height=2)
+    assert len(states) == 4
+    assert {item["tile_id"] for item in states} == {"tile-00000000", "tile-00000001"}
+    assert states[0]["region"]["x"] == 0
+    assert states[0]["valid_until_s"] == 1.0
+    assert states[0]["state"] == "UPDATE"
+    assert states[2]["state"] == "HOLD"
+
+
+def test_tile_primitives_fail_closed_for_noncanonical_frames():
+    np = __import__("numpy")
+    with pytest.raises(TileStateError):
+        compare_tile_frames(np.zeros((2, 2), dtype="float32"), np.zeros((2, 2), dtype="uint8"))
 
 
 def test_manifest_rejects_non_hex_digest():
