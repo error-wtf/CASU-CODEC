@@ -200,6 +200,13 @@ def test_libvlc_library_candidates_are_platform_independent():
     assert '"libvlc.dll", "libvlc-5.dll"' in source
 
 
+def test_casu_backend_does_not_claim_native_payload_playback():
+    source = Path("mpcasu_backend.py").read_text(encoding="utf-8")
+    player = Path("mpcasu_player.py").read_text(encoding="utf-8")
+    assert '"native_casu_payload": "unavailable"' in source
+    assert "Native CASU manifest" not in player
+
+
 def test_casu_scheduler_returns_deterministic_state():
     scheduler = CasuScheduler.from_manifest({"video": {"segments": [
         {"start_s": 0, "end_s": 1, "state": "static"},
