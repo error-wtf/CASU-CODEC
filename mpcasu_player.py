@@ -79,6 +79,8 @@ class MPCASUPlayer(tk.Tk):
         self._diagnostic_vars: dict[str, tk.StringVar] = {}
         self._diagnostic_cards: list[tk.Frame] = []
         self._layout_mode = "wide"
+        self._advancing = False
+        self._end_handled = False
         self._session_file = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "mpcasu" / "session.json"
         self._build()
         self._restore_session()
@@ -170,7 +172,7 @@ class MPCASUPlayer(tk.Tk):
         self.timeline.bind("<ButtonRelease-1>", lambda _event: (setattr(self, "_dragging", False), self.seek_restart()))
         bar = tk.Frame(center, bg=PANEL)
         bar.pack(fill="x", pady=8)
-        for label, command in (("−10 s", lambda: self.seek_by(-10)), ("Back", lambda: self.seek_by(-10)), ("Play / Pause", self.toggle_playback), ("Stop", self.stop), ("Forward", lambda: self.seek_by(10))):
+        for label, command in (("Previous", self.play_previous), ("−10 s", lambda: self.seek_by(-10)), ("Play / Pause", self.toggle_playback), ("Stop", self.stop), ("+10 s", lambda: self.seek_by(10)), ("Next", self.play_next)):
             ttk.Button(bar, text=label, style="MPC.TButton", command=command).pack(side="left", padx=3)
         ttk.Button(bar, text="Mute", style="MPC.TButton", command=self.toggle_mute).pack(side="right", padx=3)
         ttk.Button(bar, text="Audio", style="MPC.TButton", command=self.cycle_audio_track).pack(side="right", padx=3)
@@ -283,6 +285,30 @@ class MPCASUPlayer(tk.Tk):
         if selected:
             self.library.selection_clear(0, "end"); self.library.selection_set(selected[0]); self.play_selected()
 
+    def play_next(self):
+        """Advance to the next queued media item."""
+        selected = self.library.curselection()
+        index = selected[0] if selected else -1
+        if index + 1 >= self.library.size():
+            self.status.set("End of playlist")
+            return
+        self.library.selection_clear(0, "end")
+        self.library.selection_set(index + 1)
+        self.library.see(index + 1)
+        self.play_selected()
+
+    def play_previous(self):
+        """Return to the previous queued media item."""
+        selected = self.library.curselection()
+        index = selected[0] if selected else 0
+        if index <= 0:
+            self.status.set("Beginning of playlist")
+            return
+        self.library.selection_clear(0, "end")
+        self.library.selection_set(index - 1)
+        self.library.see(index - 1)
+        self.play_selected()
+
     def add_dialog(self):
         paths = filedialog.askopenfilenames(filetypes=[("Media and streams", "*"), ("Known media", " ".join(f"*{x}" for x in sorted(MEDIA))), ("All files", "*.*")])
         self.add_files([Path(p) for p in paths])
@@ -306,6 +332,7 @@ class MPCASUPlayer(tk.Tk):
 
     def _open_external_source(self, source: str):
         self.stop()
+        self._end_handled = False
         self.current = None
         self.now_playing.configure(text=source)
         try:
@@ -490,6 +517,7 @@ class MPCASUPlayer(tk.Tk):
             messagebox.showinfo("MPCASU", "Add a media file first.")
             return
         self.stop()
+        self._end_handled = False
         self.current = path
         self.now_playing.configure(text=path.name.upper())
         selected = self.library.curselection()
@@ -668,6 +696,13 @@ class MPCASUPlayer(tk.Tk):
     def _poll(self):
         if self.backend and not self._dragging and not self._paused:
             self._sync_position()
+            if self.backend.state() == PlaybackState.ENDED and not self._advancing and not self._end_handled:
+                self._end_handled = True
+                self._advancing = True
+                try:
+                    self.play_next()
+                finally:
+                    self._advancing = False
         self.after(500, self._poll)
 
 
