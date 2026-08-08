@@ -1,0 +1,81 @@
+CODEX MASTER-PROMPT — CASU / CASU CONVERTER / MPCASU
+
+Arbeite nicht weiter am vorhandenen Code als wäre er bereits ein fertiges Produkt. Auditiere ihn zuerst vollständig und behandle den aktuellen Stand als Prototyp.
+
+Ziel sind drei echte, getrennte Komponenten:
+1. CASU — Codec for All Segmented Units: echter räumlich-zeitlicher State-/Segment-Layer und später nativer Container, nicht nur ein JSON-Sidecar.
+2. CASU Converter — professionelles Batch-, Analyze-, Convert-, Verify- und Benchmark-Tool.
+3. MPCASU — vollständiger eigener Media Player mit nativer CASU-Unterstützung und möglichst vollständiger Legacy-Kompatibilität über libVLC.
+
+WICHTIG:
+- Kein ffplay.
+- Kein VLC.exe.
+- Keine eingebettete Fremdplayer-UI.
+- libVLC/FFmpeg dürfen als Bibliotheken/Decoder-Infrastruktur verwendet werden.
+- Wenn der verwendete libVLC-Build ein Legacy-Medium abspielen kann, darf MPCASU es nicht durch eine kleine eigene Format-/Extension-Whitelist blockieren.
+- Eine normale MP4 H.264/AAC muss im MPCASU-Fenster echtes Video UND echten Ton liefern.
+- Audio-only muss in einen echten Audio-Modus wechseln.
+- Waveform/FFT nur aus real decodierten Audiodaten; niemals als Videoersatz oder Fake-Animation.
+- CASU muss einen eigenen Backend-Pfad besitzen.
+- Keine Fake-Werte für CPU, Energie, Integrity, Segmente oder Performance.
+- Keine sichtbaren Buttons oder Navigationseinträge ohne funktionierendes Backend.
+- Jede Funktion nur dann COMPLETE nennen, wenn Backend + UI + Fehlerbehandlung + Tests + manuelle Validierung vorhanden sind.
+
+VERBINDLICHE DESIGN-ASSETS:
+- das vom Auftraggeber gelieferte offizielle CASU-Logo,
+- das offizielle MPCASU-Player-Logo,
+- das offizielle MPCASU-Player-Icon,
+- das offizielle CASU-Converter-Icon,
+- das rote MPCASU-Mockup.
+Diese Assets wirklich verwenden. Keine Ersatzlogos erzeugen. Logos niemals croppen oder verzerren.
+
+AKTUELL KONKRET ZU REPARIEREN:
+- mpcasu_player.py ist monolithisch und die UI nur teilweise responsiv;
+- viele Sidebar-Funktionen sind Platzhalter;
+- libVLC ist hart auf Linux/X11/libvlc.so.5 und einen Debian-Pluginpfad zugeschnitten;
+- Player-State läuft überwiegend per Polling statt libVLC-Events;
+- Track-Auswahl kennt keine vollständigen Track-Deskriptoren/Namen;
+- externe Untertitel, Chapters, Audio-Devices, Library, Settings, Resume, Mini-Player und echte Playlist fehlen;
+- der CASU-Scheduler ist nur ein einfacher Zeitintervall-Lookup;
+- CASU speichert keine echte per-Tile räumlich-zeitliche State Map;
+- strict/visually_lossless/adaptive unterscheiden sich algorithmisch derzeit nicht;
+- „strict pixel identical“ darf nicht aus downscaled grayscale threshold abgeleitet werden;
+- Audioanalyse darf nicht komplette lange PCM-Daten in RAM laden;
+- Converter ist nur Single-File + JSON-Ausgabe mit indeterminate progress;
+- pyproject/package-Struktur und Runtime-Module/Assets vollständig reparieren;
+- Converter-Paket muss das gelieferte CASU-Logo und Converter-Icon wirklich enthalten;
+- CI muss echten libVLC-Playbackpfad testen und Fast/Slow-Media-Tests trennen.
+
+TECHNISCHE ZIELARCHITEKTUR:
+- UI von Core/Backends trennen.
+- MPCASU vorzugsweise auf PySide6/Qt migrieren, statt den Tkinter-Prototyp weiter monolithisch auszubauen.
+- IMediaBackend/BaseBackend definieren.
+- LibVLCBackend cross-platform: Linux set_xwindow, Windows set_hwnd, macOS set_nsobject.
+- libVLC-Events für Opening/Playing/Paused/Buffering/TimeChanged/LengthChanged/EndReached/Error.
+- echte Playlist-/Library-Modelle.
+- native CASU-Module für format/reader/writer/index/integrity/recovery, analysis/video/audio/tiles, runtime/scheduler/cache/state_graph, converter/pipeline/queue/progress/report.
+
+CASU STRICT:
+- Quelltreue ist oberstes Gebot.
+- Nur exakt identische kanonische Tile-Zustände dürfen als HOLD gelten.
+- Quelle-Timestamps bleiben Wahrheit.
+- Kein Frame erfinden, kein Motion Smoothing, kein Time Warp, kein Fake HDR, kein Audio-Time-Stretch.
+
+IMPLEMENTIERUNGSREIHENFOLGE:
+P0 Packaging/Assets/Build sauber.
+P1 Legacy-Playback: echtes Video + Audio + Seek + Volume + Tracks + Subtitles + Fullscreen + Netzwerk über libVLC.
+P2 responsive professionelle UI + Playlist + Settings + Library + Audio View.
+P3 professioneller Converter: Batch, Progress, Cancel, Profiles, Verify, Reports.
+P4 echte per-Tile CASU State Engine + Cache + Scheduler + Benchmark.
+P5 nativer CASU Container mit Versionierung, Index, Key States, Checksums, Recovery und Streams.
+
+Nach jeder Phase:
+- compile/build,
+- unit tests,
+- media integration tests,
+- GUI smoke tests,
+- clean wheel install,
+- clean package install,
+- git diff --check.
+
+Erstelle am Ende IMPLEMENTATION_REPORT.md und MPCASU_FEATURE_COMPLETION_MATRIX.md neu aus dem realen Stand. Keine Funktion schönreden. Wenn ein P0-Acceptance-Gate nicht erfüllt ist, ist das Produkt nicht fertig.
