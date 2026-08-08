@@ -10,6 +10,9 @@ from typing import Any
 # Defensive parser bounds. These limits prevent a malformed manifest from
 # causing unbounded validation work or memory use before it reaches playback.
 MAX_SEGMENTS_PER_STREAM = 1_000_000
+MAX_STREAMS = 256
+MAX_METADATA_KEYS = 256
+MAX_TEXT_LENGTH = 4096
 
 
 class CasuManifestError(ValueError):
@@ -35,6 +38,10 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
         errors.append("casu.name must be CASU")
     if identity.get("container_extension") != ".casu":
         errors.append("casu.container_extension must be .casu")
+    if identity.get("version") != "1.0.0":
+        errors.append("casu.version must be 1.0.0")
+    if format_info.get("schema") not in (None, "0.2"):
+        errors.append("format.schema is not supported")
     if identity.get("analysis_mode") is not None and identity.get("analysis_mode") not in {"strict", "visually_lossless", "adaptive"}:
         errors.append("casu.analysis_mode is not a supported CASU mode")
     source = manifest.get("source") or {}
@@ -64,6 +71,34 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
         or re.fullmatch(r"[0-9a-fA-F]{64}", source["sha256"]) is None
     ):
         errors.append("source.sha256 must be a 64-character hex digest when present")
+    streams = manifest.get("streams", [])
+    if not isinstance(streams, list):
+        errors.append("streams must be an array")
+        streams = []
+    elif len(streams) > MAX_STREAMS:
+        errors.append(f"streams exceeds safety limit of {MAX_STREAMS}")
+    for index, stream in enumerate(streams[:MAX_STREAMS]):
+        if not isinstance(stream, dict):
+            errors.append(f"streams[{index}] must be an object")
+            continue
+        codec_type = stream.get("codec_type")
+        if codec_type not in {"video", "audio", "subtitle", "attachment", "data"}:
+            errors.append(f"streams[{index}].codec_type is unsupported")
+        codec_name = stream.get("codec_name")
+        if codec_name is not None and (not isinstance(codec_name, str) or len(codec_name) > MAX_TEXT_LENGTH):
+            errors.append(f"streams[{index}].codec_name is invalid")
+    metadata = manifest.get("metadata", {})
+    if metadata is not None:
+        if not isinstance(metadata, dict):
+            errors.append("metadata must be an object")
+        elif len(metadata) > MAX_METADATA_KEYS:
+            errors.append(f"metadata exceeds safety limit of {MAX_METADATA_KEYS} keys")
+        else:
+            for key, value in metadata.items():
+                if not isinstance(key, str) or len(key) > MAX_TEXT_LENGTH:
+                    errors.append("metadata keys must be bounded strings")
+                if not isinstance(value, (str, int, float, bool)) and value is not None:
+                    errors.append(f"metadata[{key!r}] must be a scalar value")
     for media_key in ("video", "audio"):
         section = manifest.get(media_key) or {}
         if not isinstance(section, dict):
@@ -102,6 +137,8 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
             previous_end = max(previous_end, end)
             if not isinstance(segment.get("state"), str) or not segment.get("state", "").strip():
                 errors.append(f"{media_key}.segments[{index}].state must be a non-empty string")
+            elif len(segment["state"]) > MAX_TEXT_LENGTH:
+                errors.append(f"{media_key}.segments[{index}].state is too long")
             for timing_key in ("valid_until_s", "deadline_s"):
                 if timing_key in segment:
                     try:

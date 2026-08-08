@@ -93,6 +93,20 @@ def test_manifest_validator_fails_closed_for_malformed_shapes(value):
     assert errors
 
 
+def test_manifest_rejects_unsupported_version_and_stream_shape():
+    manifest = {
+        "format": {"magic": "MPCASU\\0", "schema": "99"},
+        "casu": {"name": "CASU", "container_extension": ".casu", "version": "9.0.0"},
+        "source": {"filename": "sample.mp4", "duration_s": 1},
+        "streams": [{"codec_type": "alien", "codec_name": "x"}],
+        "integrity": {"timestamps_are_source_of_truth": True},
+    }
+    errors = validate_manifest(manifest)
+    assert any("casu.version" in error for error in errors)
+    assert any("format.schema" in error for error in errors)
+    assert any("codec_type" in error for error in errors)
+
+
 def test_converter_rejects_nested_casu_input(tmp_path):
     source = tmp_path / "already.casu"
     source.write_text("{}", encoding="utf-8")
