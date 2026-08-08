@@ -15,6 +15,7 @@ MAX_METADATA_KEYS = 256
 MAX_TEXT_LENGTH = 4096
 MAX_SEGMENT_PRIORITY = 1_000_000
 SEGMENT_LIFECYCLES = frozenset({"CREATE", "UPDATE", "HOLD", "MOVE", "REPLACE", "INVALIDATE", "RELEASE"})
+MAX_SEEK_ENTRIES = 2_000_000
 
 
 class CasuManifestError(ValueError):
@@ -178,6 +179,36 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
                             errors.append(f"{media_key}.segments[{index}].{timing_key} must equal end_s")
                     except (TypeError, ValueError):
                         errors.append(f"{media_key}.segments[{index}].{timing_key} must be numeric")
+    seek_index = manifest.get("seek_index")
+    if seek_index is not None:
+        if not isinstance(seek_index, dict):
+            errors.append("seek_index must be an object")
+        else:
+            entries = seek_index.get("entries", [])
+            if not isinstance(entries, list):
+                errors.append("seek_index.entries must be an array")
+            elif len(entries) > MAX_SEEK_ENTRIES:
+                errors.append(f"seek_index.entries exceeds safety limit of {MAX_SEEK_ENTRIES}")
+            else:
+                previous_timestamp = -1.0
+                for index, entry in enumerate(entries):
+                    if not isinstance(entry, dict):
+                        errors.append(f"seek_index.entries[{index}] must be an object")
+                        continue
+                    try:
+                        timestamp = float(entry["timestamp_s"])
+                        if not math.isfinite(timestamp) or timestamp < 0 or timestamp > duration + 0.5:
+                            errors.append(f"seek_index.entries[{index}].timestamp_s is outside source duration")
+                        elif timestamp < previous_timestamp - 1e-6:
+                            errors.append("seek_index.entries must be sorted by timestamp_s")
+                        previous_timestamp = max(previous_timestamp, timestamp)
+                    except (KeyError, TypeError, ValueError):
+                        errors.append(f"seek_index.entries[{index}].timestamp_s must be numeric")
+                    if entry.get("stream") not in {"video", "audio"}:
+                        errors.append(f"seek_index.entries[{index}].stream is unsupported")
+                    segment_id = entry.get("segment_id")
+                    if segment_id is not None and (not isinstance(segment_id, str) or not segment_id.strip() or len(segment_id) > MAX_TEXT_LENGTH):
+                        errors.append(f"seek_index.entries[{index}].segment_id is invalid")
     integrity = manifest.get("integrity") or {}
     if not isinstance(integrity, dict):
         errors.append("integrity must be an object")
