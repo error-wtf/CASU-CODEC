@@ -11,6 +11,7 @@ from __future__ import annotations
 import sys
 import json
 import math
+import os
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -60,9 +61,12 @@ class MPCASUPlayer(tk.Tk):
         self._logo_image = None
         self._volume = 100
         self._muted = False
+        self._session_file = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "mpcasu" / "session.json"
         self._build()
+        self._restore_session()
         if initial:
             self.add_files(initial if isinstance(initial, list) else [initial])
+        self.protocol("WM_DELETE_WINDOW", self._shutdown)
 
     def _build(self):
         style = ttk.Style(self)
@@ -224,6 +228,35 @@ class MPCASUPlayer(tk.Tk):
             if path.exists() and str(path) not in self.library.get(0, "end"):
                 self.library.insert("end", str(path))
                 self.queue.insert("end", path.name)
+
+    def _restore_session(self):
+        try:
+            payload = json.loads(self._session_file.read_text(encoding="utf-8"))
+            self.add_files([Path(value) for value in payload.get("playlist", []) if Path(value).is_file()])
+            self._volume = max(0, min(200, int(payload.get("volume", self._volume))))
+            self._muted = bool(payload.get("muted", False))
+            geometry = payload.get("geometry")
+            if isinstance(geometry, str) and geometry:
+                self.geometry(geometry)
+        except (OSError, ValueError, TypeError):
+            pass
+
+    def _shutdown(self):
+        try:
+            self._session_file.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self._session_file.with_suffix(".tmp")
+            temporary.write_text(json.dumps({
+                "playlist": list(self.library.get(0, "end")),
+                "volume": self._volume,
+                "muted": self._muted,
+                "geometry": self.geometry(),
+            }, indent=2) + "\n", encoding="utf-8")
+            temporary.replace(self._session_file)
+        except OSError:
+            pass
+        if self.backend:
+            self.backend.close()
+        self.destroy()
 
     def _load_visual_state(self, path: Path):
         self._visual_state = "legacy"
