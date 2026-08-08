@@ -133,11 +133,13 @@ def _interval(start: int, end: int, state: str, step: float) -> dict[str, Any]:
 
 
 def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
-                  width: int = 160, height: int = 90) -> dict[str, Any]:
+                  width: int = 160, height: int = 90, mode: str = "strict") -> dict[str, Any]:
     if not np.isfinite(analysis_fps) or analysis_fps <= 0:
         raise CasuError("analysis FPS must be finite and positive")
     if width <= 0 or height <= 0:
         raise CasuError("analysis dimensions must be positive")
+    if mode not in ANALYSIS_MODES:
+        raise CasuError(f"unknown video analysis mode: {mode}")
     video = stream(probe, "video")
     if not video:
         return {}
@@ -172,7 +174,11 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
             for y in range(0, height, tile_height):
                 for x in range(0, width, tile_width):
                     tile_delta = np.abs(current_grid[y:y + tile_height, x:x + tile_width] - previous_grid[y:y + tile_height, x:x + tile_width]).mean() / 255.0
-                    changed += int(tile_delta > 0.01)
+                    # These thresholds define analysis hints only. They do
+                    # not establish strict pixel identity on downscaled
+                    # grayscale frames.
+                    threshold = {"strict": 0.01, "visually_lossless": 0.03, "adaptive": 0.08}[mode]
+                    changed += int(tile_delta > threshold)
                     total += 1
             changed_ratio = changed / max(1, total)
         state = "motion" if delta >= 0.010 else "low_motion" if delta >= 0.0015 else "static"
@@ -187,6 +193,7 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
     counts = {name: states.count(name) for name in ("static", "low_motion", "motion")}
     return {
         "method": "decoded grayscale temporal activity hint",
+        "analysis_mode": mode,
         "analysis_fps": analysis_fps,
         "analysis_resolution": [width, height],
         "source_width": video.get("width"),
@@ -203,7 +210,9 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
             "tile_grid": [int(np.ceil(width / tile_width)), int(np.ceil(height / tile_height))],
             "mean_changed_tile_ratio": round(float(np.mean(tile_changes)) if tile_changes else 0.0, 8),
             "p95_changed_tile_ratio": round(float(np.percentile(tile_changes, 95)) if tile_changes else 0.0, 8),
-            "strict_pixel_identical_available": True,
+            "strict_pixel_identical_available": False,
+            "strict_pixel_identity_note": "requires canonical-resolution pixel/plane tile comparison; this reduced preview is not an identity proof",
+            "mode_threshold": {"strict": 0.01, "visually_lossless": 0.03, "adaptive": 0.08}[mode],
             "state_is_hint_only": True,
         },
         "segments": rle(states, 1.0 / analysis_fps, duration(probe)),
@@ -272,7 +281,7 @@ def analyze(path: Path, analysis_fps: float = 10.0, mode: str = "strict") -> dic
                    "format_name": fmt.get("format_name"), "duration_s": duration(probe)},
         "streams": [{key: item.get(key) for key in ("index", "codec_type", "codec_name", "width", "height", "sample_rate", "channels", "time_base")}
                     for item in probe.get("streams", [])],
-        "video": analyze_video(path, probe, analysis_fps=analysis_fps),
+        "video": analyze_video(path, probe, analysis_fps=analysis_fps, mode=mode),
         "audio": analyze_audio(path, probe),
         "integrity": {"timestamps_are_source_of_truth": True, "optimization_is_hint_only": True, "mode_is_not_quality_proof": True,
                       "fallback": "full-frame/full-fidelity legacy playback"},

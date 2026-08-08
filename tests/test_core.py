@@ -34,6 +34,7 @@ def test_reference_video_manifest_preserves_source_metadata(tmp_path):
     assert manifest["audio"]["state_is_hint_only"] is True
     assert manifest["video"]["spatial_analysis"]["tile_grid"]
     assert 0.0 <= manifest["video"]["spatial_analysis"]["mean_changed_tile_ratio"] <= 1.0
+    assert manifest["video"]["spatial_analysis"]["strict_pixel_identical_available"] is False
 
 
 def test_manifest_json_roundtrip(tmp_path):
