@@ -134,6 +134,10 @@ def _interval(start: int, end: int, state: str, step: float) -> dict[str, Any]:
 
 def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
                   width: int = 160, height: int = 90) -> dict[str, Any]:
+    if not np.isfinite(analysis_fps) or analysis_fps <= 0:
+        raise CasuError("analysis FPS must be finite and positive")
+    if width <= 0 or height <= 0:
+        raise CasuError("analysis dimensions must be positive")
     video = stream(probe, "video")
     if not video:
         return {}
@@ -183,6 +187,8 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
 
 def analyze_audio(path: Path, probe: dict[str, Any], sample_rate: int = 16000,
                   window_ms: int = 20) -> dict[str, Any]:
+    if sample_rate <= 0 or window_ms <= 0:
+        raise CasuError("audio sample rate and window must be positive")
     audio = stream(probe, "audio")
     if not audio:
         return {}
@@ -220,6 +226,8 @@ def analyze_audio(path: Path, probe: dict[str, Any], sample_rate: int = 16000,
 def analyze(path: Path, analysis_fps: float = 10.0, mode: str = "strict") -> dict[str, Any]:
     if mode not in ANALYSIS_MODES:
         raise CasuError(f"unknown analysis mode: {mode}; choose one of {sorted(ANALYSIS_MODES)}")
+    if not np.isfinite(analysis_fps) or analysis_fps <= 0:
+        raise CasuError("analysis FPS must be finite and positive")
     path = path.expanduser().resolve()
     if not path.is_file():
         raise CasuError(f"input not found: {path}")
