@@ -21,6 +21,7 @@ implemented. A control is not marked complete merely because a widget exists.
 | PCM waveform / spectrum | not implemented | unavailable state | no | OPEN |
 | Energy measurement | not implemented | unavailable state | no | OPEN |
 | Persistent media library and settings | not implemented | minimal queue only | no | OPEN |
+| Source-resolution STRICT state builder | exact multi-plane unit core | no UI | unit | PARTIAL |
 
 `PARTIAL` and `OPEN` are deliberate release truthfulness: the player is a
 working in-process prototype, not a claim of feature parity with VLC.

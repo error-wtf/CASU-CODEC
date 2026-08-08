@@ -16,6 +16,7 @@ MAX_METADATA_KEYS = 256
 MAX_TEXT_LENGTH = 4096
 MAX_SEGMENT_PRIORITY = 1_000_000
 SEGMENT_LIFECYCLES = frozenset({"CREATE", "UPDATE", "HOLD", "MOVE", "REPLACE", "INVALIDATE", "RELEASE"})
+SUPPORTED_CASU_VERSIONS = frozenset({"1.0.0", "1.0.0rc1"})
 MAX_SEEK_ENTRIES = 2_000_000
 
 
@@ -42,8 +43,8 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
         errors.append("casu.name must be CASU")
     if identity.get("container_extension") != ".casu":
         errors.append("casu.container_extension must be .casu")
-    if identity.get("version") != "1.0.0":
-        errors.append("casu.version must be 1.0.0")
+    if identity.get("version") not in SUPPORTED_CASU_VERSIONS:
+        errors.append("casu.version must be a supported CASU version")
     if format_info.get("schema") not in (None, "0.2"):
         errors.append("format.schema is not supported")
     if identity.get("analysis_mode") is not None and identity.get("analysis_mode") not in {"strict", "visually_lossless", "adaptive"}:

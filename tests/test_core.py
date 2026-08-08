@@ -18,6 +18,7 @@ from casu.cli import main as casu_cli_main
 from mpcasu_backend import LibVLCBackend
 from mpcasu_playback import ControllerState, PlaybackController
 from mpcasu_player import presentation_mode
+from casu.strict import StrictFrame, build_state_map, canonical_frame
 
 
 VIDEO = Path(os.environ.get("CASU_TEST_VIDEO", "test_media/lino_lol_test_pattern.mp4"))
@@ -193,6 +194,30 @@ def test_tile_primitives_fail_closed_for_noncanonical_frames():
     np = __import__("numpy")
     with pytest.raises(TileStateError):
         compare_tile_frames(np.zeros((2, 2), dtype="float32"), np.zeros((2, 2), dtype="uint8"))
+
+
+def test_source_resolution_strict_detects_single_chroma_or_alpha_sample():
+    np = __import__("numpy")
+    y = np.zeros((4, 4), dtype="uint8")
+    chroma = np.zeros((4, 4), dtype="uint8")
+    previous = canonical_frame((y, chroma), pixel_format="yuv420p")
+    changed_chroma = chroma.copy(); changed_chroma[1, 1] = 1
+    current = canonical_frame((y, changed_chroma), pixel_format="yuv420p")
+    frames = [StrictFrame(0, 1, 1, previous), StrictFrame(1, 1, 1, current)]
+    states = build_state_map(frames, tile_width=4, tile_height=4)
+    assert states[0]["state"] == "UPDATE"
+    assert states[0]["fidelity"] == "SOURCE_RESOLUTION_STRICT"
+    assert states[0]["valid_from_s"] == 0.0
+    assert states[1]["state"] == "UPDATE"
+
+
+def test_source_resolution_strict_holds_identical_multiplane_frame():
+    np = __import__("numpy")
+    planes = (np.zeros((2, 2), dtype="uint16"), np.ones((2, 2), dtype="uint16"))
+    frame = canonical_frame(planes, pixel_format="yuv420p10le")
+    states = build_state_map([StrictFrame(10, 1, 1000, frame), StrictFrame(20, 1, 1000, frame)], tile_width=2, tile_height=2)
+    assert states[1]["state"] == "HOLD"
+    assert states[1]["valid_from_s"] == 0.02
 
 
 def test_native_casu_roundtrip_is_standalone_and_integrity_checked(tmp_path):
