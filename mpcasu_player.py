@@ -176,7 +176,14 @@ class MPCASUPlayer(tk.Tk):
         self.bind("<Right>", lambda _event: self.seek_by(10))
         self.bind("<Up>", lambda _event: self.change_volume(5))
         self.bind("<Down>", lambda _event: self.change_volume(-5))
+        self.bind("f", lambda _event: self.toggle_fullscreen())
+        self.bind("F", lambda _event: self.toggle_fullscreen())
+        self.bind("m", lambda _event: self.toggle_mute())
+        self.bind("M", lambda _event: self.toggle_mute())
+        self.bind("s", lambda _event: self.stop())
+        self.bind("S", lambda _event: self.stop())
         self.bind("<Escape>", lambda _event: self.attributes("-fullscreen", False))
+        self.canvas.bind("<Double-Button-1>", lambda _event: self.toggle_fullscreen())
         self.after(500, self._poll)
         self.after(50, self._visual_tick)
 
@@ -223,6 +230,8 @@ class MPCASUPlayer(tk.Tk):
             self.backend.play()
             self.duration = self.backend.duration()
             self.timeline.configure(to=max(self.duration, 1.0))
+            capabilities = self.backend.capabilities()
+            self.status.set(f"{path.name} · {state} · {capabilities.get('version', 'libVLC')}")
             self.status.set("Playing network source · timing owned by libVLC")
         except (BackendError, OSError) as exc:
             self.backend = None
@@ -477,6 +486,9 @@ class MPCASUPlayer(tk.Tk):
             self.status.set(f"Audio track {next_track + 1}/{count}")
         except BackendError as exc:
             self.status.set(str(exc))
+
+    def toggle_fullscreen(self):
+        self.attributes("-fullscreen", not bool(self.attributes("-fullscreen")))
 
     def _source_for(self, path: Path) -> Path:
         if path.suffix.lower() != ".casu":
