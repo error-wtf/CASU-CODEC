@@ -168,13 +168,14 @@ def test_manifest_rejects_unsorted_and_invalid_seek_index():
         "format": {"magic": "MPCASU\\0"},
         "casu": {"name": "CASU", "container_extension": ".casu", "version": "1.0.0"},
         "source": {"filename": "sample.mp4", "duration_s": 2},
-        "seek_index": {"entries": [
+        "seek_index": {"native_key_states": "yes", "entries": [
             {"timestamp_s": 1.0, "stream": "video", "segment_id": "s1"},
             {"timestamp_s": 0.5, "stream": "unknown", "segment_id": ""},
         ]},
         "integrity": {"timestamps_are_source_of_truth": True},
     }
     errors = validate_manifest(manifest)
+    assert any("native_key_states must be boolean" in error for error in errors)
     assert any("sorted by timestamp_s" in error for error in errors)
     assert any("stream is unsupported" in error for error in errors)
     assert any("segment_id is invalid" in error for error in errors)
