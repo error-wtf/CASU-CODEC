@@ -601,7 +601,10 @@ class MPCASUPlayer(tk.Tk):
             self.status.set("No local media selected for information")
             return
         try:
-            native = path.suffix.lower() == ".casu" and path.read_bytes()[:8] == b"CASUNAT1"
+            native = False
+            if path.suffix.lower() == ".casu":
+                with path.open("rb") as handle:
+                    native = handle.read(8) == b"CASUNAT1"
             if native:
                 manifest = read_native(path, verify_payload=True).manifest
                 source = path
@@ -762,7 +765,11 @@ class MPCASUPlayer(tk.Tk):
         try:
             # A CASU sidecar is metadata; stream presentation comes from the
             # immutable source it references, never from the JSON manifest.
-            if path.suffix.lower() == ".casu" and path.read_bytes()[:8] == b"CASUNAT1":
+            native = False
+            if path.suffix.lower() == ".casu":
+                with path.open("rb") as handle:
+                    native = handle.read(8) == b"CASUNAT1"
+            if native:
                 manifest = read_native(path, verify_payload=False).manifest
                 streams = manifest.get("streams", [])
                 probe = {"streams": streams, "format": {"duration": manifest.get("source", {}).get("duration_s", 0)}}
