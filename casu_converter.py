@@ -17,7 +17,8 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from casu.core import ANALYSIS_MODES, CasuCancelled, CasuError, analyze, ffprobe, duration
-from casu.native import NativeCasuError, write_native
+from casu.native import NativeCasuError, read_native, write_native
+from casu.schema import validate_manifest
 
 BG = "#090B0D"
 PANEL = "#111418"
@@ -48,6 +49,7 @@ class CASUConverter(tk.Tk):
         self.source = tk.StringVar()
         self.output = tk.StringVar()
         self._sources: list[Path] = []
+        self._source_root: Path | None = None
         self.mode = tk.StringVar(value="strict")
         # Sidecar remains the safe default until the native envelope is wired
         # into the player's CASU reader; users can explicitly opt into it.
@@ -107,8 +109,9 @@ class CASUConverter(tk.Tk):
         tk.Label(root, textvariable=self.status, wraplength=680, bg=BG, fg=SECONDARY, anchor="w", justify="left").pack(fill="x", pady=5)
         actions = tk.Frame(root, bg=BG); actions.pack(anchor="e", pady=(12, 0))
         ttk.Button(actions, text="Convert", style="CASU.TButton", command=self.convert).pack(side="left")
+        ttk.Button(actions, text="Verify output", style="CASU.TButton", command=self.verify_output).pack(side="left", padx=8)
         self.cancel_button = ttk.Button(actions, text="Cancel", style="CASU.TButton", command=self.cancel, state="disabled")
-        self.cancel_button.pack(side="left", padx=8)
+        self.cancel_button.pack(side="left")
         ttk.Button(actions, text="Close", style="CASU.TButton", command=self.destroy).pack(side="left")
 
     def choose_source(self) -> None:
@@ -117,11 +120,13 @@ class CASUConverter(tk.Tk):
         # them.
         paths = filedialog.askopenfilenames(filetypes=[("All media and files", "*.*"), ("All files", "*")])
         if paths:
+            self._source_root = None
             self._set_sources([Path(path) for path in paths])
 
     def choose_folder(self) -> None:
         folder = filedialog.askdirectory(mustexist=True)
         if folder:
+            self._source_root = Path(folder).expanduser().resolve()
             self._set_sources(sorted(path for path in Path(folder).rglob("*")
                                      if path.is_file() and path.suffix.lower() != ".casu"))
 
@@ -145,6 +150,7 @@ class CASUConverter(tk.Tk):
         self._set_sources([path for index, path in enumerate(self._sources) if index not in selected])
 
     def clear_queue(self) -> None:
+        self._source_root = None
         self._set_sources([])
 
     def choose_output(self) -> None:
@@ -173,7 +179,10 @@ class CASUConverter(tk.Tk):
         if output_dir.exists() and not output_dir.is_dir():
             messagebox.showerror("CASU", "Output must be a directory."); return
         output_dir.mkdir(parents=True, exist_ok=True)
-        outputs = [output_dir / f"{source.stem}.casu" for source in sources]
+        outputs = [self._target_for(source, output_dir) for source in sources]
+        if len(set(outputs)) != len(outputs):
+            messagebox.showerror("CASU", "Multiple sources map to the same output name. Choose a different output folder or convert them separately.")
+            return
         existing = [item for item in outputs if item.exists()]
         if existing and not messagebox.askyesno("Replace output?", f"Replace {len(existing)} existing CASU file(s)?"):
             return
@@ -191,12 +200,24 @@ class CASUConverter(tk.Tk):
         self.status.set("Analyzing decoded source activity…")
         threading.Thread(target=self._worker, args=(sources, output_dir, fps, mode, self.native_output.get()), daemon=True).start()
 
+    def _target_for(self, source: Path, output_dir: Path) -> Path:
+        """Map a source to a deterministic output without flattening folders."""
+        source = source.expanduser().resolve()
+        if self._source_root is not None:
+            try:
+                relative = source.relative_to(self._source_root)
+            except ValueError:
+                relative = Path(source.name)
+            return (output_dir / relative).with_suffix(".casu")
+        return output_dir / f"{source.stem}.casu"
+
     def _worker(self, sources: list[Path], output_dir: Path, fps: float, mode: str, native: bool) -> None:
         try:
             total = len(sources)
             results: list[dict[str, object]] = []
             for index, source in enumerate(sources):
-                output = output_dir / f"{source.stem}.casu"
+                output = self._target_for(source, output_dir)
+                output.parent.mkdir(parents=True, exist_ok=True)
                 def report(value: float, index=index, source=source) -> None:
                     overall = (index + max(0.0, min(1.0, value))) / total
                     self.after(0, lambda overall=overall, source=source: (
@@ -242,6 +263,42 @@ class CASUConverter(tk.Tk):
             self.after(0, lambda: self._done("Conversion cancelled; no incomplete CASU output was kept.", error=False, cancelled=True))
         except (CasuError, NativeCasuError, OSError, ValueError) as exc:
             self.after(0, lambda: self._done(f"Conversion failed: {exc}", error=True))
+
+    def verify_output(self) -> None:
+        """Verify every CASU file in the selected output directory."""
+        directory = Path(self.output.get()).expanduser() if self.output.get() else None
+        if directory is None or not directory.is_dir():
+            messagebox.showerror("CASU", "Choose an existing output folder first.")
+            return
+        files = sorted(directory.rglob("*.casu"))
+        if not files:
+            messagebox.showinfo("CASU Verify", "No .casu files found in the output folder.")
+            return
+        passed = 0
+        failures: list[str] = []
+        for path in files:
+            try:
+                with path.open("rb") as handle:
+                    magic = handle.read(8)
+                if magic == b"CASUNAT1":
+                    read_native(path, verify_payload=True)
+                else:
+                    manifest = json.loads(path.read_text(encoding="utf-8"))
+                    errors = validate_manifest(manifest)
+                    if errors:
+                        raise ValueError(errors[0])
+                passed += 1
+            except (OSError, ValueError, json.JSONDecodeError, NativeCasuError) as exc:
+                failures.append(f"{path.name}: {exc}")
+        report = directory / "casu_verify_report.json"
+        report.write_text(json.dumps({"version": 1, "checked": len(files),
+                                      "passed": passed, "failed": len(failures),
+                                      "errors": failures}, indent=2, ensure_ascii=False) + "\n",
+                         encoding="utf-8")
+        if failures:
+            messagebox.showerror("CASU Verify", f"{passed}/{len(files)} files passed. Details: {report}")
+        else:
+            messagebox.showinfo("CASU Verify", f"{passed}/{len(files)} files verified successfully.\nReport: {report}")
 
     def cancel(self) -> None:
         if self._busy:

@@ -215,6 +215,22 @@ def test_native_casu_roundtrip_is_standalone_and_integrity_checked(tmp_path):
         read_native(native)
 
 
+def test_cli_verify_accepts_native_container(tmp_path, monkeypatch, capsys):
+    source = tmp_path / "source.bin"
+    source.write_bytes(b"payload")
+    manifest = {
+        "format": {"magic": "MPCASU\\0"},
+        "casu": {"name": "CASU", "container_extension": ".casu", "version": "1.0.0"},
+        "source": {"filename": source.name, "duration_s": 1, "size_bytes": source.stat().st_size},
+        "integrity": {"timestamps_are_source_of_truth": True},
+        "seek_index": {"entries": [], "native_key_states": False},
+    }
+    native = write_native(tmp_path / "source.casu", source, manifest)
+    monkeypatch.setattr("sys.argv", ["casu", "verify", str(native)])
+    assert casu_cli_main() == 0
+    assert "native CASU container" in capsys.readouterr().out
+
+
 def test_manifest_rejects_non_hex_digest():
     manifest = {
         "casu": {"name": "CASU", "container_extension": ".casu"},

@@ -205,6 +205,29 @@ def main() -> int:
             play(args.input)
             return 0
         if args.command in {"validate", "verify", "info"}:
+            # Native containers have a binary header and are verified through
+            # the same integrity-aware reader as the converter GUI.
+            try:
+                with args.manifest.expanduser().open("rb") as handle:
+                    is_native = handle.read(8) == b"CASUNAT1"
+            except OSError as exc:
+                raise CasuError(f"could not read manifest {args.manifest}: {exc}") from exc
+            if is_native:
+                try:
+                    container = read_native(args.manifest, verify_payload=True)
+                except NativeCasuError as exc:
+                    if args.command == "info":
+                        print(json.dumps({"valid": False, "native": True, "errors": [str(exc)]}, indent=2))
+                        return 1
+                    print(f"INVALID: {exc}")
+                    return 1
+                if args.command == "info":
+                    print(json.dumps({"valid": True, "native": True,
+                                      "payload_bytes": container.payload_length,
+                                      "manifest": container.manifest}, indent=2, ensure_ascii=False))
+                else:
+                    print("VALID: native CASU container and payload integrity verified")
+                return 0
             try:
                 manifest = json.loads(args.manifest.expanduser().read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
