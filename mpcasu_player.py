@@ -1,26 +1,23 @@
 # SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
 # SPDX-FileCopyrightText: 2026 Lino Casu
 #!/usr/bin/env python3
-"""MPCASU — a small, dependency-light media player built around FFplay.
+"""MPCASU — an in-process media player using the libVLC shared-library API.
 
-The player intentionally delegates decoding to FFplay/FFmpeg. MPCASU owns the
-library, CASU sidecar discovery, transport controls and safe fallback; it does
-not reimplement mature MP4/MP3 decoders.
+MPCASU owns the window, playback state, CASU validation, clock polling and
+transport controls. It does not launch an external player executable.
 """
 from __future__ import annotations
 
-import signal
-import subprocess
 import sys
-import time
 import json
 import math
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from casu.core import CasuError, require_tool, resolve_casu_source
+from casu.core import CasuError, resolve_casu_source
 from casu.schema import validate_manifest
+from mpcasu_backend import BackendError, CasuBackend, LibVLCBackend, PlaybackState
 
 
 MEDIA = {".mp4", ".mp3", ".mkv", ".m4v", ".mov", ".flac", ".wav", ".ogg", ".webm", ".m4a", ".aac", ".opus", ".aiff", ".alac", ".casu"}
@@ -42,7 +39,7 @@ class MPCASUPlayer(tk.Tk):
         self.geometry("1360x820")
         self.minsize(980, 620)
         self.configure(bg=BG)
-        self.process: subprocess.Popen[str] | None = None
+        self.backend: LibVLCBackend | None = None
         self.current: Path | None = None
         self.duration = 0.0
         self.position = tk.DoubleVar(value=0.0)
@@ -137,8 +134,8 @@ class MPCASUPlayer(tk.Tk):
         self.bind("<space>", lambda _event: self.pause())
         self.bind("<Left>", lambda _event: self.seek_by(-10))
         self.bind("<Right>", lambda _event: self.seek_by(10))
-        self.bind("<Up>", lambda _event: self.status.set("Volume control delegated to FFplay"))
-        self.bind("<Down>", lambda _event: self.status.set("Volume control delegated to FFplay"))
+        self.bind("<Up>", lambda _event: self.status.set("Volume control is not available in this backend yet"))
+        self.bind("<Down>", lambda _event: self.status.set("Volume control is not available in this backend yet"))
         self.bind("<Escape>", lambda _event: self.attributes("-fullscreen", False))
         self.after(500, self._poll)
         self.after(50, self._visual_tick)
@@ -228,7 +225,7 @@ class MPCASUPlayer(tk.Tk):
                                 fill="#8ca8b8", tags="viz")
 
     def _visual_tick(self):
-        if self.process and not self._paused:
+        if self.backend and self.backend.state() == PlaybackState.PLAYING and not self._paused:
             self._visual_phase += 0.16
         self._draw_visualizer()
         self.after(50, self._visual_tick)
@@ -270,29 +267,22 @@ class MPCASUPlayer(tk.Tk):
             messagebox.showerror("MPCASU", str(exc))
             self.status.set("Cannot play — safe fallback refused an invalid CASU manifest")
             return
-        self.duration = self._probe_duration(source)
-        self.timeline.configure(to=max(self.duration, 1.0))
         state = "CASU manifest selected" if path.suffix.lower() == ".casu" else ("CASU sidecar found" if sidecar.exists() else "legacy fallback — no CASU sidecar")
         self.status.set(f"{path.name} · {state}")
         try:
-            self.process = self._launch(source)
-        except (CasuError, OSError) as exc:
-            self.process = None
-            self.status.set("Cannot play — FFplay could not be started")
-            messagebox.showerror("MPCASU", f"Could not start FFplay: {exc}")
+            self.backend = CasuBackend(self.canvas) if path.suffix.lower() == ".casu" else LibVLCBackend(self.canvas)
+            if path.suffix.lower() == ".casu": self.backend.open_casu(path)
+            else: self.backend.open(source)
+            self.backend.play()
+            self.duration = self.backend.duration()
+            self.timeline.configure(to=max(self.duration, 1.0))
+        except (BackendError, CasuError, OSError) as exc:
+            if self.backend: self.backend.close()
+            self.backend = None
+            self.status.set("Cannot play — internal media backend unavailable")
+            messagebox.showerror("MPCASU", f"Could not start internal playback: {exc}")
             return
         self._paused = False
-
-    def _launch(self, source: Path, offset: float | None = None) -> subprocess.Popen[str]:
-        require_tool("ffplay")
-        command = ["ffplay", "-hide_banner", "-autoexit"]
-        if offset is not None:
-            command.extend(["-ss", f"{offset:.3f}"])
-        command.extend(["-window_title", "MPCASU — " + source.name, str(source)])
-        process = subprocess.Popen(command, text=True)
-        self._start_offset = offset or 0.0
-        self._started_at = time.monotonic()
-        return process
 
     def _source_for(self, path: Path) -> Path:
         if path.suffix.lower() != ".casu":
@@ -309,38 +299,23 @@ class MPCASUPlayer(tk.Tk):
         except CasuError as exc:
             raise CasuError(f"CASU source unavailable: {exc}") from exc
 
-    def _probe_duration(self, path: Path) -> float:
-        try:
-            out = subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", str(path)], text=True)
-            return max(0.0, float(out.strip()))
-        except (OSError, ValueError, subprocess.CalledProcessError):
-            return 0.0
-
     def pause(self):
-        if self.process and self.process.poll() is None:
+        if self.backend and self.backend.state() not in {PlaybackState.EMPTY, PlaybackState.STOPPED, PlaybackState.ENDED}:
             if self._paused:
-                self.process.send_signal(signal.SIGCONT)
+                self.backend.resume()
                 self._paused = False
-                self._start_offset = self.position.get()
-                self._started_at = time.monotonic()
                 self.status.set("Playing — source timing is preserved")
             else:
                 self._sync_position()
-                self.process.send_signal(signal.SIGSTOP)
+                self.backend.pause()
                 self._paused = True
                 self.status.set("Paused — source timing is preserved")
 
     def stop(self):
-        if self.process and self.process.poll() is None:
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=1)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-        self.process = None
+        if self.backend:
+            self.backend.close()
+        self.backend = None
         self._paused = False
-        self._started_at = 0.0
-        self._start_offset = 0.0
 
     def seek_by(self, seconds: float):
         self.position.set(max(0.0, min(self.duration, self.position.get() + seconds)))
@@ -360,23 +335,21 @@ class MPCASUPlayer(tk.Tk):
         except CasuError as exc:
             self.status.set(str(exc))
             return
-        self.stop()
         try:
-            self.process = self._launch(source, offset)
-        except (CasuError, OSError) as exc:
-            self.status.set(f"Cannot seek — FFplay could not be started: {exc}")
+            if self.backend:
+                self.backend.seek(offset)
+                self.backend.play()
+        except (BackendError, CasuError, OSError) as exc:
+            self.status.set(f"Cannot seek — internal media backend failed: {exc}")
             return
         self._paused = False
 
     def _sync_position(self):
-        if self.process and not self._paused and self.process.poll() is None:
-            elapsed = max(0.0, time.monotonic() - self._started_at)
-            self.position.set(min(self.duration, self._start_offset + elapsed))
+        if self.backend and not self._paused:
+            self.position.set(min(self.duration, self.backend.position()))
 
     def _poll(self):
-        if self.process and self.process.poll() is not None:
-            self.process = None
-        elif self.process and not self._dragging and not self._paused:
+        if self.backend and not self._dragging and not self._paused:
             self._sync_position()
         self.after(500, self._poll)
 

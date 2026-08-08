@@ -13,10 +13,10 @@ source code from either project:
   which is source-available but includes restrictions on modified distribution.
   It is therefore not treated as an open-source code dependency here.
 
-MPCASU uses the system's FFmpeg/FFplay binaries as an external decoder/player
-process. It does not embed VLC or Winamp code. Any distribution of a packaged
-MPCASU build must ship the applicable FFmpeg/FFplay notices and licenses for
-the exact binaries included by that distribution.
+MPCASU uses the system libVLC shared library through an in-process backend. It
+does not embed VLC or Winamp source code and does not launch a player process.
+Any distribution of a packaged MPCASU build must ship the applicable libVLC
+notices and licenses for the exact runtime supplied by that distribution.
 
 The clean-room boundary is intentional: MPCASU may learn from general player
 concepts such as playlists, transport controls, skins and library views, but
@@ -25,5 +25,5 @@ is authored independently in this repository.
 
 The built-in visualizer is an explanatory decoded-activity animation. It is
 not presented as a waveform, a perceptual-quality score or an energy-saving
-measurement. CASU state labels remain hints, while FFmpeg/FFplay remains the
-canonical full-fidelity playback path.
+measurement. CASU state labels remain hints, while the libVLC-backed pipeline
+remains the canonical full-fidelity playback path.

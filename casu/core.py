@@ -261,7 +261,7 @@ def analyze(path: Path, analysis_fps: float = 10.0, mode: str = "strict") -> dic
 
 
 def play(path: Path, extra: list[str] | None = None) -> None:
-    require_tool("ffplay")
+    """Reject the legacy CLI player path; MPCASU owns playback in-process."""
     path = path.expanduser().resolve()
     if not path.is_file():
         raise CasuError(f"media not found: {path}")
@@ -275,4 +275,4 @@ def play(path: Path, extra: list[str] | None = None) -> None:
         if errors:
             raise CasuError(f"invalid CASU manifest: {errors[0]}")
         path = resolve_casu_source(path)
-    run(["ffplay", "-autoexit", "-hide_banner", *(extra or []), str(path)])
+    raise CasuError("external playback is not supported; use the MPCASU in-process player")

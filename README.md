@@ -58,8 +58,8 @@ mpcasu /path/to/movie.mp4
 ```
 
 It provides a library list, play/pause/stop, seek controls, CASU sidecar
-detection and a safe legacy fallback. Decoding remains delegated to FFplay;
-this prevents a new UI layer from silently replacing mature MP4/MP3 decoders.
+detection and a safe legacy fallback. Decoding runs through the in-process
+libVLC shared-library backend; no external player executable is launched.
 
 The same converter is also available as a small Tk interface:
 
@@ -74,9 +74,10 @@ film.casu → CASU codec/container → MPCASU player → audio/video output
 legacy MP4/MP3/MKV ───────────────────────────────→ MPCASU fallback
 ```
 
-`play` delegates to FFplay and does not transcode, retimestamp, stretch, or
-otherwise modify the input. If a sidecar is missing or invalid, legacy playback
-continues normally. `analyze` decodes a small inspection stream and writes
+The CLI `play` command validates a path for MPCASU but does not launch an
+external player. MPCASU does not transcode, retimestamp, stretch, or otherwise
+modify the input. If a sidecar is missing or invalid, safe fallback is explicit.
+`analyze` decodes a small inspection stream and writes
 `movie.mp4.casu` or `song.mp3.casu`.
 
 ## Compatibility contract

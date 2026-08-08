@@ -30,9 +30,8 @@ def parser() -> argparse.ArgumentParser:
     c.add_argument("--mode", choices=sorted(ANALYSIS_MODES), default="strict",
                    help="state-analysis policy; strict is the reference mode")
     c.add_argument("--force", action="store_true", help="replace an existing output atomically")
-    v = sub.add_parser("play", help="play legacy media through FFplay without changing it")
+    v = sub.add_parser("play", help="validate a media path for MPCASU in-process playback")
     v.add_argument("input", type=Path)
-    v.add_argument("ffplay_args", nargs=argparse.REMAINDER)
     x = sub.add_parser("validate", help="validate a .casu manifest")
     x.add_argument("manifest", type=Path)
     x.add_argument("--verify-source", action="store_true",
@@ -69,7 +68,7 @@ def main() -> int:
                               "mode": result["casu"]["analysis_mode"]}, indent=2))
             return 0
         if args.command == "play":
-            play(args.input, args.ffplay_args)
+            play(args.input)
             return 0
         if args.command == "validate":
             try:
