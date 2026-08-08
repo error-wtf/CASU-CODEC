@@ -130,6 +130,7 @@ See [`docs/FORMAT_SPEC.md`](docs/FORMAT_SPEC.md),
 [`docs/PLAYER_PROVENANCE.md`](docs/PLAYER_PROVENANCE.md),
 [`docs/LEGACY_MEDIA_REQUIREMENTS.md`](docs/LEGACY_MEDIA_REQUIREMENTS.md) and
 [`docs/DEVELOPMENT_PATH.md`](docs/DEVELOPMENT_PATH.md).
+Release details are in [`RELEASE_NOTES_v1.0.0.md`](RELEASE_NOTES_v1.0.0.md).
 
 ## Status
 
