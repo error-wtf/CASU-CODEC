@@ -46,9 +46,13 @@ class LibVLCBackend:
         except OSError as exc:
             raise BackendError("libVLC shared library is unavailable") from exc
         self.widget = video_widget
+        # VLC 3.x discovers modules through VLC_PLUGIN_PATH. The historical
+        # --plugin-path command-line option is no longer accepted and can
+        # prevent codec modules from loading in embedded libVLC builds.
+        # VLC 3.x discovers modules through VLC_PLUGIN_PATH. The historical
+        # --plugin-path command-line option is no longer accepted and can
+        # prevent codec modules from loading in embedded libVLC builds.
         options = [b"--no-video-title-show"]
-        if os.path.isdir(plugin_path):
-            options.append(("--plugin-path=" + plugin_path).encode())
         argv = (ctypes.c_char_p * len(options))(*options)
         self.instance = self._call("libvlc_new", ctypes.c_void_p, [ctypes.c_int, ctypes.POINTER(ctypes.c_char_p)])(len(options), argv)
         if not self.instance:

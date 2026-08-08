@@ -94,6 +94,10 @@ class MPCASUPlayer(tk.Tk):
         self._restore_session()
         if initial:
             self.add_files(initial if isinstance(initial, list) else [initial])
+            # A file supplied to the application is an explicit play request,
+            # not merely a request to populate the queue.  Start after Tk has
+            # mapped the video surface so libVLC can bind its native renderer.
+            self.after_idle(self.play_selected)
         self.protocol("WM_DELETE_WINDOW", self._shutdown)
 
     def _build(self):
@@ -166,6 +170,18 @@ class MPCASUPlayer(tk.Tk):
         ttk.Button(actions, text="− Remove", style="MPC.TButton", command=self.remove_selected).pack(fill="x", pady=(5, 0))
         ttk.Button(actions, text="▣ Save playlist", style="MPC.TButton", command=self.save_playlist).pack(fill="x", pady=(5, 0))
         ttk.Button(actions, text="□ Load playlist", style="MPC.TButton", command=self.load_playlist).pack(fill="x", pady=(5, 0))
+
+        # A real compact navigation rail keeps navigation available when the
+        # full sidebar would steal too much video width.  It is deliberately
+        # icon-only and uses the same actions as the expanded navigation.
+        compact_nav = tk.Frame(body, bg=PANEL, width=54)
+        compact_nav.pack_propagate(False)
+        for symbol, name in (("▶", "Now Playing"), ("▦", "Library"), ("◆", "CASU Files"), ("♫", "Music"), ("☷", "Playlists")):
+            ttk.Button(
+                compact_nav, text=symbol, width=3, style="MPC.TButton",
+                command=lambda label=name: self.status.set(f"{label}: compact navigation"),
+            ).pack(fill="x", padx=7, pady=5)
+        self.compact_nav = compact_nav
 
         center = tk.Frame(body, bg=PANEL); center.pack(side="left", fill="both", expand=True)
         self.canvas = tk.Canvas(center, background="#0D1013", highlightthickness=0)
@@ -262,11 +278,15 @@ class MPCASUPlayer(tk.Tk):
         if mode != self._layout_mode:
             self._layout_mode = mode
             if mode == "wide":
+                if self.compact_nav.winfo_ismapped():
+                    self.compact_nav.pack_forget()
                 if not self.right_shell.winfo_ismapped():
                     self.right_shell.pack(side="right", fill="y", padx=(10, 0))
                 if not self.left_shell.winfo_ismapped():
                     self.left_shell.pack(side="left", fill="y", padx=(0, 10), before=self.canvas.master)
             elif mode == "medium":
+                if self.compact_nav.winfo_ismapped():
+                    self.compact_nav.pack_forget()
                 if self.right_shell.winfo_ismapped():
                     self.right_shell.pack_forget()
                 if not self.left_shell.winfo_ismapped():
@@ -276,6 +296,8 @@ class MPCASUPlayer(tk.Tk):
                     self.right_shell.pack_forget()
                 if self.left_shell.winfo_ismapped():
                     self.left_shell.pack_forget()
+                if not self.compact_nav.winfo_ismapped():
+                    self.compact_nav.pack(side="left", fill="y", padx=(0, 8), before=self.canvas.master)
         # At low heights the diagnostics row is collapsed rather than clipped.
         if height < 700:
             if self.diagnostics.winfo_ismapped():
@@ -543,7 +565,14 @@ class MPCASUPlayer(tk.Tk):
     def selected_path(self) -> Path | None:
         selected = self.library.curselection()
         if not selected:
-            return self.current
+            if self.current:
+                return self.current
+            # Opening a file from the command line or file manager populates
+            # the queue without creating a Listbox selection.  The first queue
+            # item is the deterministic playback target in that case.
+            if self.library.size():
+                return Path(self.library.get(0))
+            return None
         return Path(self.library.get(selected[0]))
 
     def _sidecar(self, path: Path) -> Path:
@@ -595,6 +624,11 @@ class MPCASUPlayer(tk.Tk):
             self.timeline.configure(to=max(self.duration, 1.0))
             capabilities = self.backend.capabilities()
             self.status.set(f"{path.name} · {state} · {capabilities.get('version', 'libVLC')}")
+            # libVLC can accept a media object while a decoder later fails.
+            # Check local playback after its asynchronous pipeline had time to
+            # announce streams; never leave the UI claiming PLAYING forever
+            # when no timed media was produced.
+            self.after(1500, self._check_playback_start)
         except (BackendError, CasuError, OSError) as exc:
             self.controller.close()
             self.backend = None
@@ -603,6 +637,15 @@ class MPCASUPlayer(tk.Tk):
             return
         self._paused = False
         self._update_presentation(path)
+
+    def _check_playback_start(self):
+        if not self.backend or not self.current or self._paused:
+            return
+        if self.current.as_uri().startswith(("http:", "https:", "rtsp:")):
+            return
+        if self.backend.state() == PlaybackState.PLAYING and self.duration <= 0 and self.position.get() <= 0:
+            self.status.set("Playback unavailable — decoder produced no timed media")
+            self._set_diagnostics(support="backend opened; decoder unavailable")
 
     def _update_presentation(self, path: Path):
         """Choose a presentation mode from probed streams, not file suffixes."""
