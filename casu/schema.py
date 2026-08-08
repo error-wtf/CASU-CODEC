@@ -59,6 +59,12 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
           or PurePath(source["filename"]).name != source["filename"]
           or source["filename"] in {".", ".."}):
         errors.append("source.filename must be a bounded basename without path traversal")
+    source_path = source.get("path")
+    if source_path is not None:
+        if not isinstance(source_path, str) or not source_path or len(source_path) > MAX_TEXT_LENGTH:
+            errors.append("source.path must be a bounded string when present")
+        elif isinstance(source.get("filename"), str) and PurePath(source_path.replace("\\", "/")).name != source["filename"]:
+            errors.append("source.path basename must match source.filename")
     if "duration_s" not in source:
         errors.append("source.duration_s is required")
     try:
