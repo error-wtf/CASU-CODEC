@@ -64,6 +64,6 @@ EOF
 
 make_pkg casu-codec "CASU Codec for All Segmented Units" "python3 (>= 3.10), python3-numpy, ffmpeg" install_codec
 make_pkg casu-converter "CASU graphical media converter" "casu-codec (= $version), python3-tk" install_converter
-make_pkg mpcasu "MPCASU CASU and legacy media player" "casu-codec (= $version), python3-tk, ffmpeg" install_player
+make_pkg mpcasu "MPCASU CASU and legacy media player" "casu-codec (= $version), python3-tk, libvlc5" install_player
 sha256sum "$out"/*.deb > "$out/SHA256SUMS"
 printf 'Built CASU/MPCASU Debian packages version %s in %s\n' "$version" "$out"
