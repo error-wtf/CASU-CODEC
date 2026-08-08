@@ -66,6 +66,9 @@ class LibVLCBackend:
         self._install("libvlc_media_player_get_time", ctypes.c_int64, [ctypes.c_void_p])
         self._install("libvlc_media_player_get_length", ctypes.c_int64, [ctypes.c_void_p])
         self._install("libvlc_media_player_set_time", None, [ctypes.c_void_p, ctypes.c_int64])
+        self._install("libvlc_audio_set_volume", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int])
+        self._install("libvlc_audio_get_volume", ctypes.c_int, [ctypes.c_void_p])
+        self._install("libvlc_audio_set_mute", None, [ctypes.c_void_p, ctypes.c_int])
         if sys.platform.startswith("linux"):
             self._install("libvlc_media_player_set_xwindow", None, [ctypes.c_void_p, ctypes.c_uint32])
 
@@ -116,6 +119,19 @@ class LibVLCBackend:
         if self.player and self._state == PlaybackState.PLAYING and not self.libvlc_media_player_is_playing(self.player):
             if self.duration() and self.position() >= self.duration() - 0.2: self._state = PlaybackState.ENDED
         return self._state
+
+    def set_volume(self, value: int) -> int:
+        if not self.player: return 0
+        value = max(0, min(200, int(value)))
+        if self.libvlc_audio_set_volume(self.player, value) != 0:
+            raise BackendError("libVLC rejected the requested volume")
+        return value
+
+    def volume(self) -> int:
+        return max(0, int(self.libvlc_audio_get_volume(self.player) if self.player else 0))
+
+    def set_mute(self, muted: bool) -> None:
+        if self.player: self.libvlc_audio_set_mute(self.player, int(bool(muted)))
 
     def close_media(self):
         if self.player: self.libvlc_media_player_stop(self.player); self.libvlc_media_player_release(self.player)

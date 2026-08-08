@@ -54,6 +54,8 @@ class MPCASUPlayer(tk.Tk):
         self._visual_video_segments: list[dict] = []
         self._visual_audio_segments: list[dict] = []
         self._logo_image = None
+        self._volume = 100
+        self._muted = False
         self._build()
         if initial:
             self.add_files(initial if isinstance(initial, list) else [initial])
@@ -112,6 +114,7 @@ class MPCASUPlayer(tk.Tk):
         bar.pack(fill="x", pady=8)
         for label, command in (("−10 s", lambda: self.seek_by(-10)), ("Back", lambda: self.seek_by(-10)), ("Play / Pause", self.toggle_playback), ("Stop", self.stop), ("Forward", lambda: self.seek_by(10))):
             ttk.Button(bar, text=label, style="MPC.TButton", command=command).pack(side="left", padx=3)
+        ttk.Button(bar, text="Mute", style="MPC.TButton", command=self.toggle_mute).pack(side="right", padx=3)
         ttk.Button(bar, text="Audio", style="MPC.TButton", command=lambda: self.status.set("Audio track selection is unavailable in this backend")).pack(side="right", padx=3)
         ttk.Button(bar, text="Fullscreen", style="MPC.TButton", command=lambda: self.attributes("-fullscreen", not self.attributes("-fullscreen"))).pack(side="right", padx=3)
         tk.Label(center, textvariable=self.status, bg=PANEL, fg=SECONDARY, anchor="w").pack(fill="x", padx=14, pady=(0, 8))
@@ -134,8 +137,8 @@ class MPCASUPlayer(tk.Tk):
         self.bind("<space>", lambda _event: self.pause())
         self.bind("<Left>", lambda _event: self.seek_by(-10))
         self.bind("<Right>", lambda _event: self.seek_by(10))
-        self.bind("<Up>", lambda _event: self.status.set("Volume control is not available in this backend yet"))
-        self.bind("<Down>", lambda _event: self.status.set("Volume control is not available in this backend yet"))
+        self.bind("<Up>", lambda _event: self.change_volume(5))
+        self.bind("<Down>", lambda _event: self.change_volume(-5))
         self.bind("<Escape>", lambda _event: self.attributes("-fullscreen", False))
         self.after(500, self._poll)
         self.after(50, self._visual_tick)
@@ -281,6 +284,20 @@ class MPCASUPlayer(tk.Tk):
             self.play_selected()
         else:
             self.pause()
+
+    def change_volume(self, delta: int):
+        self._volume = max(0, min(200, self._volume + delta))
+        if self.backend:
+            try: self._volume = self.backend.set_volume(self._volume)
+            except BackendError as exc: self.status.set(str(exc)); return
+        self.status.set(f"Volume {self._volume}%")
+
+    def toggle_mute(self):
+        self._muted = not self._muted
+        if self.backend:
+            try: self.backend.set_mute(self._muted)
+            except BackendError as exc: self.status.set(str(exc)); return
+        self.status.set("Muted" if self._muted else f"Volume {self._volume}%")
 
     def _source_for(self, path: Path) -> Path:
         if path.suffix.lower() != ".casu":
