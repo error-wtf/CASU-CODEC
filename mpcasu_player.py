@@ -199,30 +199,22 @@ class MPCASUPlayer(tk.Tk):
         width = max(120, self.canvas.winfo_width())
         height = max(160, self.canvas.winfo_height())
         self.canvas.delete("viz")
+        # The canvas is the libVLC video surface during playback. Never paint
+        # an invented waveform over a real video (or pretend that a timer is
+        # an audio signal). A future PCM-backed audio visualizer must provide
+        # measured samples before it is enabled.
+        if self.backend and self.backend.state() in {
+            PlaybackState.LOADING, PlaybackState.READY, PlaybackState.PLAYING,
+            PlaybackState.PAUSED,
+        }:
+            return
         baseline = height - 54
-        bars = 32
-        gap = 4
-        bar_width = max(3, (width - 40 - gap * (bars - 1)) / bars)
         state = self._state_at_position()
-        for index in range(bars):
-            wave = 0.5 + 0.5 * math.sin(self._visual_phase + index * 0.43)
-            envelope = 0.25 + 0.75 * wave
-            if state in {"static", "silence"}:
-                envelope *= 0.22
-            elif state in {"low_motion", "low_level"}:
-                envelope *= 0.55
-            elif state in {"motion", "active"}:
-                envelope *= 1.0
-            elif self._visual_state == "legacy":
-                envelope *= 0.7
-            bar_height = 12 + envelope * min(150, height * 0.34)
-            x0 = 20 + index * (bar_width + gap)
-            self.canvas.create_rectangle(x0, baseline - bar_height, x0 + bar_width, baseline,
-                                         fill="#4aa3c7" if index % 3 else "#d3a84c",
-                                         outline="", tags="viz")
-        self.canvas.create_line(20, baseline, width - 20, baseline, fill="#29495a", tags="viz")
-        self.canvas.create_text(20, baseline + 14, anchor="nw", text=f"{self._visual_state} · {self._state_at_position()}",
-                                fill="#8ca8b8", tags="viz")
+        label = "Measured audio visualization unavailable"
+        if self._visual_state.startswith("CASU"):
+            label = f"CASU state map · {state}"
+        self.canvas.create_text(width // 2, height // 2, anchor="center", text=label,
+                                fill=MUTED, font=("TkDefaultFont", 11), tags="viz")
 
     def _visual_tick(self):
         if self.backend and self.backend.state() == PlaybackState.PLAYING and not self._paused:
