@@ -44,6 +44,8 @@ def resolve_casu_source(path: Path) -> Path:
             if not candidate.is_file():
                 raise CasuError(f"CASU source media not found: {path}")
             candidate = candidate.resolve()
+            if candidate.parent != path.parent.resolve():
+                raise CasuError(f"CASU source filename escapes manifest directory: {path}")
         expected_size = manifest.get("source", {}).get("size_bytes")
         if expected_size is not None:
             try:
