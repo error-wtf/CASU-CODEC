@@ -59,7 +59,10 @@ class CASUConverter(tk.Tk):
         self.source_info = tk.StringVar(value="No source inspected")
         self.output_info = tk.StringVar(value="The original source is never modified.")
         self._cancel_event = threading.Event()
+        self._pause_event = threading.Event()
+        self._pause_event.set()
         self._busy = False
+        self._paused = False
         self._build()
 
     def _build(self) -> None:
@@ -110,6 +113,8 @@ class CASUConverter(tk.Tk):
         actions = tk.Frame(root, bg=BG); actions.pack(anchor="e", pady=(12, 0))
         ttk.Button(actions, text="Convert", style="CASU.TButton", command=self.convert).pack(side="left")
         ttk.Button(actions, text="Verify output", style="CASU.TButton", command=self.verify_output).pack(side="left", padx=8)
+        self.pause_button = ttk.Button(actions, text="Pause queue", style="CASU.TButton", command=self.pause_queue, state="disabled")
+        self.pause_button.pack(side="left", padx=(0, 8))
         self.cancel_button = ttk.Button(actions, text="Cancel", style="CASU.TButton", command=self.cancel, state="disabled")
         self.cancel_button.pack(side="left")
         ttk.Button(actions, text="Close", style="CASU.TButton", command=self.destroy).pack(side="left")
@@ -194,8 +199,11 @@ class CASUConverter(tk.Tk):
             messagebox.showerror("CASU", "FPS must be positive."); return
         mode = self.mode.get()
         self._cancel_event.clear()
+        self._pause_event.set()
+        self._paused = False
         self._busy = True
         self.cancel_button.configure(state="normal")
+        self.pause_button.configure(state="normal", text="Pause queue")
         self.progress.configure(value=0.0)
         self.status.set("Analyzing decoded source activity…")
         threading.Thread(target=self._worker, args=(sources, output_dir, fps, mode, self.native_output.get()), daemon=True).start()
@@ -216,6 +224,9 @@ class CASUConverter(tk.Tk):
             total = len(sources)
             results: list[dict[str, object]] = []
             for index, source in enumerate(sources):
+                while not self._pause_event.wait(0.1):
+                    if self._cancel_event.is_set():
+                        raise CasuCancelled("conversion cancelled")
                 output = self._target_for(source, output_dir)
                 output.parent.mkdir(parents=True, exist_ok=True)
                 def report(value: float, index=index, source=source) -> None:
@@ -225,8 +236,10 @@ class CASUConverter(tk.Tk):
                         self.status.set(f"Converting {source.name} ({index + 1}/{total})"),
                     ))
                 try:
+                    self.after(0, lambda source=source, index=index: self.status.set(f"Analyzing {source.name} ({index + 1}/{total})"))
                     result = analyze(source, fps, mode, progress=report, cancel=self._cancel_event)
                     payload = json.dumps(result, indent=2, ensure_ascii=False) + "\n"
+                    self.after(0, lambda source=source, index=index: self.status.set(f"Writing {source.name} ({index + 1}/{total})"))
                     fd, temporary = tempfile.mkstemp(prefix=f".{output.name}.", dir=output.parent, text=True)
                     try:
                         if native:
@@ -306,9 +319,26 @@ class CASUConverter(tk.Tk):
             self.status.set("Cancellation requested — stopping decoder…")
             self.cancel_button.configure(state="disabled")
 
+    def pause_queue(self) -> None:
+        if not self._busy:
+            return
+        if self._paused:
+            self._paused = False
+            self._pause_event.set()
+            self.pause_button.configure(text="Pause queue")
+            self.status.set("Queue resumed.")
+        else:
+            self._paused = True
+            self._pause_event.clear()
+            self.pause_button.configure(text="Resume queue")
+            self.status.set("Queue paused after the current file.")
+
     def _done(self, message: str, error: bool = False, cancelled: bool = False) -> None:
         self._busy = False
+        self._paused = False
+        self._pause_event.set()
         self.cancel_button.configure(state="disabled")
+        self.pause_button.configure(state="disabled", text="Pause queue")
         self.progress.configure(value=0.0 if error else 100.0)
         self.status.set(message)
         if cancelled:
