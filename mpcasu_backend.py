@@ -221,6 +221,10 @@ class LibVLCBackend:
             if self.duration() and self.position() >= self.duration() - 0.2: self._state = PlaybackState.ENDED
         return self._state
 
+    def is_actively_playing(self) -> bool:
+        """Return the backend's real playing flag, not just requested state."""
+        return bool(self.player and self.libvlc_media_player_is_playing(self.player))
+
     def set_volume(self, value: int) -> int:
         if not self.player: return 0
         value = max(0, min(200, int(value)))
