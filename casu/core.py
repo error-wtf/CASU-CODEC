@@ -13,6 +13,7 @@ from typing import Any
 import numpy as np
 
 from . import __version__
+from .tiles import compare_tile_frames, tile_regions
 
 
 class CasuError(RuntimeError):
@@ -187,9 +188,12 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
         raise CasuError("could not open FFmpeg video output")
     size = width * height
     previous = None
+    previous_canonical: np.ndarray | None = None
     deltas: list[float] = []
     states: list[str] = []
     tile_changes: list[float] = []
+    active_tiles: dict[str, dict[str, Any]] = {}
+    tile_intervals: list[dict[str, Any]] = []
     tile_width = max(1, min(16, width // 8))
     tile_height = max(1, min(16, height // 8))
     frame_index = 0
@@ -202,7 +206,8 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
         raw = process.stdout.read(size)
         if len(raw) != size:
             break
-        frame = np.frombuffer(raw, dtype=np.uint8).astype(np.int16)
+        canonical = np.frombuffer(raw, dtype=np.uint8).reshape(height, width)
+        frame = canonical.astype(np.int16).reshape(-1)
         delta = 1.0 if previous is None else float(np.abs(frame - previous).mean() / 255.0)
         if previous is None:
             changed_ratio = 1.0
@@ -221,11 +226,33 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
                     changed += int(tile_delta > threshold)
                     total += 1
             changed_ratio = changed / max(1, total)
+        # Build a compact, deterministic S(x,y,t) map from the decoded
+        # analysis plane.  This is intentionally labelled as a canonical
+        # analysis plane: it is exact for the decoded gray8 preview, but is
+        # not a claim of source-resolution pixel identity.
+        tile_records = compare_tile_frames(
+            previous_canonical, canonical,
+            tile_width=tile_width, tile_height=tile_height,
+            mode=mode, timestamp_s=frame_index / analysis_fps,
+        )
+        timestamp_s = frame_index / analysis_fps
+        for record in tile_records:
+            tile_id = str(record["tile_id"])
+            prior = active_tiles.get(tile_id)
+            if (prior is not None
+                    and prior.get("state_hash") == record.get("state_hash")
+                    and prior.get("state") == record.get("state")):
+                continue
+            if prior is not None:
+                prior["valid_until_s"] = round(timestamp_s, 6)
+                tile_intervals.append(prior)
+            active_tiles[tile_id] = record
         state = "motion" if delta >= 0.010 else "low_motion" if delta >= 0.0015 else "static"
         deltas.append(delta)
         tile_changes.append(changed_ratio)
         states.append(state)
         previous = frame
+        previous_canonical = canonical
         frame_index += 1
         if progress is not None:
             try:
@@ -240,6 +267,11 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
     error_stream.close()
     if process.returncode != 0:
         raise CasuError(f"video analysis failed: {error.strip()}")
+    end_s = duration(probe)
+    for record in active_tiles.values():
+        record["valid_until_s"] = round(end_s, 6)
+        tile_intervals.append(record)
+    tile_intervals.sort(key=lambda item: (float(item["valid_from_s"]), str(item["tile_id"])))
     total = max(1, len(states))
     counts = {name: states.count(name) for name in ("static", "low_motion", "motion")}
     return {
@@ -265,6 +297,10 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
             "strict_pixel_identity_note": "requires canonical-resolution pixel/plane tile comparison; this reduced preview is not an identity proof",
             "mode_threshold": {"strict": 0.01, "visually_lossless": 0.03, "adaptive": 0.08}[mode],
             "state_is_hint_only": True,
+            "state_map": tile_intervals,
+            "state_map_count": len(tile_intervals),
+            "state_map_coordinate_system": "analysis-plane-pixels",
+            "state_map_identity_scope": "decoded gray8 analysis plane only",
         },
         "segments": rle(states, 1.0 / analysis_fps, duration(probe), "video"),
         "state_is_hint_only": True,

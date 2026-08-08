@@ -41,6 +41,9 @@ def test_reference_video_manifest_preserves_source_metadata(tmp_path):
     assert manifest["video"]["spatial_analysis"]["tile_grid"]
     assert 0.0 <= manifest["video"]["spatial_analysis"]["mean_changed_tile_ratio"] <= 1.0
     assert manifest["video"]["spatial_analysis"]["strict_pixel_identical_available"] is False
+    state_map = manifest["video"]["spatial_analysis"]["state_map"]
+    assert state_map and state_map[0]["tile_id"].startswith("tile-")
+    assert manifest["video"]["spatial_analysis"]["state_map_identity_scope"] == "decoded gray8 analysis plane only"
     assert manifest["video"]["segments"][0]["segment_id"].startswith("video-")
     assert manifest["audio"]["segments"][0]["segment_id"].startswith("audio-")
     assert manifest["seek_index"]["native_key_states"] is False

@@ -18,7 +18,7 @@ incorrect.
 | Audio codec preservation | MISSING | Audio is downmixed to mono float PCM for RMS hints; no audio payload or channel-preserving stream exists. |
 | Subtitle/chapter/attachment preservation | MISSING | Probe metadata is not written as native stream payloads; tags, chapters, fonts, cover art and attachments are lost. |
 | Exact strict identity | MISSING in runtime | `casu.tiles` can compare canonical uint8 arrays exactly, but the production analyzer still uses 160×90 grayscale previews and never calls the tile engine. |
-| Spatial state map | PARTIAL | `casu.tiles` emits in-memory tile records; no persistence, integration with decoded PTS, payload references or reader consumption. |
+| Spatial state map | PARTIAL+ | `analyze_video` now persists a compact per-tile `S(x,y,t)` interval map for the decoded gray8 analysis plane; source-resolution PTS/payload integration remains absent. |
 | Temporal truth | PARTIAL | Source duration is retained, but sampled frame intervals use requested analysis FPS rather than every source PTS/VFR timestamp. |
 | Tile lifecycle | PARTIAL | Primitive records contain lifecycle/hash/region fields; scheduler consumes only global time intervals and ignores tile dependencies. |
 | Key states | MISSING | `native_key_states` is explicitly `False`; no reconstruction checkpoints exist. |
@@ -34,12 +34,13 @@ incorrect.
 ## Concrete correctness gaps
 
 1. `analyze_video` still creates activity hints from a reduced grayscale stream;
-   even `strict` is explicitly not an identity proof.
+   its new state map is exact only for that analysis plane, and `strict` is
+   explicitly not a source-resolution identity proof.
 2. `casu.tiles` accepts only canonical `uint8` arrays. Real media may use
    YUV planes, 10/12-bit samples, HDR transfer functions and pixel-aspect
    metadata; canonicalization for those formats is undefined.
-3. The tile state map is in-memory only and is not consumed by
-   `CasuScheduler`, `CasuBackend` or the converter.
+3. The tile state map is persisted in the manifest and converter output, but is
+   not yet consumed by `CasuScheduler`, `CasuBackend` or a native renderer.
 4. State timestamps are derived from analysis cadence, not decoded PTS/DTS;
    variable-frame-rate and decoder-reorder behavior are therefore not modeled.
 5. Segment validation checks ordering/overlap but not coverage, region bounds
