@@ -15,7 +15,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from casu.core import ANALYSIS_MODES, CasuError, analyze, ffprobe, duration
+from casu.core import ANALYSIS_MODES, CasuCancelled, CasuError, analyze, ffprobe, duration
 
 BG = "#090B0D"
 PANEL = "#111418"
@@ -50,6 +50,8 @@ class CASUConverter(tk.Tk):
         self.status = tk.StringVar(value="Choose an MP4 or MP3 source.")
         self.source_info = tk.StringVar(value="No source inspected")
         self.output_info = tk.StringVar(value="The original source is never modified.")
+        self._cancel_event = threading.Event()
+        self._busy = False
         self._build()
 
     def _build(self) -> None:
@@ -90,7 +92,9 @@ class CASUConverter(tk.Tk):
         tk.Label(root, textvariable=self.status, wraplength=680, bg=BG, fg=SECONDARY, anchor="w", justify="left").pack(fill="x", pady=5)
         actions = tk.Frame(root, bg=BG); actions.pack(anchor="e", pady=(12, 0))
         ttk.Button(actions, text="Convert", style="CASU.TButton", command=self.convert).pack(side="left")
-        ttk.Button(actions, text="Close", style="CASU.TButton", command=self.destroy).pack(side="left", padx=8)
+        self.cancel_button = ttk.Button(actions, text="Cancel", style="CASU.TButton", command=self.cancel, state="disabled")
+        self.cancel_button.pack(side="left", padx=8)
+        ttk.Button(actions, text="Close", style="CASU.TButton", command=self.destroy).pack(side="left")
 
     def choose_source(self) -> None:
         # Let ffprobe/libVLC decide support; a short extension whitelist would
@@ -117,6 +121,8 @@ class CASUConverter(tk.Tk):
             self.source_info.set(f"Inspection unavailable: {exc}")
 
     def convert(self) -> None:
+        if self._busy:
+            return
         source = Path(self.source.get()).expanduser()
         output = Path(self.output.get()).expanduser()
         if not source.is_file():
@@ -136,6 +142,9 @@ class CASUConverter(tk.Tk):
         if fps <= 0:
             messagebox.showerror("CASU", "FPS must be positive."); return
         mode = self.mode.get()
+        self._cancel_event.clear()
+        self._busy = True
+        self.cancel_button.configure(state="normal")
         self.progress.configure(value=0.0)
         self.status.set("Analyzing decoded source activity…")
         threading.Thread(target=self._worker, args=(source, output, fps, mode), daemon=True).start()
@@ -148,7 +157,7 @@ class CASUConverter(tk.Tk):
                 # blocks on a modal dialog.
                 self.after(0, lambda: self.progress.configure(value=max(0.0, min(100.0, value * 100.0))))
 
-            result = analyze(source, fps, mode, progress=report)
+            result = analyze(source, fps, mode, progress=report, cancel=self._cancel_event)
             output.parent.mkdir(parents=True, exist_ok=True)
             payload = json.dumps(result, indent=2, ensure_ascii=False) + "\n"
             fd, temporary = tempfile.mkstemp(prefix=f".{output.name}.", dir=output.parent, text=True)
@@ -159,12 +168,24 @@ class CASUConverter(tk.Tk):
             finally:
                 if os.path.exists(temporary): os.unlink(temporary)
             self.after(0, lambda: self._done(f"Wrote {output} without modifying the source."))
+        except CasuCancelled:
+            self.after(0, lambda: self._done("Conversion cancelled; no incomplete CASU output was kept.", error=False, cancelled=True))
         except (CasuError, OSError, ValueError) as exc:
             self.after(0, lambda: self._done(f"Conversion failed: {exc}", error=True))
 
-    def _done(self, message: str, error: bool = False) -> None:
+    def cancel(self) -> None:
+        if self._busy:
+            self._cancel_event.set()
+            self.status.set("Cancellation requested — stopping decoder…")
+            self.cancel_button.configure(state="disabled")
+
+    def _done(self, message: str, error: bool = False, cancelled: bool = False) -> None:
+        self._busy = False
+        self.cancel_button.configure(state="disabled")
         self.progress.configure(value=0.0 if error else 100.0)
         self.status.set(message)
+        if cancelled:
+            return
         (messagebox.showerror if error else messagebox.showinfo)("CASU Converter", message)
 
 

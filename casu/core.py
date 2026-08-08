@@ -19,6 +19,10 @@ class CasuError(RuntimeError):
     pass
 
 
+class CasuCancelled(CasuError):
+    """Raised when a user cancels an active analysis job."""
+
+
 ANALYSIS_MODES = frozenset({"strict", "visually_lossless", "adaptive"})
 
 
@@ -70,6 +74,21 @@ def require_tool(name: str) -> str:
     if not value:
         raise CasuError(f"required tool not found: {name}")
     return value
+
+
+def _cancelled(cancel: Any | None) -> bool:
+    return bool(cancel is not None and getattr(cancel, "is_set", lambda: False)())
+
+
+def _stop_process(process: subprocess.Popen[Any]) -> None:
+    """Stop a decoder child without leaving a zombie behind."""
+    if process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=2.0)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=2.0)
 
 
 def run(command: list[str], *, capture: bool = False) -> subprocess.CompletedProcess[str]:
@@ -143,7 +162,8 @@ def _interval(start: int, end: int, state: str, step: float,
 
 def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
                   width: int = 160, height: int = 90, mode: str = "strict",
-                  progress: Any | None = None) -> dict[str, Any]:
+                  progress: Any | None = None,
+                  cancel: Any | None = None) -> dict[str, Any]:
     if not np.isfinite(analysis_fps) or analysis_fps <= 0:
         raise CasuError("analysis FPS must be finite and positive")
     if width <= 0 or height <= 0:
@@ -175,6 +195,10 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
     frame_index = 0
     expected_frames = max(1.0, duration(probe) * analysis_fps)
     while True:
+        if _cancelled(cancel):
+            _stop_process(process)
+            error_stream.close()
+            raise CasuCancelled("video analysis cancelled")
         raw = process.stdout.read(size)
         if len(raw) != size:
             break
@@ -204,7 +228,12 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
         previous = frame
         frame_index += 1
         if progress is not None:
-            progress(min(1.0, frame_index / expected_frames))
+            try:
+                progress(min(1.0, frame_index / expected_frames))
+            except CasuCancelled:
+                _stop_process(process)
+                error_stream.close()
+                raise
     process.wait()
     error_stream.seek(0)
     error = error_stream.read().decode("utf-8", errors="replace")
@@ -243,7 +272,8 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
 
 
 def analyze_audio(path: Path, probe: dict[str, Any], sample_rate: int = 16000,
-                  window_ms: int = 20, progress: Any | None = None) -> dict[str, Any]:
+                  window_ms: int = 20, progress: Any | None = None,
+                  cancel: Any | None = None) -> dict[str, Any]:
     if sample_rate <= 0 or window_ms <= 0:
         raise CasuError("audio sample rate and window must be positive")
     audio = stream(probe, "audio")
@@ -263,6 +293,10 @@ def analyze_audio(path: Path, probe: dict[str, Any], sample_rate: int = 16000,
     processed_windows = 0
     expected_windows = max(1.0, duration(probe) * 1000.0 / window_ms)
     while True:
+        if _cancelled(cancel):
+            _stop_process(process)
+            error_stream.close()
+            raise CasuCancelled("audio analysis cancelled")
         chunk = process.stdout.read(max(window_bytes, 64 * 1024))
         if not chunk:
             break
@@ -278,7 +312,12 @@ def analyze_audio(path: Path, probe: dict[str, Any], sample_rate: int = 16000,
         states.extend(np.where(db < -55.0, "silence", np.where(db < -38.0, "low_level", "active")).tolist())
         processed_windows += int(db.size)
         if progress is not None:
-            progress(min(1.0, processed_windows / expected_windows))
+            try:
+                progress(min(1.0, processed_windows / expected_windows))
+            except CasuCancelled:
+                _stop_process(process)
+                error_stream.close()
+                raise
     if pending:
         tail = np.frombuffer(bytes(pending), dtype=np.float32)
         if tail.size:
@@ -312,7 +351,7 @@ def analyze_audio(path: Path, probe: dict[str, Any], sample_rate: int = 16000,
 
 
 def analyze(path: Path, analysis_fps: float = 10.0, mode: str = "strict",
-            progress: Any | None = None) -> dict[str, Any]:
+            progress: Any | None = None, cancel: Any | None = None) -> dict[str, Any]:
     if mode not in ANALYSIS_MODES:
         raise CasuError(f"unknown analysis mode: {mode}; choose one of {sorted(ANALYSIS_MODES)}")
     if not np.isfinite(analysis_fps) or analysis_fps <= 0:
@@ -334,6 +373,8 @@ def analyze(path: Path, analysis_fps: float = 10.0, mode: str = "strict",
     stat = path.stat()
     digest = sha256_file(path)
     def phase(value: float) -> None:
+        if _cancelled(cancel):
+            raise CasuCancelled("analysis cancelled")
         if progress is not None:
             progress(max(0.0, min(1.0, value)))
 
@@ -342,10 +383,12 @@ def analyze(path: Path, analysis_fps: float = 10.0, mode: str = "strict",
     video_data = analyze_video(
         path, probe, analysis_fps=analysis_fps, mode=mode,
         progress=lambda value: phase(0.05 + 0.55 * value),
+        cancel=cancel,
     ) if has_video else {}
     audio_data = analyze_audio(
         path, probe,
         progress=lambda value: phase(0.60 + 0.35 * value),
+        cancel=cancel,
     ) if has_audio else {}
     phase(1.0)
     seek_entries = []

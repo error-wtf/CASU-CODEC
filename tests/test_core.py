@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from casu.core import CasuError, analyze, play, resolve_casu_source, rle
+from casu.core import CasuCancelled, CasuError, analyze, play, resolve_casu_source, rle
 from casu.schema import validate_manifest
 from casu.scheduler import CasuScheduler
 from casu.tiles import (TileStateError, compare_tile_frames, state_map_from_frames,
@@ -216,6 +216,19 @@ def test_manifest_rejects_unsorted_and_invalid_seek_index():
 def test_analysis_rejects_invalid_fps():
     with pytest.raises(CasuError, match="analysis FPS"):
         analyze(VIDEO, analysis_fps=0)
+
+
+def test_analysis_honors_cancellation_before_decoder_start(tmp_path, monkeypatch):
+    import threading
+    source = tmp_path / "source.bin"
+    source.write_bytes(b"source")
+    monkeypatch.setattr("casu.core.ffprobe", lambda _path: {
+        "streams": [{"codec_type": "video", "width": 2, "height": 2}],
+        "format": {"duration": "1"},
+    })
+    event = threading.Event(); event.set()
+    with pytest.raises(CasuCancelled, match="cancelled"):
+        analyze(source, cancel=event)
 
 
 def test_analysis_rejects_input_without_playable_streams(tmp_path, monkeypatch):
