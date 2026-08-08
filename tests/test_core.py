@@ -295,6 +295,12 @@ def test_backend_exposes_optional_video_track_selection():
     assert "def cycle_video_track" in player
 
 
+def test_backend_maps_libvlc_media_error_state():
+    source = Path("mpcasu_backend.py").read_text(encoding="utf-8")
+    assert "libvlc_media_get_state" in source
+    assert "media_state == 7" in source
+
+
 def test_libvlc_library_candidates_are_platform_independent():
     # The backend must keep a shared-library fallback chain instead of
     # assuming a Debian x86_64 soname in its public source contract.
