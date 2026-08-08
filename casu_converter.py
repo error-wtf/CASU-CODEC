@@ -45,6 +45,7 @@ class CASUConverter(tk.Tk):
         self.minsize(600, 360)
         self.source = tk.StringVar()
         self.output = tk.StringVar()
+        self._sources: list[Path] = []
         self.mode = tk.StringVar(value="strict")
         self.fps = tk.DoubleVar(value=10.0)
         self.status = tk.StringVar(value="Choose an MP4 or MP3 source.")
@@ -72,11 +73,14 @@ class CASUConverter(tk.Tk):
         except (tk.TclError, OSError):
             tk.Label(root, text="CASU CONVERTER", bg=BG, fg=RED, font=("TkDefaultFont", 22, "bold")).pack(anchor="w")
         tk.Label(root, text="Codec for All Segmented Units · source media remains untouched", bg=BG, fg=SECONDARY).pack(anchor="w", pady=(0, 18))
-        for label, variable, command in (("Source media", self.source, self.choose_source), ("CASU output", self.output, self.choose_output)):
+        for label, variable, command in (("Source files", self.source, self.choose_source), ("Output folder", self.output, self.choose_output)):
             row = ttk.Frame(root); row.pack(fill="x", pady=5)
             tk.Label(row, text=label, width=16, bg=BG, fg=TEXT, anchor="w").pack(side="left")
             ttk.Entry(row, textvariable=variable).pack(side="left", fill="x", expand=True)
             ttk.Button(row, text="Browse…", style="CASU.TButton", command=command).pack(side="left", padx=(8, 0))
+        folder_actions = tk.Frame(root, bg=BG); folder_actions.pack(fill="x", pady=(0, 4))
+        ttk.Button(folder_actions, text="Add folder (recursive)", style="CASU.TButton", command=self.choose_folder).pack(side="left")
+        tk.Label(folder_actions, text="Each file is probed independently.", bg=BG, fg=SECONDARY).pack(side="left", padx=10)
         info = tk.Frame(root, bg=PANEL_ALT, padx=14, pady=10)
         info.pack(fill="x", pady=(8, 4))
         tk.Label(info, text="SOURCE INSPECTION", bg=PANEL_ALT, fg=RED, font=("TkDefaultFont", 8, "bold")).pack(anchor="w")
@@ -100,14 +104,28 @@ class CASUConverter(tk.Tk):
         # Let ffprobe/libVLC decide support; a short extension whitelist would
         # hide valid legacy formats before the universal backend can inspect
         # them.
-        path = filedialog.askopenfilename(filetypes=[("All media and files", "*.*"), ("All files", "*")])
-        if path:
-            self.source.set(path)
-            if not self.output.get(): self.output.set(path + ".casu")
-            self.inspect_source(Path(path))
+        paths = filedialog.askopenfilenames(filetypes=[("All media and files", "*.*"), ("All files", "*")])
+        if paths:
+            self._set_sources([Path(path) for path in paths])
+
+    def choose_folder(self) -> None:
+        folder = filedialog.askdirectory(mustexist=True)
+        if folder:
+            self._set_sources(sorted(path for path in Path(folder).rglob("*")
+                                     if path.is_file() and path.suffix.lower() != ".casu"))
+
+    def _set_sources(self, paths: list[Path]) -> None:
+        self._sources = list(dict.fromkeys(path.expanduser().resolve() for path in paths if path.is_file()))
+        self.source.set(f"{len(self._sources)} file(s) selected" if self._sources else "")
+        if len(self._sources) == 1:
+            self.inspect_source(self._sources[0])
+        elif self._sources:
+            self.source_info.set(f"{len(self._sources)} files queued for conversion")
+        else:
+            self.source_info.set("No source files selected")
 
     def choose_output(self) -> None:
-        path = filedialog.asksaveasfilename(defaultextension=".casu", filetypes=[("CASU manifest", "*.casu")])
+        path = filedialog.askdirectory(mustexist=True)
         if path: self.output.set(path)
 
     def inspect_source(self, path: Path) -> None:
@@ -123,18 +141,19 @@ class CASUConverter(tk.Tk):
     def convert(self) -> None:
         if self._busy:
             return
-        source = Path(self.source.get()).expanduser()
-        output = Path(self.output.get()).expanduser()
-        if not source.is_file():
-            messagebox.showerror("CASU", "Choose an existing source media file first."); return
-        try:
-            if output.resolve() == source.resolve():
-                messagebox.showerror("CASU", "The output must differ from the source media.")
-                return
-        except OSError:
-            messagebox.showerror("CASU", "The source or output path could not be resolved.")
+        sources = self._sources or []
+        if not sources and self.source.get() and Path(self.source.get()).is_file():
+            sources = [Path(self.source.get()).expanduser().resolve()]
+        if not sources:
+            messagebox.showerror("CASU", "Choose one or more existing source files first."); return
+        output_dir = Path(self.output.get()).expanduser() if self.output.get() else sources[0].parent
+        if output_dir.exists() and not output_dir.is_dir():
+            messagebox.showerror("CASU", "Output must be a directory."); return
+        output_dir.mkdir(parents=True, exist_ok=True)
+        outputs = [output_dir / f"{source.stem}.casu" for source in sources]
+        existing = [item for item in outputs if item.exists()]
+        if existing and not messagebox.askyesno("Replace output?", f"Replace {len(existing)} existing CASU file(s)?"):
             return
-        if output.exists() and not messagebox.askyesno("Replace output?", f"Replace {output.name}?"): return
         try:
             fps = float(self.fps.get())
         except (TypeError, ValueError):
@@ -147,27 +166,29 @@ class CASUConverter(tk.Tk):
         self.cancel_button.configure(state="normal")
         self.progress.configure(value=0.0)
         self.status.set("Analyzing decoded source activity…")
-        threading.Thread(target=self._worker, args=(source, output, fps, mode), daemon=True).start()
+        threading.Thread(target=self._worker, args=(sources, output_dir, fps, mode), daemon=True).start()
 
-    def _worker(self, source: Path, output: Path, fps: float, mode: str) -> None:
+    def _worker(self, sources: list[Path], output_dir: Path, fps: float, mode: str) -> None:
         try:
-            def report(value: float) -> None:
-                # Tk widgets are only touched by the UI thread.  The analysis
-                # worker emits measured progress; it never runs a repaint or
-                # blocks on a modal dialog.
-                self.after(0, lambda: self.progress.configure(value=max(0.0, min(100.0, value * 100.0))))
-
-            result = analyze(source, fps, mode, progress=report, cancel=self._cancel_event)
-            output.parent.mkdir(parents=True, exist_ok=True)
-            payload = json.dumps(result, indent=2, ensure_ascii=False) + "\n"
-            fd, temporary = tempfile.mkstemp(prefix=f".{output.name}.", dir=output.parent, text=True)
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                    handle.write(payload); handle.flush(); os.fsync(handle.fileno())
-                os.replace(temporary, output)
-            finally:
-                if os.path.exists(temporary): os.unlink(temporary)
-            self.after(0, lambda: self._done(f"Wrote {output} without modifying the source."))
+            total = len(sources)
+            for index, source in enumerate(sources):
+                output = output_dir / f"{source.stem}.casu"
+                def report(value: float, index=index, source=source) -> None:
+                    overall = (index + max(0.0, min(1.0, value))) / total
+                    self.after(0, lambda overall=overall, source=source: (
+                        self.progress.configure(value=overall * 100.0),
+                        self.status.set(f"Converting {source.name} ({index + 1}/{total})"),
+                    ))
+                result = analyze(source, fps, mode, progress=report, cancel=self._cancel_event)
+                payload = json.dumps(result, indent=2, ensure_ascii=False) + "\n"
+                fd, temporary = tempfile.mkstemp(prefix=f".{output.name}.", dir=output.parent, text=True)
+                try:
+                    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                        handle.write(payload); handle.flush(); os.fsync(handle.fileno())
+                    os.replace(temporary, output)
+                finally:
+                    if os.path.exists(temporary): os.unlink(temporary)
+            self.after(0, lambda: self._done(f"Converted {total} file(s) to {output_dir}."))
         except CasuCancelled:
             self.after(0, lambda: self._done("Conversion cancelled; no incomplete CASU output was kept.", error=False, cancelled=True))
         except (CasuError, OSError, ValueError) as exc:
