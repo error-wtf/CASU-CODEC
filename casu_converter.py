@@ -1,5 +1,161 @@
-¨¥yÛhr·šµë-­æ¦}Ó©z¶­Š‰ç¢Ú^®h­µçEj)^vÚ­æ­zËky©Ÿtê^­«b¢yè¶—«š+myÑZŠW¶‡+y«^²ÚÞjgÝ:—«jØ¨žz-¥êæŠÛ^tŒMA`µ1¥•¹Í”µ%‘•¹Ñ¥™¥•Èè1¥•¹Í•I•˜µMTµ¹Ñ¥…Á¥Ñ…±¥ÍÐ´Ä¸Ð(ŒMA`µ¥±•½ÁåÉ¥¡ÑQ•áÐè€ÈÀÈØ1¥¹¼…ÍÔ(ˆˆ‰Mµ…±°°…•ÍÍ¥‰±”Q¬™É½¹Ðµ•¹™½ÈÑ¡”MT½¹Ù•ÉÑ•È¸()Q¡”1$É•µ…¥¹ÌÑ¡”…ÕÑ½µ…Ñ¥½¸½É•™•É•¹”¥¹Ñ•É™…”ìÑ¡¥ÌÝ¥¹‘½Ü½¹±ä½±±•ÑÌ)Ñ¡”Í…µ”•áÁ±¥¥Ð½ÁÑ¥½¹Ì…¹ÉÕ¹ÌÑ¡”½¹Ù•ÉÑ•ÈÝ¥Ñ¡½ÕÐ¡…¹¥¹œÑ¡”Í½ÕÉ”¸(ˆˆˆ)™É½´}}™ÕÑÕÉ•}|¥µÁ½ÉÐ…¹¹½Ñ…Ñ¥½¹Ì()¥µÁ½ÉÐ©Í½¸)¥µÁ½ÉÐ½Ì)¥µÁ½ÉÐÑ•µÁ™¥±”)¥µÁ½ÉÐÑ¡É•…‘¥¹œ)¥µÁ½ÉÐÑ­¥¹Ñ•È…ÌÑ¬)™É½´Á…Ñ¡±¥ˆ¥µÁ½ÉÐA…Ñ )™É½´Ñ­¥¹Ñ•È¥µÁ½ÉÐ™¥±•‘¥…±½œ°µ•ÍÍ…•‰½à°ÑÑ¬()™É½´…ÍÔ¹½É”¥µÁ½ÉÐ91eM%M}5=L°…ÍÕÉÉ½È°…¹…±åé”°™™ÁÉ½‰”°‘ÕÉ…Ñ¥½¸()	€ô€ˆŒÀäÁÁˆ)A90€ô€ˆŒÄÄÄÐÄàˆ)A91}1P€ô€ˆŒÄÐÄàÅˆ)I€ô€ˆÅÉˆ)QaP€ô€ˆÉÉÈˆ)M=9Id€ô€ˆÝ	Àˆ(()‘•˜}…ÍÍ•Ñ}Á…Ñ ¡¹…µ”èÍÑÈ¤€´øA…Ñ è(€€€€ˆˆ‰I•Í½±Ù”‰Õ¹‘±•…ÍÍ•ÑÌ™É½´„Í½ÕÉ”ÑÉ•”½È¥¹ÍÑ…±±•Ý¡••°¸ˆˆˆ(€€€±½…°€ôA…Ñ ¡}}™¥±•}|¤¹É•Í½±Ù” ¤¹Á…É•¹Ð€¼€‰…ÍÍ•ÑÌˆ€¼¹…µ”(€€€¥˜±½…°¹¥Í}™¥±” ¤è(€€€€€€€É•ÑÕÉ¸±½…°(€€€™½ÈÉ½½Ð¥¸€¡A…Ñ  ˆ½ÕÍÈ½Í¡…É”½…ÍÔµ½‘•Œ½…ÍÍ•ÑÌˆ¤°A…Ñ  ˆ½ÕÍÈ½±½…°½Í¡…É”½…ÍÔµ½‘•Œ½…ÍÍ•ÑÌˆ¤¤è(€€€€€€€…¹‘¥‘…Ñ”€ôÉ½½Ð€¼¹…µ”(€€€€€€€¥˜…¹‘¥‘…Ñ”¹¥Í}™¥±” ¤è(€€€€€€€€€€€É•ÑÕÉ¸…¹‘¥‘…Ñ”(€€€É•ÑÕÉ¸±½…°(()±…ÍÌMU½¹Ù•ÉÑ•È¡Ñ¬¹Q¬¤è(€€€‘•˜}}¥¹¥Ñ}|¡Í•±˜¤€´ø9½¹”è(€€€€€€€ÍÕÁ•È ¤¹}}¥¹¥Ñ}| ¤(€€€€€€€Í•±˜¹Ñ¥Ñ±” ‰MT½¹Ù•ÉÑ•Èˆ¤(€€€€€€€Í•±˜¹•½µ•ÑÉä ˆÜÈÁàÐÌÀˆ¤(€€€€€€€Í•±˜¹µ¥¹Í¥é” ØÀÀ°€ÌØÀ¤(€€€€€€€Í•±˜¹Í½ÕÉ”€ôÑ¬¹MÑÉ¥¹Y…È ¤(€€€€€€€Í•±˜¹½ÕÑÁÕÐ€ôÑ¬¹MÑÉ¥¹Y…È ¤(€€€€€€€Í•±˜¹µ½‘”€ôÑ¬¹MÑÉ¥¹Y…È¡Ù…±Õ”ô‰ÍÑÉ¥Ðˆ¤(€€€€€€€Í•±˜¹™ÁÌ€ôÑ¬¹½Õ‰±•Y…È¡Ù…±Õ”ôÄÀ¸À¤(€€€€€€€Í•±˜¹ÍÑ…ÑÕÌ€ôÑ¬¹MÑÉ¥¹Y…È¡Ù…±Õ”ô‰¡½½Í”…¸5@Ð½È5@ÌÍ½ÕÉ”¸ˆ¤(€€€€€€€Í•±˜¹Í½ÕÉ•}¥¹™¼€ôÑ¬¹MÑÉ¥¹Y…È¡Ù…±Õ”ô‰9¼Í½ÕÉ”¥¹ÍÁ•Ñ•ˆ¤(€€€€€€€Í•±˜¹½ÕÑÁÕÑ}¥¹™¼€ôÑ¬¹MÑÉ¥¹Y…È¡Ù…±Õ”ô‰Q¡”½É¥¥¹…°Í½ÕÉ”¥Ì¹•Ù•Èµ½‘¥™¥•¸ˆ¤(€€€€€€€Í•±˜¹}‰Õ¥± ¤((€€€‘•˜}‰Õ¥±¡Í•±˜¤€´ø9½¹”è(€€€€€€€Í•±˜¹½¹™¥ÕÉ”¡‰œõ	¤(€€€€€€€ÍÑå±”€ôÑÑ¬¹MÑå±”¡Í•±˜¤(€€€€€€€ÑÉäèÍÑå±”¹Ñ¡•µ•}ÕÍ” ‰±…´ˆ¤(€€€€€€€•á•ÁÐÑ¬¹Q±ÉÉ½ÈèÁ…ÍÌ(€€€€€€€ÍÑå±”¹½¹™¥ÕÉ” ‰MT¹Q	ÕÑÑ½¸ˆ°‰…­É½Õ¹õA91}1P°™½É•É½Õ¹õQaP°‰½É‘•ÉÝ¥‘Ñ ôÀ°Á…‘‘¥¹œô ÄÀ°€Ø¤¤(€€€€€€€ÍÑå±”¹µ…À ‰MT¹Q	ÕÑÑ½¸ˆ°‰…­É½Õ¹õl ‰…Ñ¥Ù”ˆ°€ˆŒÍÄÀÄÔˆ¥t¤(€€€€€€€É½½Ð€ôÑ¬¹É…µ”¡Í•±˜°‰œõ	°Á…‘àôÈÈ°Á…‘äôÈÀ¤(€€€€€€€É½½Ð¹Á…¬¡™¥±°ô‰‰½Ñ ˆ°•áÁ…¹õQÉÕ”¤(€€€€€€€±½½}Á…Ñ €ô}…ÍÍ•Ñ}Á…Ñ  ‰…ÍÕ}½‘•}±½½}¡•…‘•È¹Á¹œˆ¤(€€€€€€€Í•±˜¹}±½½}¥µ…”€ô9½¹”(€€€€€€€ÑÉäè(€€€€€€€€€€€¥µ…”€ôÑ¬¹A¡½Ñ½%µ…”¡™¥±”õÍÑÈ¡±½½}Á…Ñ ¤¤ìÍ•±˜¹}±½½}¥µ…”€ô¥µ…”¹ÍÕ‰Í…µÁ±”¡µ…à Ä°¥µ…”¹Ý¥‘Ñ  ¤€¼¼€ÄÐÀ¤°µ…à Ä°¥µ…”¹¡•¥¡Ð ¤€¼¼€ØÀ¤¤(€€€€€€€€€€€Í•±˜¹¥½¹Á¡½Ñ¼¡QÉÕ”°Í•±˜¹}±½½}¥µ…”¤(€€€€€€€€€€€Ñ¬¹1…‰•°¡É½½Ð°¥µ…”õÍ•±˜¹}±½½}¥µ…”°‰œõ	¤¹Á…¬¡…¹¡½Èô‰Üˆ¤(€€€€€€€•á•ÁÐ€¡Ñ¬¹Q±ÉÉ½È°=MÉÉ½È¤è(€€€€€€€€€€€Ñ¬¹1…‰•°¡É½½Ð°Ñ•áÐô‰MT=9YIQHˆ°‰œõ	°™œõI°™½¹Ðô ‰Q­•™…Õ±Ñ½¹Ðˆ°€ÈÈ°€‰‰½±ˆ¤¤¹Á…¬¡…¹¡½Èô‰Üˆ¤(€€€€€€€Ñ¬¹1…‰•°¡É½½Ð°Ñ•áÐô‰½‘•Œ™½È±°M•µ•¹Ñ•U¹¥ÑÌƒ
-ÜÍ½ÕÉ”µ•‘¥„É•µ…¥¹ÌÕ¹Ñ½Õ¡•ˆ°‰œõ	°™œõM=9Id¤¹Á…¬¡…¹¡½Èô‰Üˆ°Á…‘äô À°€Äà¤¤(€€€€€€€™½È±…‰•°°Ù…É¥…‰±”°½µµ…¹¥¸€  ‰M½ÕÉ”µ•‘¥„ˆ°Í•±˜¹Í½ÕÉ”°Í•±˜¹¡½½Í•}Í½ÕÉ”¤°€ ‰MT½ÕÑÁÕÐˆ°Í•±˜¹½ÕÑÁÕÐ°Í•±˜¹¡½½Í•}½ÕÑÁÕÐ¤¤è(€€€€€€€€€€€É½Ü€ôÑÑ¬¹É…µ”¡É½½Ð¤ìÉ½Ü¹Á…¬¡™¥±°ô‰àˆ°Á…‘äôÔ¤(€€€€€€€€€€€Ñ¬¹1…‰•°¡É½Ü°Ñ•áÐõ±…‰•°°Ý¥‘Ñ ôÄØ°‰œõ	°™œõQaP°…¹¡½Èô‰Üˆ¤¹Á…¬¡Í¥‘”ô‰±•™Ðˆ¤(€€€€€€€€€€€ÑÑ¬¹¹ÑÉä¡É½Ü°Ñ•áÑÙ…É¥…‰±”õÙ…É¥…‰±”¤¹Á…¬¡Í¥‘”ô‰±•™Ðˆ°™¥±°ô‰àˆ°•áÁ…¹õQÉÕ”¤(€€€€€€€€€€€ÑÑ¬¹	ÕÑÑ½¸¡É½Ü°Ñ•áÐô‰	É½ÝÍ—Š˜ˆ°ÍÑå±”ô‰MT¹Q	ÕÑÑ½¸ˆ°½µµ…¹õ½µµ…¹¤¹Á…¬¡Í¥‘”ô‰±•™Ðˆ°Á…‘àô à°€À¤¤(€€€€€€€¥¹™¼€ôÑ¬¹É…µ”¡É½½Ð°‰œõA91}1P°Á…‘àôÄÐ°Á…‘äôÄÀ¤(€€€€€€€¥¹™¼¹Á…¬¡™¥±°ô‰àˆ°Á…‘äô à°€Ð¤¤(€€€€€€€Ñ¬¹1…‰•°¡¥¹™¼°Ñ•áÐô‰M=UI%9MAQ%=8ˆ°‰œõA91}1P°™œõI°™½¹Ðô ‰Q­•™…Õ±Ñ½¹Ðˆ°€à°€‰‰½±ˆ¤¤¹Á…¬¡…¹¡½Èô‰Üˆ¤(€€€€€€€Ñ¬¹1…‰•°¡¥¹™¼°Ñ•áÑÙ…É¥…‰±”õÍ•±˜¹Í½ÕÉ•}¥¹™¼°‰œõA91}1P°™œõQaP°…¹¡½Èô‰Üˆ°©ÕÍÑ¥™äô‰±•™Ðˆ¤¹Á…¬¡™¥±°ô‰àˆ°Á…‘äô Ð°€À¤¤(€€€€€€€Ñ¬¹1…‰•°¡¥¹™¼°Ñ•áÑÙ…É¥…‰±”õÍ•±˜¹½ÕÑÁÕÑ}¥¹™¼°‰œõA91}1P°™œõM=9Id°…¹¡½Èô‰Üˆ¤¹Á…¬¡™¥±°ô‰àˆ°Á…‘äô Ì°€À¤¤(€€€€€€€½ÁÑ¥½¹Ì€ôÑ¬¹É…µ”¡É½½Ð°‰œõ	¤ì½ÁÑ¥½¹Ì¹Á…¬¡™¥±°ô‰àˆ°Á…‘äôÄÈ¤(€€€€€€€ÑÑ¬¹1…‰•°¡½ÁÑ¥½¹Ì°Ñ•áÐô‰¹…±åÍ¥Ìµ½‘”ˆ¤¹Á…¬¡Í¥‘”ô‰±•™Ðˆ¤(€€€€€€€ÑÑ¬¹½µ‰½‰½à¡½ÁÑ¥½¹Ì°Ñ•áÑÙ…É¥…‰±”õÍ•±˜¹µ½‘”°Ù…±Õ•ÌõÍ½ÉÑ•¡91eM%M}5=L¤°ÍÑ…Ñ”ô‰É•…‘½¹±äˆ°Ý¥‘Ñ ôÄà¤¹Á…¬¡Í¥‘”ô‰±•™Ðˆ°Á…‘àôà¤(€€€€€€€ÑÑ¬¹1…‰•°¡½ÁÑ¥½¹Ì°Ñ•áÐô‰ALˆ¤¹Á…¬¡Í¥‘”ô‰±•™Ðˆ¤(€€€€€€€ÑÑ¬¹MÁ¥¹‰½à¡½ÁÑ¥½¹Ì°™É½µ|ôÀ¸Ä°Ñ¼ôÄÈÀ¸À°¥¹É•µ•¹ÐôÀ¸Ô°Ñ•áÑÙ…É¥…‰±”õÍ•±˜¹™ÁÌ°Ý¥‘Ñ ôà¤¹Á…¬¡Í¥‘”ô‰±•™Ðˆ°Á…‘àôà¤(€€€€€€€Í•±˜¹ÁÉ½É•ÍÌ€ôÑÑ¬¹AÉ½É•ÍÍ‰…È¡É½½Ð°µ½‘”ô‰¥¹‘•Ñ•Éµ¥¹…Ñ”ˆ¤(€€€€€€€Í•±˜¹ÁÉ½É•ÍÌ¹Á…¬¡™¥±°ô‰àˆ°Á…‘äô à°€Ð¤¤(€€€€€€€Ñ¬¹1…‰•°¡É½½Ð°Ñ•áÑÙ…É¥…‰±”õÍ•±˜¹ÍÑ…ÑÕÌ°ÝÉ…Á±•¹Ñ ôØàÀ°‰œõ	°™œõM=9Id°…¹¡½Èô‰Üˆ°©ÕÍÑ¥™äô‰±•™Ðˆ¤¹Á…¬¡™¥±°ô‰àˆ°Á…‘äôÔ¤(€€€€€€€…Ñ¥½¹Ì€ôÑ¬¹É…µ”¡É½½Ð°‰œõ	¤ì…Ñ¥½¹Ì¹Á…¬¡…¹¡½Èô‰”ˆ°Á…‘äô ÄÈ°€À¤¤(€€€€€€€ÑÑ¬¹	ÕÑÑ½¸¡…Ñ¥½¹Ì°Ñ•áÐô‰½¹Ù•ÉÐˆ°ÍÑå±”ô‰MT¹Q	ÕÑÑ½¸ˆ°½µµ…¹õÍ•±˜¹½¹Ù•ÉÐ¤¹Á…¬¡Í¥‘”ô‰±•™Ðˆ¤(€€€€€€€ÑÑ¬¹	ÕÑÑ½¸¡…Ñ¥½¹Ì°Ñ•áÐô‰±½Í”ˆ°ÍÑå±”ô‰MT¹Q	ÕÑÑ½¸ˆ°½µµ…¹õÍ•±˜¹‘•ÍÑÉ½ä¤¹Á…¬¡Í¥‘”ô‰±•™Ðˆ°Á…‘àôà¤((€€€‘•˜¡½½Í•}Í½ÕÉ”¡Í•±˜¤€´ø9½¹”è(€€€€€€€Á…Ñ €ô™¥±•‘¥…±½œ¹…Í­½Á•¹™¥±•¹…µ”¡™¥±•ÑåÁ•Ìõl ‰5•‘¥„ˆ°€ˆ¨¹µÀÐ€¨¹µÀÌ€¨¹µ­Ø€¨¹µ½Ø€¨¹´Ñ„€¨¹Ý…Øˆ¤°€ ‰±°™¥±•Ìˆ°€ˆ¨¸¨ˆ¥t¤(€€€€€€€¥˜Á…Ñ è(€€€€€€€€€€€Í•±˜¹Í½ÕÉ”¹Í•Ð¡Á…Ñ ¤(€€€€€€€€€€€¥˜¹½ÐÍ•±˜¹½ÕÑÁÕÐ¹•Ð ¤èÍ•±˜¹½ÕÑÁÕÐ¹Í•Ð¡Á…Ñ €¬€ˆ¹…ÍÔˆ¤(€€€€€€€€€€€Í•±˜¹¥¹ÍÁ•Ñ}Í½ÕÉ”¡A…Ñ ¡Á…Ñ ¤¤((€€€‘•˜¡½½Í•}½ÕÑÁÕÐ¡Í•±˜¤€´ø9½¹”è(€€€€€€€Á…Ñ €ô™¥±•‘¥…±½œ¹…Í­Í…Ù•…Í™¥±•¹…µ”¡‘•™…Õ±Ñ•áÑ•¹Í¥½¸ôˆ¹…ÍÔˆ°™¥±•ÑåÁ•Ìõl ‰MTµ…¹¥™•ÍÐˆ°€ˆ¨¹…ÍÔˆ¥t¤(€€€€€€€¥˜Á…Ñ èÍ•±˜¹½ÕÑÁÕÐ¹Í•Ð¡Á…Ñ ¤((€€€‘•˜¥¹ÍÁ•Ñ}Í½ÕÉ”¡Í•±˜°Á…Ñ èA…Ñ ¤€´ø9½¹”è(€€€€€€€ÑÉäè(€€€€€€€€€€€ÁÉ½‰”€ô™™ÁÉ½‰”¡Á…Ñ ¤(€€€€€€€€€€€ÍÑÉ•…µÌ€ôÁÉ½‰”¹•Ð ‰ÍÑÉ•…µÌˆ°mt¤(€€€€€€€€€€€­¥¹‘Ì€ô€ˆ°€ˆ¹©½¥¸¡Í½ÉÑ•¡íÍÑÈ¡¥Ñ•´¹•Ð ‰½‘•}ÑåÁ”ˆ°€‰Õ¹­¹½Ý¸ˆ¤¤™½È¥Ñ•´¥¸ÍÑÉ•…µÍô¤¤½È€‰¹¼ÍÑÉ•…µÌˆ(€€€€€€€€€€€½‘•Ì€ô€ˆ°€ˆ¹©½¥¸¡ÍÑÈ¡¥Ñ•´¹•Ð ‰½‘•}¹…µ”ˆ¤¤™½È¥Ñ•´¥¸ÍÑÉ•…µÌ¥˜¥Ñ•´¹•Ð ‰½‘•}¹…µ”ˆ¤¤½È€‰Õ¹­¹½Ý¸½‘•Œˆ(€€€€€€€€€€€Í•±˜¹Í½ÕÉ•}¥¹™¼¹Í•Ð¡˜‰íÁ…Ñ ¹¹…µ•ô€ƒ
-Ü€í­¥¹‘Íô€ƒ
-Ü€í½‘•Íô€ƒ
-Ü€í‘ÕÉ…Ñ¥½¸¡ÁÉ½‰”¤è¸Í™ôÌˆ¤(€€€€€€€•á•ÁÐ€¡…ÍÕÉÉ½È°=MÉÉ½È°Y…±Õ•ÉÉ½È¤…Ì•áŒè(€€€€€€€€€€€Í•±˜¹Í½ÕÉ•}¥¹™¼¹Í•Ð¡˜‰%¹ÍÁ•Ñ¥½¸Õ¹…Ù…¥±…‰±”èí•áôˆ¤((€€€‘•˜½¹Ù•ÉÐ¡Í•±˜¤€´ø9½¹”è(€€€€€€€Í½ÕÉ”€ôA…Ñ ¡Í•±˜¹Í½ÕÉ”¹•Ð ¤¤¹•áÁ…¹‘ÕÍ•È ¤(€€€€€€€½ÕÑÁÕÐ€ôA…Ñ ¡Í•±˜¹½ÕÑÁÕÐ¹•Ð ¤¤¹•áÁ…¹‘ÕÍ•È ¤(€€€€€€€¥˜¹½ÐÍ½ÕÉ”¹¥Í}™¥±” ¤è(€€€€€€€€€€€µ•ÍÍ…•‰½à¹Í¡½Ý•ÉÉ½È ‰MTˆ°€‰¡½½Í”…¸•á¥ÍÑ¥¹œÍ½ÕÉ”µ•‘¥„™¥±”™¥ÉÍÐ¸ˆ¤ìÉ•ÑÕÉ¸(€€€€€€€¥˜½ÕÑÁÕÐ¹•á¥ÍÑÌ ¤…¹¹½Ðµ•ÍÍ…•‰½à¹…Í­å•Í¹¼ ‰I•Á±…”½ÕÑÁÕÐüˆ°˜‰I•Á±…”í½ÕÑÁÕÐ¹¹…µ•ôüˆ¤èÉ•ÑÕÉ¸(€€€€€€€ÑÉäè(€€€€€€€€€€€™ÁÌ€ô™±½…Ð¡Í•±˜¹™ÁÌ¹•Ð ¤¤(€€€€€€€•á•ÁÐ€¡QåÁ•ÉÉ½È°Y…±Õ•ÉÉ½È¤è(€€€€€€€€€€€µ•ÍÍ…•‰½à¹Í¡½Ý•ÉÉ½È ‰MTˆ°€‰ALµÕÍÐ‰”„™¥¹¥Ñ”Á½Í¥Ñ¥Ù”¹Õµ‰•È¸ˆ¤ìÉ•ÑÕÉ¸(€€€€€€€¥˜™ÁÌ€ðô€Àè(€€€€€€€€€€€µ•ÍÍ…•‰½à¹Í¡½Ý•ÉÉ½È ‰MTˆ°€‰ALµÕÍÐ‰”Á½Í¥Ñ¥Ù”¸ˆ¤ìÉ•ÑÕÉ¸(€€€€€€€µ½‘”€ôÍ•±˜¹µ½‘”¹•Ð ¤(€€€€€€€Í•±˜¹ÁÉ½É•ÍÌ¹ÍÑ…ÉÐ ÄÈ¤ìÍ•±˜¹ÍÑ…ÑÕÌ¹Í•Ð ‰¹…±åé¥¹œ‘•½‘•Í½ÕÉ”…Ñ¥Ù¥ÑçŠ˜ˆ¤(€€€€€€€Ñ¡É•…‘¥¹œ¹Q¡É•…¡Ñ…É•ÐõÍ•±˜¹}Ý½É­•È°…ÉÌô¡Í½ÕÉ”°½ÕÑÁÕÐ°™ÁÌ°µ½‘”¤°‘…•µ½¸õQÉÕ”¤¹ÍÑ…ÉÐ ¤((€€€‘•˜}Ý½É­•È¡Í•±˜°Í½ÕÉ”èA…Ñ °½ÕÑÁÕÐèA…Ñ °™ÁÌè™±½…Ð°µ½‘”èÍÑÈ¤€´ø9½¹”è(€€€€€€€ÑÉäè(€€€€€€€€€€€É•ÍÕ±Ð€ô…¹…±åé”¡Í½ÕÉ”°™ÁÌ°µ½‘”¤(€€€€€€€€€€€½ÕÑÁÕÐ¹Á…É•¹Ð¹µ­‘¥È¡Á…É•¹ÑÌõQÉÕ”°•á¥ÍÑ}½¬õQÉÕ”¤(€€€€€€€€€€€Á…å±½…€ô©Í½¸¹‘ÕµÁÌ¡É•ÍÕ±Ð°¥¹‘•¹ÐôÈ°•¹ÍÕÉ•}…Í¥¤õ…±Í”¤€¬€‰q¸ˆ(€€€€€€€€€€€™°Ñ•µÁ½É…Éä€ôÑ•µÁ™¥±”¹µ­ÍÑ•µÀ¡ÁÉ•™¥àõ˜ˆ¹í½ÕÑÁÕÐ¹¹…µ•ô¸ˆ°‘¥Èõ½ÕÑÁÕÐ¹Á…É•¹Ð°Ñ•áÐõQÉÕ”¤(€€€€€€€€€€€ÑÉäè(€€€€€€€€€€€€€€€Ý¥Ñ ½Ì¹™‘½Á•¸¡™°€‰Üˆ°•¹½‘¥¹œô‰ÕÑ˜´àˆ¤…Ì¡…¹‘±”è(€€€€€€€€€€€€€€€€€€€¡…¹‘±”¹ÝÉ¥Ñ”¡Á…å±½…¤ì¡…¹‘±”¹™±ÕÍ  ¤ì½Ì¹™Íå¹Œ¡¡…¹‘±”¹™¥±•¹¼ ¤¤(€€€€€€€€€€€€€€€½Ì¹É•Á±…”¡Ñ•µÁ½É…Éä°½ÕÑÁÕÐ¤(€€€€€€€€€€€™¥¹…±±äè(€€€€€€€€€€€€€€€¥˜½Ì¹Á…Ñ ¹•á¥ÍÑÌ¡Ñ•µÁ½É…Éä¤è½Ì¹Õ¹±¥¹¬¡Ñ•µÁ½É…Éä¤(€€€€€€€€€€€Í•±˜¹…™Ñ•È À°±…µ‰‘„èÍ•±˜¹}‘½¹”¡˜‰]É½Ñ”í½ÕÑÁÕÑôÝ¥Ñ¡½ÕÐµ½‘¥™å¥¹œÑ¡”Í½ÕÉ”¸ˆ¤¤(€€€€€€€•á•ÁÐ€¡…ÍÕÉÉ½È°=MÉÉ½È°Y…±Õ•ÉÉ½È¤…Ì•áŒè(€€€€€€€€€€€Í•±˜¹…™Ñ•È À°±…µ‰‘„èÍ•±˜¹}‘½¹”¡˜‰½¹Ù•ÉÍ¥½¸™…¥±•èí•áôˆ°•ÉÉ½ÈõQÉÕ”¤¤((€€€‘•˜}‘½¹”¡Í•±˜°µ•ÍÍ…”èÍÑÈ°•ÉÉ½Èè‰½½°€ô…±Í”¤€´ø9½¹”è(€€€€€€€Í•±˜¹ÁÉ½É•ÍÌ¹ÍÑ½À ¤ìÍ•±˜¹ÍÑ…ÑÕÌ¹Í•Ð¡µ•ÍÍ…”¤(€€€€€€€€¡µ•ÍÍ…•‰½à¹Í¡½Ý•ÉÉ½È¥˜•ÉÉ½È•±Í”µ•ÍÍ…•‰½à¹Í¡½Ý¥¹™¼¤ ‰MT½¹Ù•ÉÑ•Èˆ°µ•ÍÍ…”¤(()‘•˜µ…¥¸ ¤€´ø¥¹Ðè(€€€MU½¹Ù•ÉÑ•È ¤¹µ…¥¹±½½À ¤ìÉ•ÑÕÉ¸€À(()¥˜}}¹…µ•}|€ôô€‰}}µ…¥¹}|ˆè(€€€É…¥Í”MåÍÑ•µá¥Ð¡µ…¥¸ ¤¤(
+# SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
+# SPDX-FileCopyrightText: 2026 Lino Casu
+"""Small, accessible Tk front-end for the CASU converter.
+
+The CLI remains the automation/reference interface; this window only collects
+the same explicit options and runs the converter without changing the source.
+"""
+from __future__ import annotations
+
+import json
+import os
+import tempfile
+import threading
+import tkinter as tk
+from pathlib import Path
+from tkinter import filedialog, messagebox, ttk
+
+from casu.core import ANALYSIS_MODES, CasuError, analyze, ffprobe, duration
+
+BG = "#090B0D"
+PANEL = "#111418"
+PANEL_ALT = "#14181D"
+RED = "#FF1E2D"
+TEXT = "#F2F2F2"
+SECONDARY = "#A7ABB0"
+
+
+def _asset_path(name: str) -> Path:
+    """Resolve bundled assets from a source tree or installed wheel."""
+    local = Path(__file__).resolve().parent / "assets" / name
+    if local.is_file():
+        return local
+    for root in (Path("/usr/share/casu-codec/assets"), Path("/usr/local/share/casu-codec/assets")):
+        candidate = root / name
+        if candidate.is_file():
+            return candidate
+    return local
+
+
+class CASUConverter(tk.Tk):
+    def __init__(self) -> None:
+        super().__init__()
+        self.title("CASU Converter")
+        self.geometry("720x430")
+        self.minsize(600, 360)
+        self.source = tk.StringVar()
+        self.output = tk.StringVar()
+        self.mode = tk.StringVar(value="strict")
+        self.fps = tk.DoubleVar(value=10.0)
+        self.status = tk.StringVar(value="Choose an MP4 or MP3 source.")
+        self.source_info = tk.StringVar(value="No source inspected")
+        self.output_info = tk.StringVar(value="The original source is never modified.")
+        self._build()
+
+    def _build(self) -> None:
+        self.configure(bg=BG)
+        style = ttk.Style(self)
+        try: style.theme_use("clam")
+        except tk.TclError: pass
+        style.configure("CASU.TButton", background=PANEL_ALT, foreground=TEXT, borderwidth=0, padding=(10, 6))
+        style.map("CASU.TButton", background=[("active", "#3A1015")])
+        root = tk.Frame(self, bg=BG, padx=22, pady=20)
+        root.pack(fill="both", expand=True)
+        logo_path = _asset_path("casu_codec_logo_header.png")
+        self._logo_image = None
+        try:
+            image = tk.PhotoImage(file=str(logo_path)); self._logo_image = image.subsample(max(1, image.width() // 140), max(1, image.height() // 60))
+            self.iconphoto(True, self._logo_image)
+            tk.Label(root, image=self._logo_image, bg=BG).pack(anchor="w")
+        except (tk.TclError, OSError):
+            tk.Label(root, text="CASU CONVERTER", bg=BG, fg=RED, font=("TkDefaultFont", 22, "bold")).pack(anchor="w")
+        tk.Label(root, text="Codec for All Segmented Units Â· source media remains untouched", bg=BG, fg=SECONDARY).pack(anchor="w", pady=(0, 18))
+        for label, variable, command in (("Source media", self.source, self.choose_source), ("CASU output", self.output, self.choose_output)):
+            row = ttk.Frame(root); row.pack(fill="x", pady=5)
+            tk.Label(row, text=label, width=16, bg=BG, fg=TEXT, anchor="w").pack(side="left")
+            ttk.Entry(row, textvariable=variable).pack(side="left", fill="x", expand=True)
+            ttk.Button(row, text="Browseâ€¦", style="CASU.TButton", command=command).pack(side="left", padx=(8, 0))
+        info = tk.Frame(root, bg=PANEL_ALT, padx=14, pady=10)
+        info.pack(fill="x", pady=(8, 4))
+        tk.Label(info, text="SOURCE INSPECTION", bg=PANEL_ALT, fg=RED, font=("TkDefaultFont", 8, "bold")).pack(anchor="w")
+        tk.Label(info, textvariable=self.source_info, bg=PANEL_ALT, fg=TEXT, anchor="w", justify="left").pack(fill="x", pady=(4, 0))
+        tk.Label(info, textvariable=self.output_info, bg=PANEL_ALT, fg=SECONDARY, anchor="w").pack(fill="x", pady=(3, 0))
+        options = tk.Frame(root, bg=BG); options.pack(fill="x", pady=12)
+        ttk.Label(options, text="Analysis mode").pack(side="left")
+        ttk.Combobox(options, textvariable=self.mode, values=sorted(ANALYSIS_MODES), state="readonly", width=18).pack(side="left", padx=8)
+        ttk.Label(options, text="FPS").pack(side="left")
+        ttk.Spinbox(options, from_=0.1, to=120.0, increment=0.5, textvariable=self.fps, width=8).pack(side="left", padx=8)
+        self.progress = ttk.Progressbar(root, mode="indeterminate")
+        self.progress.pack(fill="x", pady=(8, 4))
+        tk.Label(root, textvariable=self.status, wraplength=680, bg=BG, fg=SECONDARY, anchor="w", justify="left").pack(fill="x", pady=5)
+        actions = tk.Frame(root, bg=BG); actions.pack(anchor="e", pady=(12, 0))
+        ttk.Button(actions, text="Convert", style="CASU.TButton", command=self.convert).pack(side="left")
+        ttk.Button(actions, text="Close", style="CASU.TButton", command=self.destroy).pack(side="left", padx=8)
+
+    def choose_source(self) -> None:
+        # Let ffprobe/libVLC decide support; a short extension whitelist would
+        # hide valid legacy formats before the universal backend can inspect
+        # them.
+        path = filedialog.askopenfilename(filetypes=[("All media and files", "*.*"), ("All files", "*")])
+        if path:
+            self.source.set(path)
+            if not self.output.get(): self.output.set(path + ".casu")
+            self.inspect_source(Path(path))
+
+    def choose_output(self) -> None:
+        path = filedialog.asksaveasfilename(defaultextension=".casu", filetypes=[("CASU manifest", "*.casu")])
+        if path: self.output.set(path)
+
+    def inspect_source(self, path: Path) -> None:
+        try:
+            probe = ffprobe(path)
+            streams = probe.get("streams", [])
+            kinds = ", ".join(sorted({str(item.get("codec_type", "unknown")) for item in streams})) or "no streams"
+            codecs = ", ".join(str(item.get("codec_name")) for item in streams if item.get("codec_name")) or "unknown codec"
+            self.source_info.set(f"{path.name}  Â·  {kinds}  Â·  {codecs}  Â·  {duration(probe):.3f} s")
+        except (CasuError, OSError, ValueError) as exc:
+            self.source_info.set(f"Inspection unavailable: {exc}")
+
+    def convert(self) -> None:
+        source = Path(self.source.get()).expanduser()
+        output = Path(self.output.get()).expanduser()
+        if not source.is_file():
+            messagebox.showerror("CASU", "Choose an existing source media file first."); return
+        if output.exists() and not messagebox.askyesno("Replace output?", f"Replace {output.name}?"): return
+        try:
+            fps = float(self.fps.get())
+        except (TypeError, ValueError):
+            messagebox.showerror("CASU", "FPS must be a finite positive number."); return
+        if fps <= 0:
+            messagebox.showerror("CASU", "FPS must be positive."); return
+        mode = self.mode.get()
+        self.progress.start(12); self.status.set("Analyzing decoded source activityâ€¦")
+        threading.Thread(target=self._worker, args=(source, output, fps, mode), daemon=True).start()
+
+    def _worker(self, source: Path, output: Path, fps: float, mode: str) -> None:
+        try:
+            result = analyze(source, fps, mode)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            payload = json.dumps(result, indent=2, ensure_ascii=False) + "\n"
+            fd, temporary = tempfile.mkstemp(prefix=f".{output.name}.", dir=output.parent, text=True)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    handle.write(payload); handle.flush(); os.fsync(handle.fileno())
+                os.replace(temporary, output)
+            finally:
+                if os.path.exists(temporary): os.unlink(temporary)
+            self.after(0, lambda: self._done(f"Wrote {output} without modifying the source."))
+        except (CasuError, OSError, ValueError) as exc:
+            self.after(0, lambda: self._done(f"Conversion failed: {exc}", error=True))
+
+    def _done(self, message: str, error: bool = False) -> None:
+        self.progress.stop(); self.status.set(message)
+        (messagebox.showerror if error else messagebox.showinfo)("CASU Converter", message)
+
+
+def main() -> int:
+    CASUConverter().mainloop(); return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
