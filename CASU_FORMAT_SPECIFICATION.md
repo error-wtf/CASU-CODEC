@@ -51,6 +51,13 @@ codec payload.
 
 ## Version policy
 
+An experimental **CASUNAT2** binary revision now exists in `casu.native_v2`.
+It provides a deterministic header, typed chunks, a JSON manifest, byte-offset
+seek entries, an integrity table and an END marker. It is standalone and does
+not reference a source pathname. It remains a release-candidate building block:
+video tile reconstruction, audio block semantics and recovery points must be
+completed and conformance-tested before Gate 1 can be PASS.
+
 Readers must reject an unknown `format.magic`, invalid version fields, unsafe
 numeric values, overlapping intervals and manifests exceeding the validator's
 segment safety limit. Newer native formats require an explicit reader version;

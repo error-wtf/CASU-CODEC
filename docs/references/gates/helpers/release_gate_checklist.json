@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "gates": [
+    {
+      "id": 1,
+      "name": "Native CASU Payload",
+      "required": [
+        "CASUNAT2 segmented payload",
+        "key states",
+        "byte-offset seek index",
+        "standalone roundtrip without source file"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Source-resolution STRICT",
+      "required": [
+        "source PTS",
+        "plane-aware canonicalization",
+        "8/10/12-bit tests",
+        "exact tile identity"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Native Player Path",
+      "required": [
+        "NativeCasuBackend",
+        "no legacy payload extraction",
+        "state cache",
+        "native audio/video seek"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Media Management",
+      "required": [
+        "track descriptors",
+        "external subtitles",
+        "chapters",
+        "audio devices"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Product Maturity",
+      "required": [
+        "library",
+        "settings",
+        "resume/history",
+        "responsive UI",
+        "playback regression"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Format Robustness",
+      "required": [
+        "integrity",
+        "recovery",
+        "resource limits",
+        "fuzzing"
+      ]
+    }
+  ]
+}

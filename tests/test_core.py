@@ -11,6 +11,7 @@ from casu.core import CasuCancelled, CasuError, analyze, play, resolve_casu_sour
 from casu.schema import validate_manifest
 from casu.scheduler import CasuScheduler
 from casu.native import NativeCasuError, read_native, write_native
+from casu.native_v2 import ChunkType, NativeChunk, read_native_v2, write_native_v2
 from casu.tiles import (TileStateError, compare_tile_frames, state_map_from_frames,
                         tile_regions)
 from casu.cli import atomic_write_text
@@ -18,7 +19,7 @@ from casu.cli import main as casu_cli_main
 from mpcasu_backend import LibVLCBackend
 from mpcasu_playback import ControllerState, PlaybackController
 from mpcasu_player import presentation_mode
-from casu.strict import StrictFrame, build_state_map, canonical_frame
+from casu.strict import StrictFrame, build_state_map, canonical_frame, iter_source_frames
 
 
 VIDEO = Path(os.environ.get("CASU_TEST_VIDEO", "test_media/lino_lol_test_pattern.mp4"))
@@ -220,6 +221,19 @@ def test_source_resolution_strict_holds_identical_multiplane_frame():
     assert states[1]["valid_from_s"] == 0.02
 
 
+@pytest.mark.media
+@pytest.mark.skipif(not VIDEO.exists() or not shutil.which("ffmpeg") or not shutil.which("ffprobe"),
+                    reason="test video/ffmpeg/ffprobe unavailable")
+def test_source_decoder_preserves_native_yuv_planes_and_pts():
+    frames = list(iter_source_frames(VIDEO, max_frames=2))
+    assert len(frames) == 2
+    assert frames[0].frame.pixel_format == "yuv420p"
+    assert frames[0].frame.shape == (360, 640)
+    assert [plane.shape for plane in frames[0].frame.planes] == [(360, 640), (180, 320), (180, 320)]
+    assert frames[0].timestamp_s == 0.0
+    assert frames[1].timestamp_s > frames[0].timestamp_s
+
+
 def test_native_casu_roundtrip_is_standalone_and_integrity_checked(tmp_path):
     source = tmp_path / "source.bin"
     source.write_bytes(b"native payload\x00" * 100)
@@ -238,6 +252,23 @@ def test_native_casu_roundtrip_is_standalone_and_integrity_checked(tmp_path):
     native.write_bytes(native.read_bytes()[:-1])
     with pytest.raises(NativeCasuError, match="file size|truncated|integrity"):
         read_native(native)
+
+
+def test_native_v2_is_segmented_standalone_and_has_byte_seek_index(tmp_path):
+    target = tmp_path / "segment.casu"
+    chunks = [
+        NativeChunk(ChunkType.STREAM_CONFIG, 0, 0, b"video:yuv420p"),
+        NativeChunk(ChunkType.VIDEO_KEY_STATE, 0, 0, b"key-state"),
+        NativeChunk(ChunkType.VIDEO_TILE_UPDATE, 0, 1, b"tile-update"),
+        NativeChunk(ChunkType.AUDIO_BLOCK, 1, 0, b"pcm-block"),
+    ]
+    write_native_v2(target, {"format": "CASUNAT2", "streams": [0, 1]}, chunks)
+    container = read_native_v2(target)
+    assert container.integrity_verified is True
+    assert [item.chunk_type for item in container.chunks[:2]] == [ChunkType.STREAM_CONFIG, ChunkType.VIDEO_KEY_STATE]
+    assert container.seek_entries
+    assert container.seek_entries[0].key_state_offset > 0
+    assert container.seek_entries[0].first_update_offset >= container.seek_entries[0].key_state_offset
 
 
 def test_cli_verify_accepts_native_container(tmp_path, monkeypatch, capsys):
