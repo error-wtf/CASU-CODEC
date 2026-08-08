@@ -196,6 +196,8 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
         if not isinstance(seek_index, dict):
             errors.append("seek_index must be an object")
         else:
+            if "native_key_states" in seek_index and not isinstance(seek_index["native_key_states"], bool):
+                errors.append("seek_index.native_key_states must be boolean")
             entries = seek_index.get("entries", [])
             if not isinstance(entries, list):
                 errors.append("seek_index.entries must be an array")
