@@ -291,6 +291,8 @@ def test_backend_exposes_optional_video_track_selection():
     assert "libvlc_video_get_track_count" in source
     assert "def set_video_track" in source
     assert "def video_track_descriptions" in source
+    player = Path("mpcasu_player.py").read_text(encoding="utf-8")
+    assert "def cycle_video_track" in player
 
 
 def test_libvlc_library_candidates_are_platform_independent():
