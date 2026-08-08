@@ -217,6 +217,7 @@ class MPCASUPlayer(tk.Tk):
         ttk.Button(bar, text="Audio", style="MPC.TButton", command=self.cycle_audio_track).pack(side="right", padx=3)
         ttk.Button(bar, text="Video", style="MPC.TButton", command=self.cycle_video_track).pack(side="right", padx=3)
         ttk.Button(bar, text="Subtitles", style="MPC.TButton", command=self.cycle_subtitle_track).pack(side="right", padx=3)
+        ttk.Button(bar, text="Load subtitle", style="MPC.TButton", command=self.load_external_subtitle).pack(side="right", padx=3)
         ttk.Button(bar, text="Info", style="MPC.TButton", command=self.show_media_info).pack(side="right", padx=3)
         ttk.Button(bar, text="Fullscreen", style="MPC.TButton", command=self.toggle_fullscreen).pack(side="right", padx=3)
         tk.Label(center, textvariable=self.status, bg=PANEL, fg=SECONDARY, anchor="w").pack(fill="x", padx=14, pady=(0, 8))
@@ -811,6 +812,28 @@ class MPCASUPlayer(tk.Tk):
             self.status.set(f"Subtitle: {label} ({next_track + 1}/{count})")
         except BackendError as exc:
             self.status.set(str(exc))
+
+    def load_external_subtitle(self):
+        if not self.backend or not self.current:
+            self.status.set("Open local media before loading an external subtitle")
+            return
+        subtitle = filedialog.askopenfilename(
+            filetypes=[("Subtitle files", "*.srt *.ass *.ssa *.vtt *.sub"), ("All files", "*.*")]
+        )
+        if not subtitle:
+            return
+        try:
+            position = self.backend.position()
+            paused = self._paused
+            self.backend.add_external_subtitle(Path(subtitle))
+            self.duration = self.backend.duration()
+            self.timeline.configure(to=max(self.duration, 1.0))
+            self.backend.seek(position)
+            if not paused:
+                self.backend.play()
+            self.status.set(f"External subtitle loaded · {Path(subtitle).name}")
+        except (BackendError, OSError) as exc:
+            self.status.set(f"Could not load subtitle: {exc}")
 
     def toggle_fullscreen(self):
         self.attributes("-fullscreen", not bool(self.attributes("-fullscreen")))

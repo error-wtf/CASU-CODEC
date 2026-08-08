@@ -83,6 +83,7 @@ class LibVLCBackend:
         self._event_api = False
         self.on_event = None
         self._install("libvlc_media_new_path", ctypes.c_void_p, [ctypes.c_void_p, ctypes.c_char_p])
+        self._subtitle_option_api = self._optional_install("libvlc_media_add_option", None, [ctypes.c_void_p, ctypes.c_char_p])
         self._install("libvlc_media_player_new_from_media", ctypes.c_void_p, [ctypes.c_void_p])
         self._install("libvlc_media_player_release", None, [ctypes.c_void_p])
         self._install("libvlc_media_release", None, [ctypes.c_void_p])
@@ -172,10 +173,10 @@ class LibVLCBackend:
             "player_process": "none",
         }
 
-    def open(self, path: Path) -> None:
-        self.open_source(path)
+    def open(self, path: Path, subtitle: Path | None = None) -> None:
+        self.open_source(path, subtitle=subtitle)
 
-    def open_source(self, source: str | Path) -> None:
+    def open_source(self, source: str | Path, subtitle: Path | None = None) -> None:
         if not self.supports(source):
             raise BackendError(f"unsupported media source: {source}")
         self.close_media()
@@ -190,6 +191,14 @@ class LibVLCBackend:
             local = self.path or Path(parsed.path)
             self.media = self.libvlc_media_new_path(self.instance, os_path(local))
         if not self.media: self._state = PlaybackState.ERROR; raise BackendError(f"libVLC could not open {source}")
+        if subtitle is not None:
+            subtitle = subtitle.expanduser().resolve()
+            if not subtitle.is_file():
+                raise BackendError(f"subtitle file does not exist: {subtitle}")
+            if not self._subtitle_option_api:
+                raise BackendError("external subtitle loading is unavailable in this libVLC build")
+            option = f":sub-file={subtitle}".encode("utf-8")
+            self.libvlc_media_add_option(self.media, option)
         self.player = self.libvlc_media_player_new_from_media(self.media)
         if not self.player: self._state = PlaybackState.ERROR; raise BackendError("libVLC could not create media player")
         if sys.platform.startswith("linux"):
@@ -200,6 +209,18 @@ class LibVLCBackend:
             self.libvlc_media_player_set_nsobject(self.player, ctypes.c_void_p(self.widget.winfo_id()))
         self._attach_events()
         self._state = PlaybackState.READY
+
+    def add_external_subtitle(self, subtitle: Path) -> None:
+        """Reopen the current source with a real libVLC subtitle option."""
+        if self.path is None:
+            raise BackendError("external subtitles require a local media source")
+        position = self.position()
+        was_playing = self.is_actively_playing()
+        self.open_source(self.path, subtitle=subtitle)
+        if was_playing:
+            self.play()
+            if position > 0:
+                self.seek(position)
 
     def _attach_events(self) -> None:
         """Map libVLC lifecycle events to the backend state machine."""
