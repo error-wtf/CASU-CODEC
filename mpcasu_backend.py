@@ -1,1 +1,318 @@
-¨¥yÛhr·šµë-­æ¦}Ó©z¶­Š‰ç¢Ú^®h­µçEj)^vÚ­æ­zËky©Ÿtê^­«b¢yè¶—«š+myÑZŠW¶‡+y«^²ÚÞjgÝ:—«jØ¨žz-¥êæŠÛ^tŒMA`µ1¥•¹Í”µ%‘•¹Ñ¥™¥•Èè1¥•¹Í•I•˜µMTµ¹Ñ¥…Á¥Ñ…±¥ÍÐ´Ä¸Ð(ŒMA`µ¥±•½ÁåÉ¥¡ÑQ•áÐè€ÈÀÈØ1¥¹¼…ÍÔ(ˆˆ‰%¹Ñ•É¹…°5AMTÁ±…å‰…¬‰…­•¹‘Ì¸()Q¡”‰…­•¹ÕÍ•Ì±¥‰Y1Ñ¡É½Õ ¥ÑÌÍ¡…É•±¥‰É…ÉäA$¸€9¼Á±…å•È•á•ÕÑ…‰±”)¥Ì±…Õ¹¡•è‘•½‘¥¹œ°±½­¥¹œ°Í••­¥¹œ…¹Ù¥‘•¼µÝ¥¹‘½Ü½Ý¹•ÉÍ¡¥ÀÉ•µ…¥¸)Õ¹‘•È5AMT½¹ÑÉ½°¸€MTµ…¹¥™•ÍÑÌ…É”Ù…±¥‘…Ñ•‰•™½É”Ñ¡•¥È¥µµÕÑ…‰±”)Í½ÕÉ”¥Ì½Á•¹•‰äÑ¡”Í…µ”¥¸µÁÉ½•ÍÌµ•‘¥„Á¥Á•±¥¹”¸(ˆˆˆ)™É½´}}™ÕÑÕÉ•}|¥µÁ½ÉÐ…¹¹½Ñ…Ñ¥½¹Ì()¥µÁ½ÉÐÑåÁ•Ì)¥µÁ½ÉÐ½Ì)¥µÁ½ÉÐÍåÌ)™É½´•¹Õ´¥µÁ½ÉÐ¹Õ´)™É½´Á…Ñ¡±¥ˆ¥µÁ½ÉÐA…Ñ ()™É½´…ÍÔ¹½É”¥µÁ½ÉÐ…ÍÕÉÉ½È°É•Í½±Ù•}…ÍÕ}Í½ÕÉ”)™É½´…ÍÔ¹Í¡•µ„¥µÁ½ÉÐÙ…±¥‘…Ñ•}µ…¹¥™•ÍÐ)¥µÁ½ÉÐ©Í½¸)™É½´ÕÉ±±¥ˆ¹Á…ÉÍ”¥µÁ½ÉÐÕÉ±Á…ÉÍ”(()±…ÍÌA±…å‰…­MÑ…Ñ”¡ÍÑÈ°¹Õ´¤è(€€€5AQd€ô€‰5AQdˆì1=%9€ô€‰1=%9ˆìId€ô€‰Idˆ(€€€A1e%9€ô€‰A1e%9ˆìAUM€ô€‰AUMˆìMQ=AA€ô€‰MQ=AAˆ(€€€9€ô€‰9ˆìII=H€ô€‰II=Hˆ(()±…ÍÌ	…­•¹‘ÉÉ½È¡…ÍÕÉÉ½È¤è(€€€Á…ÍÌ(()±…ÍÌ}QÉ…­•ÍÉ¥ÁÑ¥½¸¡ÑåÁ•Ì¹MÑÉÕÑÕÉ”¤è(€€€}™¥•±‘Í|€ôl ‰¥‘•¹Ñ¥™¥•Èˆ°ÑåÁ•Ì¹}¥¹Ð¤°€ ‰¹…µ”ˆ°ÑåÁ•Ì¹}¡…É}À¥t(()±…ÍÌ1¥‰Y1	…­•¹è(€€€€ˆˆ‰5¥¹¥µ…°°É•…°¥¸µÁÉ½•ÍÌ±¥‰Y1‰…­•¹™½ÈÑ¡”5AMTÝ¥¹‘½Ü¸ˆˆˆ((€€€‘•˜}}¥¹¥Ñ}|¡Í•±˜°Ù¥‘•½}Ý¥‘•Ð¤è(€€€€€€€€ŒAåÑ¡½¸½ÑåÁ•Ì‘½•Ì¹½Ð¥¹¡•É¥ÐÑ¡”Á±Õ¥¸µÁ…Ñ Í•ÑÕÀÑ¡…ÐÑ¡”Y1(€€€€€€€€Œ±…Õ¹¡•È¹½Éµ…±±äÁ•É™½ÉµÌ¸A½¥¹Ð±¥‰Y1…Ð¥ÑÌ¥¹ÍÑ…±±•µ½‘Õ±•ÌÍ¼(€€€€€€€€Œ ¸ÈØÐ½…¹½Ñ¡•È½‘•Ì…É”‘¥Í½Ù•É•‰äÑ¡”¥¸µÁÉ½•ÍÌÁ±…å•È¸(€€€€€€€Á±Õ¥¹}…¹‘¥‘…Ñ•Ì€ômt(€€€€€€€½¹™¥ÕÉ•‘}Á±Õ¥¹Ì€ô½Ì¹•¹Ù¥É½¸¹•Ð ‰Y1}A1U%9}AQ ˆ¤(€€€€€€€¥˜½¹™¥ÕÉ•‘}Á±Õ¥¹Ìè(€€€€€€€€€€€Á±Õ¥¹}…¹‘¥‘…Ñ•Ì¹…ÁÁ•¹¡½¹™¥ÕÉ•‘}Á±Õ¥¹Ì¤(€€€€€€€¥˜ÍåÌ¹Á±…Ñ™½É´¹ÍÑ…ÉÑÍÝ¥Ñ  ‰±¥¹Õàˆ¤è(€€€€€€€€€€€Á±Õ¥¹}…¹‘¥‘…Ñ•Ì¹•áÑ•¹  ˆ½ÕÍÈ½±¥ˆ½ààÙ|ØÐµ±¥¹Õàµ¹Ô½Ù±Œ½Á±Õ¥¹Ìˆ°€ˆ½ÕÍÈ½±¥ˆ½Ù±Œ½Á±Õ¥¹Ìˆ¤¤(€€€€€€€•±¥˜ÍåÌ¹Á±…Ñ™½É´€ôô€‰‘…ÉÝ¥¸ˆè(€€€€€€€€€€€Á±Õ¥¹}…¹‘¥‘…Ñ•Ì¹…ÁÁ•¹ ˆ½ÁÁ±¥…Ñ¥½¹Ì½Y1¹…ÁÀ½½¹Ñ•¹ÑÌ½5…=L½Á±Õ¥¹Ìˆ¤(€€€€€€€Á±Õ¥¹}Á…Ñ €ô¹•áÐ ¡…¹‘¥‘…Ñ”™½È…¹‘¥‘…Ñ”¥¸Á±Õ¥¹}…¹‘¥‘…Ñ•Ì¥˜½Ì¹Á…Ñ ¹¥Í‘¥È¡…¹‘¥‘…Ñ”¤¤°9½¹”¤(€€€€€€€¥˜Á±Õ¥¹}Á…Ñ è(€€€€€€€€€€€½Ì¹•¹Ù¥É½¸¹Í•Ñ‘•™…Õ±Ð ‰Y1}A1U%9}AQ ˆ°Á±Õ¥¹}Á…Ñ ¤(€€€€€€€±¥‰É…Éå}¹…µ•Ì€ô€¡l‰±¥‰Ù±Œ¹‘±°ˆ°€‰±¥‰Ù±Œ´Ô¹‘±°‰t¥˜ÍåÌ¹Á±…Ñ™½É´¹ÍÑ…ÉÑÍÝ¥Ñ  ‰Ý¥¸ˆ¤(€€€€€€€€€€€€€€€€€€€€€€€€•±Í”l‰±¥‰Ù±Œ¹‘å±¥ˆ‰t¥˜ÍåÌ¹Á±…Ñ™½É´€ôô€‰‘…ÉÝ¥¸ˆ(€€€€€€€€€€€€€€€€€€€€€€€€•±Í”l‰±¥‰Ù±Œ¹Í¼¸Ôˆ°€‰±¥‰Ù±Œ¹Í¼‰t¤(€€€€€€€±½…‘}•ÉÉ½È€ô9½¹”(€€€€€€€™½È±¥‰É…Éå}¹…µ”¥¸±¥‰É…Éå}¹…µ•Ìè(€€€€€€€€€€€ÑÉäè(€€€€€€€€€€€€€€€Í•±˜¹±¥ˆ€ôÑåÁ•Ì¹10¡±¥‰É…Éå}¹…µ”¤(€€€€€€€€€€€€€€€‰É•…¬(€€€€€€€€€€€•á•ÁÐ=MÉÉ½È…Ì•áŒè(€€€€€€€€€€€€€€€±½…‘}•ÉÉ½È€ô•áŒ(€€€€€€€•±Í”è(€€€€€€€€€€€É…¥Í”	…­•¹‘ÉÉ½È ‰±¥‰Y1Í¡…É•±¥‰É…Éä¥ÌÕ¹…Ù…¥±…‰±”ˆ¤™É½´±½…‘}•ÉÉ½È(€€€€€€€Í•±˜¹Ý¥‘•Ð€ôÙ¥‘•½}Ý¥‘•Ð(€€€€€€€€ŒY1€Ì¹à‘¥Í½Ù•ÉÌµ½‘Õ±•ÌÑ¡É½Õ Y1}A1U%9}AQ ¸Q¡”¡¥ÍÑ½É¥…°(€€€€€€€€Œ€´µÁ±Õ¥¸µÁ…Ñ ½µµ…¹µ±¥¹”½ÁÑ¥½¸¥Ì¹¼±½¹•È…•ÁÑ•…¹…¸(€€€€€€€€ŒÁÉ•Ù•¹Ð½‘•Œµ½‘Õ±•Ì™É½´±½…‘¥¹œ¥¸•µ‰•‘‘•±¥‰Y1‰Õ¥±‘Ì¸(€€€€€€€½ÁÑ¥½¹Ì€ômˆˆ´µ¹¼µÙ¥‘•¼µÑ¥Ñ±”µÍ¡½Ü‰t(€€€€€€€…ÉØ€ô€¡ÑåÁ•Ì¹}¡…É}À€¨±•¸¡½ÁÑ¥½¹Ì¤¤ ©½ÁÑ¥½¹Ì¤(€€€€€€€Í•±˜¹¥¹ÍÑ…¹”€ôÍ•±˜¹}…±° ‰±¥‰Ù±}¹•Üˆ°ÑåÁ•Ì¹}Ù½¥‘}À°mÑåÁ•Ì¹}¥¹Ð°ÑåÁ•Ì¹A=%9QH¡ÑåÁ•Ì¹}¡…É}À¥t¤¡±•¸¡½ÁÑ¥½¹Ì¤°…ÉØ¤(€€€€€€€¥˜¹½ÐÍ•±˜¹¥¹ÍÑ…¹”è(€€€€€€€€€€€É…¥Í”	…­•¹‘ÉÉ½È ‰±¥‰Y1½Õ±¹½Ð‰”¥¹¥Ñ¥…±¥é•ˆ¤(€€€€€€€Í•±˜¹µ•‘¥„€ô9½¹”ìÍ•±˜¹Á±…å•È€ô9½¹”ìÍ•±˜¹Á…Ñ èA…Ñ ð9½¹”€ô9½¹”(€€€€€€€Í•±˜¹}ÍÑ…Ñ”€ôA±…å‰…­MÑ…Ñ”¹5AQd(€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}µ•‘¥…}¹•Ý}Á…Ñ ˆ°ÑåÁ•Ì¹}Ù½¥‘}À°mÑåÁ•Ì¹}Ù½¥‘}À°ÑåÁ•Ì¹}¡…É}Át¤(€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}µ•‘¥…}Á±…å•É}¹•Ý}™É½µ}µ•‘¥„ˆ°ÑåÁ•Ì¹}Ù½¥‘}À°mÑåÁ•Ì¹}Ù½¥‘}Át¤(€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}µ•‘¥…}Á±…å•É}É•±•…Í”ˆ°9½¹”°mÑåÁ•Ì¹}Ù½¥‘}Át¤(€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}µ•‘¥…}É•±•…Í”ˆ°9½¹”°mÑåÁ•Ì¹}Ù½¥‘}Át¤(€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}É•±•…Í”ˆ°9½¹”°mÑåÁ•Ì¹}Ù½¥‘}Át¤(€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}µ•‘¥…}Á±…å•É}Á±…äˆ°ÑåÁ•Ì¹}¥¹Ð°mÑåÁ•Ì¹}Ù½¥‘}Át¤(€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}µ•‘¥…}Á±…å•É}Í•Ñ}Á…ÕÍ”ˆ°9½¹”°mÑåÁ•Ì¹}Ù½¥‘}À°ÑåÁ•Ì¹}¥¹Ñt¤(€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}µ•‘¥…}Á±…å•É}ÍÑ½Àˆ°9½¹”°mÑåÁ•Ì¹}Ù½¥‘}Át¤(€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}µ•‘¥…}Á±…å•É}¥Í}Á±…å¥¹œˆ°ÑåÁ•Ì¹}¥¹Ð°mÑåÁ•Ì¹}Ù½¥‘}Át¤(€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}µ•‘¥…}Á±…å•É}•Ñ}Ñ¥µ”ˆ°ÑåÁ•Ì¹}¥¹ÐØÐ°mÑåÁ•Ì¹}Ù½¥‘}Át¤(€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}µ•‘¥…}Á±…å•É}•Ñ}±•¹Ñ ˆ°ÑåÁ•Ì¹}¥¹ÐØÐ°mÑåÁ•Ì¹}Ù½¥‘}Át¤(€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}µ•‘¥…}Á±…å•É}Í•Ñ}Ñ¥µ”ˆ°9½¹”°mÑåÁ•Ì¹}Ù½¥‘}À°ÑåÁ•Ì¹}¥¹ÐØÑt¤(€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}µ•‘¥…}Á±…å•É}Í•Ñ}É…Ñ”ˆ°ÑåÁ•Ì¹}¥¹Ð°mÑåÁ•Ì¹}Ù½¥‘}À°ÑåÁ•Ì¹}™±½…Ñt¤(€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}µ•‘¥…}Á±…å•É}•Ñ}É…Ñ”ˆ°ÑåÁ•Ì¹}™±½…Ð°mÑåÁ•Ì¹}Ù½¥‘}Át¤(€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}…Õ‘¥½}Í•Ñ}Ù½±Õµ”ˆ°ÑåÁ•Ì¹}¥¹Ð°mÑåÁ•Ì¹}Ù½¥‘}À°ÑåÁ•Ì¹}¥¹Ñt¤(€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}…Õ‘¥½}•Ñ}Ù½±Õµ”ˆ°ÑåÁ•Ì¹}¥¹Ð°mÑåÁ•Ì¹}Ù½¥‘}Át¤(€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}…Õ‘¥½}Í•Ñ}µÕÑ”ˆ°9½¹”°mÑåÁ•Ì¹}Ù½¥‘}À°ÑåÁ•Ì¹}¥¹Ñt¤(€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}…Õ‘¥½}•Ñ}ÑÉ…­}½Õ¹Ðˆ°ÑåÁ•Ì¹}¥¹Ð°mÑåÁ•Ì¹}Ù½¥‘}Át¤(€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}…Õ‘¥½}•Ñ}ÑÉ…¬ˆ°ÑåÁ•Ì¹}¥¹Ð°mÑåÁ•Ì¹}Ù½¥‘}Át¤(€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}…Õ‘¥½}Í•Ñ}ÑÉ…¬ˆ°ÑåÁ•Ì¹}¥¹Ð°mÑåÁ•Ì¹}Ù½¥‘}À°ÑåÁ•Ì¹}¥¹Ñt¤(€€€€€€€Í•±˜¹}…Õ‘¥½}‘•ÍÉ¥ÁÑ¥½¹}…Á¤€ôÍ•±˜¹}¥¹ÍÑ…±±}‘•ÍÉ¥ÁÑ¥½¹Ì ‰±¥‰Ù±}…Õ‘¥½}•Ñ}ÑÉ…­}‘•ÍÉ¥ÁÑ¥½¸ˆ¤(€€€€€€€Í•±˜¹}ÍÕ‰Ñ¥Ñ±•}…Á¤€ô…±°¡Í•±˜¹}½ÁÑ¥½¹…±}¥¹ÍÑ…±°¡¹…µ”°É•ÍÑåÁ”°…ÉÌ¤™½È¹…µ”°É•ÍÑåÁ”°…ÉÌ¥¸€ (€€€€€€€€€€€€ ‰±¥‰Ù±}Ù¥‘•½}•Ñ}ÍÁÕ}½Õ¹Ðˆ°ÑåÁ•Ì¹}¥¹Ð°mÑåÁ•Ì¹}Ù½¥‘}Át¤°(€€€€€€€€€€€€ ‰±¥‰Ù±}Ù¥‘•½}•Ñ}ÍÁÔˆ°ÑåÁ•Ì¹}¥¹Ð°mÑåÁ•Ì¹}Ù½¥‘}Át¤°(€€€€€€€€€€€€ ‰±¥‰Ù±}Ù¥‘•½}Í•Ñ}ÍÁÔˆ°ÑåÁ•Ì¹}¥¹Ð°mÑåÁ•Ì¹}Ù½¥‘}À°ÑåÁ•Ì¹}¥¹Ñt¤°(€€€€€€€€¤¤(€€€€€€€Í•±˜¹}ÍÕ‰Ñ¥Ñ±•}‘•ÍÉ¥ÁÑ¥½¹}…Á¤€ôÍ•±˜¹}¥¹ÍÑ…±±}‘•ÍÉ¥ÁÑ¥½¹Ì ‰±¥‰Ù±}Ù¥‘•½}•Ñ}ÍÁÕ}‘•ÍÉ¥ÁÑ¥½¸ˆ¤(€€€€€€€¥˜ÍåÌ¹Á±…Ñ™½É´¹ÍÑ…ÉÑÍÝ¥Ñ  ‰±¥¹Õàˆ¤è(€€€€€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}µ•‘¥…}Á±…å•É}Í•Ñ}áÝ¥¹‘½Üˆ°9½¹”°mÑåÁ•Ì¹}Ù½¥‘}À°ÑåÁ•Ì¹}Õ¥¹ÐÌÉt¤(€€€€€€€•±¥˜ÍåÌ¹Á±…Ñ™½É´¹ÍÑ…ÉÑÍÝ¥Ñ  ‰Ý¥¸ˆ¤è(€€€€€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}µ•‘¥…}Á±…å•É}Í•Ñ}¡Ý¹ˆ°9½¹”°mÑåÁ•Ì¹}Ù½¥‘}À°ÑåÁ•Ì¹}Ù½¥‘}Át¤(€€€€€€€•±¥˜ÍåÌ¹Á±…Ñ™½É´€ôô€‰‘…ÉÝ¥¸ˆè(€€€€€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}µ•‘¥…}Á±…å•É}Í•Ñ}¹Í½‰©•Ðˆ°9½¹”°mÑåÁ•Ì¹}Ù½¥‘}À°ÑåÁ•Ì¹}Ù½¥‘}Át¤((€€€‘•˜}¥¹ÍÑ…±°¡Í•±˜°¹…µ”°É•ÍÑåÁ”°…ÉÌ¤è(€€€€€€€Í•Ñ…ÑÑÈ¡Í•±˜°¹…µ”°Í•±˜¹}…±°¡¹…µ”°É•ÍÑåÁ”°…ÉÌ¤¤((€€€‘•˜}½ÁÑ¥½¹…±}¥¹ÍÑ…±°¡Í•±˜°¹…µ”°É•ÍÑåÁ”°…ÉÌ¤€´ø‰½½°è(€€€€€€€ÑÉäè(€€€€€€€€€€€Í•±˜¹}¥¹ÍÑ…±°¡¹…µ”°É•ÍÑåÁ”°…ÉÌ¤(€€€€€€€•á•ÁÐ	…­•¹‘ÉÉ½Èè(€€€€€€€€€€€É•ÑÕÉ¸…±Í”(€€€€€€€É•ÑÕÉ¸QÉÕ”((€€€‘•˜}¥¹ÍÑ…±±}‘•ÍÉ¥ÁÑ¥½¹Ì¡Í•±˜°¹…µ”¤€´ø‰½½°è(€€€€€€€ÑÉäè(€€€€€€€€€€€Í•±˜¹}¥¹ÍÑ…±°¡¹…µ”°ÑåÁ•Ì¹A=%9QH¡}QÉ…­•ÍÉ¥ÁÑ¥½¸¤°mÑåÁ•Ì¹}Ù½¥‘}Át¤(€€€€€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}ÑÉ…­}‘•ÍÉ¥ÁÑ¥½¹}É•±•…Í”ˆ°9½¹”°mÑåÁ•Ì¹A=%9QH¡}QÉ…­•ÍÉ¥ÁÑ¥½¸¥t¤(€€€€€€€•á•ÁÐ	…­•¹‘ÉÉ½Èè(€€€€€€€€€€€É•ÑÕÉ¸…±Í”(€€€€€€€É•ÑÕÉ¸QÉÕ”((€€€‘•˜}…±°¡Í•±˜°¹…µ”°É•ÍÑåÁ”°…ÉÌ¤è(€€€€€€€ÑÉäè™Õ¹Ñ¥½¸€ô•Ñ…ÑÑÈ¡Í•±˜¹±¥ˆ°¹…µ”¤(€€€€€€€•á•ÁÐÑÑÉ¥‰ÕÑ•ÉÉ½È…Ì•áŒèÉ…¥Í”	…­•¹‘ÉÉ½È¡˜‰±¥‰Y1A$µ¥ÍÍ¥¹œèí¹…µ•ôˆ¤™É½´•áŒ(€€€€€€€™Õ¹Ñ¥½¸¹É•ÍÑåÁ”€ôÉ•ÍÑåÁ”ì™Õ¹Ñ¥½¸¹…ÉÑåÁ•Ì€ô…ÉÌ(€€€€€€€É•ÑÕÉ¸™Õ¹Ñ¥½¸((€€€ÍÑ…Ñ¥µ•Ñ¡½(€€€‘•˜ÍÕÁÁ½ÉÑÌ¡Í½ÕÉ”èÍÑÈðA…Ñ ¤€´ø‰½½°è(€€€€€€€€ˆˆ‰I•ÑÕÉ¸Ý¡•Ñ¡•ÈÑ¡”Õ¹¥Ù•ÉÍ…°‰…­•¹…¸…•ÁÐÑ¡¥ÌÍ½ÕÉ”™½É´¸ˆˆˆ(€€€€€€€Ù…±Õ”€ôÍÑÈ¡Í½ÕÉ”¤(€€€€€€€Á…ÉÍ•€ôÕÉ±Á…ÉÍ”¡Ù…±Õ”¤(€€€€€€€É•ÑÕÉ¸¥Í¥¹ÍÑ…¹”¡Í½ÕÉ”°A…Ñ ¤½È¹½ÐÁ…ÉÍ•¹Í¡•µ”½ÈÁ…ÉÍ•¹Í¡•µ”¥¸ì(€€€€€€€€€€€€‰™¥±”ˆ°€‰¡ÑÑÀˆ°€‰¡ÑÑÁÌˆ°€‰ÉÑÍÀˆ°€‰ÉÑÀˆ°€‰Õ‘Àˆ°€‰™ÑÀˆ°€‰Íµˆˆ(€€€€€€€ô((€€€‘•˜…Á…‰¥±¥Ñ¥•Ì¡Í•±˜¤€´ø‘¥ÑmÍÑÈ°ÍÑÉtè(€€€€€€€€ˆˆ‰áÁ½Í”ÉÕ¹Ñ¥µ”™…ÑÌ¥¹ÍÑ•…½˜±…¥µ¥¹œ„ÍÑ…Ñ¥Œ™½Éµ…Ðµ…ÑÉ¥à¸ˆˆˆ(€€€€€€€Ù•ÉÍ¥½¸€ôÍ•±˜¹}…±° ‰±¥‰Ù±}•Ñ}Ù•ÉÍ¥½¸ˆ°ÑåÁ•Ì¹}¡…É}À°mt¤ ¤(€€€€€€€É•ÑÕÉ¸ì(€€€€€€€€€€€€‰‰…­•¹ˆè€‰±¥‰Y1Í¡…É•±¥‰É…Éäˆ°(€€€€€€€€€€€€‰Ù•ÉÍ¥½¸ˆèÙ•ÉÍ¥½¸¹‘•½‘” ‰ÕÑ˜´àˆ°€‰É•Á±…”ˆ¤¥˜Ù•ÉÍ¥½¸•±Í”€‰Õ¹­¹½Ý¸ˆ°(€€€€€€€€€€€€‰¹•ÑÝ½É¬ˆè€‰…Ù…¥±…‰±”ˆ°(€€€€€€€€€€€€‰¡…É‘Ý…É•}‘•½‘”ˆè€‰‘•±•…Ñ•Ñ¼¥¹ÍÑ…±±•±¥‰Y1µ½‘Õ±•Ìˆ°(€€€€€€€€€€€€‰Á±…å•É}ÁÉ½•ÍÌˆè€‰¹½¹”ˆ°(€€€€€€€ô((€€€‘•˜½Á•¸¡Í•±˜°Á…Ñ èA…Ñ ¤€´ø9½¹”è(€€€€€€€Í•±˜¹½Á•¹}Í½ÕÉ”¡Á…Ñ ¤((€€€‘•˜½Á•¹}Í½ÕÉ”¡Í•±˜°Í½ÕÉ”èÍÑÈðA…Ñ ¤€´ø9½¹”è(€€€€€€€¥˜¹½ÐÍ•±˜¹ÍÕÁÁ½ÉÑÌ¡Í½ÕÉ”¤è(€€€€€€€€€€€É…¥Í”	…­•¹‘ÉÉ½È¡˜‰Õ¹ÍÕÁÁ½ÉÑ•µ•‘¥„Í½ÕÉ”èíÍ½ÕÉ•ôˆ¤(€€€€€€€Í•±˜¹±½Í•}µ•‘¥„ ¤(€€€€€€€Í•±˜¹Á…Ñ €ôA…Ñ ¡Í½ÕÉ”¤¹É•Í½±Ù” ¤¥˜¥Í¥¹ÍÑ…¹”¡Í½ÕÉ”°A…Ñ ¤•±Í”9½¹”(€€€€€€€Í•±˜¹}ÍÑ…Ñ”€ôA±…å‰…­MÑ…Ñ”¹1=%9(€€€€€€€Ù…±Õ”€ôÍÑÈ¡Í½ÕÉ”¤(€€€€€€€Á…ÉÍ•€ôÕÉ±Á…ÉÍ”¡Ù…±Õ”¤(€€€€€€€¥˜Á…ÉÍ•¹Í¡•µ”…¹Á…ÉÍ•¹Í¡•µ”€„ô€‰™¥±”ˆè(€€€€€€€€€€€Í•±˜¹}¥¹ÍÑ…±° ‰±¥‰Ù±}µ•‘¥…}¹•Ý}±½…Ñ¥½¸ˆ°ÑåÁ•Ì¹}Ù½¥‘}À°mÑåÁ•Ì¹}Ù½¥‘}À°ÑåÁ•Ì¹}¡…É}Át¤(€€€€€€€€€€€Í•±˜¹µ•‘¥„€ôÍ•±˜¹±¥‰Ù±}µ•‘¥…}¹•Ý}±½…Ñ¥½¸¡Í•±˜¹¥¹ÍÑ…¹”°Ù…±Õ”¹•¹½‘” ‰ÕÑ˜´àˆ¤¤(€€€€€€€•±Í”è(€€€€€€€€€€€±½…°€ôÍ•±˜¹Á…Ñ ½ÈA…Ñ ¡Á…ÉÍ•¹Á…Ñ ¤(€€€€€€€€€€€Í•±˜¹µ•‘¥„€ôÍ•±˜¹±¥‰Ù±}µ•‘¥…}¹•Ý}Á…Ñ ¡Í•±˜¹¥¹ÍÑ…¹”°½Í}Á…Ñ ¡±½…°¤¤(€€€€€€€¥˜¹½ÐÍ•±˜¹µ•‘¥„èÍ•±˜¹}ÍÑ…Ñ”€ôA±…å‰…­MÑ…Ñ”¹II=HìÉ…¥Í”	…­•¹‘ÉÉ½È¡˜‰±¥‰Y1½Õ±¹½Ð½Á•¸íÍ½ÕÉ•ôˆ¤(€€€€€€€Í•±˜¹Á±…å•È€ôÍ•±˜¹±¥‰Ù±}µ•‘¥…}Á±…å•É}¹•Ý}™É½µ}µ•‘¥„¡Í•±˜¹µ•‘¥„¤(€€€€€€€¥˜¹½ÐÍ•±˜¹Á±…å•ÈèÍ•±˜¹}ÍÑ…Ñ”€ôA±…å‰…­MÑ…Ñ”¹II=HìÉ…¥Í”	…­•¹‘ÉÉ½È ‰±¥‰Y1½Õ±¹½ÐÉ•…Ñ”µ•‘¥„Á±…å•Èˆ¤(€€€€€€€¥˜ÍåÌ¹Á±…Ñ™½É´¹ÍÑ…ÉÑÍÝ¥Ñ  ‰±¥¹Õàˆ¤è(€€€€€€€€€€€Í•±˜¹±¥‰Ù±}µ•‘¥…}Á±…å•É}Í•Ñ}áÝ¥¹‘½Ü¡Í•±˜¹Á±…å•È°Í•±˜¹Ý¥‘•Ð¹Ý¥¹™½}¥ ¤¤(€€€€€€€•±¥˜ÍåÌ¹Á±…Ñ™½É´¹ÍÑ…ÉÑÍÝ¥Ñ  ‰Ý¥¸ˆ¤è(€€€€€€€€€€€Í•±˜¹±¥‰Ù±}µ•‘¥…}Á±…å•É}Í•Ñ}¡Ý¹¡Í•±˜¹Á±…å•È°ÑåÁ•Ì¹}Ù½¥‘}À¡Í•±˜¹Ý¥‘•Ð¹Ý¥¹™½}¥ ¤¤¤(€€€€€€€•±¥˜ÍåÌ¹Á±…Ñ™½É´€ôô€‰‘…ÉÝ¥¸ˆè(€€€€€€€€€€€Í•±˜¹±¥‰Ù±}µ•‘¥…}Á±…å•É}Í•Ñ}¹Í½‰©•Ð¡Í•±˜¹Á±…å•È°ÑåÁ•Ì¹}Ù½¥‘}À¡Í•±˜¹Ý¥‘•Ð¹Ý¥¹™½}¥ ¤¤¤(€€€€€€€Í•±˜¹}ÍÑ…Ñ”€ôA±…å‰…­MÑ…Ñ”¹Id((€€€‘•˜Á±…ä¡Í•±˜¤è(€€€€€€€¥˜¹½ÐÍ•±˜¹Á±…å•È½ÈÍ•±˜¹±¥‰Ù±}µ•‘¥…}Á±…å•É}Á±…ä¡Í•±˜¹Á±…å•È¤€„ô€ÀèÉ…¥Í”	…­•¹‘ÉÉ½È ‰±¥‰Y1Á±…å‰…¬½Õ±¹½ÐÍÑ…ÉÐˆ¤(€€€€€€€Í•±˜¹}ÍÑ…Ñ”€ôA±…å‰…­MÑ…Ñ”¹A1e%9((€€€‘•˜Á…ÕÍ”¡Í•±˜¤è(€€€€€€€¥˜Í•±˜¹Á±…å•ÈèÍ•±˜¹±¥‰Ù±}µ•‘¥…}Á±…å•É}Í•Ñ}Á…ÕÍ”¡Í•±˜¹Á±…å•È°€Ä¤ìÍ•±˜¹}ÍÑ…Ñ”€ôA±…å‰…­MÑ…Ñ”¹AUM((€€€‘•˜É•ÍÕµ”¡Í•±˜¤è(€€€€€€€¥˜Í•±˜¹Á±…å•ÈèÍ•±˜¹±¥‰Ù±}µ•‘¥…}Á±…å•É}Í•Ñ}Á…ÕÍ”¡Í•±˜¹Á±…å•È°€À¤ìÍ•±˜¹}ÍÑ…Ñ”€ôA±…å‰…­MÑ…Ñ”¹A1e%9((€€€‘•˜ÍÑ½À¡Í•±˜¤è(€€€€€€€¥˜Í•±˜¹Á±…å•ÈèÍ•±˜¹±¥‰Ù±}µ•‘¥…}Á±…å•É}ÍÑ½À¡Í•±˜¹Á±…å•È¤(€€€€€€€Í•±˜¹}ÍÑ…Ñ”€ôA±…å‰…­MÑ…Ñ”¹MQ=AA((€€€‘•˜Í••¬¡Í•±˜°Í•½¹‘Ìè™±½…Ð¤è(€€€€€€€¥˜Í•±˜¹Á±…å•ÈèÍ•±˜¹±¥‰Ù±}µ•‘¥…}Á±…å•É}Í•Ñ}Ñ¥µ”¡Í•±˜¹Á±…å•È°¥¹Ð¡µ…à À¸À°Í•½¹‘Ì¤€¨€ÄÀÀÀ¤¤((€€€‘•˜Í•Ñ}É…Ñ”¡Í•±˜°É…Ñ”è™±½…Ð¤€´ø™±½…Ðè(€€€€€€€¥˜¹½ÐÍ•±˜¹Á±…å•Èè(€€€€€€€€€€€É…¥Í”	…­•¹‘ÉÉ½È ‰¹¼…Ñ¥Ù”µ•‘¥„Á±…å•Èˆ¤(€€€€€€€É…Ñ”€ôµ…à À¸ÈÔ°µ¥¸ Ð¸À°™±½…Ð¡É…Ñ”¤¤¤(€€€€€€€¥˜Í•±˜¹±¥‰Ù±}µ•‘¥…}Á±…å•É}Í•Ñ}É…Ñ”¡Í•±˜¹Á±…å•È°ÑåÁ•Ì¹}™±½…Ð¡É…Ñ”¤¤€ôô€´Äè(€€€€€€€€€€€É…¥Í”	…­•¹‘ÉÉ½È ‰±¥‰Y1É•©•Ñ•Á±…å‰…¬É…Ñ”ˆ¤(€€€€€€€É•ÑÕÉ¸™±½…Ð¡Í•±˜¹±¥‰Ù±}µ•‘¥…}Á±…å•É}•Ñ}É…Ñ”¡Í•±˜¹Á±…å•È¤¤((€€€‘•˜É…Ñ”¡Í•±˜¤€´ø™±½…Ðè(€€€€€€€É•ÑÕÉ¸™±½…Ð¡Í•±˜¹±¥‰Ù±}µ•‘¥…}Á±…å•É}•Ñ}É…Ñ”¡Í•±˜¹Á±…å•È¤¤¥˜Í•±˜¹Á±…å•È•±Í”€Ä¸À((€€€‘•˜Á½Í¥Ñ¥½¸¡Í•±˜¤€´ø™±½…Ðè(€€€€€€€É•ÑÕÉ¸µ…à À¸À°™±½…Ð¡Í•±˜¹±¥‰Ù±}µ•‘¥…}Á±…å•É}•Ñ}Ñ¥µ”¡Í•±˜¹Á±…å•È¤¥˜Í•±˜¹Á±…å•È•±Í”€À¤€¼€ÄÀÀÀ¸À¤((€€€‘•˜‘ÕÉ…Ñ¥½¸¡Í•±˜¤€´ø™±½…Ðè(€€€€€€€É•ÑÕÉ¸µ…à À¸À°™±½…Ð¡Í•±˜¹±¥‰Ù±}µ•‘¥…}Á±…å•É}•Ñ}±•¹Ñ ¡Í•±˜¹Á±…å•È¤¥˜Í•±˜¹Á±…å•È•±Í”€À¤€¼€ÄÀÀÀ¸À¤((€€€‘•˜ÍÑ…Ñ”¡Í•±˜¤€´øA±…å‰…­MÑ…Ñ”è(€€€€€€€¥˜Í•±˜¹Á±…å•È…¹Í•±˜¹}ÍÑ…Ñ”€ôôA±…å‰…­MÑ…Ñ”¹A1e%9…¹¹½ÐÍ•±˜¹±¥‰Ù±}µ•‘¥…}Á±…å•É}¥Í}Á±…å¥¹œ¡Í•±˜¹Á±…å•È¤è(€€€€€€€€€€€¥˜Í•±˜¹‘ÕÉ…Ñ¥½¸ ¤…¹Í•±˜¹Á½Í¥Ñ¥½¸ ¤€øôÍ•±˜¹‘ÕÉ…Ñ¥½¸ ¤€´€À¸ÈèÍ•±˜¹}ÍÑ…Ñ”€ôA±…å‰…­MÑ…Ñ”¹9(€€€€€€€É•ÑÕÉ¸Í•±˜¹}ÍÑ…Ñ”((€€€‘•˜Í•Ñ}Ù½±Õµ”¡Í•±˜°Ù…±Õ”è¥¹Ð¤€´ø¥¹Ðè(€€€€€€€¥˜¹½ÐÍ•±˜¹Á±…å•ÈèÉ•ÑÕÉ¸€À(€€€€€€€Ù…±Õ”€ôµ…à À°µ¥¸ ÈÀÀ°¥¹Ð¡Ù…±Õ”¤¤¤(€€€€€€€¥˜Í•±˜¹±¥‰Ù±}…Õ‘¥½}Í•Ñ}Ù½±Õµ”¡Í•±˜¹Á±…å•È°Ù…±Õ”¤€„ô€Àè(€€€€€€€€€€€É…¥Í”	…­•¹‘ÉÉ½È ‰±¥‰Y1É•©•Ñ•Ñ¡”É•ÅÕ•ÍÑ•Ù½±Õµ”ˆ¤(€€€€€€€É•ÑÕÉ¸Ù…±Õ”((€€€‘•˜Ù½±Õµ”¡Í•±˜¤€´ø¥¹Ðè(€€€€€€€É•ÑÕÉ¸µ…à À°¥¹Ð¡Í•±˜¹±¥‰Ù±}…Õ‘¥½}•Ñ}Ù½±Õµ”¡Í•±˜¹Á±…å•È¤¥˜Í•±˜¹Á±…å•È•±Í”€À¤¤((€€€‘•˜Í•Ñ}µÕÑ”¡Í•±˜°µÕÑ•è‰½½°¤€´ø9½¹”è(€€€€€€€¥˜Í•±˜¹Á±…å•ÈèÍ•±˜¹±¥‰Ù±}…Õ‘¥½}Í•Ñ}µÕÑ”¡Í•±˜¹Á±…å•È°¥¹Ð¡‰½½°¡µÕÑ•¤¤¤((€€€‘•˜…Õ‘¥½}ÑÉ…­}½Õ¹Ð¡Í•±˜¤€´ø¥¹Ðè(€€€€€€€É•ÑÕÉ¸µ…à À°¥¹Ð¡Í•±˜¹±¥‰Ù±}…Õ‘¥½}•Ñ}ÑÉ…­}½Õ¹Ð¡Í•±˜¹Á±…å•È¤¥˜Í•±˜¹Á±…å•È•±Í”€À¤¤((€€€‘•˜…Õ‘¥½}ÑÉ…¬¡Í•±˜¤€´ø¥¹Ðè(€€€€€€€É•ÑÕÉ¸¥¹Ð¡Í•±˜¹±¥‰Ù±}…Õ‘¥½}•Ñ}ÑÉ…¬¡Í•±˜¹Á±…å•È¤¥˜Í•±˜¹Á±…å•È•±Í”€´Ä¤((€€€‘•˜Í•Ñ}…Õ‘¥½}ÑÉ…¬¡Í•±˜°ÑÉ…¬è¥¹Ð¤€´ø9½¹”è(€€€€€€€¥˜Í•±˜¹Á±…å•È…¹Í•±˜¹±¥‰Ù±}…Õ‘¥½}Í•Ñ}ÑÉ…¬¡Í•±˜¹Á±…å•È°¥¹Ð¡ÑÉ…¬¤¤€„ô€Àè(€€€€€€€€€€€É…¥Í”	…­•¹‘ÉÉ½È¡˜‰±¥‰Y1É•©•Ñ•…Õ‘¥¼ÑÉ…¬íÑÉ…­ôˆ¤((€€€‘•˜…Õ‘¥½}ÑÉ…­}‘•ÍÉ¥ÁÑ¥½¹Ì¡Í•±˜¤€´ø±¥ÍÑmÑÕÁ±•m¥¹Ð°ÍÑÉutè(€€€€€€€É•ÑÕÉ¸Í•±˜¹}ÑÉ…­}‘•ÍÉ¥ÁÑ¥½¹Ì¡Í•±˜¹±¥‰Ù±}…Õ‘¥½}•Ñ}ÑÉ…­}‘•ÍÉ¥ÁÑ¥½¸¤¥˜Í•±˜¹}…Õ‘¥½}‘•ÍÉ¥ÁÑ¥½¹}…Á¤…¹Í•±˜¹Á±…å•È•±Í”mt((€€€‘•˜ÍÕ‰Ñ¥Ñ±•}ÑÉ…­}½Õ¹Ð¡Í•±˜¤€´ø¥¹Ðè(€€€€€€€¥˜¹½ÐÍ•±˜¹}ÍÕ‰Ñ¥Ñ±•}…Á¤è(€€€€€€€€€€€É•ÑÕÉ¸€À(€€€€€€€É•ÑÕÉ¸µ…à À°¥¹Ð¡Í•±˜¹±¥‰Ù±}Ù¥‘•½}•Ñ}ÍÁÕ}½Õ¹Ð¡Í•±˜¹Á±…å•È¤¥˜Í•±˜¹Á±…å•È•±Í”€À¤¤((€€€‘•˜ÍÕ‰Ñ¥Ñ±•}ÑÉ…¬¡Í•±˜¤€´ø¥¹Ðè(€€€€€€€¥˜¹½ÐÍ•±˜¹}ÍÕ‰Ñ¥Ñ±•}…Á¤è(€€€€€€€€€€€É•ÑÕÉ¸€´Ä(€€€€€€€É•ÑÕÉ¸¥¹Ð¡Í•±˜¹±¥‰Ù±}Ù¥‘•½}•Ñ}ÍÁÔ¡Í•±˜¹Á±…å•È¤¥˜Í•±˜¹Á±…å•È•±Í”€´Ä¤((€€€‘•˜Í•Ñ}ÍÕ‰Ñ¥Ñ±•}ÑÉ…¬¡Í•±˜°ÑÉ…¬è¥¹Ð¤€´ø9½¹”è(€€€€€€€¥˜¹½ÐÍ•±˜¹}ÍÕ‰Ñ¥Ñ±•}…Á¤è(€€€€€€€€€€€É…¥Í”	…­•¹‘ÉÉ½È ‰ÍÕ‰Ñ¥Ñ±”Í•±•Ñ¥½¸¥ÌÕ¹…Ù…¥±…‰±”¥¸Ñ¡¥Ì±¥‰Y1‰Õ¥±ˆ¤(€€€€€€€¥˜Í•±˜¹Á±…å•È…¹Í•±˜¹±¥‰Ù±}Ù¥‘•½}Í•Ñ}ÍÁÔ¡Í•±˜¹Á±…å•È°¥¹Ð¡ÑÉ…¬¤¤€„ô€Àè(€€€€€€€€€€€É…¥Í”	…­•¹‘ÉÉ½È¡˜‰±¥‰Y1É•©•Ñ•ÍÕ‰Ñ¥Ñ±”ÑÉ…¬íÑÉ…­ôˆ¤((€€€‘•˜ÍÕ‰Ñ¥Ñ±•}ÑÉ…­}‘•ÍÉ¥ÁÑ¥½¹Ì¡Í•±˜¤€´ø±¥ÍÑmÑÕÁ±•m¥¹Ð°ÍÑÉutè(€€€€€€€É•ÑÕÉ¸Í•±˜¹}ÑÉ…­}‘•ÍÉ¥ÁÑ¥½¹Ì¡Í•±˜¹±¥‰Ù±}Ù¥‘•½}•Ñ}ÍÁÕ}‘•ÍÉ¥ÁÑ¥½¸¤¥˜Í•±˜¹}ÍÕ‰Ñ¥Ñ±•}‘•ÍÉ¥ÁÑ¥½¹}…Á¤…¹Í•±˜¹Á±…å•È•±Í”mt((€€€‘•˜}ÑÉ…­}‘•ÍÉ¥ÁÑ¥½¹Ì¡Í•±˜°•ÑÑ•È¤€´ø±¥ÍÑmÑÕÁ±•m¥¹Ð°ÍÑÉutè(€€€€€€€Á½¥¹Ñ•È€ô•ÑÑ•È¡Í•±˜¹Á±…å•È¤(€€€€€€€¥˜¹½ÐÁ½¥¹Ñ•Èè(€€€€€€€€€€€É•ÑÕÉ¸mt(€€€€€€€Ù…±Õ•Ìè±¥ÍÑmÑÕÁ±•m¥¹Ð°ÍÑÉut€ômt(€€€€€€€ÑÉäè(€€€€€€€€€€€¥¹‘•à€ô€À(€€€€€€€€€€€Ý¡¥±”¥¹‘•à€ð€ÈÔØè(€€€€€€€€€€€€€€€¥Ñ•´€ôÁ½¥¹Ñ•Ém¥¹‘•át(€€€€€€€€€€€€€€€¥˜¥Ñ•´¹¥‘•¹Ñ¥™¥•È€ôô€´Äè(€€€€€€€€€€€€€€€€€€€‰É•…¬(€€€€€€€€€€€€€€€Ù…±Õ•Ì¹…ÁÁ•¹ ¡¥¹Ð¡¥Ñ•´¹¥‘•¹Ñ¥™¥•È¤°€¡¥Ñ•´¹¹…µ”½Èˆˆˆ¤¹‘•½‘” ‰ÕÑ˜´àˆ°€‰É•Á±…”ˆ¤¤¤(€€€€€€€€€€€€€€€¥¹‘•à€¬ô€Ä(€€€€€€€™¥¹…±±äè(€€€€€€€€€€€Í•±˜¹±¥‰Ù±}ÑÉ…­}‘•ÍÉ¥ÁÑ¥½¹}É•±•…Í”¡Á½¥¹Ñ•È¤(€€€€€€€É•ÑÕÉ¸Ù…±Õ•Ì((€€€‘•˜±½Í•}µ•‘¥„¡Í•±˜¤è(€€€€€€€¥˜Í•±˜¹Á±…å•ÈèÍ•±˜¹±¥‰Ù±}µ•‘¥…}Á±…å•É}ÍÑ½À¡Í•±˜¹Á±…å•È¤ìÍ•±˜¹±¥‰Ù±}µ•‘¥…}Á±…å•É}É•±•…Í”¡Í•±˜¹Á±…å•È¤(€€€€€€€¥˜Í•±˜¹µ•‘¥„èÍ•±˜¹±¥‰Ù±}µ•‘¥…}É•±•…Í”¡Í•±˜¹µ•‘¥„¤(€€€€€€€Í•±˜¹Á±…å•È€ôÍ•±˜¹µ•‘¥„€ô9½¹”((€€€‘•˜±½Í”¡Í•±˜¤è(€€€€€€€Í•±˜¹±½Í•}µ•‘¥„ ¤(€€€€€€€¥˜Í•±˜¹¥¹ÍÑ…¹”èÍ•±˜¹±¥‰Ù±}É•±•…Í”¡Í•±˜¹¥¹ÍÑ…¹”¤(€€€€€€€Í•±˜¹¥¹ÍÑ…¹”€ô9½¹”ìÍ•±˜¹}ÍÑ…Ñ”€ôA±…å‰…­MÑ…Ñ”¹5AQd(()±…ÍÌ…ÍÕ	…­•¹¡1¥‰Y1	…­•¹¤è(€€€€ˆˆ‰Y…±¥‘…Ñ•MTÍ¥‘•…ÈÁ…Ñ Ý¥Ñ ¥µµÕÑ…‰±”Í½ÕÉ”ÁÉ½Ù•¹…¹”¸ˆˆˆ((€€€‘•˜½Á•¹}…ÍÔ¡Í•±˜°µ…¹¥™•ÍÑ}Á…Ñ èA…Ñ ¤€´ø9½¹”è(€€€€€€€ÑÉäèµ…¹¥™•ÍÐ€ô©Í½¸¹±½…‘Ì¡µ…¹¥™•ÍÑ}Á…Ñ ¹É•…‘}Ñ•áÐ¡•¹½‘¥¹œô‰ÕÑ˜´àˆ¤¤(€€€€€€€•á•ÁÐ€¡=MÉÉ½È°Y…±Õ•ÉÉ½È¤…Ì•áŒèÉ…¥Í”	…­•¹‘ÉÉ½È¡˜‰¥¹Ù…±¥MTµ…¹¥™•ÍÐèíµ…¹¥™•ÍÑ}Á…Ñ¡ôˆ¤™É½´•áŒ(€€€€€€€•ÉÉ½ÉÌ€ôÙ…±¥‘…Ñ•}µ…¹¥™•ÍÐ¡µ…¹¥™•ÍÐ¤(€€€€€€€¥˜•ÉÉ½ÉÌèÉ…¥Í”	…­•¹‘ÉÉ½È¡˜‰¥¹Ù…±¥MTµ…¹¥™•ÍÐèí•ÉÉ½ÉÍlÁuôˆ¤(€€€€€€€Í•±˜¹½Á•¸¡É•Í½±Ù•}…ÍÕ}Í½ÕÉ”¡µ…¹¥™•ÍÑ}Á…Ñ ¤¤(()‘•˜½Í}Á…Ñ ¡Á…Ñ èA…Ñ ¤€´ø‰åÑ•Ìè(€€€É•ÑÕÉ¸ÍÑÈ¡Á…Ñ ¤¹•¹½‘”¡ÍåÌ¹•Ñ™¥±•ÍåÍÑ•µ•¹½‘¥¹œ ¤°•ÉÉ½ÉÌô‰ÍÕÉÉ½…Ñ••Í…Á”ˆ¤(
+# SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
+# SPDX-FileCopyrightText: 2026 Lino Casu
+"""Internal MPCASU playback backends.
+
+The backend uses libVLC through its shared library API.  No player executable
+is launched: decoding, clocking, seeking and video-window ownership remain
+under MPCASU control.  CASU manifests are validated before their immutable
+source is opened by the same in-process media pipeline.
+"""
+from __future__ import annotations
+
+import ctypes
+import os
+import sys
+from enum import Enum
+from pathlib import Path
+
+from casu.core import CasuError, resolve_casu_source
+from casu.schema import validate_manifest
+import json
+from urllib.parse import urlparse
+
+
+class PlaybackState(str, Enum):
+    EMPTY = "EMPTY"; LOADING = "LOADING"; READY = "READY"
+    PLAYING = "PLAYING"; PAUSED = "PAUSED"; STOPPED = "STOPPED"
+    ENDED = "ENDED"; ERROR = "ERROR"
+
+
+class BackendError(CasuError):
+    pass
+
+
+class _TrackDescription(ctypes.Structure):
+    _fields_ = [("identifier", ctypes.c_int), ("name", ctypes.c_char_p)]
+
+
+class LibVLCBackend:
+    """Minimal, real in-process libVLC backend for the MPCASU window."""
+
+    def __init__(self, video_widget):
+        # Python/ctypes does not inherit the plugin-path setup that the VLC
+        # launcher normally performs. Point libVLC at its installed modules so
+        # H.264/AAC and other codecs are discovered by the in-process player.
+        plugin_candidates = []
+        configured_plugins = os.environ.get("VLC_PLUGIN_PATH")
+        if configured_plugins:
+            plugin_candidates.append(configured_plugins)
+        if sys.platform.startswith("linux"):
+            plugin_candidates.extend(("/usr/lib/x86_64-linux-gnu/vlc/plugins", "/usr/lib/vlc/plugins"))
+        elif sys.platform == "darwin":
+            plugin_candidates.append("/Applications/VLC.app/Contents/MacOS/plugins")
+        plugin_path = next((candidate for candidate in plugin_candidates if os.path.isdir(candidate)), None)
+        if plugin_path:
+            os.environ.setdefault("VLC_PLUGIN_PATH", plugin_path)
+        library_names = (["libvlc.dll", "libvlc-5.dll"] if sys.platform.startswith("win")
+                         else ["libvlc.dylib"] if sys.platform == "darwin"
+                         else ["libvlc.so.5", "libvlc.so"])
+        load_error = None
+        for library_name in library_names:
+            try:
+                self.lib = ctypes.CDLL(library_name)
+                break
+            except OSError as exc:
+                load_error = exc
+        else:
+            raise BackendError("libVLC shared library is unavailable") from load_error
+        self.widget = video_widget
+        # VLC 3.x discovers modules through VLC_PLUGIN_PATH. The historical
+        # --plugin-path command-line option is no longer accepted and can
+        # prevent codec modules from loading in embedded libVLC builds.
+        options = [b"--no-video-title-show"]
+        argv = (ctypes.c_char_p * len(options))(*options)
+        self.instance = self._call("libvlc_new", ctypes.c_void_p, [ctypes.c_int, ctypes.POINTER(ctypes.c_char_p)])(len(options), argv)
+        if not self.instance:
+            raise BackendError("libVLC could not be initialized")
+        self.media = None; self.player = None; self.path: Path | None = None
+        self._state = PlaybackState.EMPTY
+        self._install("libvlc_media_new_path", ctypes.c_void_p, [ctypes.c_void_p, ctypes.c_char_p])
+        self._install("libvlc_media_player_new_from_media", ctypes.c_void_p, [ctypes.c_void_p])
+        self._install("libvlc_media_player_release", None, [ctypes.c_void_p])
+        self._install("libvlc_media_release", None, [ctypes.c_void_p])
+        self._install("libvlc_release", None, [ctypes.c_void_p])
+        self._install("libvlc_media_player_play", ctypes.c_int, [ctypes.c_void_p])
+        self._install("libvlc_media_player_set_pause", None, [ctypes.c_void_p, ctypes.c_int])
+        self._install("libvlc_media_player_stop", None, [ctypes.c_void_p])
+        self._install("libvlc_media_player_is_playing", ctypes.c_int, [ctypes.c_void_p])
+        self._install("libvlc_media_player_get_time", ctypes.c_int64, [ctypes.c_void_p])
+        self._install("libvlc_media_player_get_length", ctypes.c_int64, [ctypes.c_void_p])
+        self._install("libvlc_media_player_set_time", None, [ctypes.c_void_p, ctypes.c_int64])
+        self._install("libvlc_media_player_set_rate", ctypes.c_int, [ctypes.c_void_p, ctypes.c_float])
+        self._install("libvlc_media_player_get_rate", ctypes.c_float, [ctypes.c_void_p])
+        self._install("libvlc_audio_set_volume", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int])
+        self._install("libvlc_audio_get_volume", ctypes.c_int, [ctypes.c_void_p])
+        self._install("libvlc_audio_set_mute", None, [ctypes.c_void_p, ctypes.c_int])
+        self._install("libvlc_audio_get_track_count", ctypes.c_int, [ctypes.c_void_p])
+        self._install("libvlc_audio_get_track", ctypes.c_int, [ctypes.c_void_p])
+        self._install("libvlc_audio_set_track", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int])
+        self._audio_description_api = self._install_descriptions("libvlc_audio_get_track_description")
+        self._subtitle_api = all(self._optional_install(name, restype, args) for name, restype, args in (
+            ("libvlc_video_get_spu_count", ctypes.c_int, [ctypes.c_void_p]),
+            ("libvlc_video_get_spu", ctypes.c_int, [ctypes.c_void_p]),
+            ("libvlc_video_set_spu", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int]),
+        ))
+        self._subtitle_description_api = self._install_descriptions("libvlc_video_get_spu_description")
+        if sys.platform.startswith("linux"):
+            self._install("libvlc_media_player_set_xwindow", None, [ctypes.c_void_p, ctypes.c_uint32])
+        elif sys.platform.startswith("win"):
+            self._install("libvlc_media_player_set_hwnd", None, [ctypes.c_void_p, ctypes.c_void_p])
+        elif sys.platform == "darwin":
+            self._install("libvlc_media_player_set_nsobject", None, [ctypes.c_void_p, ctypes.c_void_p])
+
+    def _install(self, name, restype, args):
+        setattr(self, name, self._call(name, restype, args))
+
+    def _optional_install(self, name, restype, args) -> bool:
+        try:
+            self._install(name, restype, args)
+        except BackendError:
+            return False
+        return True
+
+    def _install_descriptions(self, name) -> bool:
+        try:
+            self._install(name, ctypes.POINTER(_TrackDescription), [ctypes.c_void_p])
+            self._install("libvlc_track_description_release", None, [ctypes.POINTER(_TrackDescription)])
+        except BackendError:
+            return False
+        return True
+
+    def _call(self, name, restype, args):
+        try: function = getattr(self.lib, name)
+        except AttributeError as exc: raise BackendError(f"libVLC API missing: {name}") from exc
+        function.restype = restype; function.argtypes = args
+        return function
+
+    @staticmethod
+    def supports(source: str | Path) -> bool:
+        """Return whether the universal backend can accept this source form."""
+        value = str(source)
+        parsed = urlparse(value)
+        return isinstance(source, Path) or not parsed.scheme or parsed.scheme in {
+            "file", "http", "https", "rtsp", "rtp", "udp", "ftp", "smb"
+        }
+
+    def capabilities(self) -> dict[str, str]:
+        """Expose runtime facts instead of claiming a static format matrix."""
+        version = self._call("libvlc_get_version", ctypes.c_char_p, [])()
+        return {
+            "backend": "libVLC shared library",
+            "version": version.decode("utf-8", "replace") if version else "unknown",
+            "network": "available",
+            "hardware_decode": "delegated to installed libVLC modules",
+            "player_process": "none",
+        }
+
+    def open(self, path: Path) -> None:
+        self.open_source(path)
+
+    def open_source(self, source: str | Path) -> None:
+        if not self.supports(source):
+            raise BackendError(f"unsupported media source: {source}")
+        self.close_media()
+        self.path = Path(source).resolve() if isinstance(source, Path) else None
+        self._state = PlaybackState.LOADING
+        value = str(source)
+        parsed = urlparse(value)
+        if parsed.scheme and parsed.scheme != "file":
+            self._install("libvlc_media_new_location", ctypes.c_void_p, [ctypes.c_void_p, ctypes.c_char_p])
+            self.media = self.libvlc_media_new_location(self.instance, value.encode("utf-8"))
+        else:
+            local = self.path or Path(parsed.path)
+            self.media = self.libvlc_media_new_path(self.instance, os_path(local))
+        if not self.media: self._state = PlaybackState.ERROR; raise BackendError(f"libVLC could not open {source}")
+        self.player = self.libvlc_media_player_new_from_media(self.media)
+        if not self.player: self._state = PlaybackState.ERROR; raise BackendError("libVLC could not create media player")
+        if sys.platform.startswith("linux"):
+            self.libvlc_media_player_set_xwindow(self.player, self.widget.winfo_id())
+        elif sys.platform.startswith("win"):
+            self.libvlc_media_player_set_hwnd(self.player, ctypes.c_void_p(self.widget.winfo_id()))
+        elif sys.platform == "darwin":
+            self.libvlc_media_player_set_nsobject(self.player, ctypes.c_void_p(self.widget.winfo_id()))
+        self._state = PlaybackState.READY
+
+    def play(self):
+        if not self.player or self.libvlc_media_player_play(self.player) != 0: raise BackendError("libVLC playback could not start")
+        self._state = PlaybackState.PLAYING
+
+    def pause(self):
+        if self.player: self.libvlc_media_player_set_pause(self.player, 1); self._state = PlaybackState.PAUSED
+
+    def resume(self):
+        if self.player: self.libvlc_media_player_set_pause(self.player, 0); self._state = PlaybackState.PLAYING
+
+    def stop(self):
+        if self.player: self.libvlc_media_player_stop(self.player)
+        self._state = PlaybackState.STOPPED
+
+    def seek(self, seconds: float):
+        if self.player: self.libvlc_media_player_set_time(self.player, int(max(0.0, seconds) * 1000))
+
+    def set_rate(self, rate: float) -> float:
+        if not self.player:
+            raise BackendError("no active media player")
+        rate = max(0.25, min(4.0, float(rate)))
+        if self.libvlc_media_player_set_rate(self.player, ctypes.c_float(rate)) == -1:
+            raise BackendError("libVLC rejected playback rate")
+        return float(self.libvlc_media_player_get_rate(self.player))
+
+    def rate(self) -> float:
+        return float(self.libvlc_media_player_get_rate(self.player)) if self.player else 1.0
+
+    def position(self) -> float:
+        return max(0.0, float(self.libvlc_media_player_get_time(self.player) if self.player else 0) / 1000.0)
+
+    def duration(self) -> float:
+        return max(0.0, float(self.libvlc_media_player_get_length(self.player) if self.player else 0) / 1000.0)
+
+    def state(self) -> PlaybackState:
+        if self.player and self._state == PlaybackState.PLAYING and not self.libvlc_media_player_is_playing(self.player):
+            if self.duration() and self.position() >= self.duration() - 0.2: self._state = PlaybackState.ENDED
+        return self._state
+
+    def set_volume(self, value: int) -> int:
+        if not self.player: return 0
+        value = max(0, min(200, int(value)))
+        if self.libvlc_audio_set_volume(self.player, value) != 0:
+            raise BackendError("libVLC rejected the requested volume")
+        return value
+
+    def volume(self) -> int:
+        return max(0, int(self.libvlc_audio_get_volume(self.player) if self.player else 0))
+
+    def set_mute(self, muted: bool) -> None:
+        if self.player: self.libvlc_audio_set_mute(self.player, int(bool(muted)))
+
+    def audio_track_count(self) -> int:
+        return max(0, int(self.libvlc_audio_get_track_count(self.player) if self.player else 0))
+
+    def audio_track(self) -> int:
+        return int(self.libvlc_audio_get_track(self.player) if self.player else -1)
+
+    def set_audio_track(self, track: int) -> None:
+        if self.player and self.libvlc_audio_set_track(self.player, int(track)) != 0:
+            raise BackendError(f"libVLC rejected audio track {track}")
+
+    def audio_track_descriptions(self) -> list[tuple[int, str]]:
+        return self._track_descriptions(self.libvlc_audio_get_track_description) if self._audio_description_api and self.player else []
+
+    def subtitle_track_count(self) -> int:
+        if not self._subtitle_api:
+            return 0
+        return max(0, int(self.libvlc_video_get_spu_count(self.player) if self.player else 0))
+
+    def subtitle_track(self) -> int:
+        if not self._subtitle_api:
+            return -1
+        return int(self.libvlc_video_get_spu(self.player) if self.player else -1)
+
+    def set_subtitle_track(self, track: int) -> None:
+        if not self._subtitle_api:
+            raise BackendError("subtitle selection is unavailable in this libVLC build")
+        if self.player and self.libvlc_video_set_spu(self.player, int(track)) != 0:
+            raise BackendError(f"libVLC rejected subtitle track {track}")
+
+    def subtitle_track_descriptions(self) -> list[tuple[int, str]]:
+        return self._track_descriptions(self.libvlc_video_get_spu_description) if self._subtitle_description_api and self.player else []
+
+    def _track_descriptions(self, getter) -> list[tuple[int, str]]:
+        pointer = getter(self.player)
+        if not pointer:
+            return []
+        values: list[tuple[int, str]] = []
+        try:
+            index = 0
+            while index < 256:
+                item = pointer[index]
+                if item.identifier == -1:
+                    break
+                values.append((int(item.identifier), (item.name or b"").decode("utf-8", "replace")))
+                index += 1
+        finally:
+            self.libvlc_track_description_release(pointer)
+        return values
+
+    def close_media(self):
+        if self.player: self.libvlc_media_player_stop(self.player); self.libvlc_media_player_release(self.player)
+        if self.media: self.libvlc_media_release(self.media)
+        self.player = self.media = None
+
+    def close(self):
+        self.close_media()
+        if self.instance: self.libvlc_release(self.instance)
+        self.instance = None; self._state = PlaybackState.EMPTY
+
+
+class CasuBackend(LibVLCBackend):
+    """Validated CASU sidecar path with immutable source provenance.
+
+    This is intentionally named as a compatibility path until CASU has a
+    native payload decoder; capability reporting must not imply otherwise.
+    """
+
+    def capabilities(self) -> dict[str, str]:
+        values = super().capabilities()
+        values.update({"backend_path": "CASU sidecar compatibility", "native_casu_payload": "unavailable"})
+        return values
+
+    def open_casu(self, manifest_path: Path) -> None:
+        try: manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc: raise BackendError(f"invalid CASU manifest: {manifest_path}") from exc
+        errors = validate_manifest(manifest)
+        if errors: raise BackendError(f"invalid CASU manifest: {errors[0]}")
+        self.open(resolve_casu_source(manifest_path))
+
+
+def os_path(path: Path) -> bytes:
+    return str(path).encode(sys.getfilesystemencoding(), errors="surrogateescape")
