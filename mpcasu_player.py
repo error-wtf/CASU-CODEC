@@ -232,6 +232,11 @@ class MPCASUPlayer(tk.Tk):
         tk.Label(playlist_header, text="Queue · source metadata", bg=PANEL, fg=MUTED, font=("TkDefaultFont", 8), anchor="w").pack(anchor="w", pady=(2, 0))
         self.queue = tk.Listbox(right, bg=PANEL_ALT, fg=SECONDARY, selectbackground=RED_DARK, selectforeground=TEXT, relief="flat", highlightthickness=0, activestyle="none", exportselection=False)
         self.queue.pack(fill="both", expand=True, padx=10, pady=(0, 8)); self.queue.bind("<Double-Button-1>", self._play_queue_item)
+        queue_actions = tk.Frame(right, bg=PANEL)
+        queue_actions.pack(fill="x", padx=10, pady=(0, 8))
+        ttk.Button(queue_actions, text="↑", width=3, style="MPC.TButton", command=lambda: self.move_queue(-1)).pack(side="left")
+        ttk.Button(queue_actions, text="↓", width=3, style="MPC.TButton", command=lambda: self.move_queue(1)).pack(side="left", padx=4)
+        ttk.Button(queue_actions, text="Clear", style="MPC.TButton", command=self.clear_playlist).pack(side="right")
         self.queue_empty_label = tk.Label(
             right, text="No media queued\nAdd files or drop a playlist here",
             bg=PANEL, fg=MUTED, justify="center", font=("TkDefaultFont", 9),
@@ -340,6 +345,36 @@ class MPCASUPlayer(tk.Tk):
         selected = self.queue.curselection()
         if selected:
             self.library.selection_clear(0, "end"); self.library.selection_set(selected[0]); self.play_selected()
+
+    def move_queue(self, delta: int) -> None:
+        """Reorder the real playlist and keep its display models aligned."""
+        selected = self.queue.curselection()
+        if not selected:
+            return
+        index = selected[0]
+        target = index + int(delta)
+        if target < 0 or target >= self.queue.size():
+            return
+        queue_values = list(self.queue.get(0, "end"))
+        library_values = list(self.library.get(0, "end"))
+        queue_values[index], queue_values[target] = queue_values[target], queue_values[index]
+        library_values[index], library_values[target] = library_values[target], library_values[index]
+        self.queue.delete(0, "end"); self.library.delete(0, "end")
+        for value in queue_values: self.queue.insert("end", value)
+        for value in library_values: self.library.insert("end", value)
+        self.queue.selection_set(target); self.queue.see(target)
+        self.library.selection_set(target); self.library.see(target)
+        self._sync_queue_empty()
+
+    def clear_playlist(self) -> None:
+        if self.backend:
+            self.stop()
+        self.library.delete(0, "end")
+        self.queue.delete(0, "end")
+        self.current = None
+        self.now_playing.configure(text="NOW PLAYING · NO MEDIA SELECTED")
+        self.status.set("Playlist cleared")
+        self._sync_queue_empty()
 
     def play_next(self):
         """Advance to the next queued media item."""
