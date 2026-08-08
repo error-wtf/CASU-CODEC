@@ -14,6 +14,7 @@ as complete unless the underlying behavior is implemented and exercised.
 | Native CASU state scheduler | **MISSING** | Current `.casu` is a validated sidecar; segment states are diagnostic hints, not yet a renderer scheduler. |
 | Shared media clock | **PARTIAL** | Backend position is polled from libVLC; explicit audio-master clock and drift correction remain. |
 | Embedded video surface | **PARTIAL** | libVLC targets the MPCASU Tk canvas window on Linux; color/HDR/HiDPI policy is not complete. |
+| Official player icon asset | **COMPLETE** | `assets/mpcasu_player_icon.png` is packaged and used for the application icon when Pillow is available. |
 | Internal audio output | **PARTIAL** | libVLC owns decoding/output, but MPCASU does not yet expose a separate audio device pipeline. |
 
 ## User-facing capabilities

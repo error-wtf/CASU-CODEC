@@ -63,6 +63,7 @@ class MPCASUPlayer(tk.Tk):
         self._visual_audio_segments: list[dict] = []
         self._scheduler = None
         self._logo_image = None
+        self._icon_image = None
         self._volume = 100
         self._muted = False
         self._session_file = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "mpcasu" / "session.json"
@@ -83,6 +84,15 @@ class MPCASUPlayer(tk.Tk):
         root.pack(fill="both", expand=True)
         top = tk.Frame(root, bg=BG, height=76); top.pack(fill="x", padx=18, pady=(10, 6)); top.pack_propagate(False)
         logo = tk.Frame(top, bg=BG); logo.pack(side="left")
+        icon_path = Path(__file__).resolve().parent / "assets" / "mpcasu_player_icon.png"
+        if icon_path.is_file() and Image is not None:
+            try:
+                icon = Image.open(icon_path).convert("RGBA")
+                icon.thumbnail((64, 64), Image.Resampling.LANCZOS)
+                self._icon_image = ImageTk.PhotoImage(icon)
+                self.iconphoto(True, self._icon_image)
+            except (OSError, ValueError):
+                self._icon_image = None
         logo_path = Path(__file__).resolve().parent / "assets" / "mpcasu_player_logo_header.png"
         try:
             if logo_path.is_file():
@@ -94,7 +104,8 @@ class MPCASUPlayer(tk.Tk):
                     source_logo = tk.PhotoImage(file=str(logo_path))
                     factor = max(1, max(source_logo.width() // 170, source_logo.height() // 58))
                     self._logo_image = source_logo.subsample(factor, factor)
-                self.iconphoto(True, self._logo_image)
+                if self._icon_image is None:
+                    self.iconphoto(True, self._logo_image)
                 tk.Label(logo, image=self._logo_image, bg=BG).pack(anchor="w")
             else:
                 raise tk.TclError("logo asset unavailable")
