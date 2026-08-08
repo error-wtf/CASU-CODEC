@@ -55,5 +55,10 @@ The detailed compatibility definition is maintained in
 casu analyze input.mp4
 casu convert input.mp4 -o output.casu
 casu verify output.casu
-casu info output.casu
+    casu info output.casu
+    casu benchmark input.mp4 -o report.json
 ```
+
+`benchmark` reports measured analysis time, source duration, segment counts
+and input size. It deliberately reports energy as unavailable unless a future
+platform telemetry backend supplies a real measurement.

@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import tempfile
+import time
 from pathlib import Path
 
 from .core import ANALYSIS_MODES, CasuError, analyze, play, resolve_casu_source
@@ -40,12 +41,43 @@ def parser() -> argparse.ArgumentParser:
     vfy.add_argument("manifest", type=Path)
     info = sub.add_parser("info", help="print machine-readable CASU manifest information")
     info.add_argument("manifest", type=Path)
+    b = sub.add_parser("benchmark", help="measure deterministic CASU analysis cost and emit a JSON report")
+    b.add_argument("input", type=Path)
+    b.add_argument("-o", "--output", type=Path, help="write the report JSON to this path")
+    b.add_argument("--analysis-fps", type=float, default=10.0)
+    b.add_argument("--mode", choices=sorted(ANALYSIS_MODES), default="strict")
     return p
 
 
 def main() -> int:
     args = parser().parse_args()
     try:
+        if args.command == "benchmark":
+            if args.analysis_fps <= 0:
+                raise CasuError("analysis FPS must be positive")
+            if not args.input.is_file():
+                raise CasuError(f"input media does not exist: {args.input}")
+            started = time.perf_counter()
+            result = analyze(args.input, args.analysis_fps, args.mode)
+            elapsed = time.perf_counter() - started
+            report = {
+                "report": "casu-benchmark-1",
+                "input": str(args.input.expanduser().resolve()),
+                "source_size_bytes": result["source"].get("size_bytes"),
+                "duration_s": result["source"].get("duration_s"),
+                "analysis_fps": args.analysis_fps,
+                "analysis_mode": args.mode,
+                "conversion_analysis_seconds": round(elapsed, 6),
+                "video_segments": len(result.get("video", {}).get("segments", [])),
+                "audio_segments": len(result.get("audio", {}).get("segments", [])),
+                "energy_measurement": "unavailable",
+                "notes": ["This report measures analysis cost; it does not claim energy savings."],
+            }
+            payload = json.dumps(report, indent=2, ensure_ascii=False) + "\n"
+            if args.output:
+                args.output.expanduser().resolve().write_text(payload, encoding="utf-8")
+            print(payload, end="")
+            return 0
         if args.command in {"analyze", "convert"}:
             if args.analysis_fps <= 0:
                 raise CasuError("analysis FPS must be positive")
