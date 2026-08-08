@@ -295,6 +295,13 @@ def analyze(path: Path, analysis_fps: float = 10.0, mode: str = "strict") -> dic
     if path.suffix.lower() == ".casu":
         raise CasuError("input is already a CASU manifest; convert the original MP4/MP3 media instead")
     probe = ffprobe(path)
+    playable_streams = [
+        item for item in probe.get("streams", [])
+        if isinstance(item, dict) and item.get("codec_type") in {"video", "audio"}
+        and not (item.get("codec_type") == "video" and item.get("disposition", {}).get("attached_pic"))
+    ]
+    if not playable_streams:
+        raise CasuError("input contains no playable audio or video stream")
     fmt = probe.get("format", {})
     stat = path.stat()
     digest = sha256_file(path)
