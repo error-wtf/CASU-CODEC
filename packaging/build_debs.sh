@@ -31,8 +31,9 @@ EOF
 }
 
 install_codec() {
-  local stage="$1"; mkdir -p "$stage/usr/share/casu-codec" "$stage/usr/bin"
+  local stage="$1"; mkdir -p "$stage/usr/share/casu-codec" "$stage/usr/bin" "$stage/usr/share/icons/hicolor/256x256/apps"
   cp -a "$root/casu" "$root/LICENSE" "$root/CASU_FORMAT_SPECIFICATION.md" "$root/docs" "$root/assets" "$stage/usr/share/casu-codec/"
+  cp "$root/assets/casu_codec_icon.png" "$stage/usr/share/icons/hicolor/256x256/apps/casu-codec.png"
   cat > "$stage/usr/bin/casu" <<'EOF'
 #!/bin/sh
 export PYTHONPATH=/usr/share/casu-codec${PYTHONPATH:+:$PYTHONPATH}
