@@ -8,6 +8,8 @@ the same explicit options and runs the converter without changing the source.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -67,14 +69,28 @@ class CASUConverter(tk.Tk):
         if not source.is_file():
             messagebox.showerror("CASU", "Choose an existing source media file first."); return
         if output.exists() and not messagebox.askyesno("Replace output?", f"Replace {output.name}?"): return
-        self.progress.start(12); self.status.set("Analyzing decoded source activity…")
-        threading.Thread(target=self._worker, args=(source, output), daemon=True).start()
-
-    def _worker(self, source: Path, output: Path) -> None:
         try:
-            result = analyze(source, float(self.fps.get()), self.mode.get())
+            fps = float(self.fps.get())
+        except (TypeError, ValueError):
+            messagebox.showerror("CASU", "FPS must be a finite positive number."); return
+        if fps <= 0:
+            messagebox.showerror("CASU", "FPS must be positive."); return
+        mode = self.mode.get()
+        self.progress.start(12); self.status.set("Analyzing decoded source activity…")
+        threading.Thread(target=self._worker, args=(source, output, fps, mode), daemon=True).start()
+
+    def _worker(self, source: Path, output: Path, fps: float, mode: str) -> None:
+        try:
+            result = analyze(source, fps, mode)
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            payload = json.dumps(result, indent=2, ensure_ascii=False) + "\n"
+            fd, temporary = tempfile.mkstemp(prefix=f".{output.name}.", dir=output.parent, text=True)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    handle.write(payload); handle.flush(); os.fsync(handle.fileno())
+                os.replace(temporary, output)
+            finally:
+                if os.path.exists(temporary): os.unlink(temporary)
             self.after(0, lambda: self._done(f"Wrote {output} without modifying the source."))
         except (CasuError, OSError, ValueError) as exc:
             self.after(0, lambda: self._done(f"Conversion failed: {exc}", error=True))
