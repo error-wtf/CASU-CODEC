@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
+# SPDX-FileCopyrightText: 2026 Lino Casu
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+artifacts/*.mp4
+artifacts/*.mp3
+artifacts/*.opus
+artifacts/*.casu
+test_media/*.mp4
+test_media/*.mp3

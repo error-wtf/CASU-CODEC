@@ -1,0 +1,51 @@
+CASU — ALL RIGHTS RESERVED / ANTICAPITALIST LICENSE 1.4
+================================================================
+
+Copyright © 2026 Lino Casu. All rights reserved.
+
+This is a human-readable project license for CASU (Codec for All Segmented
+Units), its reference tools, MPCASU player code, documentation and tests.
+
+1. No default commercial grant
+--------------------------------
+No right to sell, sublicense, rent, lease, advertise, package as a paid
+service, or otherwise exploit this work commercially is granted by publishing
+or receiving this repository.
+
+2. Permitted use
+----------------
+Individuals may download, inspect, study, run and modify a private copy for
+personal, educational, accessibility, research and non-commercial community
+purposes, provided that this license and the attribution remain intact.
+
+3. Sharing and derivatives
+--------------------------
+Unmodified or modified copies may be shared only free of charge, with this
+license included in full and with clear attribution to Lino Casu. A derivative
+must identify its changes and must not imply endorsement by the author.
+
+4. Anti-capitalist condition
+----------------------------
+The work may not be used to create private monopoly control, surveillance,
+worker exploitation, paywalled access to the covered code, or a proprietary
+lock-in that removes the freedoms granted in section 2. Community access,
+mutual aid and non-commercial collective use are expressly permitted.
+
+5. Third-party material
+-----------------------
+This license applies only to material authored for this repository. Existing
+third-party libraries, codecs, trademarks, media and notices retain their own
+licenses. Users must comply with those licenses independently.
+
+6. No warranty
+--------------
+The work is provided “as is”, without warranty of any kind. The author is not
+liable for claims, damages or losses arising from its use.
+
+7. Version and precedence
+-------------------------
+This text is Anticapitalist License version 1.4 by Lino Casu. A later written
+license notice by the copyright holder may supersede it for a named release;
+otherwise this version remains the governing project license.
+
+For permissions outside these terms, contact the copyright holder.

@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
+# SPDX-FileCopyrightText: 2026 Lino Casu
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "casu-codec"
+version = "0.1.0"
+description = "CASU (Codec for All Segmented Units): legacy-compatible segmented-state codec/container for MP4 and MP3"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24"]
+
+[project.scripts]
+casu = "casu.cli:main"
+mpc = "casu.cli:main"
+mpcasu = "mpcasu_player:main"
+
+[tool.setuptools.packages.find]
+include = ["casu*"]
+
+[tool.setuptools]
+py-modules = ["mpcasu_player"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
