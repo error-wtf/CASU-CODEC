@@ -1,139 +1,1 @@
-# SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
-# SPDX-FileCopyrightText: 2026 Lino Casu
-import json
-import os
-import shutil
-from pathlib import Path
-
-import pytest
-
-from casu.core import CasuError, analyze, play, resolve_casu_source, rle
-from casu.schema import validate_manifest
-
-
-VIDEO = Path(os.environ.get("CASU_TEST_VIDEO", "test_media/lino_lol_test_pattern.mp4"))
-if not VIDEO.is_absolute():
-    VIDEO = Path(__file__).resolve().parents[1] / VIDEO
-AUDIO = Path(os.environ.get("CASU_TEST_AUDIO", "test_media/lino_casu_error.mp3"))
-if not AUDIO.is_absolute():
-    AUDIO = Path(__file__).resolve().parents[1] / AUDIO
-
-
-@pytest.mark.skipif(not VIDEO.exists() or not shutil.which("ffmpeg"), reason="test video/ffmpeg unavailable")
-def test_reference_video_manifest_preserves_source_metadata(tmp_path):
-    manifest = analyze(VIDEO, analysis_fps=2.0)
-    assert manifest["source"]["duration_s"] > 100
-    assert manifest["streams"][0]["codec_type"] == "video"
-    assert manifest["streams"][1]["codec_type"] == "audio"
-    assert manifest["integrity"]["timestamps_are_source_of_truth"] is True
-    assert manifest["video"]["state_is_hint_only"] is True
-    assert manifest["audio"]["state_is_hint_only"] is True
-
-
-def test_manifest_json_roundtrip(tmp_path):
-    payload = {"state": "HOLD", "start_s": 0.0, "end_s": 1.0}
-    target = tmp_path / "state.json"
-    target.write_text(json.dumps(payload), encoding="utf-8")
-    assert json.loads(target.read_text(encoding="utf-8")) == payload
-
-
-def test_rle_clamps_final_partial_interval_to_source_duration():
-    segments = rle(["active", "active", "silence"], 0.2, end_s=0.5)
-    assert segments[-1]["end_s"] == 0.5
-    assert segments[-1]["duration_s"] == 0.1
-
-
-def test_manifest_rejects_non_hex_digest():
-    manifest = {
-        "casu": {"name": "CASU", "container_extension": ".casu"},
-        "source": {"filename": "sample.mp4", "duration_s": 1, "sha256": "z" * 64},
-        "integrity": {"timestamps_are_source_of_truth": True},
-    }
-    assert any("hex digest" in error for error in validate_manifest(manifest))
-
-
-def test_manifest_rejects_inconsistent_segment_duration_and_state():
-    manifest = {
-        "format": {"magic": "MPCASU\\0"},
-        "casu": {"name": "CASU", "container_extension": ".casu"},
-        "source": {"filename": "sample.mp4", "duration_s": 2},
-        "video": {"segments": [{"start_s": 0, "end_s": 1, "duration_s": 0.5, "state": 7}]},
-        "integrity": {"timestamps_are_source_of_truth": True},
-    }
-    errors = validate_manifest(manifest)
-    assert any("duration_s must equal" in error for error in errors)
-    assert any("state must be a non-empty string" in error for error in errors)
-
-
-def test_manifest_rejects_nonfinite_deadline():
-    manifest = {
-        "format": {"magic": "MPCASU\\0"},
-        "casu": {"name": "CASU", "container_extension": ".casu"},
-        "source": {"filename": "sample.mp4", "duration_s": 2},
-        "audio": {"segments": [{"start_s": 0, "end_s": 1, "duration_s": 1, "state": "active", "deadline_s": "NaN"}]},
-        "integrity": {"timestamps_are_source_of_truth": True},
-    }
-    assert any("deadline_s must be finite" in error for error in validate_manifest(manifest))
-
-
-def test_analysis_rejects_invalid_fps():
-    with pytest.raises(CasuError, match="analysis FPS"):
-        analyze(VIDEO, analysis_fps=0)
-
-
-@pytest.mark.parametrize("value", [None, [], {"source": []}, {"source": {}, "casu": []}])
-def test_manifest_validator_fails_closed_for_malformed_shapes(value):
-    errors = validate_manifest(value)
-    assert errors
-
-
-def test_converter_rejects_nested_casu_input(tmp_path):
-    source = tmp_path / "already.casu"
-    source.write_text("{}", encoding="utf-8")
-    with pytest.raises(CasuError, match="already a CASU manifest"):
-        analyze(source)
-
-
-def test_play_rejects_malformed_casu_before_launch(tmp_path):
-    source = tmp_path / "broken.casu"
-    source.write_text("{}", encoding="utf-8")
-    with pytest.raises(CasuError, match="invalid CASU manifest"):
-        play(source)
-
-
-@pytest.mark.skipif(not VIDEO.exists() or not shutil.which("ffmpeg"), reason="test video/ffmpeg unavailable")
-def test_casu_manifest_resolves_original_media(tmp_path):
-    manifest = analyze(VIDEO, analysis_fps=1.0)
-    sidecar = tmp_path / "video.casu"
-    sidecar.write_text(json.dumps(manifest), encoding="utf-8")
-    assert resolve_casu_source(sidecar) == VIDEO.resolve()
-
-
-@pytest.mark.skipif(not VIDEO.exists() or not shutil.which("ffmpeg"), reason="test video/ffmpeg unavailable")
-def test_casu_manifest_rejects_changed_source_digest(tmp_path):
-    manifest = analyze(VIDEO, analysis_fps=1.0)
-    manifest["source"]["sha256"] = "0" * 64
-    sidecar = tmp_path / "changed.casu"
-    sidecar.write_text(json.dumps(manifest), encoding="utf-8")
-    with pytest.raises(CasuError, match="integrity mismatch"):
-        resolve_casu_source(sidecar)
-
-
-@pytest.mark.skipif(not VIDEO.exists() or not shutil.which("ffmpeg"), reason="test video/ffmpeg unavailable")
-def test_casu_manifest_rejects_changed_source_size(tmp_path):
-    manifest = analyze(VIDEO, analysis_fps=1.0)
-    manifest["source"]["sha256"] = None
-    manifest["source"]["size_bytes"] += 1
-    sidecar = tmp_path / "changed-size.casu"
-    sidecar.write_text(json.dumps(manifest), encoding="utf-8")
-    with pytest.raises(CasuError, match="size mismatch"):
-        resolve_casu_source(sidecar)
-
-
-@pytest.mark.skipif(not AUDIO.exists() or not shutil.which("ffmpeg"), reason="test audio/ffmpeg unavailable")
-def test_reference_mp3_manifest_preserves_audio_stream():
-    manifest = analyze(AUDIO, analysis_fps=1.0)
-    assert manifest["source"]["duration_s"] > 270
-    assert any(item.get("codec_type") == "audio" and item.get("codec_name") == "mp3" for item in manifest["streams"])
-    assert manifest["audio"]["segments"]
-    assert manifest["integrity"]["timestamps_are_source_of_truth"] is True
+¨¥yÛhr·šµë-­æ¦}Ó©z¶­Š‰ç¢Ú^®h­µçEj)^vÚ­æ­zËky©Ÿtê^­«b¢yè¶—«š+myÑZŠW¶‡+y«^²ÚŞjgİ:—«jØ¨z-¥êæŠÛ^tŒMA`µ1¥•¹Í”µ%‘•¹Ñ¥™¥•Èè1¥•¹Í•I•˜µMTµ¹Ñ¥…Á¥Ñ…±¥ÍĞ´Ä¸Ğ(ŒMA`µ¥±•½ÁåÉ¥¡ÑQ•áĞè€ÈÀÈØ1¥¹¼…ÍÔ)¥µÁ½ÉĞ©Í½¸)¥µÁ½ÉĞ½Ì)¥µÁ½ÉĞÍ¡ÕÑ¥°)™É½´Á…Ñ¡±¥ˆ¥µÁ½ÉĞA…Ñ ()¥µÁ½ÉĞÁåÑ•ÍĞ()™É½´…ÍÔ¹½É”¥µÁ½ÉĞ…ÍÕÉÉ½È°…¹…±åé”°Á±…ä°É•Í½±Ù•}…ÍÕ}Í½ÕÉ”°É±”)™É½´…ÍÔ¹Í¡•µ„¥µÁ½ÉĞÙ…±¥‘…Ñ•}µ…¹¥™•ÍĞ)™É½´µÁ…ÍÕ}‰…­•¹¥µÁ½ÉĞ1¥‰Y1	…­•¹(()Y%<€ôA…Ñ ¡½Ì¹•¹Ù¥É½¸¹•Ğ ‰MU}QMQ}Y%<ˆ°€‰Ñ•ÍÑ}µ•‘¥„½±¥¹½}±½±}Ñ•ÍÑ}Á…ÑÑ•É¸¹µÀĞˆ¤¤)¥˜¹½ĞY%<¹¥Í}…‰Í½±ÕÑ” ¤è(€€€Y%<€ôA…Ñ ¡}}™¥±•}|¤¹É•Í½±Ù” ¤¹Á…É•¹ÑÍlÅt€¼Y%<)U%<€ôA…Ñ ¡½Ì¹•¹Ù¥É½¸¹•Ğ ‰MU}QMQ}U%<ˆ°€‰Ñ•ÍÑ}µ•‘¥„½±¥¹½}…ÍÕ}•ÉÉ½È¹µÀÌˆ¤¤)¥˜¹½ĞU%<¹¥Í}…‰Í½±ÕÑ” ¤è(€€€U%<€ôA…Ñ ¡}}™¥±•}|¤¹É•Í½±Ù” ¤¹Á…É•¹ÑÍlÅt€¼U%<(()ÁåÑ•ÍĞ¹µ…É¬¹Í­¥Á¥˜¡¹½ĞY%<¹•á¥ÍÑÌ ¤½È¹½ĞÍ¡ÕÑ¥°¹İ¡¥  ‰™™µÁ•œˆ¤°É•…Í½¸ô‰Ñ•ÍĞÙ¥‘•¼½™™µÁ•œÕ¹…Ù…¥±…‰±”ˆ¤)‘•˜Ñ•ÍÑ}É•™•É•¹•}Ù¥‘•½}µ…¹¥™•ÍÑ}ÁÉ•Í•ÉÙ•Í}Í½ÕÉ•}µ•Ñ…‘…Ñ„¡ÑµÁ}Á…Ñ ¤è(€€€µ…¹¥™•ÍĞ€ô…¹…±åé”¡Y%<°…¹…±åÍ¥Í}™ÁÌôÈ¸À¤(€€€…ÍÍ•ÉĞµ…¹¥™•ÍÑl‰Í½ÕÉ”‰ul‰‘ÕÉ…Ñ¥½¹}Ì‰t€ø€ÄÀÀ(€€€…ÍÍ•ÉĞµ…¹¥™•ÍÑl‰ÍÑÉ•…µÌ‰ulÁul‰½‘•}ÑåÁ”‰t€ôô€‰Ù¥‘•¼ˆ(€€€…ÍÍ•ÉĞµ…¹¥™•ÍÑl‰ÍÑÉ•…µÌ‰ulÅul‰½‘•}ÑåÁ”‰t€ôô€‰…Õ‘¥¼ˆ(€€€…ÍÍ•ÉĞµ…¹¥™•ÍÑl‰¥¹Ñ•É¥Ñä‰ul‰Ñ¥µ•ÍÑ…µÁÍ}…É•}Í½ÕÉ•}½™}ÑÉÕÑ ‰t¥ÌQÉÕ”(€€€…ÍÍ•ÉĞµ…¹¥™•ÍÑl‰Ù¥‘•¼‰ul‰ÍÑ…Ñ•}¥Í}¡¥¹Ñ}½¹±ä‰t¥ÌQÉÕ”(€€€…ÍÍ•ÉĞµ…¹¥™•ÍÑl‰…Õ‘¥¼‰ul‰ÍÑ…Ñ•}¥Í}¡¥¹Ñ}½¹±ä‰t¥ÌQÉÕ”(()‘•˜Ñ•ÍÑ}µ…¹¥™•ÍÑ}©Í½¹}É½Õ¹‘ÑÉ¥À¡ÑµÁ}Á…Ñ ¤è(€€€Á…å±½…€ôì‰ÍÑ…Ñ”ˆè€‰!=1ˆ°€‰ÍÑ…ÉÑ}Ìˆè€À¸À°€‰•¹‘}Ìˆè€Ä¸Áô(€€€Ñ…É•Ğ€ôÑµÁ}Á…Ñ €¼€‰ÍÑ…Ñ”¹©Í½¸ˆ(€€€Ñ…É•Ğ¹İÉ¥Ñ•}Ñ•áĞ¡©Í½¸¹‘ÕµÁÌ¡Á…å±½…¤°•¹½‘¥¹œô‰ÕÑ˜´àˆ¤(€€€…ÍÍ•ÉĞ©Í½¸¹±½…‘Ì¡Ñ…É•Ğ¹É•…‘}Ñ•áĞ¡•¹½‘¥¹œô‰ÕÑ˜´àˆ¤¤€ôôÁ…å±½…(()‘•˜Ñ•ÍÑ}É±•}±…µÁÍ}™¥¹…±}Á…ÉÑ¥…±}¥¹Ñ•ÉÙ…±}Ñ½}Í½ÕÉ•}‘ÕÉ…Ñ¥½¸ ¤è(€€€Í•µ•¹ÑÌ€ôÉ±”¡l‰…Ñ¥Ù”ˆ°€‰…Ñ¥Ù”ˆ°€‰Í¥±•¹”‰t°€À¸È°•¹‘}ÌôÀ¸Ô¤(€€€…ÍÍ•ÉĞÍ•µ•¹ÑÍl´Åul‰•¹‘}Ì‰t€ôô€À¸Ô(€€€…ÍÍ•ÉĞÍ•µ•¹ÑÍl´Åul‰‘ÕÉ…Ñ¥½¹}Ì‰t€ôô€À¸Ä(()‘•˜Ñ•ÍÑ}µ…¹¥™•ÍÑ}É•©•ÑÍ}¹½¹}¡•á}‘¥•ÍĞ ¤è(€€€µ…¹¥™•ÍĞ€ôì(€€€€€€€€‰…ÍÔˆèì‰¹…µ”ˆè€‰MTˆ°€‰½¹Ñ…¥¹•É}•áÑ•¹Í¥½¸ˆè€ˆ¹…ÍÔ‰ô°(€€€€€€€€‰Í½ÕÉ”ˆèì‰™¥±•¹…µ”ˆè€‰Í…µÁ±”¹µÀĞˆ°€‰‘ÕÉ…Ñ¥½¹}Ìˆè€Ä°€‰Í¡„ÈÔØˆè€‰èˆ€¨€ØÑô°(€€€€€€€€‰¥¹Ñ•É¥Ñäˆèì‰Ñ¥µ•ÍÑ…µÁÍ}…É•}Í½ÕÉ•}½™}ÑÉÕÑ ˆèQÉÕ•ô°(€€€ô(€€€…ÍÍ•ÉĞ…¹ä ‰¡•à‘¥•ÍĞˆ¥¸•ÉÉ½È™½È•ÉÉ½È¥¸Ù…±¥‘…Ñ•}µ…¹¥™•ÍĞ¡µ…¹¥™•ÍĞ¤¤(()‘•˜Ñ•ÍÑ}µ…¹¥™•ÍÑ}É•©•ÑÍ}¥¹½¹Í¥ÍÑ•¹Ñ}Í•µ•¹Ñ}‘ÕÉ…Ñ¥½¹}…¹‘}ÍÑ…Ñ” ¤è(€€€µ…¹¥™•ÍĞ€ôì(€€€€€€€€‰™½Éµ…Ğˆèì‰µ…¥Œˆè€‰5AMUqpÀ‰ô°(€€€€€€€€‰…ÍÔˆèì‰¹…µ”ˆè€‰MTˆ°€‰½¹Ñ…¥¹•É}•áÑ•¹Í¥½¸ˆè€ˆ¹…ÍÔ‰ô°(€€€€€€€€‰Í½ÕÉ”ˆèì‰™¥±•¹…µ”ˆè€‰Í…µÁ±”¹µÀĞˆ°€‰‘ÕÉ…Ñ¥½¹}Ìˆè€Éô°(€€€€€€€€‰Ù¥‘•¼ˆèì‰Í•µ•¹ÑÌˆèmì‰ÍÑ…ÉÑ}Ìˆè€À°€‰•¹‘}Ìˆè€Ä°€‰‘ÕÉ…Ñ¥½¹}Ìˆè€À¸Ô°€‰ÍÑ…Ñ”ˆè€İõuô°(€€€€€€€€‰¥¹Ñ•É¥Ñäˆèì‰Ñ¥µ•ÍÑ…µÁÍ}…É•}Í½ÕÉ•}½™}ÑÉÕÑ ˆèQÉÕ•ô°(€€€ô(€€€•ÉÉ½ÉÌ€ôÙ…±¥‘…Ñ•}µ…¹¥™•ÍĞ¡µ…¹¥™•ÍĞ¤(€€€…ÍÍ•ÉĞ…¹ä ‰‘ÕÉ…Ñ¥½¹}ÌµÕÍĞ•ÅÕ…°ˆ¥¸•ÉÉ½È™½È•ÉÉ½È¥¸•ÉÉ½ÉÌ¤(€€€…ÍÍ•ÉĞ…¹ä ‰ÍÑ…Ñ”µÕÍĞ‰”„¹½¸µ•µÁÑäÍÑÉ¥¹œˆ¥¸•ÉÉ½È™½È•ÉÉ½È¥¸•ÉÉ½ÉÌ¤(()‘•˜Ñ•ÍÑ}µ…¹¥™•ÍÑ}É•©•ÑÍ}¹½¹™¥¹¥Ñ•}‘•…‘±¥¹” ¤è(€€€µ…¹¥™•ÍĞ€ôì(€€€€€€€€‰™½Éµ…Ğˆèì‰µ…¥Œˆè€‰5AMUqpÀ‰ô°(€€€€€€€€‰…ÍÔˆèì‰¹…µ”ˆè€‰MTˆ°€‰½¹Ñ…¥¹•É}•áÑ•¹Í¥½¸ˆè€ˆ¹…ÍÔ‰ô°(€€€€€€€€‰Í½ÕÉ”ˆèì‰™¥±•¹…µ”ˆè€‰Í…µÁ±”¹µÀĞˆ°€‰‘ÕÉ…Ñ¥½¹}Ìˆè€Éô°(€€€€€€€€‰…Õ‘¥¼ˆèì‰Í•µ•¹ÑÌˆèmì‰ÍÑ…ÉÑ}Ìˆè€À°€‰•¹‘}Ìˆè€Ä°€‰‘ÕÉ…Ñ¥½¹}Ìˆè€Ä°€‰ÍÑ…Ñ”ˆè€‰…Ñ¥Ù”ˆ°€‰‘•…‘±¥¹•}Ìˆè€‰9…8‰õuô°(€€€€€€€€‰¥¹Ñ•É¥Ñäˆèì‰Ñ¥µ•ÍÑ…µÁÍ}…É•}Í½ÕÉ•}½™}ÑÉÕÑ ˆèQÉÕ•ô°(€€€ô(€€€…ÍÍ•ÉĞ…¹ä ‰‘•…‘±¥¹•}ÌµÕÍĞ‰”™¥¹¥Ñ”ˆ¥¸•ÉÉ½È™½È•ÉÉ½È¥¸Ù…±¥‘…Ñ•}µ…¹¥™•ÍĞ¡µ…¹¥™•ÍĞ¤¤(()‘•˜Ñ•ÍÑ}…¹…±åÍ¥Í}É•©•ÑÍ}¥¹Ù…±¥‘}™ÁÌ ¤è(€€€İ¥Ñ ÁåÑ•ÍĞ¹É…¥Í•Ì¡…ÍÕÉÉ½È°µ…Ñ ô‰…¹…±åÍ¥ÌALˆ¤è(€€€€€€€…¹…±åé”¡Y%<°…¹…±åÍ¥Í}™ÁÌôÀ¤(()ÁåÑ•ÍĞ¹µ…É¬¹Á…É…µ•ÑÉ¥é” ‰Ù…±Õ”ˆ°m9½¹”°mt°ì‰Í½ÕÉ”ˆèmuô°ì‰Í½ÕÉ”ˆèíô°€‰…ÍÔˆèmuõt¤)‘•˜Ñ•ÍÑ}µ…¹¥™•ÍÑ}Ù…±¥‘…Ñ½É}™…¥±Í}±½Í•‘}™½É}µ…±™½Éµ•‘}Í¡…Á•Ì¡Ù…±Õ”¤è(€€€•ÉÉ½ÉÌ€ôÙ…±¥‘…Ñ•}µ…¹¥™•ÍĞ¡Ù…±Õ”¤(€€€…ÍÍ•ÉĞ•ÉÉ½ÉÌ(()‘•˜Ñ•ÍÑ}½¹Ù•ÉÑ•É}É•©•ÑÍ}¹•ÍÑ•‘}…ÍÕ}¥¹ÁÕĞ¡ÑµÁ}Á…Ñ ¤è(€€€Í½ÕÉ”€ôÑµÁ}Á…Ñ €¼€‰…±É•…‘ä¹…ÍÔˆ(€€€Í½ÕÉ”¹İÉ¥Ñ•}Ñ•áĞ ‰íôˆ°•¹½‘¥¹œô‰ÕÑ˜´àˆ¤(€€€İ¥Ñ ÁåÑ•ÍĞ¹É…¥Í•Ì¡…ÍÕÉÉ½È°µ…Ñ ô‰…±É•…‘ä„MTµ…¹¥™•ÍĞˆ¤è(€€€€€€€…¹…±åé”¡Í½ÕÉ”¤(()‘•˜Ñ•ÍÑ}Á±…å}É•©•ÑÍ}µ…±™½Éµ•‘}…ÍÕ}‰•™½É•}±…Õ¹ ¡ÑµÁ}Á…Ñ ¤è(€€€Í½ÕÉ”€ôÑµÁ}Á…Ñ €¼€‰‰É½­•¸¹…ÍÔˆ(€€€Í½ÕÉ”¹İÉ¥Ñ•}Ñ•áĞ ‰íôˆ°•¹½‘¥¹œô‰ÕÑ˜´àˆ¤(€€€İ¥Ñ ÁåÑ•ÍĞ¹É…¥Í•Ì¡…ÍÕÉÉ½È°µ…Ñ ô‰¥¹Ù…±¥MTµ…¹¥™•ÍĞˆ¤è(€€€€€€€Á±…ä¡Í½ÕÉ”¤(()ÁåÑ•ÍĞ¹µ…É¬¹Í­¥Á¥˜¡¹½ĞY%<¹•á¥ÍÑÌ ¤½È¹½ĞÍ¡ÕÑ¥°¹İ¡¥  ‰™™µÁ•œˆ¤°É•…Í½¸ô‰Ñ•ÍĞÙ¥‘•¼½™™µÁ•œÕ¹…Ù…¥±…‰±”ˆ¤)‘•˜Ñ•ÍÑ}…ÍÕ}µ…¹¥™•ÍÑ}É•Í½±Ù•Í}½É¥¥¹…±}µ•‘¥„¡ÑµÁ}Á…Ñ ¤è(€€€µ…¹¥™•ÍĞ€ô…¹…±åé”¡Y%<°…¹…±åÍ¥Í}™ÁÌôÄ¸À¤(€€€Í¥‘•…È€ôÑµÁ}Á…Ñ €¼€‰Ù¥‘•¼¹…ÍÔˆ(€€€Í¥‘•…È¹İÉ¥Ñ•}Ñ•áĞ¡©Í½¸¹‘ÕµÁÌ¡µ…¹¥™•ÍĞ¤°•¹½‘¥¹œô‰ÕÑ˜´àˆ¤(€€€…ÍÍ•ÉĞÉ•Í½±Ù•}…ÍÕ}Í½ÕÉ”¡Í¥‘•…È¤€ôôY%<¹É•Í½±Ù” ¤(()ÁåÑ•ÍĞ¹µ…É¬¹Í­¥Á¥˜¡¹½ĞY%<¹•á¥ÍÑÌ ¤½È¹½ĞÍ¡ÕÑ¥°¹İ¡¥  ‰™™µÁ•œˆ¤°É•…Í½¸ô‰Ñ•ÍĞÙ¥‘•¼½™™µÁ•œÕ¹…Ù…¥±…‰±”ˆ¤)‘•˜Ñ•ÍÑ}…ÍÕ}µ…¹¥™•ÍÑ}É•©•ÑÍ}¡…¹•‘}Í½ÕÉ•}‘¥•ÍĞ¡ÑµÁ}Á…Ñ ¤è(€€€µ…¹¥™•ÍĞ€ô…¹…±åé”¡Y%<°…¹…±åÍ¥Í}™ÁÌôÄ¸À¤(€€€µ…¹¥™•ÍÑl‰Í½ÕÉ”‰ul‰Í¡„ÈÔØ‰t€ô€ˆÀˆ€¨€ØĞ(€€€Í¥‘•…È€ôÑµÁ}Á…Ñ €¼€‰¡…¹•¹…ÍÔˆ(€€€Í¥‘•…È¹İÉ¥Ñ•}Ñ•áĞ¡©Í½¸¹‘ÕµÁÌ¡µ…¹¥™•ÍĞ¤°•¹½‘¥¹œô‰ÕÑ˜´àˆ¤(€€€İ¥Ñ ÁåÑ•ÍĞ¹É…¥Í•Ì¡…ÍÕÉÉ½È°µ…Ñ ô‰¥¹Ñ•É¥Ñäµ¥Íµ…Ñ ˆ¤è(€€€€€€€É•Í½±Ù•}…ÍÕ}Í½ÕÉ”¡Í¥‘•…È¤(()ÁåÑ•ÍĞ¹µ…É¬¹Í­¥Á¥˜¡¹½ĞY%<¹•á¥ÍÑÌ ¤½È¹½ĞÍ¡ÕÑ¥°¹İ¡¥  ‰™™µÁ•œˆ¤°É•…Í½¸ô‰Ñ•ÍĞÙ¥‘•¼½™™µÁ•œÕ¹…Ù…¥±…‰±”ˆ¤)‘•˜Ñ•ÍÑ}…ÍÕ}µ…¹¥™•ÍÑ}É•©•ÑÍ}¡…¹•‘}Í½ÕÉ•}Í¥é”¡ÑµÁ}Á…Ñ ¤è(€€€µ…¹¥™•ÍĞ€ô…¹…±åé”¡Y%<°…¹…±åÍ¥Í}™ÁÌôÄ¸À¤(€€€µ…¹¥™•ÍÑl‰Í½ÕÉ”‰ul‰Í¡„ÈÔØ‰t€ô9½¹”(€€€µ…¹¥™•ÍÑl‰Í½ÕÉ”‰ul‰Í¥é•}‰åÑ•Ì‰t€¬ô€Ä(€€€Í¥‘•…È€ôÑµÁ}Á…Ñ €¼€‰¡…¹•µÍ¥é”¹…ÍÔˆ(€€€Í¥‘•…È¹İÉ¥Ñ•}Ñ•áĞ¡©Í½¸¹‘ÕµÁÌ¡µ…¹¥™•ÍĞ¤°•¹½‘¥¹œô‰ÕÑ˜´àˆ¤(€€€İ¥Ñ ÁåÑ•ÍĞ¹É…¥Í•Ì¡…ÍÕÉÉ½È°µ…Ñ ô‰Í¥é”µ¥Íµ…Ñ ˆ¤è(€€€€€€€É•Í½±Ù•}…ÍÕ}Í½ÕÉ”¡Í¥‘•…È¤(()ÁåÑ•ÍĞ¹µ…É¬¹Í­¥Á¥˜¡¹½ĞU%<¹•á¥ÍÑÌ ¤½È¹½ĞÍ¡ÕÑ¥°¹İ¡¥  ‰™™µÁ•œˆ¤°É•…Í½¸ô‰Ñ•ÍĞ…Õ‘¥¼½™™µÁ•œÕ¹…Ù…¥±…‰±”ˆ¤)‘•˜Ñ•ÍÑ}É•™•É•¹•}µÀÍ}µ…¹¥™•ÍÑ}ÁÉ•Í•ÉÙ•Í}…Õ‘¥½}ÍÑÉ•…´ ¤è(€€€µ…¹¥™•ÍĞ€ô…¹…±åé”¡U%<°…¹…±åÍ¥Í}™ÁÌôÄ¸À¤(€€€…ÍÍ•ÉĞµ…¹¥™•ÍÑl‰Í½ÕÉ”‰ul‰‘ÕÉ…Ñ¥½¹}Ì‰t€ø€ÈÜÀ(€€€…ÍÍ•ÉĞ…¹ä¡¥Ñ•´¹•Ğ ‰½‘•}ÑåÁ”ˆ¤€ôô€‰…Õ‘¥¼ˆ…¹¥Ñ•´¹•Ğ ‰½‘•}¹…µ”ˆ¤€ôô€‰µÀÌˆ™½È¥Ñ•´¥¸µ…¹¥™•ÍÑl‰ÍÑÉ•…µÌ‰t¤(€€€…ÍÍ•ÉĞµ…¹¥™•ÍÑl‰…Õ‘¥¼‰ul‰Í•µ•¹ÑÌ‰t(€€€…ÍÍ•ÉĞµ…¹¥™•ÍÑl‰¥¹Ñ•É¥Ñä‰ul‰Ñ¥µ•ÍÑ…µÁÍ}…É•}Í½ÕÉ•}½™}ÑÉÕÑ ‰t¥ÌQÉÕ”(()‘•˜Ñ•ÍÑ}±¥‰Ù±}‰…­•¹‘}Í½ÕÉ•}…Á…‰¥±¥Ñå}‘•Ñ•Ñ¥½¸ ¤è(€€€…ÍÍ•ÉĞ1¥‰Y1	…­•¹¹ÍÕÁÁ½ÉÑÌ ‰¡ÑÑÁÌè¼½•á…µÁ±”¹¥¹Ù…±¥½Ù¥‘•¼¹´ÍÔàˆ¤(€€€…ÍÍ•ÉĞ1¥‰Y1	…­•¹¹ÍÕÁÁ½ÉÑÌ ‰ÉÑÍÀè¼½•á…µÁ±”¹¥¹Ù…±¥½±¥Ù”ˆ¤(€€€…ÍÍ•ÉĞ¹½Ğ1¥‰Y1	…­•¹¹ÍÕÁÁ½ÉÑÌ ‰½Á¡•Èè¼½•á…µÁ±”¹¥¹Ù…±¥½µ•‘¥„ˆ¤(
