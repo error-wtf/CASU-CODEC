@@ -1,100 +1,1 @@
-# SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
-# SPDX-FileCopyrightText: 2026 Lino Casu
-from __future__ import annotations
-
-import argparse
-import json
-import os
-import tempfile
-from pathlib import Path
-
-from .core import ANALYSIS_MODES, CasuError, analyze, play, resolve_casu_source
-from .schema import validate_manifest
-from . import __version__
-
-
-def parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="casu", description="CASU â€” Codec for All Segmented Units: legacy-compatible MP4/MP3 segmented-state layer")
-    p.add_argument("--version", action="version", version=f"CASU Codec for All Segmented Units {__version__}")
-    sub = p.add_subparsers(dest="command", required=True)
-    a = sub.add_parser("analyze", help="write a CASU temporal-state sidecar")
-    a.add_argument("input", type=Path)
-    a.add_argument("-o", "--output", type=Path)
-    a.add_argument("--analysis-fps", type=float, default=10.0)
-    a.add_argument("--mode", choices=sorted(ANALYSIS_MODES), default="strict",
-                   help="state-analysis policy; strict is the reference mode")
-    c = sub.add_parser("convert", help="convert legacy media to a CASU manifest without changing the source")
-    c.add_argument("input", type=Path)
-    c.add_argument("-o", "--output", type=Path)
-    c.add_argument("--analysis-fps", type=float, default=10.0)
-    c.add_argument("--mode", choices=sorted(ANALYSIS_MODES), default="strict",
-                   help="state-analysis policy; strict is the reference mode")
-    c.add_argument("--force", action="store_true", help="replace an existing output atomically")
-    v = sub.add_parser("play", help="play legacy media through FFplay without changing it")
-    v.add_argument("input", type=Path)
-    v.add_argument("ffplay_args", nargs=argparse.REMAINDER)
-    x = sub.add_parser("validate", help="validate a .casu manifest")
-    x.add_argument("manifest", type=Path)
-    x.add_argument("--verify-source", action="store_true",
-                   help="also resolve the recorded source and verify its SHA-256 digest")
-    return p
-
-
-def main() -> int:
-    args = parser().parse_args()
-    try:
-        if args.command in {"analyze", "convert"}:
-            if args.analysis_fps <= 0:
-                raise CasuError("analysis FPS must be positive")
-            result = analyze(args.input, args.analysis_fps, args.mode)
-            output = args.output or args.input.with_suffix(args.input.suffix + ".casu")
-            output = output.expanduser().resolve()
-            output.parent.mkdir(parents=True, exist_ok=True)
-            if output.exists() and args.command == "convert" and not args.force:
-                raise CasuError(f"output exists (use --force): {output}")
-            payload = json.dumps(result, indent=2, ensure_ascii=False) + "\n"
-            fd, temporary = tempfile.mkstemp(prefix=f".{output.name}.", dir=output.parent, text=True)
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                    handle.write(payload)
-                    handle.flush()
-                    os.fsync(handle.fileno())
-                os.replace(temporary, output)
-            finally:
-                if os.path.exists(temporary):
-                    os.unlink(temporary)
-            print(json.dumps({"manifest": str(output), "duration_s": result["source"]["duration_s"],
-                              "video_segments": len(result["video"].get("segments", [])),
-                              "audio_segments": len(result["audio"].get("segments", [])),
-                              "mode": result["casu"]["analysis_mode"]}, indent=2))
-            return 0
-        if args.command == "play":
-            play(args.input, args.ffplay_args)
-            return 0
-        if args.command == "validate":
-            try:
-                manifest = json.loads(args.manifest.expanduser().read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError) as exc:
-                raise CasuError(f"could not read manifest {args.manifest}: {exc}") from exc
-            errors = validate_manifest(manifest)
-            if errors:
-                for error in errors:
-                    print(f"INVALID: {error}")
-                return 1
-            if args.verify_source:
-                try:
-                    source = resolve_casu_source(args.manifest)
-                except CasuError as exc:
-                    print(f"INVALID: {exc}")
-                    return 1
-                print(f"VERIFIED source: {source}")
-            print(f"VALID CASU manifest: {args.manifest}")
-            return 0
-        raise CasuError("unknown command")
-    except CasuError as exc:
-        print(f"casu: error: {exc}")
-        return 2
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+¨¥yÛhr·šµë-­æ¦}Ó©z¶­Š‰ç¢Ú^®h­µçEj)^vÚ­æ­zËky©Ÿtê^­«b¢yè¶—«š+myÑZŠW¶‡+y«^²ÚÞjgÝ:—«jØ¨žz-¥êæŠÛ^tŒMA`µ1¥•¹Í”µ%‘•¹Ñ¥™¥•Èè1¥•¹Í•I•˜µMTµ¹Ñ¥…Á¥Ñ…±¥ÍÐ´Ä¸Ð(ŒMA`µ¥±•½ÁåÉ¥¡ÑQ•áÐè€ÈÀÈØ1¥¹¼…ÍÔ)™É½´}}™ÕÑÕÉ•}|¥µÁ½ÉÐ…¹¹½Ñ…Ñ¥½¹Ì()¥µÁ½ÉÐ…ÉÁ…ÉÍ”)¥µÁ½ÉÐ©Í½¸)¥µÁ½ÉÐ½Ì)¥µÁ½ÉÐÑ•µÁ™¥±”)™É½´Á…Ñ¡±¥ˆ¥µÁ½ÉÐA…Ñ ()™É½´€¹½É”¥µÁ½ÉÐ91eM%M}5=L°…ÍÕÉÉ½È°…¹…±åé”°Á±…ä°É•Í½±Ù•}…ÍÕ}Í½ÕÉ”)™É½´€¹Í¡•µ„¥µÁ½ÉÐÙ…±¥‘…Ñ•}µ…¹¥™•ÍÐ)™É½´€¸¥µÁ½ÉÐ}}Ù•ÉÍ¥½¹}|(()‘•˜Á…ÉÍ•È ¤€´ø…ÉÁ…ÉÍ”¹ÉÕµ•¹ÑA…ÉÍ•Èè(€€€À€ô…ÉÁ…ÉÍ”¹ÉÕµ•¹ÑA…ÉÍ•È¡ÁÉ½œô‰…ÍÔˆ°‘•ÍÉ¥ÁÑ¥½¸ô‰MTƒŠP½‘•Œ™½È±°M•µ•¹Ñ•U¹¥ÑÌè±•…äµ½µÁ…Ñ¥‰±”5@Ð½5@ÌÍ•µ•¹Ñ•µÍÑ…Ñ”±…å•Èˆ¤(€€€À¹…‘‘}…ÉÕµ•¹Ð ˆ´µÙ•ÉÍ¥½¸ˆ°…Ñ¥½¸ô‰Ù•ÉÍ¥½¸ˆ°Ù•ÉÍ¥½¸õ˜‰MT½‘•Œ™½È±°M•µ•¹Ñ•U¹¥ÑÌí}}Ù•ÉÍ¥½¹}}ôˆ¤(€€€ÍÕˆ€ôÀ¹…‘‘}ÍÕ‰Á…ÉÍ•ÉÌ¡‘•ÍÐô‰½µµ…¹ˆ°É•ÅÕ¥É•õQÉÕ”¤(€€€„€ôÍÕˆ¹…‘‘}Á…ÉÍ•È ‰…¹…±åé”ˆ°¡•±Àô‰ÝÉ¥Ñ”„MTÑ•µÁ½É…°µÍÑ…Ñ”Í¥‘•…Èˆ¤(€€€„¹…‘‘}…ÉÕµ•¹Ð ‰¥¹ÁÕÐˆ°ÑåÁ”õA…Ñ ¤(€€€„¹…‘‘}…ÉÕµ•¹Ð ˆµ¼ˆ°€ˆ´µ½ÕÑÁÕÐˆ°ÑåÁ”õA…Ñ ¤(€€€„¹…‘‘}…ÉÕµ•¹Ð ˆ´µ…¹…±åÍ¥Ìµ™ÁÌˆ°ÑåÁ”õ™±½…Ð°‘•™…Õ±ÐôÄÀ¸À¤(€€€„¹…‘‘}…ÉÕµ•¹Ð ˆ´µµ½‘”ˆ°¡½¥•ÌõÍ½ÉÑ•¡91eM%M}5=L¤°‘•™…Õ±Ðô‰ÍÑÉ¥Ðˆ°(€€€€€€€€€€€€€€€€€€¡•±Àô‰ÍÑ…Ñ”µ…¹…±åÍ¥ÌÁ½±¥äìÍÑÉ¥Ð¥ÌÑ¡”É•™•É•¹”µ½‘”ˆ¤(€€€Œ€ôÍÕˆ¹…‘‘}Á…ÉÍ•È ‰½¹Ù•ÉÐˆ°¡•±Àô‰½¹Ù•ÉÐ±•…äµ•‘¥„Ñ¼„MTµ…¹¥™•ÍÐÝ¥Ñ¡½ÕÐ¡…¹¥¹œÑ¡”Í½ÕÉ”ˆ¤(€€€Œ¹…‘‘}…ÉÕµ•¹Ð ‰¥¹ÁÕÐˆ°ÑåÁ”õA…Ñ ¤(€€€Œ¹…‘‘}…ÉÕµ•¹Ð ˆµ¼ˆ°€ˆ´µ½ÕÑÁÕÐˆ°ÑåÁ”õA…Ñ ¤(€€€Œ¹…‘‘}…ÉÕµ•¹Ð ˆ´µ…¹…±åÍ¥Ìµ™ÁÌˆ°ÑåÁ”õ™±½…Ð°‘•™…Õ±ÐôÄÀ¸À¤(€€€Œ¹…‘‘}…ÉÕµ•¹Ð ˆ´µµ½‘”ˆ°¡½¥•ÌõÍ½ÉÑ•¡91eM%M}5=L¤°‘•™…Õ±Ðô‰ÍÑÉ¥Ðˆ°(€€€€€€€€€€€€€€€€€€¡•±Àô‰ÍÑ…Ñ”µ…¹…±åÍ¥ÌÁ½±¥äìÍÑÉ¥Ð¥ÌÑ¡”É•™•É•¹”µ½‘”ˆ¤(€€€Œ¹…‘‘}…ÉÕµ•¹Ð ˆ´µ™½É”ˆ°…Ñ¥½¸ô‰ÍÑ½É•}ÑÉÕ”ˆ°¡•±Àô‰É•Á±…”…¸•á¥ÍÑ¥¹œ½ÕÑÁÕÐ…Ñ½µ¥…±±äˆ¤(€€€Ø€ôÍÕˆ¹…‘‘}Á…ÉÍ•È ‰Á±…äˆ°¡•±Àô‰Ù…±¥‘…Ñ”„µ•‘¥„Á…Ñ ™½È5AMT¥¸µÁÉ½•ÍÌÁ±…å‰…¬ˆ¤(€€€Ø¹…‘‘}…ÉÕµ•¹Ð ‰¥¹ÁÕÐˆ°ÑåÁ”õA…Ñ ¤(€€€à€ôÍÕˆ¹…‘‘}Á…ÉÍ•È ‰Ù…±¥‘…Ñ”ˆ°¡•±Àô‰Ù…±¥‘…Ñ”„€¹…ÍÔµ…¹¥™•ÍÐˆ¤(€€€à¹…‘‘}…ÉÕµ•¹Ð ‰µ…¹¥™•ÍÐˆ°ÑåÁ”õA…Ñ ¤(€€€à¹…‘‘}…ÉÕµ•¹Ð ˆ´µÙ•É¥™äµÍ½ÕÉ”ˆ°…Ñ¥½¸ô‰ÍÑ½É•}ÑÉÕ”ˆ°(€€€€€€€€€€€€€€€€€€¡•±Àô‰…±Í¼É•Í½±Ù”Ñ¡”É•½É‘•Í½ÕÉ”…¹Ù•É¥™ä¥ÑÌM!´ÈÔØ‘¥•ÍÐˆ¤(€€€É•ÑÕÉ¸À(()‘•˜µ…¥¸ ¤€´ø¥¹Ðè(€€€…ÉÌ€ôÁ…ÉÍ•È ¤¹Á…ÉÍ•}…ÉÌ ¤(€€€ÑÉäè(€€€€€€€¥˜…ÉÌ¹½µµ…¹¥¸ì‰…¹…±åé”ˆ°€‰½¹Ù•ÉÐ‰ôè(€€€€€€€€€€€¥˜…ÉÌ¹…¹…±åÍ¥Í}™ÁÌ€ðô€Àè(€€€€€€€€€€€€€€€É…¥Í”…ÍÕÉÉ½È ‰…¹…±åÍ¥ÌALµÕÍÐ‰”Á½Í¥Ñ¥Ù”ˆ¤(€€€€€€€€€€€É•ÍÕ±Ð€ô…¹…±åé”¡…ÉÌ¹¥¹ÁÕÐ°…ÉÌ¹…¹…±åÍ¥Í}™ÁÌ°…ÉÌ¹µ½‘”¤(€€€€€€€€€€€½ÕÑÁÕÐ€ô…ÉÌ¹½ÕÑÁÕÐ½È…ÉÌ¹¥¹ÁÕÐ¹Ý¥Ñ¡}ÍÕ™™¥à¡…ÉÌ¹¥¹ÁÕÐ¹ÍÕ™™¥à€¬€ˆ¹…ÍÔˆ¤(€€€€€€€€€€€½ÕÑÁÕÐ€ô½ÕÑÁÕÐ¹•áÁ…¹‘ÕÍ•È ¤¹É•Í½±Ù” ¤(€€€€€€€€€€€½ÕÑÁÕÐ¹Á…É•¹Ð¹µ­‘¥È¡Á…É•¹ÑÌõQÉÕ”°•á¥ÍÑ}½¬õQÉÕ”¤(€€€€€€€€€€€¥˜½ÕÑÁÕÐ¹•á¥ÍÑÌ ¤…¹…ÉÌ¹½µµ…¹€ôô€‰½¹Ù•ÉÐˆ…¹¹½Ð…ÉÌ¹™½É”è(€€€€€€€€€€€€€€€É…¥Í”…ÍÕÉÉ½È¡˜‰½ÕÑÁÕÐ•á¥ÍÑÌ€¡ÕÍ”€´µ™½É”¤èí½ÕÑÁÕÑôˆ¤(€€€€€€€€€€€Á…å±½…€ô©Í½¸¹‘ÕµÁÌ¡É•ÍÕ±Ð°¥¹‘•¹ÐôÈ°•¹ÍÕÉ•}…Í¥¤õ…±Í”¤€¬€‰q¸ˆ(€€€€€€€€€€€™°Ñ•µÁ½É…Éä€ôÑ•µÁ™¥±”¹µ­ÍÑ•µÀ¡ÁÉ•™¥àõ˜ˆ¹í½ÕÑÁÕÐ¹¹…µ•ô¸ˆ°‘¥Èõ½ÕÑÁÕÐ¹Á…É•¹Ð°Ñ•áÐõQÉÕ”¤(€€€€€€€€€€€ÑÉäè(€€€€€€€€€€€€€€€Ý¥Ñ ½Ì¹™‘½Á•¸¡™°€‰Üˆ°•¹½‘¥¹œô‰ÕÑ˜´àˆ¤…Ì¡…¹‘±”è(€€€€€€€€€€€€€€€€€€€¡…¹‘±”¹ÝÉ¥Ñ”¡Á…å±½…¤(€€€€€€€€€€€€€€€€€€€¡…¹‘±”¹™±ÕÍ  ¤(€€€€€€€€€€€€€€€€€€€½Ì¹™Íå¹Œ¡¡…¹‘±”¹™¥±•¹¼ ¤¤(€€€€€€€€€€€€€€€½Ì¹É•Á±…”¡Ñ•µÁ½É…Éä°½ÕÑÁÕÐ¤(€€€€€€€€€€€™¥¹…±±äè(€€€€€€€€€€€€€€€¥˜½Ì¹Á…Ñ ¹•á¥ÍÑÌ¡Ñ•µÁ½É…Éä¤è(€€€€€€€€€€€€€€€€€€€½Ì¹Õ¹±¥¹¬¡Ñ•µÁ½É…Éä¤(€€€€€€€€€€€ÁÉ¥¹Ð¡©Í½¸¹‘ÕµÁÌ¡ì‰µ…¹¥™•ÍÐˆèÍÑÈ¡½ÕÑÁÕÐ¤°€‰‘ÕÉ…Ñ¥½¹}ÌˆèÉ•ÍÕ±Ñl‰Í½ÕÉ”‰ul‰‘ÕÉ…Ñ¥½¹}Ì‰t°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€‰Ù¥‘•½}Í•µ•¹ÑÌˆè±•¸¡É•ÍÕ±Ñl‰Ù¥‘•¼‰t¹•Ð ‰Í•µ•¹ÑÌˆ°mt¤¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€‰…Õ‘¥½}Í•µ•¹ÑÌˆè±•¸¡É•ÍÕ±Ñl‰…Õ‘¥¼‰t¹•Ð ‰Í•µ•¹ÑÌˆ°mt¤¤°(€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€‰µ½‘”ˆèÉ•ÍÕ±Ñl‰…ÍÔ‰ul‰…¹…±åÍ¥Í}µ½‘”‰uô°¥¹‘•¹ÐôÈ¤¤(€€€€€€€€€€€É•ÑÕÉ¸€À(€€€€€€€¥˜…ÉÌ¹½µµ…¹€ôô€‰Á±…äˆè(€€€€€€€€€€€Á±…ä¡…ÉÌ¹¥¹ÁÕÐ¤(€€€€€€€€€€€É•ÑÕÉ¸€À(€€€€€€€¥˜…ÉÌ¹½µµ…¹€ôô€‰Ù…±¥‘…Ñ”ˆè(€€€€€€€€€€€ÑÉäè(€€€€€€€€€€€€€€€µ…¹¥™•ÍÐ€ô©Í½¸¹±½…‘Ì¡…ÉÌ¹µ…¹¥™•ÍÐ¹•áÁ…¹‘ÕÍ•È ¤¹É•…‘}Ñ•áÐ¡•¹½‘¥¹œô‰ÕÑ˜´àˆ¤¤(€€€€€€€€€€€•á•ÁÐ€¡=MÉÉ½È°©Í½¸¹)M=9•½‘•ÉÉ½È¤…Ì•áŒè(€€€€€€€€€€€€€€€É…¥Í”…ÍÕÉÉ½È¡˜‰½Õ±¹½ÐÉ•…µ…¹¥™•ÍÐí…ÉÌ¹µ…¹¥™•ÍÑôèí•áôˆ¤™É½´•áŒ(€€€€€€€€€€€•ÉÉ½ÉÌ€ôÙ…±¥‘…Ñ•}µ…¹¥™•ÍÐ¡µ…¹¥™•ÍÐ¤(€€€€€€€€€€€¥˜•ÉÉ½ÉÌè(€€€€€€€€€€€€€€€™½È•ÉÉ½È¥¸•ÉÉ½ÉÌè(€€€€€€€€€€€€€€€€€€€ÁÉ¥¹Ð¡˜‰%9Y1%èí•ÉÉ½Éôˆ¤(€€€€€€€€€€€€€€€É•ÑÕÉ¸€Ä(€€€€€€€€€€€¥˜…ÉÌ¹Ù•É¥™å}Í½ÕÉ”è(€€€€€€€€€€€€€€€ÑÉäè(€€€€€€€€€€€€€€€€€€€Í½ÕÉ”€ôÉ•Í½±Ù•}…ÍÕ}Í½ÕÉ”¡…ÉÌ¹µ…¹¥™•ÍÐ¤(€€€€€€€€€€€€€€€•á•ÁÐ…ÍÕÉÉ½È…Ì•áŒè(€€€€€€€€€€€€€€€€€€€ÁÉ¥¹Ð¡˜‰%9Y1%èí•áôˆ¤(€€€€€€€€€€€€€€€€€€€É•ÑÕÉ¸€Ä(€€€€€€€€€€€€€€€ÁÉ¥¹Ð¡˜‰YI%%Í½ÕÉ”èíÍ½ÕÉ•ôˆ¤(€€€€€€€€€€€ÁÉ¥¹Ð¡˜‰Y1%MTµ…¹¥™•ÍÐèí…ÉÌ¹µ…¹¥™•ÍÑôˆ¤(€€€€€€€€€€€É•ÑÕÉ¸€À(€€€€€€€É…¥Í”…ÍÕÉÉ½È ‰Õ¹­¹½Ý¸½µµ…¹ˆ¤(€€€•á•ÁÐ…ÍÕÉÉ½È…Ì•áŒè(€€€€€€€ÁÉ¥¹Ð¡˜‰…ÍÔè•ÉÉ½Èèí•áôˆ¤(€€€€€€€É•ÑÕÉ¸€È(()¥˜}}¹…µ•}|€ôô€‰}}µ…¥¹}|ˆè(€€€É…¥Í”MåÍÑ•µá¥Ð¡µ…¥¸ ¤¤(

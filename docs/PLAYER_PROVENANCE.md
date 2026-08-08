@@ -1,29 +1,1 @@
-<!-- SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4 | SPDX-FileCopyrightText: 2026 Lino Casu -->
-# MPCASU player provenance and licensing boundary
-
-MPCASU is an independent player implementation. Its layout and interaction
-goals are informed by two public traditions, but this repository does not copy
-source code from either project:
-
-- VLC is the VideoLAN media player project. Its source is hosted by VideoLAN
-  and is distributed under GPL-family terms with component-specific notices.
-  See the [official source repository](https://github.com/videolan/vlc) and
-  [VideoLAN legal information](https://www.videolan.org/legal.html).
-- The historical Winamp source release used the Winamp Collaborative License,
-  which is source-available but includes restrictions on modified distribution.
-  It is therefore not treated as an open-source code dependency here.
-
-MPCASU uses the system's FFmpeg/FFplay binaries as an external decoder/player
-process. It does not embed VLC or Winamp code. Any distribution of a packaged
-MPCASU build must ship the applicable FFmpeg/FFplay notices and licenses for
-the exact binaries included by that distribution.
-
-The clean-room boundary is intentional: MPCASU may learn from general player
-concepts such as playlists, transport controls, skins and library views, but
-all CASU integration, manifest validation, source-resolution and fallback code
-is authored independently in this repository.
-
-The built-in visualizer is an explanatory decoded-activity animation. It is
-not presented as a waveform, a perceptual-quality score or an energy-saving
-measurement. CASU state labels remain hints, while FFmpeg/FFplay remains the
-canonical full-fidelity playback path.
+¨¥yÛhr·šµë-­æ¦}Ó©z¶­Š‰ç¢Ú^®h­µçEj)^vÚ­æ­zËky©Ÿtê^­«b¢yè¶—«š+myÑZŠW¶‡+y«^²ÚŞjgİ:—«jØ¨z-¥êæŠÛ^tğ„´´MA`µ1¥•¹Í”µ%‘•¹Ñ¥™¥•Èè1¥•¹Í•I•˜µMTµ¹Ñ¥…Á¥Ñ…±¥ÍĞ´Ä¸ĞğMA`µ¥±•½ÁåÉ¥¡ÑQ•áĞè€ÈÀÈØ1¥¹¼…ÍÔ€´´ø(Œ5AMTÁ±…å•ÈÁÉ½Ù•¹…¹”…¹±¥•¹Í¥¹œ‰½Õ¹‘…Éä()5AMT¥Ì…¸¥¹‘•Á•¹‘•¹ĞÁ±…å•È¥µÁ±•µ•¹Ñ…Ñ¥½¸¸%ÑÌ±…å½ÕĞ…¹¥¹Ñ•É…Ñ¥½¸)½…±Ì…É”¥¹™½Éµ•‰äÑİ¼ÁÕ‰±¥ŒÑÉ…‘¥Ñ¥½¹Ì°‰ÕĞÑ¡¥ÌÉ•Á½Í¥Ñ½Éä‘½•Ì¹½Ğ½Áä)Í½ÕÉ”½‘”™É½´•¥Ñ¡•ÈÁÉ½©•Ğè((´Y1¥ÌÑ¡”Y¥‘•½18µ•‘¥„Á±…å•ÈÁÉ½©•Ğ¸%ÑÌÍ½ÕÉ”¥Ì¡½ÍÑ•‰äY¥‘•½18(€…¹¥Ì‘¥ÍÑÉ¥‰ÕÑ•Õ¹‘•ÈA0µ™…µ¥±äÑ•ÉµÌİ¥Ñ ½µÁ½¹•¹ĞµÍÁ•¥™¥Œ¹½Ñ¥•Ì¸(€M•”Ñ¡”m½™™¥¥…°Í½ÕÉ”É•Á½Í¥Ñ½Éåt¡¡ÑÑÁÌè¼½¥Ñ¡Õˆ¹½´½Ù¥‘•½±…¸½Ù±Œ¤…¹(€mY¥‘•½18±•…°¥¹™½Éµ…Ñ¥½¹t¡¡ÑÑÁÌè¼½İİÜ¹Ù¥‘•½±…¸¹½Éœ½±•…°¹¡Ñµ°¤¸(´Q¡”¡¥ÍÑ½É¥…°]¥¹…µÀÍ½ÕÉ”É•±•…Í”ÕÍ•Ñ¡”]¥¹…µÀ½±±…‰½É…Ñ¥Ù”1¥•¹Í”°(€İ¡¥ ¥ÌÍ½ÕÉ”µ…Ù…¥±…‰±”‰ÕĞ¥¹±Õ‘•ÌÉ•ÍÑÉ¥Ñ¥½¹Ì½¸µ½‘¥™¥•‘¥ÍÑÉ¥‰ÕÑ¥½¸¸(€%Ğ¥ÌÑ¡•É•™½É”¹½ĞÑÉ•…Ñ•…Ì…¸½Á•¸µÍ½ÕÉ”½‘”‘•Á•¹‘•¹ä¡•É”¸()5AMTÕÍ•ÌÑ¡”ÍåÍÑ•´±¥‰Y1Í¡…É•±¥‰É…ÉäÑ¡É½Õ …¸¥¸µÁÉ½•ÍÌ‰…­•¹¸%Ğ)‘½•Ì¹½Ğ•µ‰•Y1½È]¥¹…µÀÍ½ÕÉ”½‘”…¹‘½•Ì¹½Ğ±…Õ¹ „Á±…å•ÈÁÉ½•ÍÌ¸)¹ä‘¥ÍÑÉ¥‰ÕÑ¥½¸½˜„Á…­…•5AMT‰Õ¥±µÕÍĞÍ¡¥ÀÑ¡”…ÁÁ±¥…‰±”±¥‰Y1)¹½Ñ¥•Ì…¹±¥•¹Í•Ì™½ÈÑ¡”•á…ĞÉÕ¹Ñ¥µ”ÍÕÁÁ±¥•‰äÑ¡…Ğ‘¥ÍÑÉ¥‰ÕÑ¥½¸¸()Q¡”±•…¸µÉ½½´‰½Õ¹‘…Éä¥Ì¥¹Ñ•¹Ñ¥½¹…°è5AMTµ…ä±•…É¸™É½´•¹•É…°Á±…å•È)½¹•ÁÑÌÍÕ …ÌÁ±…å±¥ÍÑÌ°ÑÉ…¹ÍÁ½ÉĞ½¹ÑÉ½±Ì°Í­¥¹Ì…¹±¥‰É…ÉäÙ¥•İÌ°‰ÕĞ)…±°MT¥¹Ñ•É…Ñ¥½¸°µ…¹¥™•ÍĞÙ…±¥‘…Ñ¥½¸°Í½ÕÉ”µÉ•Í½±ÕÑ¥½¸…¹™…±±‰…¬½‘”)¥Ì…ÕÑ¡½É•¥¹‘•Á•¹‘•¹Ñ±ä¥¸Ñ¡¥ÌÉ•Á½Í¥Ñ½Éä¸()Q¡”‰Õ¥±Ğµ¥¸Ù¥ÍÕ…±¥é•È¥Ì…¸•áÁ±…¹…Ñ½Éä‘•½‘•µ…Ñ¥Ù¥Ñä…¹¥µ…Ñ¥½¸¸%Ğ¥Ì)¹½ĞÁÉ•Í•¹Ñ•…Ì„İ…Ù•™½É´°„Á•É•ÁÑÕ…°µÅÕ…±¥ÑäÍ½É”½È…¸•¹•ÉäµÍ…Ù¥¹œ)µ•…ÍÕÉ•µ•¹Ğ¸MTÍÑ…Ñ”±…‰•±ÌÉ•µ…¥¸¡¥¹ÑÌ°İ¡¥±”Ñ¡”±¥‰Y1µ‰…­•Á¥Á•±¥¹”)É•µ…¥¹ÌÑ¡”…¹½¹¥…°™Õ±°µ™¥‘•±¥ÑäÁ±…å‰…¬Á…Ñ ¸(

@@ -1,140 +1,3 @@
-<!-- SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4 | SPDX-FileCopyrightText: 2026 Lino Casu -->
-# CASU Codec / Container
-
-**License:** All Rights Reserved / Anticapitalist License 1.4 by Lino Casu.
-See [`LICENSE`](LICENSE). Third-party components retain their own licenses.
-
-**CASU** means **Codec for All Segmented Units** in this project. â€œCasuâ€ also
-preserves the author's surname and is the `.casu` container/sidecar identity.
-CASU is a conservative, legacy-compatible segmented-state codec/container, not
-a replacement for the original MP4/MP3 stream. **MPCASU** is reserved for the
-future VLC-/Winamp-inspired media player built on CASU.
-
-The core abstraction is:
-
-\[
-\boxed{\text{State}+\text{Segment}+\text{Change}+\text{Timing}}
-\]
-
-rather than treating a media stream as only `Frame + Frame + Frame`. The
-legacy decoded stream remains authoritative; CASU records where a state holds,
-what changed and which source timestamps govern presentation.
-It accepts ordinary MP4 and MP3 files, keeps the original media as the source of
-truth, and adds an optional temporal-state sidecar for future schedulers,
-compositors and segmented displays.
-
-This repository is a new implementation informed by the supplied SSC briefs.
-The original prototype is preserved unchanged as
-[`legacy_ssc_codec_v01.py`](legacy_ssc_codec_v01.py); the reference documents
-are copied into `docs/` for provenance and are not modified.
-
-## First working slice
-
-```bash
-python3 -m pip install -e .
-casu analyze /path/to/movie.mp4
-casu analyze /path/to/song.mp3
-casu convert /path/to/movie.mp4 --output movie.casu
-casu play /path/to/movie.mp4
-casu play /path/to/song.mp3
-casu play movie.casu
-casu validate movie.casu
-casu validate --verify-source movie.casu
-```
-
-Conversion supports three explicit analysis policies:
-`--mode strict` (the reference/default policy), `--mode visually_lossless`, and
-`--mode adaptive`. All three remain advisory state analyses; only `strict`
-is suitable for reference comparisons, and none permits a decoder to alter
-source timestamps or claim pixel identity without a separate comparison.
-
-The `mpc` command remains a compatibility alias while the future MPCASU player
-is developed separately.
-
-Launch the first MPCASU player prototype:
-
-```bash
-mpcasu /path/to/movie.mp4
-```
-
-It provides a library list, play/pause/stop, seek controls, CASU sidecar
-detection and a safe legacy fallback. Decoding remains delegated to FFplay;
-this prevents a new UI layer from silently replacing mature MP4/MP3 decoders.
-
-The same converter is also available as a small Tk interface:
-
-```bash
-casu-converter
-```
-
-The player is deliberately a separate application layer:
-
-```text
-film.casu â†’ CASU codec/container â†’ MPCASU player â†’ audio/video output
-legacy MP4/MP3/MKV â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â†’ MPCASU fallback
-```
-
-`play` delegates to FFplay and does not transcode, retimestamp, stretch, or
-otherwise modify the input. If a sidecar is missing or invalid, legacy playback
-continues normally. `analyze` decodes a small inspection stream and writes
-`movie.mp4.casu` or `song.mp3.casu`.
-
-## Compatibility contract
-
-- MP4/MP3 bytes, timestamps, codec metadata and A/V ordering remain canonical.
-- State labels are scheduling hints only; they never authorize timeline changes.
-- No interpolation, time-stretching, pitch shifting, scene invention or hidden
-  colour/HDR changes are performed by this first slice.
-- Uncertainty falls back to the full-fidelity legacy path.
-- A sidecar is optional and can be deleted without making the media unplayable.
-
-The current analyzer uses decoded luma activity for video and decoded PCM RMS
-windows for audio. These are conservative temporal hints, not perceptual truth
-and not a replacement for the source timestamps. Each segment records
-`start_s`, `end_s`, `valid_until_s`, `deadline_s`, `priority` and `change_type`,
-so a future scheduler has explicit timing data and never has to infer a
-deadline from a frame rate. `casu validate --verify-source` additionally
-resolves the recorded media and checks its SHA-256 digest.
-
-## Test media
-
-The repository includes owner-authorized reference fixtures in `test_media/`.
-They are uploaded only as deterministic local test inputs; they are not claims
-of independent scientific evidence. The supplied `/home/error/Videos/giancarlo.mp4`
-remains an additional local validation asset and is intentionally not copied
-into Git. To analyze it, run
-
-```bash
-python3 -m casu analyze /home/error/Videos/giancarlo.mp4 \
-  --output artifacts/giancarlo.mp4.casu
-```
-
-The generated artifact is ignored by Git because media-derived caches should be
-reproducible rather than silently committed. The bundled fixtures have checked
-SHA-256 values in [`test_media/README.md`](test_media/README.md), and their
-portable CASU manifests are generated by the same converter used in production.
-
-## Roadmap
-
-1. Timestamp-aware frame inventory and strict pixel-identical tile detection.
-2. Tile state maps with HOLD/ADAPTIVE/REALTIME/LOSSLESS_REALTIME classes.
-3. Seek-safe cache invalidation and full-frame fallback.
-4. Reference-vs-segmented playback comparison and A/V-sync reports.
-5. Optional visual state-display report; no native proprietary bitstream until
-   the legacy path is independently validated.
-
-See [`docs/FORMAT_SPEC.md`](docs/FORMAT_SPEC.md),
-[`docs/CASU_FORMAT_SPEC.md`](docs/CASU_FORMAT_SPEC.md),
-[`docs/CASU_CONVERTER.md`](docs/CASU_CONVERTER.md),
-[`docs/VALIDATION.md`](docs/VALIDATION.md),
-[`docs/PLAYER_PROVENANCE.md`](docs/PLAYER_PROVENANCE.md),
-[`docs/LEGACY_MEDIA_REQUIREMENTS.md`](docs/LEGACY_MEDIA_REQUIREMENTS.md) and
-[`docs/DEVELOPMENT_PATH.md`](docs/DEVELOPMENT_PATH.md).
-Release details are in [`RELEASE_NOTES_v1.0.0.md`](RELEASE_NOTES_v1.0.0.md).
-
-## Status
-
-`CASU 1.0.0 Â· LEGACY PLAYBACK, CONVERSION AND ANALYSIS SLICE Â· REVIEW OPEN`
-
-This is a media-systems experiment. A passing analyzer test is not evidence of
-display-power savings or a physical claim about human perception.
+¨¥yÛhr·šµë-­æ¦}Ó©z¶­Š‰ç¢Ú^®h­µçEj)^vÚ­æ­zËky©Ÿtê^­«b¢yè¶—«š+myÑZŠW¶‡+y«^²ÚŞjgİ:—«jØ¨z-¥êæŠÛ^tğ„´´MA`µ1¥•¹Í”µ%‘•¹Ñ¥™¥•Èè1¥•¹Í•I•˜µMTµ¹Ñ¥…Á¥Ñ…±¥ÍĞ´Ä¸ĞğMA`µ¥±•½ÁåÉ¥¡ÑQ•áĞè€ÈÀÈØ1¥¹¼…ÍÔ€´´ø(ŒMT½‘•Œ€¼½¹Ñ…¥¹•È((¨©1¥•¹Í”è¨¨±°I¥¡ÑÌI•Í•ÉÙ•€¼¹Ñ¥…Á¥Ñ…±¥ÍĞ1¥•¹Í”€Ä¸Ğ‰ä1¥¹¼…ÍÔ¸)M•”m1%9Mt¡1%9M¤¸Q¡¥ÉµÁ…ÉÑä½µÁ½¹•¹ÑÌÉ•Ñ…¥¸Ñ¡•¥È½İ¸±¥•¹Í•Ì¸((¨©MT¨¨µ•…¹Ì€¨©½‘•Œ™½È±°M•µ•¹Ñ•U¹¥ÑÌ¨¨¥¸Ñ¡¥ÌÁÉ½©•Ğ¸ƒŠq…Í×Št…±Í¼)ÁÉ•Í•ÉÙ•ÌÑ¡”…ÕÑ¡½ÈÌÍÕÉ¹…µ”…¹¥ÌÑ¡”€¹…ÍÕ€½¹Ñ…¥¹•È½Í¥‘•…È¥‘•¹Ñ¥Ñä¸)MT¥Ì„½¹Í•ÉÙ…Ñ¥Ù”°±•…äµ½µÁ…Ñ¥‰±”Í•µ•¹Ñ•µÍÑ…Ñ”½‘•Œ½½¹Ñ…¥¹•È°¹½Ğ)„É•Á±…•µ•¹Ğ™½ÈÑ¡”½É¥¥¹…°5@Ğ½5@ÌÍÑÉ•…´¸€¨©5AMT¨¨¥ÌÉ•Í•ÉÙ•™½ÈÑ¡”)™ÕÑÕÉ”Y1´½]¥¹…µÀµ¥¹ÍÁ¥É•µ•‘¥„Á±…å•È‰Õ¥±Ğ½¸MT¸()Q¡”½É”…‰ÍÑÉ…Ñ¥½¸¥Ìè()ql)q‰½á•‘íqÑ•áÑíMÑ…Ñ•ô­qÑ•áÑíM•µ•¹Ñô­qÑ•áÑí¡…¹•ô­qÑ•áÑíQ¥µ¥¹õô)qt()É…Ñ¡•ÈÑ¡…¸ÑÉ•…Ñ¥¹œ„µ•‘¥„ÍÑÉ•…´…Ì½¹±äÉ…µ”€¬É…µ”€¬É…µ•€¸Q¡”)±•…ä‘•½‘•ÍÑÉ•…´É•µ…¥¹Ì…ÕÑ¡½É¥Ñ…Ñ¥Ù”ìMTÉ•½É‘Ìİ¡•É”„ÍÑ…Ñ”¡½±‘Ì°)İ¡…Ğ¡…¹•…¹İ¡¥ Í½ÕÉ”Ñ¥µ•ÍÑ…µÁÌ½Ù•É¸ÁÉ•Í•¹Ñ…Ñ¥½¸¸)%Ğ…•ÁÑÌ½É‘¥¹…Éä5@Ğ…¹5@Ì™¥±•Ì°­••ÁÌÑ¡”½É¥¥¹…°µ•‘¥„…ÌÑ¡”Í½ÕÉ”½˜)ÑÉÕÑ °…¹…‘‘Ì…¸½ÁÑ¥½¹…°Ñ•µÁ½É…°µÍÑ…Ñ”Í¥‘•…È™½È™ÕÑÕÉ”Í¡•‘Õ±•ÉÌ°)½µÁ½Í¥Ñ½ÉÌ…¹Í•µ•¹Ñ•‘¥ÍÁ±…åÌ¸()Q¡¥ÌÉ•Á½Í¥Ñ½Éä¥Ì„¹•Ü¥µÁ±•µ•¹Ñ…Ñ¥½¸¥¹™½Éµ•‰äÑ¡”ÍÕÁÁ±¥•MM‰É¥•™Ì¸)Q¡”½É¥¥¹…°ÁÉ½Ñ½ÑåÁ”¥ÌÁÉ•Í•ÉÙ•Õ¹¡…¹•…Ì)m±•…å}ÍÍ}½‘•}ØÀÄ¹Áåt¡±•…å}ÍÍ}½‘•}ØÀÄ¹Áä¤ìÑ¡”É•™•É•¹”‘½Õµ•¹ÑÌ)…É”½Á¥•¥¹Ñ¼‘½Ì½€™½ÈÁÉ½Ù•¹…¹”…¹…É”¹½Ğµ½‘¥™¥•¸((ŒŒ¥ÉÍĞİ½É­¥¹œÍ±¥”()‰…Í )ÁåÑ¡½¸Ì€µ´Á¥À¥¹ÍÑ…±°€µ”€¸)…ÍÔ…¹…±åé”€½Á…Ñ ½Ñ¼½µ½Ù¥”¹µÀĞ)…ÍÔ…¹…±åé”€½Á…Ñ ½Ñ¼½Í½¹œ¹µÀÌ)…ÍÔ½¹Ù•ÉĞ€½Á…Ñ ½Ñ¼½µ½Ù¥”¹µÀĞ€´µ½ÕÑÁÕĞµ½Ù¥”¹…ÍÔ)…ÍÔÁ±…ä€½Á…Ñ ½Ñ¼½µ½Ù¥”¹µÀĞ)…ÍÔÁ±…ä€½Á…Ñ ½Ñ¼½Í½¹œ¹µÀÌ)…ÍÔÁ±…äµ½Ù¥”¹…ÍÔ)…ÍÔÙ…±¥‘…Ñ”µ½Ù¥”¹…ÍÔ)…ÍÔÙ…±¥‘…Ñ”€´µÙ•É¥™äµÍ½ÕÉ”µ½Ù¥”¹…ÍÔ)€()½¹Ù•ÉÍ¥½¸ÍÕÁÁ½ÉÑÌÑ¡É•”•áÁ±¥¥Ğ…¹…±åÍ¥ÌÁ½±¥¥•Ìè)€´µµ½‘”ÍÑÉ¥Ñ€€¡Ñ¡”É•™•É•¹”½‘•™…Õ±ĞÁ½±¥ä¤°€´µµ½‘”Ù¥ÍÕ…±±å}±½ÍÍ±•ÍÍ€°…¹)€´µµ½‘”…‘…ÁÑ¥Ù•€¸±°Ñ¡É•”É•µ…¥¸…‘Ù¥Í½ÉäÍÑ…Ñ”…¹…±åÍ•Ìì½¹±äÍÑÉ¥Ñ€)¥ÌÍÕ¥Ñ…‰±”™½ÈÉ•™•É•¹”½µÁ…É¥Í½¹Ì°…¹¹½¹”Á•Éµ¥ÑÌ„‘•½‘•ÈÑ¼…±Ñ•È)Í½ÕÉ”Ñ¥µ•ÍÑ…µÁÌ½È±…¥´Á¥á•°¥‘•¹Ñ¥Ñäİ¥Ñ¡½ÕĞ„Í•Á…É…Ñ”½µÁ…É¥Í½¸¸()Q¡”µÁ€½µµ…¹É•µ…¥¹Ì„½µÁ…Ñ¥‰¥±¥Ñä…±¥…Ìİ¡¥±”Ñ¡”™ÕÑÕÉ”5AMTÁ±…å•È)¥Ì‘•Ù•±½Á•Í•Á…É…Ñ•±ä¸()1…Õ¹ Ñ¡”™¥ÉÍĞ5AMTÁ±…å•ÈÁÉ½Ñ½ÑåÁ”è()‰…Í )µÁ…ÍÔ€½Á…Ñ ½Ñ¼½µ½Ù¥”¹µÀĞ)€()%ĞÁÉ½Ù¥‘•Ì„±¥‰É…Éä±¥ÍĞ°Á±…ä½Á…ÕÍ”½ÍÑ½À°Í••¬½¹ÑÉ½±Ì°MTÍ¥‘•…È)‘•Ñ•Ñ¥½¸…¹„Í…™”±•…ä™…±±‰…¬¸•½‘¥¹œÉÕ¹ÌÑ¡É½Õ Ñ¡”¥¸µÁÉ½•ÍÌ)±¥‰Y1Í¡…É•µ±¥‰É…Éä‰…­•¹ì¹¼•áÑ•É¹…°Á±…å•È•á•ÕÑ…‰±”¥Ì±…Õ¹¡•¸()Q¡”Í…µ”½¹Ù•ÉÑ•È¥Ì…±Í¼…Ù…¥±…‰±”…Ì„Íµ…±°Q¬¥¹Ñ•É™…”è()‰…Í )…ÍÔµ½¹Ù•ÉÑ•È)€()Q¡”Á±…å•È¥Ì‘•±¥‰•É…Ñ•±ä„Í•Á…É…Ñ”…ÁÁ±¥…Ñ¥½¸±…å•Èè()Ñ•áĞ)™¥±´¹…ÍÔƒŠHMT½‘•Œ½½¹Ñ…¥¹•ÈƒŠH5AMTÁ±…å•ÈƒŠH…Õ‘¥¼½Ù¥‘•¼½ÕÑÁÕĞ)±•…ä5@Ğ½5@Ì½5-XƒŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠH5AMT™…±±‰…¬)€()Q¡”1$Á±…å€½µµ…¹Ù…±¥‘…Ñ•Ì„Á…Ñ ™½È5AMT‰ÕĞ‘½•Ì¹½Ğ±…Õ¹ …¸)•áÑ•É¹…°Á±…å•È¸5AMT‘½•Ì¹½ĞÑÉ…¹Í½‘”°É•Ñ¥µ•ÍÑ…µÀ°ÍÑÉ•Ñ °½È½Ñ¡•Éİ¥Í”)µ½‘¥™äÑ¡”¥¹ÁÕĞ¸%˜„Í¥‘•…È¥Ìµ¥ÍÍ¥¹œ½È¥¹Ù…±¥°Í…™”™…±±‰…¬¥Ì•áÁ±¥¥Ğ¸)…¹…±åé•€‘•½‘•Ì„Íµ…±°¥¹ÍÁ•Ñ¥½¸ÍÑÉ•…´…¹İÉ¥Ñ•Ì)µ½Ù¥”¹µÀĞ¹…ÍÕ€½ÈÍ½¹œ¹µÀÌ¹…ÍÕ€¸((ŒŒ½µÁ…Ñ¥‰¥±¥Ñä½¹ÑÉ…Ğ((´5@Ğ½5@Ì‰åÑ•Ì°Ñ¥µ•ÍÑ…µÁÌ°½‘•Œµ•Ñ…‘…Ñ„…¹½X½É‘•É¥¹œÉ•µ…¥¸…¹½¹¥…°¸(´MÑ…Ñ”±…‰•±Ì…É”Í¡•‘Õ±¥¹œ¡¥¹ÑÌ½¹±äìÑ¡•ä¹•Ù•È…ÕÑ¡½É¥é”Ñ¥µ•±¥¹”¡…¹•Ì¸(´9¼¥¹Ñ•ÉÁ½±…Ñ¥½¸°Ñ¥µ”µÍÑÉ•Ñ¡¥¹œ°Á¥Ñ Í¡¥™Ñ¥¹œ°Í•¹”¥¹Ù•¹Ñ¥½¸½È¡¥‘‘•¸(€½±½ÕÈ½!H¡…¹•Ì…É”Á•É™½Éµ•‰äÑ¡¥Ì™¥ÉÍĞÍ±¥”¸(´U¹•ÉÑ…¥¹Ñä™…±±Ì‰…¬Ñ¼Ñ¡”™Õ±°µ™¥‘•±¥Ñä±•…äÁ…Ñ ¸(´Í¥‘•…È¥Ì½ÁÑ¥½¹…°…¹…¸‰”‘•±•Ñ•İ¥Ñ¡½ÕĞµ…­¥¹œÑ¡”µ•‘¥„Õ¹Á±…å…‰±”¸()Q¡”ÕÉÉ•¹Ğ…¹…±åé•ÈÕÍ•Ì‘•½‘•±Õµ„…Ñ¥Ù¥Ñä™½ÈÙ¥‘•¼…¹‘•½‘•A4I5L)İ¥¹‘½İÌ™½È…Õ‘¥¼¸Q¡•Í”…É”½¹Í•ÉÙ…Ñ¥Ù”Ñ•µÁ½É…°¡¥¹ÑÌ°¹½ĞÁ•É•ÁÑÕ…°ÑÉÕÑ )…¹¹½Ğ„É•Á±…•µ•¹Ğ™½ÈÑ¡”Í½ÕÉ”Ñ¥µ•ÍÑ…µÁÌ¸… Í•µ•¹ĞÉ•½É‘Ì)ÍÑ…ÉÑ}Í€°•¹‘}Í€°Ù…±¥‘}Õ¹Ñ¥±}Í€°‘•…‘±¥¹•}Í€°ÁÉ¥½É¥Ñå€…¹¡…¹•}ÑåÁ•€°)Í¼„™ÕÑÕÉ”Í¡•‘Õ±•È¡…Ì•áÁ±¥¥ĞÑ¥µ¥¹œ‘…Ñ„…¹¹•Ù•È¡…ÌÑ¼¥¹™•È„)‘•…‘±¥¹”™É½´„™É…µ”É…Ñ”¸…ÍÔÙ…±¥‘…Ñ”€´µÙ•É¥™äµÍ½ÕÉ•€…‘‘¥Ñ¥½¹…±±ä)É•Í½±Ù•ÌÑ¡”É•½É‘•µ•‘¥„…¹¡•­Ì¥ÑÌM!´ÈÔØ‘¥•ÍĞ¸((ŒŒQ•ÍĞµ•‘¥„()Q¡”É•Á½Í¥Ñ½Éä¥¹±Õ‘•Ì½İ¹•Èµ…ÕÑ¡½É¥é•É•™•É•¹”™¥áÑÕÉ•Ì¥¸Ñ•ÍÑ}µ•‘¥„½€¸)Q¡•ä…É”ÕÁ±½…‘•½¹±ä…Ì‘•Ñ•Éµ¥¹¥ÍÑ¥Œ±½…°Ñ•ÍĞ¥¹ÁÕÑÌìÑ¡•ä…É”¹½Ğ±…¥µÌ)½˜¥¹‘•Á•¹‘•¹ĞÍ¥•¹Ñ¥™¥Œ•Ù¥‘•¹”¸Q¡”ÍÕÁÁ±¥•€½¡½µ”½•ÉÉ½È½Y¥‘•½Ì½¥…¹…É±¼¹µÀÑ€)É•µ…¥¹Ì…¸…‘‘¥Ñ¥½¹…°±½…°Ù…±¥‘…Ñ¥½¸…ÍÍ•Ğ…¹¥Ì¥¹Ñ•¹Ñ¥½¹…±±ä¹½Ğ½Á¥•)¥¹Ñ¼¥Ğ¸Q¼…¹…±åé”¥Ğ°ÉÕ¸()‰…Í )ÁåÑ¡½¸Ì€µ´…ÍÔ…¹…±åé”€½¡½µ”½•ÉÉ½È½Y¥‘•½Ì½¥…¹…É±¼¹µÀĞp(€€´µ½ÕÑÁÕĞ…ÉÑ¥™…ÑÌ½¥…¹…É±¼¹µÀĞ¹…ÍÔ)€()Q¡”•¹•É…Ñ•…ÉÑ¥™…Ğ¥Ì¥¹½É•‰ä¥Ğ‰•…ÕÍ”µ•‘¥„µ‘•É¥Ù•…¡•ÌÍ¡½Õ±‰”)É•ÁÉ½‘Õ¥‰±”É…Ñ¡•ÈÑ¡…¸Í¥±•¹Ñ±ä½µµ¥ÑÑ•¸Q¡”‰Õ¹‘±•™¥áÑÕÉ•Ì¡…Ù”¡•­•)M!´ÈÔØÙ…±Õ•Ì¥¸mÑ•ÍÑ}µ•‘¥„½I5¹µ‘t¡Ñ•ÍÑ}µ•‘¥„½I5¹µ¤°…¹Ñ¡•¥È)Á½ÉÑ…‰±”MTµ…¹¥™•ÍÑÌ…É”•¹•É…Ñ•‰äÑ¡”Í…µ”½¹Ù•ÉÑ•ÈÕÍ•¥¸ÁÉ½‘ÕÑ¥½¸¸((ŒŒI½…‘µ…À((Ä¸Q¥µ•ÍÑ…µÀµ…İ…É”™É…µ”¥¹Ù•¹Ñ½Éä…¹ÍÑÉ¥ĞÁ¥á•°µ¥‘•¹Ñ¥…°Ñ¥±”‘•Ñ•Ñ¥½¸¸(È¸Q¥±”ÍÑ…Ñ”µ…ÁÌİ¥Ñ !=1½AQ%Y½I1Q%5½1=MM1MM}I1Q%5±…ÍÍ•Ì¸(Ì¸M••¬µÍ…™”…¡”¥¹Ù…±¥‘…Ñ¥½¸…¹™Õ±°µ™É…µ”™…±±‰…¬¸(Ğ¸I•™•É•¹”µÙÌµÍ•µ•¹Ñ•Á±…å‰…¬½µÁ…É¥Í½¸…¹½XµÍå¹ŒÉ•Á½ÉÑÌ¸(Ô¸=ÁÑ¥½¹…°Ù¥ÍÕ…°ÍÑ…Ñ”µ‘¥ÍÁ±…äÉ•Á½ÉĞì¹¼¹…Ñ¥Ù”ÁÉ½ÁÉ¥•Ñ…Éä‰¥ÑÍÑÉ•…´Õ¹Ñ¥°(€€Ñ¡”±•…äÁ…Ñ ¥Ì¥¹‘•Á•¹‘•¹Ñ±äÙ…±¥‘…Ñ•¸()M•”m‘½Ì½=I5Q}MA¹µ‘t¡‘½Ì½=I5Q}MA¹µ¤°)m‘½Ì½MU}=I5Q}MA¹µ‘t¡‘½Ì½MU}=I5Q}MA¹µ¤°)m‘½Ì½MU}=9YIQH¹µ‘t¡‘½Ì½MU}=9YIQH¹µ¤°)m‘½Ì½Y1%Q%=8¹µ‘t¡‘½Ì½Y1%Q%=8¹µ¤°)m‘½Ì½A1eI}AI=Y99¹µ‘t¡‘½Ì½A1eI}AI=Y99¹µ¤°)m‘½Ì½1e}5%}IEU%I59QL¹µ‘t¡‘½Ì½1e}5%}IEU%I59QL¹µ¤…¹)m‘½Ì½Y1=A59Q}AQ ¹µ‘t¡‘½Ì½Y1=A59Q}AQ ¹µ¤¸)I•±•…Í”‘•Ñ…¥±Ì…É”¥¸mI1M}9=QM}ØÄ¸À¸À¹µ‘t¡I1M}9=QM}ØÄ¸À¸À¹µ¤¸((ŒŒMÑ…ÑÕÌ()MT€Ä¸À¸Àƒ
+Ü1dA1e	,°=9YIM%=8991eM%LM1%ƒ
+ÜIY%\=A9€()Q¡¥Ì¥Ì„µ•‘¥„µÍåÍÑ•µÌ•áÁ•É¥µ•¹Ğ¸Á…ÍÍ¥¹œ…¹…±åé•ÈÑ•ÍĞ¥Ì¹½Ğ•Ù¥‘•¹”½˜)‘¥ÍÁ±…äµÁ½İ•ÈÍ…Ù¥¹Ì½È„Á¡åÍ¥…°±…¥´…‰½ÕĞ¡Õµ…¸Á•É•ÁÑ¥½¸¸(
