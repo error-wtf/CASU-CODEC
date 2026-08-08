@@ -1,1 +1,187 @@
-¨¥yÛhr·šµë-­æ¦}Ó©z¶­Š‰ç¢Ú^®h­µçEj)^vÚ­æ­zËky©Ÿtê^­«b¢yè¶—«š+myÑZŠW¶‡+y«^²ÚÞjgÝ:—«jØ¨žz-¥êæŠÛ^tŒMA`µ1¥•¹Í”µ%‘•¹Ñ¥™¥•Èè1¥•¹Í•I•˜µMTµ¹Ñ¥…Á¥Ñ…±¥ÍÐ´Ä¸Ð(ŒMA`µ¥±•½ÁåÉ¥¡ÑQ•áÐè€ÈÀÈØ1¥¹¼…ÍÔ)™É½´}}™ÕÑÕÉ•}|¥µÁ½ÉÐ…¹¹½Ñ…Ñ¥½¹Ì()¥µÁ½ÉÐµ…Ñ )¥µÁ½ÉÐÉ”)™É½´ÑåÁ¥¹œ¥µÁ½ÉÐ¹ä(((Œ•™•¹Í¥Ù”Á…ÉÍ•È‰½Õ¹‘Ì¸Q¡•Í”±¥µ¥ÑÌÁÉ•Ù•¹Ð„µ…±™½Éµ•µ…¹¥™•ÍÐ™É½´(Œ…ÕÍ¥¹œÕ¹‰½Õ¹‘•Ù…±¥‘…Ñ¥½¸Ý½É¬½Èµ•µ½ÉäÕÍ”‰•™½É”¥ÐÉ•…¡•ÌÁ±…å‰…¬¸)5a}M59QM}AI}MQI4€ô€Å|ÀÀÁ|ÀÀÀ)5a}MQI5L€ô€ÈÔØ)5a}5QQ}-eL€ô€ÈÔØ)5a}QaQ}19Q €ô€ÐÀäØ(()±…ÍÌ…ÍÕ5…¹¥™•ÍÑÉÉ½È¡Y…±Õ•ÉÉ½È¤è(€€€Á…ÍÌ(()‘•˜Ù…±¥‘…Ñ•}µ…¹¥™•ÍÐ¡µ…¹¥™•ÍÐè‘¥ÑmÍÑÈ°¹åt¤€´ø±¥ÍÑmÍÑÉtè(€€€€ˆˆ‰I•ÑÕÉ¸…±°ÍÑÉÕÑÕÉ…°ÁÉ½‰±•µÌÝ¥Ñ¡½ÕÐ¡…¹¥¹œÑ¡”Í½ÕÉ”µ•‘¥„¸ˆˆˆ(€€€•ÉÉ½ÉÌè±¥ÍÑmÍÑÉt€ômt(€€€¥˜¹½Ð¥Í¥¹ÍÑ…¹”¡µ…¹¥™•ÍÐ°‘¥Ð¤è(€€€€€€€É•ÑÕÉ¸l‰µ…¹¥™•ÍÐµÕÍÐ‰”…¸½‰©•Ð‰t(€€€¥‘•¹Ñ¥Ñä€ôµ…¹¥™•ÍÐ¹•Ð ‰…ÍÔˆ¤½Èíô(€€€™½Éµ…Ñ}¥¹™¼€ôµ…¹¥™•ÍÐ¹•Ð ‰™½Éµ…Ðˆ¤½Èíô(€€€¥˜¹½Ð¥Í¥¹ÍÑ…¹”¡¥‘•¹Ñ¥Ñä°‘¥Ð¤è(€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹ ‰…ÍÔµÕÍÐ‰”…¸½‰©•Ðˆ¤(€€€€€€€¥‘•¹Ñ¥Ñä€ôíô(€€€¥˜¹½Ð¥Í¥¹ÍÑ…¹”¡™½Éµ…Ñ}¥¹™¼°‘¥Ð¤è(€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹ ‰™½Éµ…ÐµÕÍÐ‰”…¸½‰©•Ðˆ¤(€€€€€€€™½Éµ…Ñ}¥¹™¼€ôíô(€€€¥˜™½Éµ…Ñ}¥¹™¼…¹™½Éµ…Ñ}¥¹™¼¹•Ð ‰µ…¥Œˆ¤¹½Ð¥¸€¡9½¹”°€‰5AMUqpÀˆ¤è(€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹ ‰™½Éµ…Ð¹µ…¥ŒµÕÍÐ‰”5AMUqpÀÝ¡•¸ÁÉ•Í•¹Ðˆ¤(€€€¥˜¥‘•¹Ñ¥Ñä¹•Ð ‰¹…µ”ˆ¤€„ô€‰MTˆè(€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹ ‰…ÍÔ¹¹…µ”µÕÍÐ‰”MTˆ¤(€€€¥˜¥‘•¹Ñ¥Ñä¹•Ð ‰½¹Ñ…¥¹•É}•áÑ•¹Í¥½¸ˆ¤€„ô€ˆ¹…ÍÔˆè(€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹ ‰…ÍÔ¹½¹Ñ…¥¹•É}•áÑ•¹Í¥½¸µÕÍÐ‰”€¹…ÍÔˆ¤(€€€¥˜¥‘•¹Ñ¥Ñä¹•Ð ‰Ù•ÉÍ¥½¸ˆ¤€„ô€ˆÄ¸À¸Àˆè(€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹ ‰…ÍÔ¹Ù•ÉÍ¥½¸µÕÍÐ‰”€Ä¸À¸Àˆ¤(€€€¥˜™½Éµ…Ñ}¥¹™¼¹•Ð ‰Í¡•µ„ˆ¤¹½Ð¥¸€¡9½¹”°€ˆÀ¸Èˆ¤è(€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹ ‰™½Éµ…Ð¹Í¡•µ„¥Ì¹½ÐÍÕÁÁ½ÉÑ•ˆ¤(€€€¥˜¥‘•¹Ñ¥Ñä¹•Ð ‰…¹…±åÍ¥Í}µ½‘”ˆ¤¥Ì¹½Ð9½¹”…¹¥‘•¹Ñ¥Ñä¹•Ð ‰…¹…±åÍ¥Í}µ½‘”ˆ¤¹½Ð¥¸ì‰ÍÑÉ¥Ðˆ°€‰Ù¥ÍÕ…±±å}±½ÍÍ±•ÍÌˆ°€‰…‘…ÁÑ¥Ù”‰ôè(€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹ ‰…ÍÔ¹…¹…±åÍ¥Í}µ½‘”¥Ì¹½Ð„ÍÕÁÁ½ÉÑ•MTµ½‘”ˆ¤(€€€Í½ÕÉ”€ôµ…¹¥™•ÍÐ¹•Ð ‰Í½ÕÉ”ˆ¤½Èíô(€€€¥˜¹½Ð¥Í¥¹ÍÑ…¹”¡Í½ÕÉ”°‘¥Ð¤è(€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹ ‰Í½ÕÉ”µÕÍÐ‰”…¸½‰©•Ðˆ¤(€€€€€€€Í½ÕÉ”€ôíô(€€€¥˜¹½Ð¥Í¥¹ÍÑ…¹”¡Í½ÕÉ”¹•Ð ‰™¥±•¹…µ”ˆ¤°ÍÑÈ¤½È¹½ÐÍ½ÕÉ”¹•Ð ‰™¥±•¹…µ”ˆ¤è(€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹ ‰Í½ÕÉ”¹™¥±•¹…µ”µÕÍÐ‰”„¹½¸µ•µÁÑäÍÑÉ¥¹œˆ¤(€€€¥˜€‰‘ÕÉ…Ñ¥½¹}Ìˆ¹½Ð¥¸Í½ÕÉ”è(€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹ ‰Í½ÕÉ”¹‘ÕÉ…Ñ¥½¹}Ì¥ÌÉ•ÅÕ¥É•ˆ¤(€€€ÑÉäè(€€€€€€€‘ÕÉ…Ñ¥½¸€ô™±½…Ð¡Í½ÕÉ”¹•Ð ‰‘ÕÉ…Ñ¥½¹}Ìˆ¤½È€À¤(€€€•á•ÁÐ€¡QåÁ•ÉÉ½È°Y…±Õ•ÉÉ½È¤è(€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹ ‰Í½ÕÉ”¹‘ÕÉ…Ñ¥½¹}ÌµÕÍÐ‰”¹Õµ•É¥Œˆ¤(€€€€€€€‘ÕÉ…Ñ¥½¸€ô€À¸À(€€€¥˜¹½Ðµ…Ñ ¹¥Í™¥¹¥Ñ”¡‘ÕÉ…Ñ¥½¸¤½È‘ÕÉ…Ñ¥½¸€ð€Àè(€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹ ‰Í½ÕÉ”¹‘ÕÉ…Ñ¥½¹}ÌµÕÍÐ‰”™¥¹¥Ñ”…¹¹½¸µ¹•…Ñ¥Ù”ˆ¤(€€€¥˜Í½ÕÉ”¹•Ð ‰Í¥é•}‰åÑ•Ìˆ¤¥Ì¹½Ð9½¹”è(€€€€€€€ÑÉäè(€€€€€€€€€€€Í¥é•}‰åÑ•Ì€ô™±½…Ð¡Í½ÕÉ”¹•Ð ‰Í¥é•}‰åÑ•Ìˆ¤½È€À¤(€€€€€€€€€€€¥˜¹½Ðµ…Ñ ¹¥Í™¥¹¥Ñ”¡Í¥é•}‰åÑ•Ì¤½ÈÍ¥é•}‰åÑ•Ì€ð€Àè(€€€€€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹ ‰Í½ÕÉ”¹Í¥é•}‰åÑ•ÌµÕÍÐ‰”™¥¹¥Ñ”…¹¹½¸µ¹•…Ñ¥Ù”ˆ¤(€€€€€€€•á•ÁÐ€¡QåÁ•ÉÉ½È°Y…±Õ•ÉÉ½È¤è(€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹ ‰Í½ÕÉ”¹Í¥é•}‰åÑ•ÌµÕÍÐ‰”¹Õµ•É¥Œˆ¤(€€€¥˜Í½ÕÉ”¹•Ð ‰Í¡„ÈÔØˆ¤¥Ì¹½Ð9½¹”…¹€ (€€€€€€€¹½Ð¥Í¥¹ÍÑ…¹”¡Í½ÕÉ”¹•Ð ‰Í¡„ÈÔØˆ¤°ÍÑÈ¤(€€€€€€€½ÈÉ”¹™Õ±±µ…Ñ ¡È‰lÀ´å„µ™µuìØÑôˆ°Í½ÕÉ•l‰Í¡„ÈÔØ‰t¤¥Ì9½¹”(€€€€¤è(€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹ ‰Í½ÕÉ”¹Í¡„ÈÔØµÕÍÐ‰”„€ØÐµ¡…É…Ñ•È¡•à‘¥•ÍÐÝ¡•¸ÁÉ•Í•¹Ðˆ¤(€€€ÍÑÉ•…µÌ€ôµ…¹¥™•ÍÐ¹•Ð ‰ÍÑÉ•…µÌˆ°mt¤(€€€¥˜¹½Ð¥Í¥¹ÍÑ…¹”¡ÍÑÉ•…µÌ°±¥ÍÐ¤è(€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹ ‰ÍÑÉ•…µÌµÕÍÐ‰”…¸…ÉÉ…äˆ¤(€€€€€€€ÍÑÉ•…µÌ€ômt(€€€•±¥˜±•¸¡ÍÑÉ•…µÌ¤€ø5a}MQI5Lè(€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹¡˜‰ÍÑÉ•…µÌ•á••‘ÌÍ…™•Ñä±¥µ¥Ð½˜í5a}MQI5Môˆ¤(€€€™½È¥¹‘•à°ÍÑÉ•…´¥¸•¹Õµ•É…Ñ”¡ÍÑÉ•…µÍlé5a}MQI5Mt¤è(€€€€€€€¥˜¹½Ð¥Í¥¹ÍÑ…¹”¡ÍÑÉ•…´°‘¥Ð¤è(€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹¡˜‰ÍÑÉ•…µÍmí¥¹‘•áõtµÕÍÐ‰”…¸½‰©•Ðˆ¤(€€€€€€€€€€€½¹Ñ¥¹Õ”(€€€€€€€½‘•}ÑåÁ”€ôÍÑÉ•…´¹•Ð ‰½‘•}ÑåÁ”ˆ¤(€€€€€€€¥˜½‘•}ÑåÁ”¹½Ð¥¸ì‰Ù¥‘•¼ˆ°€‰…Õ‘¥¼ˆ°€‰ÍÕ‰Ñ¥Ñ±”ˆ°€‰…ÑÑ…¡µ•¹Ðˆ°€‰‘…Ñ„‰ôè(€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹¡˜‰ÍÑÉ•…µÍmí¥¹‘•áõt¹½‘•}ÑåÁ”¥ÌÕ¹ÍÕÁÁ½ÉÑ•ˆ¤(€€€€€€€½‘•}¹…µ”€ôÍÑÉ•…´¹•Ð ‰½‘•}¹…µ”ˆ¤(€€€€€€€¥˜½‘•}¹…µ”¥Ì¹½Ð9½¹”…¹€¡¹½Ð¥Í¥¹ÍÑ…¹”¡½‘•}¹…µ”°ÍÑÈ¤½È±•¸¡½‘•}¹…µ”¤€ø5a}QaQ}19Q ¤è(€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹¡˜‰ÍÑÉ•…µÍmí¥¹‘•áõt¹½‘•}¹…µ”¥Ì¥¹Ù…±¥ˆ¤(€€€µ•Ñ…‘…Ñ„€ôµ…¹¥™•ÍÐ¹•Ð ‰µ•Ñ…‘…Ñ„ˆ°íô¤(€€€¥˜µ•Ñ…‘…Ñ„¥Ì¹½Ð9½¹”è(€€€€€€€¥˜¹½Ð¥Í¥¹ÍÑ…¹”¡µ•Ñ…‘…Ñ„°‘¥Ð¤è(€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹ ‰µ•Ñ…‘…Ñ„µÕÍÐ‰”…¸½‰©•Ðˆ¤(€€€€€€€•±¥˜±•¸¡µ•Ñ…‘…Ñ„¤€ø5a}5QQ}-eLè(€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹¡˜‰µ•Ñ…‘…Ñ„•á••‘ÌÍ…™•Ñä±¥µ¥Ð½˜í5a}5QQ}-eMô­•åÌˆ¤(€€€€€€€•±Í”è(€€€€€€€€€€€™½È­•ä°Ù…±Õ”¥¸µ•Ñ…‘…Ñ„¹¥Ñ•µÌ ¤è(€€€€€€€€€€€€€€€¥˜¹½Ð¥Í¥¹ÍÑ…¹”¡­•ä°ÍÑÈ¤½È±•¸¡­•ä¤€ø5a}QaQ}19Q è(€€€€€€€€€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹ ‰µ•Ñ…‘…Ñ„­•åÌµÕÍÐ‰”‰½Õ¹‘•ÍÑÉ¥¹Ìˆ¤(€€€€€€€€€€€€€€€¥˜¹½Ð¥Í¥¹ÍÑ…¹”¡Ù…±Õ”°€¡ÍÑÈ°¥¹Ð°™±½…Ð°‰½½°¤¤…¹Ù…±Õ”¥Ì¹½Ð9½¹”è(€€€€€€€€€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹¡˜‰µ•Ñ…‘…Ñ…mí­•ä…ÉõtµÕÍÐ‰”„Í…±…ÈÙ…±Õ”ˆ¤(€€€™½Èµ•‘¥…}­•ä¥¸€ ‰Ù¥‘•¼ˆ°€‰…Õ‘¥¼ˆ¤è(€€€€€€€Í•Ñ¥½¸€ôµ…¹¥™•ÍÐ¹•Ð¡µ•‘¥…}­•ä¤½Èíô(€€€€€€€¥˜¹½Ð¥Í¥¹ÍÑ…¹”¡Í•Ñ¥½¸°‘¥Ð¤è(€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹¡˜‰íµ•‘¥…}­•åôµÕÍÐ‰”…¸½‰©•Ðˆ¤(€€€€€€€€€€€½¹Ñ¥¹Õ”(€€€€€€€Í•µ•¹ÑÌ€ôÍ•Ñ¥½¸¹•Ð ‰Í•µ•¹ÑÌˆ°mt¤(€€€€€€€¥˜¹½Ð¥Í¥¹ÍÑ…¹”¡Í•µ•¹ÑÌ°±¥ÍÐ¤è(€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹¡˜‰íµ•‘¥…}­•åô¹Í•µ•¹ÑÌµÕÍÐ‰”…¸…ÉÉ…äˆ¤(€€€€€€€€€€€½¹Ñ¥¹Õ”(€€€€€€€¥˜±•¸¡Í•µ•¹ÑÌ¤€ø5a}M59QM}AI}MQI4è(€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹¡˜‰íµ•‘¥…}­•åô¹Í•µ•¹ÑÌ•á••‘ÌÍ…™•Ñä±¥µ¥Ð½˜í5a}M59QM}AI}MQI5ôˆ¤(€€€€€€€€€€€½¹Ñ¥¹Õ”(€€€€€€€ÁÉ•Ù¥½ÕÍ}•¹€ô€À¸À(€€€€€€€™½È¥¹‘•à°Í•µ•¹Ð¥¸•¹Õµ•É…Ñ”¡Í•µ•¹ÑÌ¤è(€€€€€€€€€€€¥˜¹½Ð¥Í¥¹ÍÑ…¹”¡Í•µ•¹Ð°‘¥Ð¤è(€€€€€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹¡˜‰íµ•‘¥…}­•åô¹Í•µ•¹ÑÍmí¥¹‘•áõtµÕÍÐ‰”…¸½‰©•Ðˆ¤(€€€€€€€€€€€€€€€½¹Ñ¥¹Õ”(€€€€€€€€€€€ÑÉäè(€€€€€€€€€€€€€€€ÍÑ…ÉÐ°•¹€ô™±½…Ð¡Í•µ•¹Ñl‰ÍÑ…ÉÑ}Ì‰t¤°™±½…Ð¡Í•µ•¹Ñl‰•¹‘}Ì‰t¤(€€€€€€€€€€€•á•ÁÐ€¡-•åÉÉ½È°QåÁ•ÉÉ½È°Y…±Õ•ÉÉ½È¤è(€€€€€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹¡˜‰íµ•‘¥…}­•åô¹Í•µ•¹ÑÍmí¥¹‘•áõt±…­Ì¹Õµ•É¥ŒÍÑ…ÉÐ½•¹ˆ¤(€€€€€€€€€€€€€€€½¹Ñ¥¹Õ”(€€€€€€€€€€€¥˜¹½Ðµ…Ñ ¹¥Í™¥¹¥Ñ”¡ÍÑ…ÉÐ¤½È¹½Ðµ…Ñ ¹¥Í™¥¹¥Ñ”¡•¹¤½ÈÍÑ…ÉÐ€ð€À½È•¹€ðÍÑ…ÉÐ½È•¹€ø‘ÕÉ…Ñ¥½¸€¬€À¸Ôè(€€€€€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹¡˜‰íµ•‘¥…}­•åô¹Í•µ•¹ÑÍmí¥¹‘•áõt¥Ì½ÕÑÍ¥‘”Í½ÕÉ”‘ÕÉ…Ñ¥½¸ˆ¤(€€€€€€€€€€€¥˜€‰‘ÕÉ…Ñ¥½¹}Ìˆ¥¸Í•µ•¹Ðè(€€€€€€€€€€€€€€€ÑÉäè(€€€€€€€€€€€€€€€€€€€Í•µ•¹Ñ}‘ÕÉ…Ñ¥½¸€ô™±½…Ð¡Í•µ•¹Ñl‰‘ÕÉ…Ñ¥½¹}Ì‰t¤(€€€€€€€€€€€€€€€€€€€¥˜¹½Ðµ…Ñ ¹¥Í™¥¹¥Ñ”¡Í•µ•¹Ñ}‘ÕÉ…Ñ¥½¸¤½ÈÍ•µ•¹Ñ}‘ÕÉ…Ñ¥½¸€ð€Àè(€€€€€€€€€€€€€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹¡˜‰íµ•‘¥…}­•åô¹Í•µ•¹ÑÍmí¥¹‘•áõt¹‘ÕÉ…Ñ¥½¹}ÌµÕÍÐ‰”™¥¹¥Ñ”…¹¹½¸µ¹•…Ñ¥Ù”ˆ¤(€€€€€€€€€€€€€€€€€€€•±¥˜…‰Ì¡Í•µ•¹Ñ}‘ÕÉ…Ñ¥½¸€´€¡•¹€´ÍÑ…ÉÐ¤¤€ø€Å”´Ôè(€€€€€€€€€€€€€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹¡˜‰íµ•‘¥…}­•åô¹Í•µ•¹ÑÍmí¥¹‘•áõt¹‘ÕÉ…Ñ¥½¹}ÌµÕÍÐ•ÅÕ…°•¹‘}ÌµÍÑ…ÉÑ}Ìˆ¤(€€€€€€€€€€€€€€€•á•ÁÐ€¡QåÁ•ÉÉ½È°Y…±Õ•ÉÉ½È¤è(€€€€€€€€€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹¡˜‰íµ•‘¥…}­•åô¹Í•µ•¹ÑÍmí¥¹‘•áõt¹‘ÕÉ…Ñ¥½¹}ÌµÕÍÐ‰”¹Õµ•É¥Œˆ¤(€€€€€€€€€€€¥˜ÍÑ…ÉÐ€ðÁÉ•Ù¥½ÕÍ}•¹€´€Å”´Øè(€€€€€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹¡˜‰íµ•‘¥…}­•åô¹Í•µ•¹ÑÍmí¥¹‘•áõt½Ù•É±…ÁÌÑ¡”ÁÉ••‘¥¹œÍ•µ•¹Ðˆ¤(€€€€€€€€€€€ÁÉ•Ù¥½ÕÍ}•¹€ôµ…à¡ÁÉ•Ù¥½ÕÍ}•¹°•¹¤(€€€€€€€€€€€¥˜¹½Ð¥Í¥¹ÍÑ…¹”¡Í•µ•¹Ð¹•Ð ‰ÍÑ…Ñ”ˆ¤°ÍÑÈ¤½È¹½ÐÍ•µ•¹Ð¹•Ð ‰ÍÑ…Ñ”ˆ°€ˆˆ¤¹ÍÑÉ¥À ¤è(€€€€€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹¡˜‰íµ•‘¥…}­•åô¹Í•µ•¹ÑÍmí¥¹‘•áõt¹ÍÑ…Ñ”µÕÍÐ‰”„¹½¸µ•µÁÑäÍÑÉ¥¹œˆ¤(€€€€€€€€€€€•±¥˜±•¸¡Í•µ•¹Ñl‰ÍÑ…Ñ”‰t¤€ø5a}QaQ}19Q è(€€€€€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹¡˜‰íµ•‘¥…}­•åô¹Í•µ•¹ÑÍmí¥¹‘•áõt¹ÍÑ…Ñ”¥ÌÑ½¼±½¹œˆ¤(€€€€€€€€€€€™½ÈÑ¥µ¥¹}­•ä¥¸€ ‰Ù…±¥‘}Õ¹Ñ¥±}Ìˆ°€‰‘•…‘±¥¹•}Ìˆ¤è(€€€€€€€€€€€€€€€¥˜Ñ¥µ¥¹}­•ä¥¸Í•µ•¹Ðè(€€€€€€€€€€€€€€€€€€€ÑÉäè(€€€€€€€€€€€€€€€€€€€€€€€Ñ¥µ¥¹œ€ô™±½…Ð¡Í•µ•¹ÑmÑ¥µ¥¹}­•åt¤(€€€€€€€€€€€€€€€€€€€€€€€¥˜¹½Ðµ…Ñ ¹¥Í™¥¹¥Ñ”¡Ñ¥µ¥¹œ¤½ÈÑ¥µ¥¹œ€ðÍÑ…ÉÐè(€€€€€€€€€€€€€€€€€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹¡˜‰íµ•‘¥…}­•åô¹Í•µ•¹ÑÍmí¥¹‘•áõt¹íÑ¥µ¥¹}­•åôµÕÍÐ‰”™¥¹¥Ñ”…¹€øôÍÑ…ÉÑ}Ìˆ¤(€€€€€€€€€€€€€€€€€€€€€€€•±¥˜…‰Ì¡Ñ¥µ¥¹œ€´•¹¤€ø€Å”´Ôè(€€€€€€€€€€€€€€€€€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹¡˜‰íµ•‘¥…}­•åô¹Í•µ•¹ÑÍmí¥¹‘•áõt¹íÑ¥µ¥¹}­•åôµÕÍÐ•ÅÕ…°•¹‘}Ìˆ¤(€€€€€€€€€€€€€€€€€€€•á•ÁÐ€¡QåÁ•ÉÉ½È°Y…±Õ•ÉÉ½È¤è(€€€€€€€€€€€€€€€€€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹¡˜‰íµ•‘¥…}­•åô¹Í•µ•¹ÑÍmí¥¹‘•áõt¹íÑ¥µ¥¹}­•åôµÕÍÐ‰”¹Õµ•É¥Œˆ¤(€€€¥¹Ñ•É¥Ñä€ôµ…¹¥™•ÍÐ¹•Ð ‰¥¹Ñ•É¥Ñäˆ¤½Èíô(€€€¥˜¹½Ð¥Í¥¹ÍÑ…¹”¡¥¹Ñ•É¥Ñä°‘¥Ð¤è(€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹ ‰¥¹Ñ•É¥ÑäµÕÍÐ‰”…¸½‰©•Ðˆ¤(€€€€€€€¥¹Ñ•É¥Ñä€ôíô(€€€¥˜¥¹Ñ•É¥Ñä¹•Ð ‰Ñ¥µ•ÍÑ…µÁÍ}…É•}Í½ÕÉ•}½™}ÑÉÕÑ ˆ¤¥Ì¹½ÐQÉÕ”è(€€€€€€€•ÉÉ½ÉÌ¹…ÁÁ•¹ ‰¥¹Ñ•É¥Ñä¹Ñ¥µ•ÍÑ…µÁÍ}…É•}Í½ÕÉ•}½™}ÑÉÕÑ µÕÍÐ‰”ÑÉÕ”ˆ¤(€€€É•ÑÕÉ¸•ÉÉ½ÉÌ(
+# SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
+# SPDX-FileCopyrightText: 2026 Lino Casu
+from __future__ import annotations
+
+import math
+import re
+from typing import Any
+
+
+# Defensive parser bounds. These limits prevent a malformed manifest from
+# causing unbounded validation work or memory use before it reaches playback.
+MAX_SEGMENTS_PER_STREAM = 1_000_000
+MAX_STREAMS = 256
+MAX_METADATA_KEYS = 256
+MAX_TEXT_LENGTH = 4096
+MAX_SEGMENT_PRIORITY = 1_000_000
+SEGMENT_LIFECYCLES = frozenset({"CREATE", "UPDATE", "HOLD", "MOVE", "REPLACE", "INVALIDATE", "RELEASE"})
+
+
+class CasuManifestError(ValueError):
+    pass
+
+
+def validate_manifest(manifest: dict[str, Any]) -> list[str]:
+    """Return all structural problems without changing the source media."""
+    errors: list[str] = []
+    if not isinstance(manifest, dict):
+        return ["manifest must be an object"]
+    identity = manifest.get("casu") or {}
+    format_info = manifest.get("format") or {}
+    if not isinstance(identity, dict):
+        errors.append("casu must be an object")
+        identity = {}
+    if not isinstance(format_info, dict):
+        errors.append("format must be an object")
+        format_info = {}
+    if format_info and format_info.get("magic") not in (None, "MPCASU\\0"):
+        errors.append("format.magic must be MPCASU\\0 when present")
+    if identity.get("name") != "CASU":
+        errors.append("casu.name must be CASU")
+    if identity.get("container_extension") != ".casu":
+        errors.append("casu.container_extension must be .casu")
+    if identity.get("version") != "1.0.0":
+        errors.append("casu.version must be 1.0.0")
+    if format_info.get("schema") not in (None, "0.2"):
+        errors.append("format.schema is not supported")
+    if identity.get("analysis_mode") is not None and identity.get("analysis_mode") not in {"strict", "visually_lossless", "adaptive"}:
+        errors.append("casu.analysis_mode is not a supported CASU mode")
+    source = manifest.get("source") or {}
+    if not isinstance(source, dict):
+        errors.append("source must be an object")
+        source = {}
+    if not isinstance(source.get("filename"), str) or not source.get("filename"):
+        errors.append("source.filename must be a non-empty string")
+    if "duration_s" not in source:
+        errors.append("source.duration_s is required")
+    try:
+        duration = float(source.get("duration_s") or 0)
+    except (TypeError, ValueError):
+        errors.append("source.duration_s must be numeric")
+        duration = 0.0
+    if not math.isfinite(duration) or duration < 0:
+        errors.append("source.duration_s must be finite and non-negative")
+    if source.get("size_bytes") is not None:
+        try:
+            size_bytes = float(source.get("size_bytes") or 0)
+            if not math.isfinite(size_bytes) or size_bytes < 0:
+                errors.append("source.size_bytes must be finite and non-negative")
+        except (TypeError, ValueError):
+            errors.append("source.size_bytes must be numeric")
+    if source.get("sha256") is not None and (
+        not isinstance(source.get("sha256"), str)
+        or re.fullmatch(r"[0-9a-fA-F]{64}", source["sha256"]) is None
+    ):
+        errors.append("source.sha256 must be a 64-character hex digest when present")
+    streams = manifest.get("streams", [])
+    if not isinstance(streams, list):
+        errors.append("streams must be an array")
+        streams = []
+    elif len(streams) > MAX_STREAMS:
+        errors.append(f"streams exceeds safety limit of {MAX_STREAMS}")
+    for index, stream in enumerate(streams[:MAX_STREAMS]):
+        if not isinstance(stream, dict):
+            errors.append(f"streams[{index}] must be an object")
+            continue
+        codec_type = stream.get("codec_type")
+        if codec_type not in {"video", "audio", "subtitle", "attachment", "data"}:
+            errors.append(f"streams[{index}].codec_type is unsupported")
+        codec_name = stream.get("codec_name")
+        if codec_name is not None and (not isinstance(codec_name, str) or len(codec_name) > MAX_TEXT_LENGTH):
+            errors.append(f"streams[{index}].codec_name is invalid")
+    metadata = manifest.get("metadata", {})
+    if metadata is not None:
+        if not isinstance(metadata, dict):
+            errors.append("metadata must be an object")
+        elif len(metadata) > MAX_METADATA_KEYS:
+            errors.append(f"metadata exceeds safety limit of {MAX_METADATA_KEYS} keys")
+        else:
+            for key, value in metadata.items():
+                if not isinstance(key, str) or len(key) > MAX_TEXT_LENGTH:
+                    errors.append("metadata keys must be bounded strings")
+                if not isinstance(value, (str, int, float, bool)) and value is not None:
+                    errors.append(f"metadata[{key!r}] must be a scalar value")
+    for media_key in ("video", "audio"):
+        section = manifest.get(media_key) or {}
+        if not isinstance(section, dict):
+            errors.append(f"{media_key} must be an object")
+            continue
+        segments = section.get("segments", [])
+        if not isinstance(segments, list):
+            errors.append(f"{media_key}.segments must be an array")
+            continue
+        if len(segments) > MAX_SEGMENTS_PER_STREAM:
+            errors.append(f"{media_key}.segments exceeds safety limit of {MAX_SEGMENTS_PER_STREAM}")
+            continue
+        previous_end = 0.0
+        segment_ids: set[str] = set()
+        for index, segment in enumerate(segments):
+            if not isinstance(segment, dict):
+                errors.append(f"{media_key}.segments[{index}] must be an object")
+                continue
+            try:
+                start, end = float(segment["start_s"]), float(segment["end_s"])
+            except (KeyError, TypeError, ValueError):
+                errors.append(f"{media_key}.segments[{index}] lacks numeric start/end")
+                continue
+            if not math.isfinite(start) or not math.isfinite(end) or start < 0 or end <= start or end > duration + 0.5:
+                errors.append(f"{media_key}.segments[{index}] is outside source duration")
+            if "duration_s" in segment:
+                try:
+                    segment_duration = float(segment["duration_s"])
+                    if not math.isfinite(segment_duration) or segment_duration < 0:
+                        errors.append(f"{media_key}.segments[{index}].duration_s must be finite and non-negative")
+                    elif abs(segment_duration - (end - start)) > 1e-5:
+                        errors.append(f"{media_key}.segments[{index}].duration_s must equal end_s-start_s")
+                except (TypeError, ValueError):
+                    errors.append(f"{media_key}.segments[{index}].duration_s must be numeric")
+            if start < previous_end - 1e-6:
+                errors.append(f"{media_key}.segments[{index}] overlaps the preceding segment")
+            previous_end = max(previous_end, end)
+            if not isinstance(segment.get("state"), str) or not segment.get("state", "").strip():
+                errors.append(f"{media_key}.segments[{index}].state must be a non-empty string")
+            elif len(segment["state"]) > MAX_TEXT_LENGTH:
+                errors.append(f"{media_key}.segments[{index}].state is too long")
+            segment_id = segment.get("segment_id")
+            if segment_id is not None:
+                if not isinstance(segment_id, str) or not segment_id.strip() or len(segment_id) > MAX_TEXT_LENGTH:
+                    errors.append(f"{media_key}.segments[{index}].segment_id must be a bounded non-empty string")
+                elif segment_id in segment_ids:
+                    errors.append(f"{media_key}.segments[{index}].segment_id must be unique")
+                else:
+                    segment_ids.add(segment_id)
+            lifecycle = segment.get("lifecycle", "UPDATE")
+            if lifecycle not in SEGMENT_LIFECYCLES:
+                errors.append(f"{media_key}.segments[{index}].lifecycle is unsupported")
+            priority = segment.get("priority", 0)
+            if isinstance(priority, bool) or not isinstance(priority, int) or abs(priority) > MAX_SEGMENT_PRIORITY:
+                errors.append(f"{media_key}.segments[{index}].priority must be a bounded integer")
+            reference_state = segment.get("reference_state")
+            if reference_state is not None and (not isinstance(reference_state, str) or len(reference_state) > MAX_TEXT_LENGTH):
+                errors.append(f"{media_key}.segments[{index}].reference_state is invalid")
+            region = segment.get("region")
+            if region is not None:
+                if not isinstance(region, dict):
+                    errors.append(f"{media_key}.segments[{index}].region must be an object")
+                else:
+                    for region_key in ("x", "y", "w", "h"):
+                        value = region.get(region_key)
+                        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                            errors.append(f"{media_key}.segments[{index}].region.{region_key} must be a non-negative integer")
+            for timing_key in ("valid_until_s", "deadline_s"):
+                if timing_key in segment:
+                    try:
+                        timing = float(segment[timing_key])
+                        if not math.isfinite(timing) or timing < start:
+                            errors.append(f"{media_key}.segments[{index}].{timing_key} must be finite and >= start_s")
+                        elif abs(timing - end) > 1e-5:
+                            errors.append(f"{media_key}.segments[{index}].{timing_key} must equal end_s")
+                    except (TypeError, ValueError):
+                        errors.append(f"{media_key}.segments[{index}].{timing_key} must be numeric")
+    integrity = manifest.get("integrity") or {}
+    if not isinstance(integrity, dict):
+        errors.append("integrity must be an object")
+        integrity = {}
+    if integrity.get("timestamps_are_source_of_truth") is not True:
+        errors.append("integrity.timestamps_are_source_of_truth must be true")
+    return errors
