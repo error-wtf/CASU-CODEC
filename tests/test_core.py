@@ -101,6 +101,15 @@ def test_manifest_rejects_non_hex_digest():
     assert any("hex digest" in error for error in validate_manifest(manifest))
 
 
+def test_manifest_rejects_source_filename_path_traversal():
+    manifest = {
+        "casu": {"name": "CASU", "container_extension": ".casu", "version": "1.0.0"},
+        "source": {"filename": "../outside.mp4", "duration_s": 1},
+        "integrity": {"timestamps_are_source_of_truth": True},
+    }
+    assert any("basename without path traversal" in error for error in validate_manifest(manifest))
+
+
 def test_manifest_rejects_inconsistent_segment_duration_and_state():
     manifest = {
         "format": {"magic": "MPCASU\\0"},
