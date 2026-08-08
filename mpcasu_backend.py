@@ -75,11 +75,23 @@ class LibVLCBackend:
         self._install("libvlc_audio_get_track_count", ctypes.c_int, [ctypes.c_void_p])
         self._install("libvlc_audio_get_track", ctypes.c_int, [ctypes.c_void_p])
         self._install("libvlc_audio_set_track", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int])
+        self._subtitle_api = all(self._optional_install(name, restype, args) for name, restype, args in (
+            ("libvlc_video_get_spu_count", ctypes.c_int, [ctypes.c_void_p]),
+            ("libvlc_video_get_spu", ctypes.c_int, [ctypes.c_void_p]),
+            ("libvlc_video_set_spu", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int]),
+        ))
         if sys.platform.startswith("linux"):
             self._install("libvlc_media_player_set_xwindow", None, [ctypes.c_void_p, ctypes.c_uint32])
 
     def _install(self, name, restype, args):
         setattr(self, name, self._call(name, restype, args))
+
+    def _optional_install(self, name, restype, args) -> bool:
+        try:
+            self._install(name, restype, args)
+        except BackendError:
+            return False
+        return True
 
     def _call(self, name, restype, args):
         try: function = getattr(self.lib, name)
@@ -192,6 +204,22 @@ class LibVLCBackend:
     def set_audio_track(self, track: int) -> None:
         if self.player and self.libvlc_audio_set_track(self.player, int(track)) != 0:
             raise BackendError(f"libVLC rejected audio track {track}")
+
+    def subtitle_track_count(self) -> int:
+        if not self._subtitle_api:
+            return 0
+        return max(0, int(self.libvlc_video_get_spu_count(self.player) if self.player else 0))
+
+    def subtitle_track(self) -> int:
+        if not self._subtitle_api:
+            return -1
+        return int(self.libvlc_video_get_spu(self.player) if self.player else -1)
+
+    def set_subtitle_track(self, track: int) -> None:
+        if not self._subtitle_api:
+            raise BackendError("subtitle selection is unavailable in this libVLC build")
+        if self.player and self.libvlc_video_set_spu(self.player, int(track)) != 0:
+            raise BackendError(f"libVLC rejected subtitle track {track}")
 
     def close_media(self):
         if self.player: self.libvlc_media_player_stop(self.player); self.libvlc_media_player_release(self.player)

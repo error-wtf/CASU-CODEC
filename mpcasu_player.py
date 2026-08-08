@@ -178,6 +178,7 @@ class MPCASUPlayer(tk.Tk):
         ttk.Button(bar, text="Mute", style="MPC.TButton", command=self.toggle_mute).pack(side="right", padx=3)
         ttk.Button(bar, text="1×", style="MPC.TButton", command=self.cycle_rate).pack(side="right", padx=3)
         ttk.Button(bar, text="Audio", style="MPC.TButton", command=self.cycle_audio_track).pack(side="right", padx=3)
+        ttk.Button(bar, text="Subtitles", style="MPC.TButton", command=self.cycle_subtitle_track).pack(side="right", padx=3)
         ttk.Button(bar, text="Info", style="MPC.TButton", command=self.show_media_info).pack(side="right", padx=3)
         ttk.Button(bar, text="Fullscreen", style="MPC.TButton", command=lambda: self.attributes("-fullscreen", not self.attributes("-fullscreen"))).pack(side="right", padx=3)
         tk.Label(center, textvariable=self.status, bg=PANEL, fg=SECONDARY, anchor="w").pack(fill="x", padx=14, pady=(0, 8))
@@ -651,6 +652,22 @@ class MPCASUPlayer(tk.Tk):
             next_track = (current + 1) % count
             self.backend.set_audio_track(next_track)
             self.status.set(f"Audio track {next_track + 1}/{count}")
+        except BackendError as exc:
+            self.status.set(str(exc))
+
+    def cycle_subtitle_track(self):
+        if not self.backend:
+            self.status.set("No active media backend")
+            return
+        try:
+            count = self.backend.subtitle_track_count()
+            if count <= 0:
+                self.status.set("No selectable subtitle tracks reported by libVLC")
+                return
+            current = self.backend.subtitle_track()
+            next_track = (current + 1) % count
+            self.backend.set_subtitle_track(next_track)
+            self.status.set(f"Subtitle track {next_track + 1}/{count}")
         except BackendError as exc:
             self.status.set(str(exc))
 
