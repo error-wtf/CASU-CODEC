@@ -81,6 +81,7 @@ class LibVLCBackend:
         self._install("libvlc_media_player_release", None, [ctypes.c_void_p])
         self._install("libvlc_media_release", None, [ctypes.c_void_p])
         self._install("libvlc_release", None, [ctypes.c_void_p])
+        self._media_state_api = self._optional_install("libvlc_media_get_state", ctypes.c_int, [ctypes.c_void_p])
         self._install("libvlc_media_player_play", ctypes.c_int, [ctypes.c_void_p])
         self._install("libvlc_media_player_set_pause", None, [ctypes.c_void_p, ctypes.c_int])
         self._install("libvlc_media_player_stop", None, [ctypes.c_void_p])
@@ -223,9 +224,21 @@ class LibVLCBackend:
         return max(0.0, float(self.libvlc_media_player_get_length(self.player) if self.player else 0) / 1000.0)
 
     def state(self) -> PlaybackState:
+        if self._media_state_api and self.media:
+            # libVLC media states: 6=Ended, 7=Error.  Opening/buffering are
+            # deliberately left to the requested controller state.
+            media_state = int(self.libvlc_media_get_state(self.media))
+            if media_state == 7:
+                self._state = PlaybackState.ERROR
+            elif media_state == 6:
+                self._state = PlaybackState.ENDED
         if self.player and self._state == PlaybackState.PLAYING and not self.libvlc_media_player_is_playing(self.player):
             if self.duration() and self.position() >= self.duration() - 0.2: self._state = PlaybackState.ENDED
         return self._state
+
+    def media_state_code(self) -> int | None:
+        """Return the raw libVLC media state when that API exists."""
+        return int(self.libvlc_media_get_state(self.media)) if self._media_state_api and self.media else None
 
     def is_actively_playing(self) -> bool:
         """Return the backend's real playing flag, not just requested state."""
