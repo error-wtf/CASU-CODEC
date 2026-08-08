@@ -171,6 +171,7 @@ class CASUConverter(tk.Tk):
     def _worker(self, sources: list[Path], output_dir: Path, fps: float, mode: str) -> None:
         try:
             total = len(sources)
+            results: list[dict[str, object]] = []
             for index, source in enumerate(sources):
                 output = output_dir / f"{source.stem}.casu"
                 def report(value: float, index=index, source=source) -> None:
@@ -179,16 +180,34 @@ class CASUConverter(tk.Tk):
                         self.progress.configure(value=overall * 100.0),
                         self.status.set(f"Converting {source.name} ({index + 1}/{total})"),
                     ))
-                result = analyze(source, fps, mode, progress=report, cancel=self._cancel_event)
-                payload = json.dumps(result, indent=2, ensure_ascii=False) + "\n"
-                fd, temporary = tempfile.mkstemp(prefix=f".{output.name}.", dir=output.parent, text=True)
                 try:
-                    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                        handle.write(payload); handle.flush(); os.fsync(handle.fileno())
-                    os.replace(temporary, output)
-                finally:
-                    if os.path.exists(temporary): os.unlink(temporary)
-            self.after(0, lambda: self._done(f"Converted {total} file(s) to {output_dir}."))
+                    result = analyze(source, fps, mode, progress=report, cancel=self._cancel_event)
+                    payload = json.dumps(result, indent=2, ensure_ascii=False) + "\n"
+                    fd, temporary = tempfile.mkstemp(prefix=f".{output.name}.", dir=output.parent, text=True)
+                    try:
+                        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                            handle.write(payload); handle.flush(); os.fsync(handle.fileno())
+                        os.replace(temporary, output)
+                    finally:
+                        if os.path.exists(temporary): os.unlink(temporary)
+                    results.append({"source": str(source), "output": str(output), "status": "converted",
+                                    "duration_s": result["source"].get("duration_s")})
+                except CasuCancelled:
+                    raise
+                except (CasuError, OSError, ValueError) as exc:
+                    # One unsupported/corrupt file must not discard successful
+                    # conversions from the same folder job.
+                    results.append({"source": str(source), "output": str(output),
+                                    "status": "failed", "error": str(exc)})
+            report_path = output_dir / "casu_batch_report.json"
+            report_path.write_text(json.dumps({"version": 1, "mode": mode,
+                                               "analysis_fps": fps, "files": results},
+                                              indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            converted = sum(item["status"] == "converted" for item in results)
+            failed = len(results) - converted
+            self.after(0, lambda: self._done(
+                f"Converted {converted}/{total} file(s) to {output_dir}; {failed} failed."
+            ))
         except CasuCancelled:
             self.after(0, lambda: self._done("Conversion cancelled; no incomplete CASU output was kept.", error=False, cancelled=True))
         except (CasuError, OSError, ValueError) as exc:
