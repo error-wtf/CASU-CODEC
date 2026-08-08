@@ -110,9 +110,9 @@ class MPCASUPlayer(tk.Tk):
         self.timeline.bind("<ButtonRelease-1>", lambda _event: (setattr(self, "_dragging", False), self.seek_restart()))
         bar = tk.Frame(center, bg=PANEL)
         bar.pack(fill="x", pady=8)
-        for label, command in (("⏮", lambda: self.seek_by(-10)), ("◀", lambda: self.seek_by(-10)), ("▶ / ❚❚", self.play_selected), ("■", self.stop), ("▶", lambda: self.seek_by(10))):
+        for label, command in (("−10 s", lambda: self.seek_by(-10)), ("Back", lambda: self.seek_by(-10)), ("Play / Pause", self.toggle_playback), ("Stop", self.stop), ("Forward", lambda: self.seek_by(10))):
             ttk.Button(bar, text=label, style="MPC.TButton", command=command).pack(side="left", padx=3)
-        ttk.Button(bar, text="Audio", style="MPC.TButton", command=lambda: self.status.set("Audio track selection is delegated to FFmpeg")).pack(side="right", padx=3)
+        ttk.Button(bar, text="Audio", style="MPC.TButton", command=lambda: self.status.set("Audio track selection is unavailable in this backend")).pack(side="right", padx=3)
         ttk.Button(bar, text="Fullscreen", style="MPC.TButton", command=lambda: self.attributes("-fullscreen", not self.attributes("-fullscreen"))).pack(side="right", padx=3)
         tk.Label(center, textvariable=self.status, bg=PANEL, fg=SECONDARY, anchor="w").pack(fill="x", padx=14, pady=(0, 8))
 
@@ -283,6 +283,12 @@ class MPCASUPlayer(tk.Tk):
             messagebox.showerror("MPCASU", f"Could not start internal playback: {exc}")
             return
         self._paused = False
+
+    def toggle_playback(self):
+        if not self.backend:
+            self.play_selected()
+        else:
+            self.pause()
 
     def _source_for(self, path: Path) -> Path:
         if path.suffix.lower() != ".casu":
