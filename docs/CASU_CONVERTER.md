@@ -1,38 +1,1 @@
-<!-- SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4 | SPDX-FileCopyrightText: 2026 Lino Casu -->
-# CASU converter
-
-The converter is deliberately a **sidecar conversion**, not a destructive
-transcode. It decodes the selected MP4/MP3 stream with FFmpeg, records source
-metadata and conservative temporal activity hints, and writes a UTF-8 JSON
-manifest with the `.casu` extension.
-
-```bash
-casu convert input.mp4 --output input.casu
-casu convert input.mp3 --output input.casu
-casu validate input.casu
-casu validate --verify-source input.casu
-casu play input.casu
-```
-
-`convert` accepts `--mode strict|visually_lossless|adaptive`; `strict` is the
-default reference mode. The mode labels the analysis policy and does not make
-an unverified pixel-identity or perceptual-quality claim. `--verify-source`
-performs the structural validation and then checks the manifest's recorded
-source path/fallback filename and SHA-256 digest.
-
-The original media is never rewritten. The manifest records its absolute path,
-filename, byte size and SHA-256 digest. Consumers must treat source timestamps
-as canonical. If the source is moved, the player first tries the recorded path
-and then the manifest directory plus the recorded filename; otherwise it fails
-closed instead of playing an unrelated file.
-
-`video.segments` and `audio.segments` carry explicit `start_s`, `end_s`,
-`valid_until_s` and `deadline_s` timing fields, but remain scheduler hints only.
-They do not
-permit frame interpolation, retiming, pitch changes, dropped audio, hidden
-colour changes or an assumption that a static hint is pixel-perfect. A missing,
-stale or invalid manifest always falls back to ordinary legacy playback.
-
-The current schema is `0.2` and identifies itself with the `MPCASU\\0` magic
-field. This is a manifest identity marker; the media payload remains in its
-original MP4/MP3 container for backward compatibility.
+¨¥yÛhr·šµë-­æ¦}Ó©z¶­Š‰ç¢Ú^®h­µçEj)^vÚ­æ­zËky©Ÿtê^­«b¢yè¶—«š+myÑZŠW¶‡+y«^²ÚŞjgİ:—«jØ¨z-¥êæŠÛ^tğ„´´MA`µ1¥•¹Í”µ%‘•¹Ñ¥™¥•Èè1¥•¹Í•I•˜µMTµ¹Ñ¥…Á¥Ñ…±¥ÍĞ´Ä¸ĞğMA`µ¥±•½ÁåÉ¥¡ÑQ•áĞè€ÈÀÈØ1¥¹¼…ÍÔ€´´ø(ŒMT½¹Ù•ÉÑ•È()Q¡”½¹Ù•ÉÑ•È¥Ì‘•±¥‰•É…Ñ•±ä„€¨©Í¥‘•…È½¹Ù•ÉÍ¥½¸¨¨°¹½Ğ„‘•ÍÑÉÕÑ¥Ù”)ÑÉ…¹Í½‘”¸%Ğ‘•½‘•ÌÑ¡”Í•±•Ñ•5@Ğ½5@ÌÍÑÉ•…´İ¥Ñ µÁ•œ°É•½É‘ÌÍ½ÕÉ”)µ•Ñ…‘…Ñ„…¹½¹Í•ÉÙ…Ñ¥Ù”Ñ•µÁ½É…°…Ñ¥Ù¥Ñä¡¥¹ÑÌ°…¹İÉ¥Ñ•Ì„UQ´à)M=8)µ…¹¥™•ÍĞİ¥Ñ Ñ¡”€¹…ÍÕ€•áÑ•¹Í¥½¸¸()‰…Í )…ÍÔ½¹Ù•ÉĞ¥¹ÁÕĞ¹µÀĞ€´µ½ÕÑÁÕĞ¥¹ÁÕĞ¹…ÍÔ)…ÍÔ½¹Ù•ÉĞ¥¹ÁÕĞ¹µÀÌ€´µ½ÕÑÁÕĞ¥¹ÁÕĞ¹…ÍÔ)…ÍÔ‰•¹¡µ…É¬¥¹ÁÕĞ¹µÀĞ€´µ½ÕÑÁÕĞ‰•¹¡µ…É¬¹©Í½¸()Q¡”‰•¹¡µ…É¬É•Á½ÉĞµ•…ÍÕÉ•Ì…¹…±åÍ¥ÌÑ¥µ”°Í½ÕÉ”Í¥é”°‘ÕÉ…Ñ¥½¸…¹Í•µ•¹Ğ)½Õ¹ÑÌ¸¹•Éä¥ÌÉ•Á½ÉÑ•…ÌÕ¹…Ù…¥±…‰±”Õ¹±•ÍÌ„É•…°Ñ•±•µ•ÑÉä‰…­•¹¥Ì)ÁÉ•Í•¹Ğì¹¼Í…Ù¥¹Ì…É”¥¹™•ÉÉ•™É½´™¥±”Í¥é”…±½¹”¸)…ÍÔÙ…±¥‘…Ñ”¥¹ÁÕĞ¹…ÍÔ)…ÍÔÙ…±¥‘…Ñ”€´µÙ•É¥™äµÍ½ÕÉ”¥¹ÁÕĞ¹…ÍÔ)…ÍÔÁ±…ä¥¹ÁÕĞ¹…ÍÔ)€()½¹Ù•ÉÑ€…•ÁÑÌ€´µµ½‘”ÍÑÉ¥ÑñÙ¥ÍÕ…±±å}±½ÍÍ±•ÍÍñ…‘…ÁÑ¥Ù•€ìÍÑÉ¥Ñ€¥ÌÑ¡”)‘•™…Õ±ĞÉ•™•É•¹”µ½‘”¸Q¡”µ½‘”±…‰•±ÌÑ¡”…¹…±åÍ¥ÌÁ½±¥ä…¹‘½•Ì¹½Ğµ…­”)…¸Õ¹Ù•É¥™¥•Á¥á•°µ¥‘•¹Ñ¥Ñä½ÈÁ•É•ÁÑÕ…°µÅÕ…±¥Ñä±…¥´¸€´µÙ•É¥™äµÍ½ÕÉ•€)Á•É™½ÉµÌÑ¡”ÍÑÉÕÑÕÉ…°Ù…±¥‘…Ñ¥½¸…¹Ñ¡•¸¡•­ÌÑ¡”µ…¹¥™•ÍĞÌÉ•½É‘•)Í½ÕÉ”Á…Ñ ½™…±±‰…¬™¥±•¹…µ”…¹M!´ÈÔØ‘¥•ÍĞ¸()Q¡”½É¥¥¹…°µ•‘¥„¥Ì¹•Ù•ÈÉ•İÉ¥ÑÑ•¸¸Q¡”µ…¹¥™•ÍĞÉ•½É‘Ì¥ÑÌ…‰Í½±ÕÑ”Á…Ñ °)™¥±•¹…µ”°‰åÑ”Í¥é”…¹M!´ÈÔØ‘¥•ÍĞ¸½¹ÍÕµ•ÉÌµÕÍĞÑÉ•…ĞÍ½ÕÉ”Ñ¥µ•ÍÑ…µÁÌ)…Ì…¹½¹¥…°¸%˜Ñ¡”Í½ÕÉ”¥Ìµ½Ù•°Ñ¡”Á±…å•È™¥ÉÍĞÑÉ¥•ÌÑ¡”É•½É‘•Á…Ñ )…¹Ñ¡•¸Ñ¡”µ…¹¥™•ÍĞ‘¥É•Ñ½ÉäÁ±ÕÌÑ¡”É•½É‘•™¥±•¹…µ”ì½Ñ¡•Éİ¥Í”¥Ğ™…¥±Ì)±½Í•¥¹ÍÑ•…½˜Á±…å¥¹œ…¸Õ¹É•±…Ñ•™¥±”¸()Ù¥‘•¼¹Í•µ•¹ÑÍ€…¹…Õ‘¥¼¹Í•µ•¹ÑÍ€…ÉÉä•áÁ±¥¥ĞÍÑ…ÉÑ}Í€°•¹‘}Í€°)Ù…±¥‘}Õ¹Ñ¥±}Í€…¹‘•…‘±¥¹•}Í€Ñ¥µ¥¹œ™¥•±‘Ì°‰ÕĞÉ•µ…¥¸Í¡•‘Õ±•È¡¥¹ÑÌ½¹±ä¸)Q¡•ä‘¼¹½Ğ)Á•Éµ¥Ğ™É…µ”¥¹Ñ•ÉÁ½±…Ñ¥½¸°É•Ñ¥µ¥¹œ°Á¥Ñ ¡…¹•Ì°‘É½ÁÁ•…Õ‘¥¼°¡¥‘‘•¸)½±½ÕÈ¡…¹•Ì½È…¸…ÍÍÕµÁÑ¥½¸Ñ¡…Ğ„ÍÑ…Ñ¥Œ¡¥¹Ğ¥ÌÁ¥á•°µÁ•É™•Ğ¸µ¥ÍÍ¥¹œ°)ÍÑ…±”½È¥¹Ù…±¥µ…¹¥™•ÍĞ…±İ…åÌ™…±±Ì‰…¬Ñ¼½É‘¥¹…Éä±•…äÁ±…å‰…¬¸()Q¡”ÕÉÉ•¹ĞÍ¡•µ„¥Ì€À¸É€…¹¥‘•¹Ñ¥™¥•Ì¥ÑÍ•±˜İ¥Ñ Ñ¡”5AMUqpÁ€µ…¥Œ)™¥•±¸Q¡¥Ì¥Ì„µ…¹¥™•ÍĞ¥‘•¹Ñ¥Ñäµ…É­•ÈìÑ¡”µ•‘¥„Á…å±½…É•µ…¥¹Ì¥¸¥ÑÌ)½É¥¥¹…°5@Ğ½5@Ì½¹Ñ…¥¹•È™½È‰…­İ…É½µÁ…Ñ¥‰¥±¥Ñä¸
