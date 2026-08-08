@@ -80,7 +80,12 @@ class CASUConverter(tk.Tk):
             ttk.Button(row, text="Browse…", style="CASU.TButton", command=command).pack(side="left", padx=(8, 0))
         folder_actions = tk.Frame(root, bg=BG); folder_actions.pack(fill="x", pady=(0, 4))
         ttk.Button(folder_actions, text="Add folder (recursive)", style="CASU.TButton", command=self.choose_folder).pack(side="left")
+        ttk.Button(folder_actions, text="Remove selected", style="CASU.TButton", command=self.remove_selected).pack(side="left", padx=6)
+        ttk.Button(folder_actions, text="Clear queue", style="CASU.TButton", command=self.clear_queue).pack(side="left")
         tk.Label(folder_actions, text="Each file is probed independently.", bg=BG, fg=SECONDARY).pack(side="left", padx=10)
+        self.queue = tk.Listbox(root, height=4, bg=PANEL_ALT, fg=TEXT, selectbackground="#3A1015",
+                                relief="flat", highlightthickness=0, activestyle="none", exportselection=False)
+        self.queue.pack(fill="x", pady=(2, 6))
         info = tk.Frame(root, bg=PANEL_ALT, padx=14, pady=10)
         info.pack(fill="x", pady=(8, 4))
         tk.Label(info, text="SOURCE INSPECTION", bg=PANEL_ALT, fg=RED, font=("TkDefaultFont", 8, "bold")).pack(anchor="w")
@@ -116,6 +121,9 @@ class CASUConverter(tk.Tk):
 
     def _set_sources(self, paths: list[Path]) -> None:
         self._sources = list(dict.fromkeys(path.expanduser().resolve() for path in paths if path.is_file()))
+        self.queue.delete(0, "end")
+        for path in self._sources:
+            self.queue.insert("end", str(path))
         self.source.set(f"{len(self._sources)} file(s) selected" if self._sources else "")
         if len(self._sources) == 1:
             self.inspect_source(self._sources[0])
@@ -123,6 +131,15 @@ class CASUConverter(tk.Tk):
             self.source_info.set(f"{len(self._sources)} files queued for conversion")
         else:
             self.source_info.set("No source files selected")
+
+    def remove_selected(self) -> None:
+        selected = set(self.queue.curselection())
+        if not selected:
+            return
+        self._set_sources([path for index, path in enumerate(self._sources) if index not in selected])
+
+    def clear_queue(self) -> None:
+        self._set_sources([])
 
     def choose_output(self) -> None:
         path = filedialog.askdirectory(mustexist=True)
