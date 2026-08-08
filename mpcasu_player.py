@@ -24,6 +24,7 @@ from casu.core import CasuError, resolve_casu_source, ffprobe
 from casu.schema import validate_manifest
 from casu.scheduler import CasuScheduler
 from mpcasu_backend import BackendError, CasuBackend, LibVLCBackend, PlaybackState
+from casu.native import NativeCasuError, read_native
 from mpcasu_playback import PlaybackController
 
 
@@ -467,7 +468,10 @@ class MPCASUPlayer(tk.Tk):
         if path.suffix.lower() != ".casu":
             return
         try:
-            manifest = json.loads(path.read_text(encoding="utf-8"))
+            with path.open("rb") as handle:
+                is_native = handle.read(8) == b"CASUNAT1"
+            manifest = (read_native(path, verify_payload=True).manifest if is_native
+                        else json.loads(path.read_text(encoding="utf-8")))
             errors = validate_manifest(manifest)
             if errors:
                 self._visual_state = "invalid CASU: " + errors[0]
@@ -477,7 +481,7 @@ class MPCASUPlayer(tk.Tk):
             self._visual_segments = self._visual_video_segments + self._visual_audio_segments
             self._scheduler = CasuScheduler.from_manifest(manifest, "video" if self._visual_video_segments else "audio")
             self._visual_state = "CASU state map" if self._visual_segments else "CASU empty map"
-        except (OSError, ValueError, TypeError):
+        except (OSError, ValueError, TypeError, NativeCasuError):
             self._visual_state = "invalid CASU"
 
     def _state_at_position(self) -> str:
@@ -618,10 +622,14 @@ class MPCASUPlayer(tk.Tk):
         sidecar = path if path.suffix.lower() == ".casu" else self._sidecar(path)
         self._load_visual_state(sidecar if sidecar.exists() else path)
         if path.suffix.lower() == ".casu":
+            try:
+                native = path.read_bytes()[:8] == b"CASUNAT1"
+            except OSError:
+                native = False
             self._set_diagnostics(
                 # The current .casu format is a validated sidecar compatibility
                 # manifest. Do not present it as a native decoded CASU payload.
-                support="CASU sidecar + legacy backend",
+                support="CASU native payload + legacy backend" if native else "CASU sidecar + legacy backend",
                 integrity="verified source manifest" if not self._visual_state.startswith("invalid") else "failed manifest validation",
                 segmented=f"{len(self._visual_segments)} segments" if self._visual_segments else "no segment data",
             )
@@ -709,9 +717,14 @@ class MPCASUPlayer(tk.Tk):
         try:
             # A CASU sidecar is metadata; stream presentation comes from the
             # immutable source it references, never from the JSON manifest.
-            source = self._source_for(path)
-            probe = ffprobe(source)
-            streams = probe.get("streams", [])
+            if path.suffix.lower() == ".casu" and path.read_bytes()[:8] == b"CASUNAT1":
+                manifest = read_native(path, verify_payload=False).manifest
+                streams = manifest.get("streams", [])
+                probe = {"streams": streams, "format": {"duration": manifest.get("source", {}).get("duration_s", 0)}}
+            else:
+                source = self._source_for(path)
+                probe = ffprobe(source)
+                streams = probe.get("streams", [])
             kinds = {item.get("codec_type") for item in streams}
             mode = presentation_mode(probe)
             if mode == "VIDEO":
@@ -724,7 +737,7 @@ class MPCASUPlayer(tk.Tk):
             else:
                 self.canvas.itemconfigure("title", text="UNSUPPORTED PRESENTATION")
                 self.canvas.itemconfigure("subtitle", text="No video or audio stream was reported by the probe")
-        except (CasuError, OSError, ValueError):
+        except (CasuError, OSError, ValueError, NativeCasuError):
             self.status.set("Stream presentation metadata unavailable")
 
     def toggle_playback(self):
