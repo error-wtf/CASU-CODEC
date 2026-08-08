@@ -190,6 +190,11 @@ class MPCASUPlayer(tk.Tk):
         tk.Label(playlist_header, text="Queue · source metadata", bg=PANEL, fg=MUTED, font=("TkDefaultFont", 8), anchor="w").pack(anchor="w", pady=(2, 0))
         self.queue = tk.Listbox(right, bg=PANEL_ALT, fg=SECONDARY, selectbackground=RED_DARK, selectforeground=TEXT, relief="flat", highlightthickness=0, activestyle="none", exportselection=False)
         self.queue.pack(fill="both", expand=True, padx=10, pady=(0, 8)); self.queue.bind("<Double-Button-1>", self._play_queue_item)
+        self.queue_empty_label = tk.Label(
+            right, text="No media queued\nAdd files or drop a playlist here",
+            bg=PANEL, fg=MUTED, justify="center", font=("TkDefaultFont", 9),
+        )
+        self.queue_empty_label.pack(fill="x", padx=12, pady=(0, 10))
         tk.Label(right, text="QUEUE · SHUFFLE · REPEAT", bg=PANEL, fg=MUTED, font=("TkDefaultFont", 8)).pack(anchor="w", padx=12, pady=(0, 12))
 
         diagnostics = tk.Frame(root, bg=BG); diagnostics.pack(fill="x", padx=18, pady=(10, 4))
@@ -360,6 +365,15 @@ class MPCASUPlayer(tk.Tk):
             if path.exists() and str(path) not in self.library.get(0, "end"):
                 self.library.insert("end", str(path))
                 self.queue.insert("end", path.name)
+        self._sync_queue_empty()
+
+    def _sync_queue_empty(self):
+        """Keep the playlist panel informative instead of showing dead empty space."""
+        if self.queue.size():
+            if self.queue_empty_label.winfo_ismapped():
+                self.queue_empty_label.pack_forget()
+        elif not self.queue_empty_label.winfo_ismapped():
+            self.queue_empty_label.pack(fill="x", padx=12, pady=(0, 10), before=self.queue.master.winfo_children()[-1])
 
     def _restore_session(self):
         try:
@@ -464,6 +478,7 @@ class MPCASUPlayer(tk.Tk):
             self.library.delete(index)
             if index < self.queue.size():
                 self.queue.delete(index)
+        self._sync_queue_empty()
 
     def save_playlist(self):
         target = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("MPCASU playlist", "*.json"), ("All files", "*.*")])
