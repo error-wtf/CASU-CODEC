@@ -14,6 +14,10 @@ import math
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
+try:
+    from PIL import Image, ImageTk
+except ImportError:  # pragma: no cover - optional presentation enhancement
+    Image = ImageTk = None
 
 from casu.core import CasuError, resolve_casu_source
 from casu.schema import validate_manifest
@@ -69,13 +73,19 @@ class MPCASUPlayer(tk.Tk):
         style.configure("MPC.Horizontal.TScale", troughcolor="#24282d", background=RED)
         root = tk.Frame(self, bg=BG)
         root.pack(fill="both", expand=True)
-        top = tk.Frame(root, bg=BG, height=62); top.pack(fill="x", padx=18, pady=(12, 6)); top.pack_propagate(False)
+        top = tk.Frame(root, bg=BG, height=76); top.pack(fill="x", padx=18, pady=(10, 6)); top.pack_propagate(False)
         logo = tk.Frame(top, bg=BG); logo.pack(side="left")
         logo_path = Path(__file__).resolve().parent / "assets" / "mpcasu_player_logo_header.png"
         try:
             if logo_path.is_file():
-                source_logo = tk.PhotoImage(file=str(logo_path))
-                self._logo_image = source_logo.subsample(max(1, source_logo.width() // 140), max(1, source_logo.height() // 60))
+                if Image is not None:
+                    source_logo = Image.open(logo_path).convert("RGBA")
+                    source_logo.thumbnail((170, 58), Image.Resampling.LANCZOS)
+                    self._logo_image = ImageTk.PhotoImage(source_logo)
+                else:
+                    source_logo = tk.PhotoImage(file=str(logo_path))
+                    factor = max(1, max(source_logo.width() // 170, source_logo.height() // 58))
+                    self._logo_image = source_logo.subsample(factor, factor)
                 self.iconphoto(True, self._logo_image)
                 tk.Label(logo, image=self._logo_image, bg=BG).pack(anchor="w")
             else:
@@ -88,7 +98,17 @@ class MPCASUPlayer(tk.Tk):
         tk.Label(top, text="CASU · LEGACY SAFE", bg=BG, fg=MUTED, font=("TkDefaultFont", 9)).pack(side="right")
 
         body = tk.Frame(root, bg=BG); body.pack(fill="both", expand=True, padx=18)
-        left = tk.Frame(body, bg=PANEL, width=220); left.pack(side="left", fill="y", padx=(0, 10)); left.pack_propagate(False)
+        left_shell = tk.Frame(body, bg=PANEL, width=220); left_shell.pack(side="left", fill="y", padx=(0, 10)); left_shell.pack_propagate(False)
+        left_canvas = tk.Canvas(left_shell, bg=PANEL, highlightthickness=0, borderwidth=0)
+        left_scroll = ttk.Scrollbar(left_shell, orient="vertical", command=left_canvas.yview)
+        left_canvas.configure(yscrollcommand=left_scroll.set)
+        left_canvas.pack(side="left", fill="both", expand=True)
+        left_scroll.pack(side="right", fill="y")
+        left = tk.Frame(left_canvas, bg=PANEL)
+        left_window = left_canvas.create_window((0, 0), window=left, anchor="nw")
+        left.bind("<Configure>", lambda _event: left_canvas.configure(scrollregion=left_canvas.bbox("all")))
+        left_canvas.bind("<Configure>", lambda event: left_canvas.itemconfigure(left_window, width=event.width))
+        left_canvas.bind_all("<MouseWheel>", lambda event: left_canvas.yview_scroll(-int(event.delta / 120), "units"))
         self._nav(left, "LIBRARY", ["Now Playing", "Library", "CASU Files", "Movies", "TV Shows", "Music", "Playlists"])
         self._nav(left, "DEVICES", ["Local Disk", "Media Drive", "Network Share"])
         self._nav(left, "ONLINE", ["CASU Hub", "Web Videos", "Podcasts"])
