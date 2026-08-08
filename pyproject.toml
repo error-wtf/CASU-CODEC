@@ -1,27 +1,1 @@
-# SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
-# SPDX-FileCopyrightText: 2026 Lino Casu
-[build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "casu-codec"
-version = "1.0.0"
-description = "CASU (Codec for All Segmented Units): legacy-compatible segmented-state codec/container for MP4 and MP3"
-requires-python = ">=3.10"
-dependencies = ["numpy>=1.24"]
-
-[project.scripts]
-casu = "casu.cli:main"
-casu-converter = "casu_converter:main"
-mpc = "casu.cli:main"
-mpcasu = "mpcasu_player:main"
-
-[tool.setuptools.packages.find]
-include = ["casu*"]
-
-[tool.setuptools]
-py-modules = ["mpcasu_player", "casu_converter"]
-
-[tool.pytest.ini_options]
-pythonpath = ["."]
+¨¥yÛhr·šµë-­æ¦}Ó©z¶­Š‰ç¢Ú^®h­µçEj)^vÚ­æ­zËky©Ÿtê^­«b¢yè¶—«š+myÑZŠW¶‡+y«^²ÚÞjgÝ:—«jØ¨žz-¥êæŠÛ^tŒMA`µ1¥•¹Í”µ%‘•¹Ñ¥™¥•Èè1¥•¹Í•I•˜µMTµ¹Ñ¥…Á¥Ñ…±¥ÍÐ´Ä¸Ð(ŒMA`µ¥±•½ÁåÉ¥¡ÑQ•áÐè€ÈÀÈØ1¥¹¼…ÍÔ)m‰Õ¥±µÍåÍÑ•µt)É•ÅÕ¥É•Ì€ôl‰Í•ÑÕÁÑ½½±ÌøôØà‰t)‰Õ¥±µ‰…­•¹€ô€‰Í•ÑÕÁÑ½½±Ì¹‰Õ¥±‘}µ•Ñ„ˆ()mÁÉ½©•Ñt)¹…µ”€ô€‰…ÍÔµ½‘•Œˆ)Ù•ÉÍ¥½¸€ô€ˆÄ¸À¸Àˆ)‘•ÍÉ¥ÁÑ¥½¸€ô€‰MT€¡½‘•Œ™½È±°M•µ•¹Ñ•U¹¥ÑÌ¤è±•…äµ½µÁ…Ñ¥‰±”Í•µ•¹Ñ•µÍÑ…Ñ”½‘•Œ½½¹Ñ…¥¹•È™½È5@Ð…¹5@Ìˆ)É•ÅÕ¥É•ÌµÁåÑ¡½¸€ô€ˆøôÌ¸ÄÀˆ)‘•Á•¹‘•¹¥•Ì€ôl‰¹ÕµÁäøôÄ¸ÈÐ‰t()mÁÉ½©•Ð¹ÍÉ¥ÁÑÍt)…ÍÔ€ô€‰…ÍÔ¹±¤éµ…¥¸ˆ)…ÍÔµ½¹Ù•ÉÑ•È€ô€‰…ÍÕ}½¹Ù•ÉÑ•Èéµ…¥¸ˆ)µÁŒ€ô€‰…ÍÔ¹±¤éµ…¥¸ˆ)µÁ…ÍÔ€ô€‰µÁ…ÍÕ}Á±…å•Èéµ…¥¸ˆ()mÑ½½°¹Í•ÑÕÁÑ½½±Ì¹Á…­…•Ì¹™¥¹‘t)¥¹±Õ‘”€ôl‰…ÍÔ¨‰t()mÑ½½°¹Í•ÑÕÁÑ½½±Ít)Áäµµ½‘Õ±•Ì€ôl‰µÁ…ÍÕ}Á±…å•Èˆ°€‰µÁ…ÍÕ}‰…­•¹ˆ°€‰µÁ…ÍÕ}Á±…å‰…¬ˆ°€‰…ÍÕ}½¹Ù•ÉÑ•È‰t()mÑ½½°¹Í•ÑÕÁÑ½½±Ì¹‘…Ñ„µ™¥±•Ít(‰Í¡…É”½…ÍÔµ½‘•Œ½…ÍÍ•ÑÌˆ€ôl(€€‰…ÍÍ•ÑÌ½…ÍÕ}½‘•}±½¼¹Á¹œˆ°(€€‰…ÍÍ•ÑÌ½…ÍÕ}½‘•}±½½}¡•…‘•È¹Á¹œˆ°(€€‰…ÍÍ•ÑÌ½…ÍÕ}½¹Ù•ÉÑ•É}¥½¸¹Á¹œˆ°(€€‰…ÍÍ•ÑÌ½µÁ…ÍÕ}Á±…å•É}¥½¸¹Á¹œˆ°(€€‰…ÍÍ•ÑÌ½µÁ…ÍÕ}Á±…å•É}±½¼¹Á¹œˆ°(€€‰…ÍÍ•ÑÌ½µÁ…ÍÕ}Á±…å•É}±½½}¡•…‘•È¹Á¹œˆ°(€€‰…ÍÍ•ÑÌ½µÁ…ÍÕ}Á±…å•É}µ½­ÕÀ¹Á¹œˆ°)t()mÑ½½°¹ÁåÑ•ÍÐ¹¥¹¥}½ÁÑ¥½¹Ít)ÁåÑ¡½¹Á…Ñ €ôlˆ¸‰t(
