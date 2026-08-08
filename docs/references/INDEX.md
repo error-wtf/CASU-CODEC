@@ -29,3 +29,14 @@ Runtime branding uses the canonical files in `assets/`:
 The active implementation and its honest completion status remain documented
 in `CASU_CODEC_DEEP_AUDIT.md`, `CASU_CONVERTER_DEEP_AUDIT.md` and
 `MPCASU_PLAYER_DEEP_AUDIT.md`.
+
+## Release-gate kit
+
+The currently supplied gate documents are preserved in `gates/`:
+
+- `01_GATE_SOURCE_RESOLUTION_STRICT.md`
+- `02_GATE_NATIVE_PAYLOAD_KEYSTATES_SEEK.md`
+- `10_CODEX_MASTER_EXECUTION_PROMPT.md`
+
+Additional gate-kit files can be added there when supplied; missing documents
+are not silently reconstructed or treated as implemented requirements.
