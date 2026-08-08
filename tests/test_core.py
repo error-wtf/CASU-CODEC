@@ -9,6 +9,7 @@ import pytest
 
 from casu.core import CasuError, analyze, play, resolve_casu_source, rle
 from casu.schema import validate_manifest
+from casu.scheduler import CasuScheduler
 from mpcasu_backend import LibVLCBackend
 
 
@@ -146,3 +147,13 @@ def test_libvlc_backend_source_capability_detection():
     assert LibVLCBackend.supports("https://example.invalid/video.m3u8")
     assert LibVLCBackend.supports("rtsp://example.invalid/live")
     assert not LibVLCBackend.supports("gopher://example.invalid/media")
+
+
+def test_casu_scheduler_returns_deterministic_state():
+    scheduler = CasuScheduler.from_manifest({"video": {"segments": [
+        {"start_s": 0, "end_s": 1, "state": "static"},
+        {"start_s": 1, "end_s": 2, "state": "motion"},
+    ]}})
+    assert scheduler.state_at(0.5).state == "static"
+    assert scheduler.summary(1.5)["active_state"] == "motion"
+    assert scheduler.state_at(2.0) is None

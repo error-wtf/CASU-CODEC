@@ -22,6 +22,7 @@ except ImportError:  # pragma: no cover - optional presentation enhancement
 
 from casu.core import CasuError, resolve_casu_source, ffprobe
 from casu.schema import validate_manifest
+from casu.scheduler import CasuScheduler
 from mpcasu_backend import BackendError, CasuBackend, LibVLCBackend, PlaybackState
 
 
@@ -58,6 +59,7 @@ class MPCASUPlayer(tk.Tk):
         self._visual_segments: list[dict] = []
         self._visual_video_segments: list[dict] = []
         self._visual_audio_segments: list[dict] = []
+        self._scheduler = None
         self._logo_image = None
         self._volume = 100
         self._muted = False
@@ -267,6 +269,7 @@ class MPCASUPlayer(tk.Tk):
         self._visual_segments = []
         self._visual_video_segments = []
         self._visual_audio_segments = []
+        self._scheduler = None
         if path.suffix.lower() != ".casu":
             return
         try:
@@ -278,6 +281,7 @@ class MPCASUPlayer(tk.Tk):
             self._visual_video_segments = [segment for segment in manifest.get("video", {}).get("segments", []) if isinstance(segment, dict)]
             self._visual_audio_segments = [segment for segment in manifest.get("audio", {}).get("segments", []) if isinstance(segment, dict)]
             self._visual_segments = self._visual_video_segments + self._visual_audio_segments
+            self._scheduler = CasuScheduler.from_manifest(manifest, "video" if self._visual_video_segments else "audio")
             self._visual_state = "CASU state map" if self._visual_segments else "CASU empty map"
         except (OSError, ValueError, TypeError):
             self._visual_state = "invalid CASU"
@@ -286,6 +290,10 @@ class MPCASUPlayer(tk.Tk):
         # Prefer decoded video activity for a video, otherwise use audio. The
         # old combined list made a continuously-active soundtrack mask the
         # actual picture state in the visualizer.
+        if self._scheduler is not None:
+            active = self._scheduler.state_at(self.position.get())
+            if active is not None:
+                return active.state
         segments = self._visual_video_segments or self._visual_audio_segments
         for segment in segments:
             try:
