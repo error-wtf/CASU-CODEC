@@ -32,7 +32,7 @@ EOF
 
 install_codec() {
   local stage="$1"; mkdir -p "$stage/usr/share/casu-codec" "$stage/usr/bin"
-  cp -a "$root/casu" "$root/LICENSE" "$root/docs" "$stage/usr/share/casu-codec/"
+  cp -a "$root/casu" "$root/LICENSE" "$root/CASU_FORMAT_SPECIFICATION.md" "$root/docs" "$stage/usr/share/casu-codec/"
   cat > "$stage/usr/bin/casu" <<'EOF'
 #!/bin/sh
 export PYTHONPATH=/usr/share/casu-codec${PYTHONPATH:+:$PYTHONPATH}

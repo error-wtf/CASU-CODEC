@@ -7,6 +7,11 @@ import re
 from typing import Any
 
 
+# Defensive parser bounds. These limits prevent a malformed manifest from
+# causing unbounded validation work or memory use before it reaches playback.
+MAX_SEGMENTS_PER_STREAM = 1_000_000
+
+
 class CasuManifestError(ValueError):
     pass
 
@@ -67,6 +72,9 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
         segments = section.get("segments", [])
         if not isinstance(segments, list):
             errors.append(f"{media_key}.segments must be an array")
+            continue
+        if len(segments) > MAX_SEGMENTS_PER_STREAM:
+            errors.append(f"{media_key}.segments exceeds safety limit of {MAX_SEGMENTS_PER_STREAM}")
             continue
         previous_end = 0.0
         for index, segment in enumerate(segments):

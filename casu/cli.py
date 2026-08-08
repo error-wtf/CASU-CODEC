@@ -36,6 +36,10 @@ def parser() -> argparse.ArgumentParser:
     x.add_argument("manifest", type=Path)
     x.add_argument("--verify-source", action="store_true",
                    help="also resolve the recorded source and verify its SHA-256 digest")
+    vfy = sub.add_parser("verify", help="validate a .casu manifest and verify its recorded source")
+    vfy.add_argument("manifest", type=Path)
+    info = sub.add_parser("info", help="print machine-readable CASU manifest information")
+    info.add_argument("manifest", type=Path)
     return p
 
 
@@ -70,23 +74,45 @@ def main() -> int:
         if args.command == "play":
             play(args.input)
             return 0
-        if args.command == "validate":
+        if args.command in {"validate", "verify", "info"}:
             try:
                 manifest = json.loads(args.manifest.expanduser().read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
                 raise CasuError(f"could not read manifest {args.manifest}: {exc}") from exc
             errors = validate_manifest(manifest)
             if errors:
+                if args.command == "info":
+                    print(json.dumps({"valid": False, "errors": errors}, indent=2))
+                    return 1
                 for error in errors:
                     print(f"INVALID: {error}")
                 return 1
-            if args.verify_source:
+            verify_source = args.command == "verify" or getattr(args, "verify_source", False)
+            if verify_source:
                 try:
                     source = resolve_casu_source(args.manifest)
                 except CasuError as exc:
+                    if args.command == "info":
+                        print(json.dumps({"valid": False, "errors": [str(exc)]}, indent=2))
+                        return 1
                     print(f"INVALID: {exc}")
                     return 1
+                if args.command == "info":
+                    print(json.dumps({"source_verified": str(source)}, indent=2))
+                    return 0
                 print(f"VERIFIED source: {source}")
+            if args.command == "info":
+                print(json.dumps({
+                    "valid": True,
+                    "manifest": str(args.manifest.expanduser().resolve()),
+                    "format": manifest.get("format", {}),
+                    "source": manifest.get("source", {}),
+                    "streams": manifest.get("streams", []),
+                    "video_segments": len(manifest.get("video", {}).get("segments", [])),
+                    "audio_segments": len(manifest.get("audio", {}).get("segments", [])),
+                    "integrity": manifest.get("integrity", {}),
+                }, indent=2, ensure_ascii=False))
+                return 0
             print(f"VALID CASU manifest: {args.manifest}")
             return 0
         raise CasuError("unknown command")
