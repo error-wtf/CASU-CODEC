@@ -96,6 +96,8 @@ class MPCASUPlayer(tk.Tk):
         self._volume = 100
         self._muted = False
         self._rate = 1.0
+        self._resume_source: str | None = None
+        self._resume_position = 0.0
         self._diagnostic_vars: dict[str, tk.StringVar] = {}
         self._diagnostic_cards: list[tk.Frame] = []
         self._layout_mode = "wide"
@@ -425,6 +427,8 @@ class MPCASUPlayer(tk.Tk):
             self._volume = max(0, min(200, int(payload.get("volume", self._volume))))
             self._muted = bool(payload.get("muted", False))
             self._rate = max(0.25, min(4.0, float(payload.get("rate", 1.0))))
+            self._resume_source = str(payload.get("current", "")) or None
+            self._resume_position = max(0.0, float(payload.get("position", 0.0)))
             geometry = payload.get("geometry")
             if isinstance(geometry, str) and geometry:
                 self.geometry(geometry)
@@ -440,6 +444,8 @@ class MPCASUPlayer(tk.Tk):
                 "volume": self._volume,
                 "muted": self._muted,
                 "rate": self._rate,
+                "current": str(self.current) if self.current else None,
+                "position": self.backend.position() if self.backend else self.position.get(),
                 "geometry": self.geometry(),
             }, indent=2) + "\n", encoding="utf-8")
             temporary.replace(self._session_file)
@@ -639,6 +645,13 @@ class MPCASUPlayer(tk.Tk):
             self._rate = self.backend.set_rate(self._rate)
             self.duration = self.backend.duration()
             self.timeline.configure(to=max(self.duration, 1.0))
+            if (self._resume_source and str(path) == self._resume_source
+                    and 5.0 < self._resume_position < max(5.0, self.duration - 5.0)):
+                self.controller.seek(self._resume_position)
+                self.position.set(self._resume_position)
+                self.status.set(f"Resumed {path.name} at {self._resume_position:.1f} s")
+            else:
+                self._resume_position = 0.0
             capabilities = self.backend.capabilities()
             self.status.set(f"{path.name} · {state} · {capabilities.get('version', 'libVLC')}")
             # libVLC can accept a media object while a decoder later fails.
