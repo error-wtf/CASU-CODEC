@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=MPCASU Media Player
+Comment=CASU and legacy media playback
+Exec=mpcasu %U
+Icon=mpcasu-player
+Terminal=false
+Categories=AudioVideo;
+MimeType=application/x-casu;video/mp4;video/x-matroska;audio/mpeg;audio/flac;
+StartupNotify=true

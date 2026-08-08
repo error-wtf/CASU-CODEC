@@ -41,8 +41,10 @@ EOF
   chmod 0755 "$stage/usr/bin/casu"
 }
 install_converter() {
-  local stage="$1"; mkdir -p "$stage/usr/share/casu-codec" "$stage/usr/bin"
+  local stage="$1"; mkdir -p "$stage/usr/share/casu-codec" "$stage/usr/bin" "$stage/usr/share/applications" "$stage/usr/share/icons/hicolor/256x256/apps"
   cp "$root/casu_converter.py" "$stage/usr/share/casu-codec/"
+  cp "$root/packaging/casu-converter.desktop" "$stage/usr/share/applications/casu-converter.desktop"
+  cp "$root/assets/casu_codec_logo.png" "$stage/usr/share/icons/hicolor/256x256/apps/casu-codec.png"
   cat > "$stage/usr/bin/casu-converter" <<'EOF'
 #!/bin/sh
 export PYTHONPATH=/usr/share/casu-codec${PYTHONPATH:+:$PYTHONPATH}
@@ -51,9 +53,11 @@ EOF
   chmod 0755 "$stage/usr/bin/casu-converter"
 }
 install_player() {
-  local stage="$1"; mkdir -p "$stage/usr/share/casu-codec" "$stage/usr/bin"
+  local stage="$1"; mkdir -p "$stage/usr/share/casu-codec" "$stage/usr/bin" "$stage/usr/share/applications" "$stage/usr/share/icons/hicolor/256x256/apps"
   cp "$root/mpcasu_player.py" "$root/mpcasu_backend.py" "$root/mpcasu_playback.py" "$root/MPCASU_IMPLEMENTATION_AUDIT.md" "$root/MPCASU_FEATURE_COMPLETION_MATRIX.md" "$stage/usr/share/casu-codec/"
   if [ -d "$root/assets" ]; then cp -a "$root/assets" "$stage/usr/share/casu-codec/"; fi
+  cp "$root/packaging/mpcasu.desktop" "$stage/usr/share/applications/mpcasu.desktop"
+  cp "$root/assets/mpcasu_player_icon.png" "$stage/usr/share/icons/hicolor/256x256/apps/mpcasu-player.png"
   cat > "$stage/usr/bin/mpcasu" <<'EOF'
 #!/bin/sh
 export PYTHONPATH=/usr/share/casu-codec${PYTHONPATH:+:$PYTHONPATH}
