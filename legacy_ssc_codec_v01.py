@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
+# SPDX-FileCopyrightText: 2026 Lino Casu
 #!/usr/bin/env python3
 """
 SSC v0.1 — Segmented State Codec / compatibility optimizer

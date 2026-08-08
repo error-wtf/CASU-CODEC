@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4 | SPDX-FileCopyrightText: 2026 Lino Casu -->
 # CODEX BRIEF 01 — Idee: Segmented State Display / Codec
 
 ## Ziel

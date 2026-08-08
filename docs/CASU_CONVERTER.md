@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4 | SPDX-FileCopyrightText: 2026 Lino Casu -->
 # CASU converter
 
 The converter is deliberately a **sidecar conversion**, not a destructive

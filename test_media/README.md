@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4 | SPDX-FileCopyrightText: 2026 Lino Casu -->
 # Casu reference test media
 
 The local test asset is downloaded from the owner's YouTube publication:

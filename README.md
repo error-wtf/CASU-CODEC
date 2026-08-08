@@ -1,4 +1,8 @@
+<!-- SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4 | SPDX-FileCopyrightText: 2026 Lino Casu -->
 # CASU Codec / Container
+
+**License:** All Rights Reserved / Anticapitalist License 1.4 by Lino Casu.
+See [`LICENSE`](LICENSE). Third-party components retain their own licenses.
 
 **CASU** means **Codec for All Segmented Units** in this project. “Casu” also
 preserves the author's surname and is the `.casu` container/sidecar identity.

@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4 | SPDX-FileCopyrightText: 2026 Lino Casu -->
 # Research inputs and provenance
 
 The initial architecture was derived from the supplied files in

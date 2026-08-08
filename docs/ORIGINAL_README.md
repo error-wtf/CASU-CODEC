@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4 | SPDX-FileCopyrightText: 2026 Lino Casu -->
 # SSC v0.1 — Segmented State Codec prototype
 
 SSC is a research prototype for the idea discussed in this chat: **treat persistent state and actual change as the fundamental unit instead of blindly treating every global display tick as equally important**.
