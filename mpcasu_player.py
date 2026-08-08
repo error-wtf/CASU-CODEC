@@ -43,6 +43,8 @@ class MPCASUPlayer(tk.Tk):
         self._visual_phase = 0.0
         self._visual_state = "idle"
         self._visual_segments: list[dict] = []
+        self._visual_video_segments: list[dict] = []
+        self._visual_audio_segments: list[dict] = []
         self._build()
         if initial:
             self.add_files([initial])
@@ -100,6 +102,8 @@ class MPCASUPlayer(tk.Tk):
     def _load_visual_state(self, path: Path):
         self._visual_state = "legacy"
         self._visual_segments = []
+        self._visual_video_segments = []
+        self._visual_audio_segments = []
         if path.suffix.lower() != ".casu":
             return
         try:
@@ -108,14 +112,19 @@ class MPCASUPlayer(tk.Tk):
             if errors:
                 self._visual_state = "invalid CASU: " + errors[0]
                 return
-            sections = [manifest.get("video", {}).get("segments", []), manifest.get("audio", {}).get("segments", [])]
-            self._visual_segments = [segment for section in sections for segment in section if isinstance(segment, dict)]
+            self._visual_video_segments = [segment for segment in manifest.get("video", {}).get("segments", []) if isinstance(segment, dict)]
+            self._visual_audio_segments = [segment for segment in manifest.get("audio", {}).get("segments", []) if isinstance(segment, dict)]
+            self._visual_segments = self._visual_video_segments + self._visual_audio_segments
             self._visual_state = "CASU state map" if self._visual_segments else "CASU empty map"
         except (OSError, ValueError, TypeError):
             self._visual_state = "invalid CASU"
 
     def _state_at_position(self) -> str:
-        for segment in self._visual_segments:
+        # Prefer decoded video activity for a video, otherwise use audio. The
+        # old combined list made a continuously-active soundtrack mask the
+        # actual picture state in the visualizer.
+        segments = self._visual_video_segments or self._visual_audio_segments
+        for segment in segments:
             try:
                 if float(segment["start_s"]) <= self.position.get() < float(segment["end_s"]):
                     return str(segment.get("state", "unknown"))

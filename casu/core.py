@@ -237,7 +237,7 @@ def analyze(path: Path, analysis_fps: float = 10.0, mode: str = "strict") -> dic
     fmt = probe.get("format", {})
     stat = path.stat()
     digest = sha256_file(path)
-    return {
+    manifest = {
         "format": {"magic": "MPCASU\\0", "kind": "CASU sidecar manifest", "schema": "0.2"},
         "casu": {"name": "CASU", "acronym": "Codec for All Segmented Units", "short_name": "CASU", "container_extension": ".casu", "version": __version__, "analysis_mode": mode,
                         "compatibility": "legacy media remains canonical; sidecar is optional"},
@@ -251,6 +251,13 @@ def analyze(path: Path, analysis_fps: float = 10.0, mode: str = "strict") -> dic
         "integrity": {"timestamps_are_source_of_truth": True, "optimization_is_hint_only": True, "mode_is_not_quality_proof": True,
                       "fallback": "full-frame/full-fidelity legacy playback"},
     }
+    # Keep the public API fail-closed: a converter must never emit a manifest
+    # that its own validator would reject.
+    from .schema import validate_manifest
+    errors = validate_manifest(manifest)
+    if errors:
+        raise CasuError("internal manifest validation failed: " + errors[0])
+    return manifest
 
 
 def play(path: Path, extra: list[str] | None = None) -> None:
