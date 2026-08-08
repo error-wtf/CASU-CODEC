@@ -83,7 +83,8 @@ class MPCASUPlayer(tk.Tk):
         except tk.TclError:
             tk.Label(logo, text="◈ MPCASU", bg=BG, fg=RED, font=("TkDefaultFont", 19, "bold")).pack(anchor="w")
             tk.Label(logo, text="PLAYER", bg=BG, fg=SECONDARY, font=("TkDefaultFont", 8, "bold")).pack(anchor="w", padx=(30, 0))
-        self.now_playing = tk.Label(top, text="NO MEDIA SELECTED", bg=BG, fg=SECONDARY, font=("TkDefaultFont", 10, "bold")); self.now_playing.pack(side="left", padx=42)
+        ttk.Button(top, text="‹", style="MPC.TButton", command=lambda: self.status.set("Navigation back is not applicable in the player view")).pack(side="left", padx=(24, 4))
+        self.now_playing = tk.Label(top, text="NOW PLAYING · NO MEDIA SELECTED", bg=BG, fg=RED, font=("TkDefaultFont", 10, "bold")); self.now_playing.pack(side="left", padx=8)
         tk.Label(top, text="CASU · LEGACY SAFE", bg=BG, fg=MUTED, font=("TkDefaultFont", 9)).pack(side="right")
 
         body = tk.Frame(root, bg=BG); body.pack(fill="both", expand=True, padx=18)
@@ -121,7 +122,9 @@ class MPCASUPlayer(tk.Tk):
         tk.Label(center, textvariable=self.status, bg=PANEL, fg=SECONDARY, anchor="w").pack(fill="x", padx=14, pady=(0, 8))
 
         right = tk.Frame(body, bg=PANEL, width=285); right.pack(side="right", fill="y", padx=(10, 0)); right.pack_propagate(False)
-        tk.Label(right, text="PLAYLIST", bg=PANEL, fg=TEXT, font=("TkDefaultFont", 11, "bold"), anchor="w").pack(fill="x", padx=12, pady=(14, 8))
+        playlist_header = tk.Frame(right, bg=PANEL); playlist_header.pack(fill="x", padx=12, pady=(14, 8))
+        tk.Label(playlist_header, text="PLAYLIST", bg=PANEL, fg=TEXT, font=("TkDefaultFont", 11, "bold"), anchor="w").pack(anchor="w")
+        tk.Label(playlist_header, text="Queue · source metadata", bg=PANEL, fg=MUTED, font=("TkDefaultFont", 8), anchor="w").pack(anchor="w", pady=(2, 0))
         self.queue = tk.Listbox(right, bg=PANEL_ALT, fg=SECONDARY, selectbackground=RED_DARK, selectforeground=TEXT, relief="flat", highlightthickness=0, activestyle="none", exportselection=False)
         self.queue.pack(fill="both", expand=True, padx=10, pady=(0, 8)); self.queue.bind("<Double-Button-1>", self._play_queue_item)
         tk.Label(right, text="QUEUE · SHUFFLE · REPEAT", bg=PANEL, fg=MUTED, font=("TkDefaultFont", 8)).pack(anchor="w", padx=12, pady=(0, 12))
