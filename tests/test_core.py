@@ -132,6 +132,17 @@ def test_analysis_rejects_invalid_fps():
         analyze(VIDEO, analysis_fps=0)
 
 
+def test_analysis_rejects_input_without_playable_streams(tmp_path, monkeypatch):
+    source = tmp_path / "attachment.bin"
+    source.write_bytes(b"not media")
+    monkeypatch.setattr("casu.core.ffprobe", lambda _path: {
+        "streams": [{"codec_type": "video", "disposition": {"attached_pic": 1}}],
+        "format": {"duration": "0"},
+    })
+    with pytest.raises(CasuError, match="no playable audio or video stream"):
+        analyze(source)
+
+
 @pytest.mark.parametrize("value", [None, [], {"source": []}, {"source": {}, "casu": []}])
 def test_manifest_validator_fails_closed_for_malformed_shapes(value):
     errors = validate_manifest(value)
