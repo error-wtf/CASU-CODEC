@@ -10,6 +10,7 @@ import pytest
 from casu.core import CasuError, analyze, play, resolve_casu_source, rle
 from casu.schema import validate_manifest
 from casu.scheduler import CasuScheduler
+from casu.cli import atomic_write_text
 from mpcasu_backend import LibVLCBackend
 from mpcasu_playback import ControllerState, PlaybackController
 from mpcasu_player import presentation_mode
@@ -47,6 +48,14 @@ def test_manifest_json_roundtrip(tmp_path):
     target = tmp_path / "state.json"
     target.write_text(json.dumps(payload), encoding="utf-8")
     assert json.loads(target.read_text(encoding="utf-8")) == payload
+
+
+def test_cli_atomic_write_text_replaces_destination(tmp_path):
+    target = tmp_path / "report.json"
+    target.write_text("old", encoding="utf-8")
+    atomic_write_text(target, "new\\n")
+    assert target.read_text(encoding="utf-8") == "new\\n"
+    assert not list(tmp_path.glob(".report.json.*"))
 
 
 def test_rle_clamps_final_partial_interval_to_source_duration():
