@@ -6,6 +6,7 @@ import json
 import hashlib
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -141,7 +142,8 @@ def _interval(start: int, end: int, state: str, step: float,
 
 
 def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
-                  width: int = 160, height: int = 90, mode: str = "strict") -> dict[str, Any]:
+                  width: int = 160, height: int = 90, mode: str = "strict",
+                  progress: Any | None = None) -> dict[str, Any]:
     if not np.isfinite(analysis_fps) or analysis_fps <= 0:
         raise CasuError("analysis FPS must be finite and positive")
     if width <= 0 or height <= 0:
@@ -156,7 +158,11 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
         "-vf", f"fps={analysis_fps},scale={width}:{height}:flags=area,format=gray",
         "-f", "rawvideo", "-pix_fmt", "gray", "pipe:1",
     ]
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # Keep stderr out of a pipe while raw frames are consumed.  A verbose
+    # decoder error stream must never be able to fill a pipe and deadlock the
+    # analysis process before stdout reaches EOF.
+    error_stream = tempfile.TemporaryFile(mode="w+b")
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=error_stream)
     if process.stdout is None:
         raise CasuError("could not open FFmpeg video output")
     size = width * height
@@ -166,6 +172,8 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
     tile_changes: list[float] = []
     tile_width = max(1, min(16, width // 8))
     tile_height = max(1, min(16, height // 8))
+    frame_index = 0
+    expected_frames = max(1.0, duration(probe) * analysis_fps)
     while True:
         raw = process.stdout.read(size)
         if len(raw) != size:
@@ -194,8 +202,14 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
         tile_changes.append(changed_ratio)
         states.append(state)
         previous = frame
-    error = process.stderr.read().decode("utf-8", errors="replace") if process.stderr else ""
-    if process.wait() != 0:
+        frame_index += 1
+        if progress is not None:
+            progress(min(1.0, frame_index / expected_frames))
+    process.wait()
+    error_stream.seek(0)
+    error = error_stream.read().decode("utf-8", errors="replace")
+    error_stream.close()
+    if process.returncode != 0:
         raise CasuError(f"video analysis failed: {error.strip()}")
     total = max(1, len(states))
     counts = {name: states.count(name) for name in ("static", "low_motion", "motion")}
@@ -229,7 +243,7 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
 
 
 def analyze_audio(path: Path, probe: dict[str, Any], sample_rate: int = 16000,
-                  window_ms: int = 20) -> dict[str, Any]:
+                  window_ms: int = 20, progress: Any | None = None) -> dict[str, Any]:
     if sample_rate <= 0 or window_ms <= 0:
         raise CasuError("audio sample rate and window must be positive")
     audio = stream(probe, "audio")
@@ -242,9 +256,12 @@ def analyze_audio(path: Path, probe: dict[str, Any], sample_rate: int = 16000,
     states: list[str] = []
     db_values: list[float] = []
     pending = bytearray()
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    error_stream = tempfile.TemporaryFile(mode="w+b")
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=error_stream)
     if process.stdout is None:
         raise CasuError("could not open FFmpeg audio output")
+    processed_windows = 0
+    expected_windows = max(1.0, duration(probe) * 1000.0 / window_ms)
     while True:
         chunk = process.stdout.read(max(window_bytes, 64 * 1024))
         if not chunk:
@@ -259,6 +276,9 @@ def analyze_audio(path: Path, probe: dict[str, Any], sample_rate: int = 16000,
         db = 20.0 * np.log10(np.sqrt(np.mean(samples * samples, axis=1) + 1e-12) + 1e-12)
         db_values.extend(float(value) for value in db)
         states.extend(np.where(db < -55.0, "silence", np.where(db < -38.0, "low_level", "active")).tolist())
+        processed_windows += int(db.size)
+        if progress is not None:
+            progress(min(1.0, processed_windows / expected_windows))
     if pending:
         tail = np.frombuffer(bytes(pending), dtype=np.float32)
         if tail.size:
@@ -267,8 +287,11 @@ def analyze_audio(path: Path, probe: dict[str, Any], sample_rate: int = 16000,
             value = float(20.0 * np.log10(np.sqrt(np.mean(padded * padded) + 1e-12) + 1e-12))
             db_values.append(value)
             states.append("silence" if value < -55.0 else "low_level" if value < -38.0 else "active")
-    error = process.stderr.read().decode("utf-8", errors="replace") if process.stderr else ""
-    if process.wait() != 0:
+    process.wait()
+    error_stream.seek(0)
+    error = error_stream.read().decode("utf-8", errors="replace")
+    error_stream.close()
+    if process.returncode != 0:
         raise CasuError(f"audio analysis failed: {error.strip()}")
     count = len(states)
     if not count:
@@ -288,7 +311,8 @@ def analyze_audio(path: Path, probe: dict[str, Any], sample_rate: int = 16000,
     }
 
 
-def analyze(path: Path, analysis_fps: float = 10.0, mode: str = "strict") -> dict[str, Any]:
+def analyze(path: Path, analysis_fps: float = 10.0, mode: str = "strict",
+            progress: Any | None = None) -> dict[str, Any]:
     if mode not in ANALYSIS_MODES:
         raise CasuError(f"unknown analysis mode: {mode}; choose one of {sorted(ANALYSIS_MODES)}")
     if not np.isfinite(analysis_fps) or analysis_fps <= 0:
@@ -309,8 +333,21 @@ def analyze(path: Path, analysis_fps: float = 10.0, mode: str = "strict") -> dic
     fmt = probe.get("format", {})
     stat = path.stat()
     digest = sha256_file(path)
-    video_data = analyze_video(path, probe, analysis_fps=analysis_fps, mode=mode)
-    audio_data = analyze_audio(path, probe)
+    def phase(value: float) -> None:
+        if progress is not None:
+            progress(max(0.0, min(1.0, value)))
+
+    has_video = bool(stream(probe, "video"))
+    has_audio = bool(stream(probe, "audio"))
+    video_data = analyze_video(
+        path, probe, analysis_fps=analysis_fps, mode=mode,
+        progress=lambda value: phase(0.05 + 0.55 * value),
+    ) if has_video else {}
+    audio_data = analyze_audio(
+        path, probe,
+        progress=lambda value: phase(0.60 + 0.35 * value),
+    ) if has_audio else {}
+    phase(1.0)
     seek_entries = []
     for stream_name, data in (("video", video_data), ("audio", audio_data)):
         for segment in data.get("segments", []):

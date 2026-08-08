@@ -85,7 +85,7 @@ class CASUConverter(tk.Tk):
         ttk.Combobox(options, textvariable=self.mode, values=sorted(ANALYSIS_MODES), state="readonly", width=18).pack(side="left", padx=8)
         ttk.Label(options, text="FPS").pack(side="left")
         ttk.Spinbox(options, from_=0.1, to=120.0, increment=0.5, textvariable=self.fps, width=8).pack(side="left", padx=8)
-        self.progress = ttk.Progressbar(root, mode="indeterminate")
+        self.progress = ttk.Progressbar(root, mode="determinate", maximum=100.0)
         self.progress.pack(fill="x", pady=(8, 4))
         tk.Label(root, textvariable=self.status, wraplength=680, bg=BG, fg=SECONDARY, anchor="w", justify="left").pack(fill="x", pady=5)
         actions = tk.Frame(root, bg=BG); actions.pack(anchor="e", pady=(12, 0))
@@ -136,12 +136,19 @@ class CASUConverter(tk.Tk):
         if fps <= 0:
             messagebox.showerror("CASU", "FPS must be positive."); return
         mode = self.mode.get()
-        self.progress.start(12); self.status.set("Analyzing decoded source activity…")
+        self.progress.configure(value=0.0)
+        self.status.set("Analyzing decoded source activity…")
         threading.Thread(target=self._worker, args=(source, output, fps, mode), daemon=True).start()
 
     def _worker(self, source: Path, output: Path, fps: float, mode: str) -> None:
         try:
-            result = analyze(source, fps, mode)
+            def report(value: float) -> None:
+                # Tk widgets are only touched by the UI thread.  The analysis
+                # worker emits measured progress; it never runs a repaint or
+                # blocks on a modal dialog.
+                self.after(0, lambda: self.progress.configure(value=max(0.0, min(100.0, value * 100.0))))
+
+            result = analyze(source, fps, mode, progress=report)
             output.parent.mkdir(parents=True, exist_ok=True)
             payload = json.dumps(result, indent=2, ensure_ascii=False) + "\n"
             fd, temporary = tempfile.mkstemp(prefix=f".{output.name}.", dir=output.parent, text=True)
@@ -156,7 +163,8 @@ class CASUConverter(tk.Tk):
             self.after(0, lambda: self._done(f"Conversion failed: {exc}", error=True))
 
     def _done(self, message: str, error: bool = False) -> None:
-        self.progress.stop(); self.status.set(message)
+        self.progress.configure(value=0.0 if error else 100.0)
+        self.status.set(message)
         (messagebox.showerror if error else messagebox.showinfo)("CASU Converter", message)
 
 
