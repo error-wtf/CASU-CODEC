@@ -7,6 +7,9 @@ source pathname for payload reconstruction.
 from .format import ChunkType, NativeChunk, SeekEntry
 from .reader import NativeV2Container, NativeV2Error, read_native_v2
 from .writer import write_native_v2
+from .video import TileStateCache, VideoPayloadError, decode_key_state, encode_key_state, encode_tile_update
 
 __all__ = ["ChunkType", "NativeChunk", "SeekEntry", "NativeV2Container",
            "NativeV2Error", "read_native_v2", "write_native_v2"]
+__all__ += ["TileStateCache", "VideoPayloadError", "decode_key_state", "encode_key_state",
+            "encode_tile_update"]

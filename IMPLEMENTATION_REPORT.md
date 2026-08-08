@@ -32,8 +32,10 @@ No 1.0 release claim is made while this gate is PARTIAL.
 Implemented `casu.native_v2` as a standalone deterministic binary container
 primitive with typed chunks, atomic writing, key-state/update byte offsets,
 seek-index serialization, bounded reads and SHA-256 integrity verification.
-The source file is not required to read the written chunks.
+It now also serializes lossless canonical video key-state planes and
+subsampled-plane tile updates, with a reconstruction cache. The source file is
+not required to read the written chunks.
 
-Still open for PASS: canonical video key-state/tile payload serialization,
-audio/subtitle/chapter chunk semantics, recovery-point writing/recovery,
-reader reconstruction and end-to-end codec roundtrip fixtures.
+Still open for PASS: audio/subtitle/chapter chunk semantics, recovery-point
+writing/recovery, native player/audio sinks and end-to-end codec roundtrip
+fixtures against real media.

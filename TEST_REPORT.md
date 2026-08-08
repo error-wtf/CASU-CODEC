@@ -2,7 +2,7 @@
 
 ## 2026-08-08
 
-- Fast/unit suite: **46 passed, 6 deselected** (`pytest -q -m 'not media'`).
+- Fast/unit suite: **47 passed, 6 deselected** (`pytest -q -m 'not media'`).
 - Targeted source-resolution media test: **1 passed**; verified native
   `yuv420p` planes and source PTS from the fixture.
 - The full long-running media/UI matrix is not claimed as passing yet. It
