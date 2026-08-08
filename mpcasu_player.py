@@ -657,9 +657,9 @@ class MPCASUPlayer(tk.Tk):
             return
         if self.current.as_uri().startswith(("http:", "https:", "rtsp:")):
             return
-        if self.backend.state() == PlaybackState.PLAYING and self.duration <= 0 and self.position.get() <= 0:
-            self.status.set("Playback unavailable — decoder produced no timed media")
-            self._set_diagnostics(support="backend opened; decoder unavailable")
+        if self.backend.state() == PlaybackState.PLAYING and not self.backend.is_actively_playing():
+            self.status.set("Playback unavailable — libVLC did not enter active playback")
+            self._set_diagnostics(support="backend opened; decoder or output unavailable")
 
     def _update_presentation(self, path: Path):
         """Choose a presentation mode from probed streams, not file suffixes."""
