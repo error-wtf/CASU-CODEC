@@ -67,6 +67,8 @@ class LibVLCBackend:
         self._install("libvlc_media_player_get_time", ctypes.c_int64, [ctypes.c_void_p])
         self._install("libvlc_media_player_get_length", ctypes.c_int64, [ctypes.c_void_p])
         self._install("libvlc_media_player_set_time", None, [ctypes.c_void_p, ctypes.c_int64])
+        self._install("libvlc_media_player_set_rate", ctypes.c_int, [ctypes.c_void_p, ctypes.c_float])
+        self._install("libvlc_media_player_get_rate", ctypes.c_float, [ctypes.c_void_p])
         self._install("libvlc_audio_set_volume", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int])
         self._install("libvlc_audio_get_volume", ctypes.c_int, [ctypes.c_void_p])
         self._install("libvlc_audio_set_mute", None, [ctypes.c_void_p, ctypes.c_int])
@@ -145,6 +147,17 @@ class LibVLCBackend:
 
     def seek(self, seconds: float):
         if self.player: self.libvlc_media_player_set_time(self.player, int(max(0.0, seconds) * 1000))
+
+    def set_rate(self, rate: float) -> float:
+        if not self.player:
+            raise BackendError("no active media player")
+        rate = max(0.25, min(4.0, float(rate)))
+        if self.libvlc_media_player_set_rate(self.player, ctypes.c_float(rate)) == -1:
+            raise BackendError("libVLC rejected playback rate")
+        return float(self.libvlc_media_player_get_rate(self.player))
+
+    def rate(self) -> float:
+        return float(self.libvlc_media_player_get_rate(self.player)) if self.player else 1.0
 
     def position(self) -> float:
         return max(0.0, float(self.libvlc_media_player_get_time(self.player) if self.player else 0) / 1000.0)

@@ -76,6 +76,7 @@ class MPCASUPlayer(tk.Tk):
         self._icon_image = None
         self._volume = 100
         self._muted = False
+        self._rate = 1.0
         self._diagnostic_vars: dict[str, tk.StringVar] = {}
         self._diagnostic_cards: list[tk.Frame] = []
         self._layout_mode = "wide"
@@ -175,6 +176,7 @@ class MPCASUPlayer(tk.Tk):
         for label, command in (("Previous", self.play_previous), ("−10 s", lambda: self.seek_by(-10)), ("Play / Pause", self.toggle_playback), ("Stop", self.stop), ("+10 s", lambda: self.seek_by(10)), ("Next", self.play_next)):
             ttk.Button(bar, text=label, style="MPC.TButton", command=command).pack(side="left", padx=3)
         ttk.Button(bar, text="Mute", style="MPC.TButton", command=self.toggle_mute).pack(side="right", padx=3)
+        ttk.Button(bar, text="1×", style="MPC.TButton", command=self.cycle_rate).pack(side="right", padx=3)
         ttk.Button(bar, text="Audio", style="MPC.TButton", command=self.cycle_audio_track).pack(side="right", padx=3)
         ttk.Button(bar, text="Info", style="MPC.TButton", command=self.show_media_info).pack(side="right", padx=3)
         ttk.Button(bar, text="Fullscreen", style="MPC.TButton", command=lambda: self.attributes("-fullscreen", not self.attributes("-fullscreen"))).pack(side="right", padx=3)
@@ -340,6 +342,7 @@ class MPCASUPlayer(tk.Tk):
             self.backend.open_source(source)
             self.controller.attach(self.backend, source)
             self.controller.play()
+            self._rate = self.backend.set_rate(self._rate)
             self._set_diagnostics(support="Legacy network backend", integrity="unavailable", segmented="unavailable", energy="unavailable — not measured")
             self.duration = self.backend.duration()
             self.timeline.configure(to=max(self.duration, 1.0))
@@ -363,6 +366,7 @@ class MPCASUPlayer(tk.Tk):
             self.add_files([Path(value) for value in payload.get("playlist", []) if Path(value).is_file()])
             self._volume = max(0, min(200, int(payload.get("volume", self._volume))))
             self._muted = bool(payload.get("muted", False))
+            self._rate = max(0.25, min(4.0, float(payload.get("rate", 1.0))))
             geometry = payload.get("geometry")
             if isinstance(geometry, str) and geometry:
                 self.geometry(geometry)
@@ -377,6 +381,7 @@ class MPCASUPlayer(tk.Tk):
                 "playlist": list(self.library.get(0, "end")),
                 "volume": self._volume,
                 "muted": self._muted,
+                "rate": self._rate,
                 "geometry": self.geometry(),
             }, indent=2) + "\n", encoding="utf-8")
             temporary.replace(self._session_file)
@@ -562,6 +567,7 @@ class MPCASUPlayer(tk.Tk):
             else: self.backend.open(source)
             self.controller.attach(self.backend, path)
             self.controller.play()
+            self._rate = self.backend.set_rate(self._rate)
             self.duration = self.backend.duration()
             self.timeline.configure(to=max(self.duration, 1.0))
             capabilities = self.backend.capabilities()
@@ -617,6 +623,20 @@ class MPCASUPlayer(tk.Tk):
             try: self.backend.set_mute(self._muted)
             except BackendError as exc: self.status.set(str(exc)); return
         self.status.set("Muted" if self._muted else f"Volume {self._volume}%")
+
+    def cycle_rate(self):
+        """Apply a real libVLC playback rate; never fake a speed label."""
+        rates = (0.5, 1.0, 1.25, 1.5, 2.0)
+        next_rate = rates[(rates.index(self._rate) + 1) % len(rates)] if self._rate in rates else 1.0
+        if not self.backend:
+            self._rate = next_rate
+            self.status.set(f"Playback rate {self._rate:g}× (applies on next media)")
+            return
+        try:
+            self._rate = self.backend.set_rate(next_rate)
+            self.status.set(f"Playback rate {self._rate:g}×")
+        except BackendError as exc:
+            self.status.set(f"Playback rate unavailable: {exc}")
 
     def cycle_audio_track(self):
         if not self.backend:
