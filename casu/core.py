@@ -99,16 +99,17 @@ def duration(probe: dict[str, Any]) -> float:
         return 0.0
 
 
-def rle(states: list[str], step: float, end_s: float | None = None) -> list[dict[str, Any]]:
+def rle(states: list[str], step: float, end_s: float | None = None,
+        id_prefix: str = "segment") -> list[dict[str, Any]]:
     if not states:
         return []
     result: list[dict[str, Any]] = []
     start, current = 0, states[0]
     for index, state in enumerate(states[1:], 1):
         if state != current:
-            result.append(_interval(start, index, current, step))
+            result.append(_interval(start, index, current, step, id_prefix, len(result)))
             start, current = index, state
-    result.append(_interval(start, len(states), current, step))
+    result.append(_interval(start, len(states), current, step, id_prefix, len(result)))
     if end_s is not None and result:
         result[-1]["end_s"] = round(min(result[-1]["end_s"], end_s), 6)
         result[-1]["duration_s"] = round(max(0.0, result[-1]["end_s"] - result[-1]["start_s"]), 6)
@@ -117,7 +118,8 @@ def rle(states: list[str], step: float, end_s: float | None = None) -> list[dict
     return result
 
 
-def _interval(start: int, end: int, state: str, step: float) -> dict[str, Any]:
+def _interval(start: int, end: int, state: str, step: float,
+              id_prefix: str = "segment", ordinal: int = 0) -> dict[str, Any]:
     start_s = round(start * step, 6)
     end_s = round(end * step, 6)
     return {
@@ -125,6 +127,8 @@ def _interval(start: int, end: int, state: str, step: float) -> dict[str, Any]:
         "end_s": end_s,
         "duration_s": round(end_s - start_s, 6),
         "state": state,
+        "segment_id": f"{id_prefix}-{ordinal:06d}",
+        "lifecycle": "CREATE" if ordinal == 0 else "UPDATE",
         "valid_until_s": end_s,
         "deadline_s": end_s,
         "priority": 0,
@@ -215,7 +219,7 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
             "mode_threshold": {"strict": 0.01, "visually_lossless": 0.03, "adaptive": 0.08}[mode],
             "state_is_hint_only": True,
         },
-        "segments": rle(states, 1.0 / analysis_fps, duration(probe)),
+        "segments": rle(states, 1.0 / analysis_fps, duration(probe), "video"),
         "state_is_hint_only": True,
     }
 
@@ -275,7 +279,7 @@ def analyze_audio(path: Path, probe: dict[str, Any], sample_rate: int = 16000,
         "sample_windows": count,
         "activity_ratio": {key: round(value / total, 6) for key, value in counts.items()},
         "mean_dbfs": round(float(np.mean(db_values)), 3),
-        "segments": rle(states, window_ms / 1000, duration(probe)),
+        "segments": rle(states, window_ms / 1000, duration(probe), "audio"),
         "state_is_hint_only": True,
     }
 
@@ -294,6 +298,18 @@ def analyze(path: Path, analysis_fps: float = 10.0, mode: str = "strict") -> dic
     fmt = probe.get("format", {})
     stat = path.stat()
     digest = sha256_file(path)
+    video_data = analyze_video(path, probe, analysis_fps=analysis_fps, mode=mode)
+    audio_data = analyze_audio(path, probe)
+    seek_entries = []
+    for stream_name, data in (("video", video_data), ("audio", audio_data)):
+        for segment in data.get("segments", []):
+            seek_entries.append({
+                "timestamp_s": segment["start_s"],
+                "stream": stream_name,
+                "segment_id": segment.get("segment_id"),
+                "state": segment.get("state"),
+            })
+    seek_entries.sort(key=lambda item: (item["timestamp_s"], item["stream"]))
     manifest = {
         "format": {"magic": "MPCASU\\0", "kind": "CASU sidecar manifest", "schema": "0.2"},
         "casu": {"name": "CASU", "acronym": "Codec for All Segmented Units", "short_name": "CASU", "container_extension": ".casu", "version": __version__, "analysis_mode": mode,
@@ -303,8 +319,14 @@ def analyze(path: Path, analysis_fps: float = 10.0, mode: str = "strict") -> dic
                    "format_name": fmt.get("format_name"), "duration_s": duration(probe)},
         "streams": [{key: item.get(key) for key in ("index", "codec_type", "codec_name", "width", "height", "sample_rate", "channels", "time_base")}
                     for item in probe.get("streams", [])],
-        "video": analyze_video(path, probe, analysis_fps=analysis_fps, mode=mode),
-        "audio": analyze_audio(path, probe),
+        "video": video_data,
+        "audio": audio_data,
+        "seek_index": {
+            "method": "deterministic segment-boundary index",
+            "entries": seek_entries,
+            "native_key_states": False,
+            "note": "sidecar navigation hints only; decoder keyframe seeking remains backend-owned",
+        },
         "integrity": {"timestamps_are_source_of_truth": True, "optimization_is_hint_only": True, "mode_is_not_quality_proof": True,
                       "fallback": "full-frame/full-fidelity legacy playback"},
     }
