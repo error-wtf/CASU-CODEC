@@ -608,7 +608,9 @@ class MPCASUPlayer(tk.Tk):
         self._load_visual_state(sidecar if sidecar.exists() else path)
         if path.suffix.lower() == ".casu":
             self._set_diagnostics(
-                support="Native CASU manifest",
+                # The current .casu format is a validated sidecar compatibility
+                # manifest. Do not present it as a native decoded CASU payload.
+                support="CASU sidecar + legacy backend",
                 integrity="verified source manifest" if not self._visual_state.startswith("invalid") else "failed manifest validation",
                 segmented=f"{len(self._visual_segments)} segments" if self._visual_segments else "no segment data",
             )

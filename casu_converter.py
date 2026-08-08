@@ -93,7 +93,10 @@ class CASUConverter(tk.Tk):
         ttk.Button(actions, text="Close", style="CASU.TButton", command=self.destroy).pack(side="left", padx=8)
 
     def choose_source(self) -> None:
-        path = filedialog.askopenfilename(filetypes=[("Media", "*.mp4 *.mp3 *.mkv *.mov *.m4a *.wav"), ("All files", "*.*")])
+        # Let ffprobe/libVLC decide support; a short extension whitelist would
+        # hide valid legacy formats before the universal backend can inspect
+        # them.
+        path = filedialog.askopenfilename(filetypes=[("All media and files", "*.*"), ("All files", "*")])
         if path:
             self.source.set(path)
             if not self.output.get(): self.output.set(path + ".casu")

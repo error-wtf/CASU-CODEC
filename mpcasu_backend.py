@@ -295,7 +295,16 @@ class LibVLCBackend:
 
 
 class CasuBackend(LibVLCBackend):
-    """Validated CASU sidecar path with immutable source provenance."""
+    """Validated CASU sidecar path with immutable source provenance.
+
+    This is intentionally named as a compatibility path until CASU has a
+    native payload decoder; capability reporting must not imply otherwise.
+    """
+
+    def capabilities(self) -> dict[str, str]:
+        values = super().capabilities()
+        values.update({"backend_path": "CASU sidecar compatibility", "native_casu_payload": "unavailable"})
+        return values
 
     def open_casu(self, manifest_path: Path) -> None:
         try: manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
