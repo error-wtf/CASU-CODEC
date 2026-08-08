@@ -728,7 +728,9 @@ class MPCASUPlayer(tk.Tk):
             current = self.backend.audio_track()
             next_track = (current + 1) % count
             self.backend.set_audio_track(next_track)
-            self.status.set(f"Audio track {next_track + 1}/{count}")
+            labels = self.backend.audio_track_descriptions()
+            label = next((name for identifier, name in labels if identifier == next_track), f"Track {next_track + 1}")
+            self.status.set(f"Audio: {label} ({next_track + 1}/{count})")
         except BackendError as exc:
             self.status.set(str(exc))
 
@@ -744,7 +746,9 @@ class MPCASUPlayer(tk.Tk):
             current = self.backend.subtitle_track()
             next_track = (current + 1) % count
             self.backend.set_subtitle_track(next_track)
-            self.status.set(f"Subtitle track {next_track + 1}/{count}")
+            labels = self.backend.subtitle_track_descriptions()
+            label = next((name for identifier, name in labels if identifier == next_track), f"Track {next_track + 1}")
+            self.status.set(f"Subtitle: {label} ({next_track + 1}/{count})")
         except BackendError as exc:
             self.status.set(str(exc))
 

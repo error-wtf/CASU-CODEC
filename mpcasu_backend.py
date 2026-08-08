@@ -31,6 +31,10 @@ class BackendError(CasuError):
     pass
 
 
+class _TrackDescription(ctypes.Structure):
+    _fields_ = [("identifier", ctypes.c_int), ("name", ctypes.c_char_p)]
+
+
 class LibVLCBackend:
     """Minimal, real in-process libVLC backend for the MPCASU window."""
 
@@ -92,11 +96,13 @@ class LibVLCBackend:
         self._install("libvlc_audio_get_track_count", ctypes.c_int, [ctypes.c_void_p])
         self._install("libvlc_audio_get_track", ctypes.c_int, [ctypes.c_void_p])
         self._install("libvlc_audio_set_track", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int])
+        self._audio_description_api = self._install_descriptions("libvlc_audio_get_track_description")
         self._subtitle_api = all(self._optional_install(name, restype, args) for name, restype, args in (
             ("libvlc_video_get_spu_count", ctypes.c_int, [ctypes.c_void_p]),
             ("libvlc_video_get_spu", ctypes.c_int, [ctypes.c_void_p]),
             ("libvlc_video_set_spu", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int]),
         ))
+        self._subtitle_description_api = self._install_descriptions("libvlc_video_get_spu_description")
         if sys.platform.startswith("linux"):
             self._install("libvlc_media_player_set_xwindow", None, [ctypes.c_void_p, ctypes.c_uint32])
         elif sys.platform.startswith("win"):
@@ -110,6 +116,14 @@ class LibVLCBackend:
     def _optional_install(self, name, restype, args) -> bool:
         try:
             self._install(name, restype, args)
+        except BackendError:
+            return False
+        return True
+
+    def _install_descriptions(self, name) -> bool:
+        try:
+            self._install(name, ctypes.POINTER(_TrackDescription), [ctypes.c_void_p])
+            self._install("libvlc_track_description_release", None, [ctypes.POINTER(_TrackDescription)])
         except BackendError:
             return False
         return True
@@ -230,6 +244,9 @@ class LibVLCBackend:
         if self.player and self.libvlc_audio_set_track(self.player, int(track)) != 0:
             raise BackendError(f"libVLC rejected audio track {track}")
 
+    def audio_track_descriptions(self) -> list[tuple[int, str]]:
+        return self._track_descriptions(self.libvlc_audio_get_track_description) if self._audio_description_api and self.player else []
+
     def subtitle_track_count(self) -> int:
         if not self._subtitle_api:
             return 0
@@ -245,6 +262,26 @@ class LibVLCBackend:
             raise BackendError("subtitle selection is unavailable in this libVLC build")
         if self.player and self.libvlc_video_set_spu(self.player, int(track)) != 0:
             raise BackendError(f"libVLC rejected subtitle track {track}")
+
+    def subtitle_track_descriptions(self) -> list[tuple[int, str]]:
+        return self._track_descriptions(self.libvlc_video_get_spu_description) if self._subtitle_description_api and self.player else []
+
+    def _track_descriptions(self, getter) -> list[tuple[int, str]]:
+        pointer = getter(self.player)
+        if not pointer:
+            return []
+        values: list[tuple[int, str]] = []
+        try:
+            index = 0
+            while index < 256:
+                item = pointer[index]
+                if item.identifier == -1:
+                    break
+                values.append((int(item.identifier), (item.name or b"").decode("utf-8", "replace")))
+                index += 1
+        finally:
+            self.libvlc_track_description_release(pointer)
+        return values
 
     def close_media(self):
         if self.player: self.libvlc_media_player_stop(self.player); self.libvlc_media_player_release(self.player)
