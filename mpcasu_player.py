@@ -19,7 +19,7 @@ try:
 except ImportError:  # pragma: no cover - optional presentation enhancement
     Image = ImageTk = None
 
-from casu.core import CasuError, resolve_casu_source
+from casu.core import CasuError, resolve_casu_source, ffprobe
 from casu.schema import validate_manifest
 from mpcasu_backend import BackendError, CasuBackend, LibVLCBackend, PlaybackState
 
@@ -119,6 +119,7 @@ class MPCASUPlayer(tk.Tk):
         self.library.bind("<Double-Button-1>", lambda _event: self.play_selected())
         actions = tk.Frame(left, bg=PANEL); actions.pack(fill="x", padx=12, pady=(12, 12))
         ttk.Button(actions, text="＋ Add media", style="MPC.TButton", command=self.add_dialog).pack(fill="x")
+        ttk.Button(actions, text="↗ Open URL", style="MPC.TButton", command=self.open_url_dialog).pack(fill="x", pady=(5, 0))
         ttk.Button(actions, text="− Remove", style="MPC.TButton", command=self.remove_selected).pack(fill="x", pady=(5, 0))
 
         center = tk.Frame(body, bg=PANEL); center.pack(side="left", fill="both", expand=True)
@@ -159,6 +160,8 @@ class MPCASUPlayer(tk.Tk):
         tk.Label(statusbar, text="Optimized for performance and integrity", bg=BG, fg=MUTED).pack(side="left", padx=28)
         tk.Label(statusbar, text="CPU/RAM telemetry unavailable", bg=BG, fg=MUTED).pack(side="right")
         self.bind("<space>", lambda _event: self.pause())
+        self.bind("<Control-o>", lambda _event: self.add_dialog())
+        self.bind("<Control-l>", lambda _event: self.open_url_dialog())
         self.bind("<Left>", lambda _event: self.seek_by(-10))
         self.bind("<Right>", lambda _event: self.seek_by(10))
         self.bind("<Up>", lambda _event: self.change_volume(5))
@@ -180,12 +183,45 @@ class MPCASUPlayer(tk.Tk):
             self.library.selection_clear(0, "end"); self.library.selection_set(selected[0]); self.play_selected()
 
     def add_dialog(self):
-        paths = filedialog.askopenfilenames(filetypes=[("Media", " ".join(f"*{x}" for x in sorted(MEDIA))), ("All files", "*.*")])
+        paths = filedialog.askopenfilenames(filetypes=[("Media and streams", "*"), ("Known media", " ".join(f"*{x}" for x in sorted(MEDIA))), ("All files", "*.*")])
         self.add_files([Path(p) for p in paths])
+
+    def open_url_dialog(self):
+        dialog = tk.Toplevel(self)
+        dialog.title("Open network URL")
+        dialog.configure(bg=BG)
+        dialog.transient(self)
+        tk.Label(dialog, text="HTTP(S), HLS, RTSP, RTP, UDP, FTP or SMB URL", bg=BG, fg=SECONDARY).pack(anchor="w", padx=16, pady=(16, 6))
+        value = tk.StringVar()
+        entry = ttk.Entry(dialog, textvariable=value, width=64)
+        entry.pack(fill="x", padx=16); entry.focus_set()
+        def open_source():
+            url = value.get().strip()
+            if url:
+                self._open_external_source(url)
+                dialog.destroy()
+        ttk.Button(dialog, text="Open", style="MPC.TButton", command=open_source).pack(anchor="e", padx=16, pady=14)
+        entry.bind("<Return>", lambda _event: open_source())
+
+    def _open_external_source(self, source: str):
+        self.stop()
+        self.current = None
+        self.now_playing.configure(text=source)
+        try:
+            self.backend = LibVLCBackend(self.canvas)
+            self.backend.open_source(source)
+            self.backend.play()
+            self.duration = self.backend.duration()
+            self.timeline.configure(to=max(self.duration, 1.0))
+            self.status.set("Playing network source · timing owned by libVLC")
+        except (BackendError, OSError) as exc:
+            self.backend = None
+            self.status.set(f"Could not open network source: {exc}")
+            messagebox.showerror("MPCASU", str(exc))
 
     def add_files(self, paths: list[Path]):
         for path in paths:
-            if path.exists() and path.suffix.lower() in MEDIA and str(path) not in self.library.get(0, "end"):
+            if path.exists() and str(path) not in self.library.get(0, "end"):
                 self.library.insert("end", str(path))
                 self.queue.insert("end", path.name)
 
@@ -302,6 +338,21 @@ class MPCASUPlayer(tk.Tk):
             messagebox.showerror("MPCASU", f"Could not start internal playback: {exc}")
             return
         self._paused = False
+        self._update_presentation(path)
+
+    def _update_presentation(self, path: Path):
+        """Choose a presentation mode from probed streams, not file suffixes."""
+        try:
+            probe = ffprobe(path)
+            kinds = {item.get("codec_type") for item in probe.get("streams", [])}
+            if "video" in kinds:
+                self.canvas.itemconfigure("title", text=path.name)
+                self.canvas.itemconfigure("subtitle", text="Video stream · original timestamps preserved")
+            elif "audio" in kinds:
+                self.canvas.itemconfigure("title", text="AUDIO MODE")
+                self.canvas.itemconfigure("subtitle", text="Audio stream · measured visualization unavailable")
+        except (CasuError, OSError, ValueError):
+            self.status.set("Stream presentation metadata unavailable")
 
     def toggle_playback(self):
         if not self.backend:
