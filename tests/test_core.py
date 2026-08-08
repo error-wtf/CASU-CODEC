@@ -244,6 +244,13 @@ def test_libvlc_backend_source_capability_detection():
     assert not LibVLCBackend.supports("gopher://example.invalid/media")
 
 
+def test_backend_exposes_active_playback_diagnostic():
+    source = Path("mpcasu_backend.py").read_text(encoding="utf-8")
+    player = Path("mpcasu_player.py").read_text(encoding="utf-8")
+    assert "def is_actively_playing" in source
+    assert "did not enter active playback" in player
+
+
 def test_libvlc_library_candidates_are_platform_independent():
     # The backend must keep a shared-library fallback chain instead of
     # assuming a Debian x86_64 soname in its public source contract.
