@@ -14,6 +14,22 @@ from .schema import validate_manifest
 from . import __version__
 
 
+def atomic_write_text(path: Path, payload: str) -> None:
+    """Write reports/manifests without exposing a partial destination file."""
+    path = path.expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent, text=True)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="casu", description="CASU — Codec for All Segmented Units: legacy-compatible MP4/MP3 segmented-state layer")
     p.add_argument("--version", action="version", version=f"CASU Codec for All Segmented Units {__version__}")
@@ -75,7 +91,7 @@ def main() -> int:
             }
             payload = json.dumps(report, indent=2, ensure_ascii=False) + "\n"
             if args.output:
-                args.output.expanduser().resolve().write_text(payload, encoding="utf-8")
+                atomic_write_text(args.output, payload)
             print(payload, end="")
             return 0
         if args.command in {"analyze", "convert"}:
@@ -88,16 +104,7 @@ def main() -> int:
             if output.exists() and args.command == "convert" and not args.force:
                 raise CasuError(f"output exists (use --force): {output}")
             payload = json.dumps(result, indent=2, ensure_ascii=False) + "\n"
-            fd, temporary = tempfile.mkstemp(prefix=f".{output.name}.", dir=output.parent, text=True)
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                    handle.write(payload)
-                    handle.flush()
-                    os.fsync(handle.fileno())
-                os.replace(temporary, output)
-            finally:
-                if os.path.exists(temporary):
-                    os.unlink(temporary)
+            atomic_write_text(output, payload)
             print(json.dumps({"manifest": str(output), "duration_s": result["source"]["duration_s"],
                               "video_segments": len(result["video"].get("segments", [])),
                               "audio_segments": len(result["audio"].get("segments", [])),
