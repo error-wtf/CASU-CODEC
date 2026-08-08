@@ -25,12 +25,23 @@ from casu.schema import validate_manifest
 
 MEDIA = {".mp4", ".mp3", ".mkv", ".m4v", ".mov", ".flac", ".wav", ".ogg", ".webm", ".m4a", ".aac", ".opus", ".aiff", ".alac", ".casu"}
 
+BG = "#090B0D"
+PANEL = "#111418"
+PANEL_ALT = "#14181D"
+RED = "#FF1E2D"
+RED_DARK = "#3A1015"
+TEXT = "#F2F2F2"
+SECONDARY = "#A7ABB0"
+MUTED = "#686E75"
+
 
 class MPCASUPlayer(tk.Tk):
-    def __init__(self, initial: Path | None = None):
+    def __init__(self, initial: Path | list[Path] | None = None):
         super().__init__()
         self.title("MPCASU Media Player")
-        self.geometry("920x580")
+        self.geometry("1360x820")
+        self.minsize(980, 620)
+        self.configure(bg=BG)
         self.process: subprocess.Popen[str] | None = None
         self.current: Path | None = None
         self.duration = 0.0
@@ -47,48 +58,92 @@ class MPCASUPlayer(tk.Tk):
         self._visual_audio_segments: list[dict] = []
         self._build()
         if initial:
-            self.add_files([initial])
+            self.add_files(initial if isinstance(initial, list) else [initial])
 
     def _build(self):
-        root = ttk.Frame(self, padding=12)
+        style = ttk.Style(self)
+        try: style.theme_use("clam")
+        except tk.TclError: pass
+        style.configure("MPC.TButton", background=PANEL_ALT, foreground=TEXT, borderwidth=0, padding=(10, 6))
+        style.map("MPC.TButton", background=[("active", RED_DARK)])
+        style.configure("MPC.Horizontal.TScale", troughcolor="#24282d", background=RED)
+        root = tk.Frame(self, bg=BG)
         root.pack(fill="both", expand=True)
-        left = ttk.Frame(root, width=260)
-        left.pack(side="left", fill="y", padx=(0, 12))
-        ttk.Label(left, text="MPCASU", font=("TkDefaultFont", 18, "bold")).pack(anchor="w")
-        ttk.Label(left, text="CASU + MP4 · MP3 · MKV · FLAC", foreground="#607080").pack(anchor="w", pady=(0, 10))
-        self.library = tk.Listbox(left, activestyle="dotbox", exportselection=False)
-        self.library.pack(fill="both", expand=True)
-        self.library.bind("<Double-Button-1>", lambda _event: self.play_selected())
-        controls = ttk.Frame(left)
-        controls.pack(fill="x", pady=(10, 0))
-        ttk.Button(controls, text="Add", command=self.add_dialog).pack(side="left")
-        ttk.Button(controls, text="Remove", command=self.remove_selected).pack(side="left", padx=5)
+        top = tk.Frame(root, bg=BG, height=62); top.pack(fill="x", padx=18, pady=(12, 6)); top.pack_propagate(False)
+        logo = tk.Frame(top, bg=BG); logo.pack(side="left")
+        tk.Label(logo, text="◈ MPCASU", bg=BG, fg=RED, font=("TkDefaultFont", 19, "bold")).pack(anchor="w")
+        tk.Label(logo, text="PLAYER", bg=BG, fg=SECONDARY, font=("TkDefaultFont", 8, "bold")).pack(anchor="w", padx=(30, 0))
+        self.now_playing = tk.Label(top, text="NO MEDIA SELECTED", bg=BG, fg=SECONDARY, font=("TkDefaultFont", 10, "bold")); self.now_playing.pack(side="left", padx=42)
+        tk.Label(top, text="CASU · LEGACY SAFE", bg=BG, fg=MUTED, font=("TkDefaultFont", 9)).pack(side="right")
 
-        right = ttk.Frame(root)
-        right.pack(side="left", fill="both", expand=True)
-        self.canvas = tk.Canvas(right, background="#101418", highlightthickness=0)
+        body = tk.Frame(root, bg=BG); body.pack(fill="both", expand=True, padx=18)
+        left = tk.Frame(body, bg=PANEL, width=220); left.pack(side="left", fill="y", padx=(0, 10)); left.pack_propagate(False)
+        self._nav(left, "LIBRARY", ["Now Playing", "Library", "CASU Files", "Movies", "TV Shows", "Music", "Playlists"])
+        self._nav(left, "DEVICES", ["Local Disk", "Media Drive", "Network Share"])
+        self._nav(left, "ONLINE", ["CASU Hub", "Web Videos", "Podcasts"])
+        self._nav(left, "PLAYLISTS", ["Favorites", "Recently Added", "4K Collection", "Workout Mix"])
+        tk.Label(left, text="LOADED MEDIA", bg=PANEL, fg=MUTED, font=("TkDefaultFont", 8, "bold"), anchor="w").pack(fill="x", padx=14, pady=(12, 4))
+        self.library = tk.Listbox(left, height=4, bg=PANEL_ALT, fg=SECONDARY, selectbackground=RED_DARK, selectforeground=TEXT, relief="flat", highlightthickness=0, activestyle="none", exportselection=False)
+        self.library.pack(fill="x", padx=10)
+        self.library.bind("<Double-Button-1>", lambda _event: self.play_selected())
+        actions = tk.Frame(left, bg=PANEL); actions.pack(fill="x", padx=12, pady=(12, 12))
+        ttk.Button(actions, text="＋ Add media", style="MPC.TButton", command=self.add_dialog).pack(fill="x")
+        ttk.Button(actions, text="− Remove", style="MPC.TButton", command=self.remove_selected).pack(fill="x", pady=(5, 0))
+
+        center = tk.Frame(body, bg=PANEL); center.pack(side="left", fill="both", expand=True)
+        self.canvas = tk.Canvas(center, background="#0D1013", highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
-        self.canvas.create_text(20, 20, anchor="nw", text="MPCASU", fill="#d8e7f3", font=("TkDefaultFont", 24, "bold"), tags="title")
-        self.canvas.create_text(20, 58, anchor="nw", text="FFmpeg decoding · CASU state/provenance · legacy-safe playback", fill="#9eb2c2", tags="subtitle")
-        self.canvas.create_text(20, 92, anchor="nw", text="Visualizer · decoded activity hint (not a waveform or quality meter)", fill="#6f91a6", tags="viz-label")
+        self.canvas.create_text(20, 20, anchor="nw", text="MPCASU", fill=TEXT, font=("TkDefaultFont", 24, "bold"), tags="title")
+        self.canvas.create_text(20, 58, anchor="nw", text="Legacy-safe playback · CASU state/provenance", fill=SECONDARY, tags="subtitle")
+        self.canvas.create_text(20, 92, anchor="nw", text="Decoded activity hint — not a waveform or quality meter", fill=MUTED, tags="viz-label")
         self.canvas.bind("<Configure>", lambda _event: self._draw_visualizer())
-        self.timeline = ttk.Scale(right, from_=0, to=1, variable=self.position, command=self.seek_preview)
-        self.timeline.pack(fill="x", pady=(10, 0))
+        self.timeline = ttk.Scale(center, from_=0, to=1, variable=self.position, command=self.seek_preview, style="MPC.Horizontal.TScale")
+        self.timeline.pack(fill="x", padx=14, pady=(10, 0))
         self.timeline.bind("<ButtonPress-1>", lambda _event: setattr(self, "_dragging", True))
         self.timeline.bind("<ButtonRelease-1>", lambda _event: (setattr(self, "_dragging", False), self.seek_restart()))
-        bar = ttk.Frame(right)
+        bar = tk.Frame(center, bg=PANEL)
         bar.pack(fill="x", pady=8)
-        ttk.Button(bar, text="Play", command=self.play_selected).pack(side="left")
-        ttk.Button(bar, text="Pause", command=self.pause).pack(side="left", padx=5)
-        ttk.Button(bar, text="Stop", command=self.stop).pack(side="left")
-        ttk.Button(bar, text="−10 s", command=lambda: self.seek_by(-10)).pack(side="left", padx=(18, 2))
-        ttk.Button(bar, text="+10 s", command=lambda: self.seek_by(10)).pack(side="left")
-        ttk.Label(right, textvariable=self.status).pack(anchor="w")
+        for label, command in (("⏮", lambda: self.seek_by(-10)), ("◀", lambda: self.seek_by(-10)), ("▶ / ❚❚", self.play_selected), ("■", self.stop), ("▶", lambda: self.seek_by(10))):
+            ttk.Button(bar, text=label, style="MPC.TButton", command=command).pack(side="left", padx=3)
+        ttk.Button(bar, text="Audio", style="MPC.TButton", command=lambda: self.status.set("Audio track selection is delegated to FFmpeg")).pack(side="right", padx=3)
+        ttk.Button(bar, text="Fullscreen", style="MPC.TButton", command=lambda: self.attributes("-fullscreen", not self.attributes("-fullscreen"))).pack(side="right", padx=3)
+        tk.Label(center, textvariable=self.status, bg=PANEL, fg=SECONDARY, anchor="w").pack(fill="x", padx=14, pady=(0, 8))
+
+        right = tk.Frame(body, bg=PANEL, width=285); right.pack(side="right", fill="y", padx=(10, 0)); right.pack_propagate(False)
+        tk.Label(right, text="PLAYLIST", bg=PANEL, fg=TEXT, font=("TkDefaultFont", 11, "bold"), anchor="w").pack(fill="x", padx=12, pady=(14, 8))
+        self.queue = tk.Listbox(right, bg=PANEL_ALT, fg=SECONDARY, selectbackground=RED_DARK, selectforeground=TEXT, relief="flat", highlightthickness=0, activestyle="none", exportselection=False)
+        self.queue.pack(fill="both", expand=True, padx=10, pady=(0, 8)); self.queue.bind("<Double-Button-1>", self._play_queue_item)
+        tk.Label(right, text="QUEUE · SHUFFLE · REPEAT", bg=PANEL, fg=MUTED, font=("TkDefaultFont", 8)).pack(anchor="w", padx=12, pady=(0, 12))
+
+        diagnostics = tk.Frame(root, bg=BG); diagnostics.pack(fill="x", padx=18, pady=(10, 4))
+        for title, text in (("SEGMENTED PLAYBACK", "Segment data unavailable"), ("ENERGY SAVE", "Telemetry unavailable"), ("INTEGRITY MODE", "Checked on CASU load"), ("CASU SUPPORT", "Legacy fallback ready")):
+            card = tk.Frame(diagnostics, bg=PANEL_ALT, padx=12, pady=8); card.pack(side="left", fill="x", expand=True, padx=(0, 8))
+            tk.Label(card, text=title, bg=PANEL_ALT, fg=RED, font=("TkDefaultFont", 8, "bold")).pack(anchor="w")
+            tk.Label(card, text=text, bg=PANEL_ALT, fg=SECONDARY, font=("TkDefaultFont", 9)).pack(anchor="w", pady=(3, 0))
+        statusbar = tk.Frame(root, bg=BG); statusbar.pack(fill="x", padx=18, pady=(4, 10))
+        tk.Label(statusbar, text="MPCASU 1.0.0  ● Ready", bg=BG, fg=SECONDARY).pack(side="left")
+        tk.Label(statusbar, text="Optimized for performance and integrity", bg=BG, fg=MUTED).pack(side="left", padx=28)
+        tk.Label(statusbar, text="CPU/RAM telemetry unavailable", bg=BG, fg=MUTED).pack(side="right")
         self.bind("<space>", lambda _event: self.pause())
         self.bind("<Left>", lambda _event: self.seek_by(-10))
         self.bind("<Right>", lambda _event: self.seek_by(10))
+        self.bind("<Up>", lambda _event: self.status.set("Volume control delegated to FFplay"))
+        self.bind("<Down>", lambda _event: self.status.set("Volume control delegated to FFplay"))
+        self.bind("<Escape>", lambda _event: self.attributes("-fullscreen", False))
         self.after(500, self._poll)
         self.after(50, self._visual_tick)
+
+    def _nav(self, parent, heading: str, entries: list[str]) -> None:
+        tk.Label(parent, text=heading, bg=PANEL, fg=MUTED, font=("TkDefaultFont", 8, "bold"), anchor="w").pack(fill="x", padx=14, pady=(14, 5))
+        for entry in entries:
+            row = tk.Frame(parent, bg=PANEL, height=27); row.pack(fill="x", padx=7, pady=1); row.pack_propagate(False)
+            tk.Label(row, text="◆", bg=PANEL, fg=RED if entry == "Now Playing" else MUTED, width=3, anchor="e").pack(side="left")
+            tk.Label(row, text=entry, bg=PANEL, fg=TEXT if entry == "Now Playing" else SECONDARY, anchor="w").pack(side="left", padx=6)
+
+    def _play_queue_item(self, _event=None):
+        selected = self.queue.curselection()
+        if selected:
+            self.library.selection_clear(0, "end"); self.library.selection_set(selected[0]); self.play_selected()
 
     def add_dialog(self):
         paths = filedialog.askopenfilenames(filetypes=[("Media", " ".join(f"*{x}" for x in sorted(MEDIA))), ("All files", "*.*")])
@@ -98,6 +153,7 @@ class MPCASUPlayer(tk.Tk):
         for path in paths:
             if path.exists() and path.suffix.lower() in MEDIA and str(path) not in self.library.get(0, "end"):
                 self.library.insert("end", str(path))
+                self.queue.insert("end", path.name)
 
     def _load_visual_state(self, path: Path):
         self._visual_state = "legacy"
@@ -171,6 +227,8 @@ class MPCASUPlayer(tk.Tk):
         selected = list(self.library.curselection())
         for index in reversed(selected):
             self.library.delete(index)
+            if index < self.queue.size():
+                self.queue.delete(index)
 
     def selected_path(self) -> Path | None:
         selected = self.library.curselection()
@@ -188,6 +246,12 @@ class MPCASUPlayer(tk.Tk):
             return
         self.stop()
         self.current = path
+        self.now_playing.configure(text=path.name.upper())
+        selected = self.library.curselection()
+        if selected:
+            self.queue.selection_clear(0, "end")
+            self.queue.selection_set(selected[0])
+            self.queue.see(selected[0])
         sidecar = path if path.suffix.lower() == ".casu" else self._sidecar(path)
         self._load_visual_state(sidecar if sidecar.exists() else path)
         try:

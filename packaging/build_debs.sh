@@ -41,7 +41,8 @@ EOF
   chmod 0755 "$stage/usr/bin/casu"
 }
 install_converter() {
-  local stage="$1"; install_codec "$stage"; cp "$root/casu_converter.py" "$stage/usr/share/casu-codec/"
+  local stage="$1"; mkdir -p "$stage/usr/share/casu-codec" "$stage/usr/bin"
+  cp "$root/casu_converter.py" "$stage/usr/share/casu-codec/"
   cat > "$stage/usr/bin/casu-converter" <<'EOF'
 #!/bin/sh
 export PYTHONPATH=/usr/share/casu-codec${PYTHONPATH:+:$PYTHONPATH}
@@ -50,7 +51,8 @@ EOF
   chmod 0755 "$stage/usr/bin/casu-converter"
 }
 install_player() {
-  local stage="$1"; install_codec "$stage"; cp "$root/mpcasu_player.py" "$stage/usr/share/casu-codec/"
+  local stage="$1"; mkdir -p "$stage/usr/share/casu-codec" "$stage/usr/bin"
+  cp "$root/mpcasu_player.py" "$stage/usr/share/casu-codec/"
   cat > "$stage/usr/bin/mpcasu" <<'EOF'
 #!/bin/sh
 export PYTHONPATH=/usr/share/casu-codec${PYTHONPATH:+:$PYTHONPATH}
