@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Lino Casu
 __pycache__/
 *.py[cod]
+MPCASU_CASU_latest*.zip
 *.egg-info/
 .pytest_cache/
 artifacts/*.mp4
