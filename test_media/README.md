@@ -1,35 +1,1 @@
-<!-- SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4 | SPDX-FileCopyrightText: 2026 Lino Casu -->
-# Casu reference test media
-
-The local test asset is downloaded from the owner's YouTube publication:
-
-- Title: `Lino.Lol - TEST PATTERN`
-- URL: https://www.youtube.com/watch?v=JG4fMJXvpZ0
-- YouTube ID: `JG4fMJXvpZ0`
-- Download format: YouTube format `18` (H.264/AAC MP4, 640Ã—360, 25 fps)
-- Duration: `1056.461497` seconds
-- SHA-256: `e8d757b6f088bb719976e910e6ebe1fa907ebfcfaacb1bf4337bd71095285a72`
-
-The media file is included as an owner-authorized reference fixture. Download
-it again with the command below if a clean checkout needs to reproduce it:
-
-```bash
-yt-dlp -f 18 --merge-output-format mp4 \
-  -o 'test_media/lino_lol_test_pattern.%(ext)s' \
-  'https://www.youtube.com/watch?v=JG4fMJXvpZ0'
-```
-
-Override the test asset with `CASU_TEST_VIDEO=/path/to/file.mp4`.
-
-## Audio reference
-
-The MP3 fixture is copied from `/home/error/Musik/Lino Casu - ERROR.mp3`:
-
-- Local fixture: `lino_casu_error.mp3`
-- Codec: MP3, 48 kHz, stereo, approximately 183.752 kb/s
-- Duration: `276.639979` seconds
-- SHA-256: `21881d98108bf9038d8f9bb539cf94047e00dc0f2b28cf5d7849ce16886a99b4`
-- The file contains an embedded PNG cover-art stream; CASU analyses the MP3
-  audio stream and preserves the source metadata boundary.
-
-Override it with `CASU_TEST_AUDIO=/path/to/file.mp3`.
+¨¥yÛhr·šµë-­æ¦}Ó©z¶­Š‰ç¢Ú^®h­µçEj)^vÚ­æ­zËky©Ÿtê^­«b¢yè¶—«š+myÑZŠW¶‡+y«^²ÚŞjgİ:—«jØ¨z-¥êæŠÛ^tğ„´´MA`µ1¥•¹Í”µ%‘•¹Ñ¥™¥•Èè1¥•¹Í•I•˜µMTµ¹Ñ¥…Á¥Ñ…±¥ÍĞ´Ä¸ĞğMA`µ¥±•½ÁåÉ¥¡ÑQ•áĞè€ÈÀÈØ1¥¹¼…ÍÔ€´´ø(Œ…ÍÔÉ•™•É•¹”Ñ•ÍĞµ•‘¥„()Q¡”±½…°Ñ•ÍĞ…ÍÍ•Ğ¥Ì‘½İ¹±½…‘•™É½´Ñ¡”½İ¹•ÈÌe½ÕQÕ‰”ÁÕ‰±¥…Ñ¥½¸è((´Q¥Ñ±”è1¥¹¼¹1½°€´QMPAQQI9€(´UI0è¡ÑÑÁÌè¼½İİÜ¹å½ÕÑÕ‰”¹½´½İ…Ñ ıØõ)Ñ™5)aÙÁhÀ(´e½ÕQÕ‰”%è)Ñ™5)aÙÁhÁ€(´½İ¹±½…™½Éµ…Ğèe½ÕQÕ‰”™½Éµ…Ğ€Äá€€¡ ¸ÈØĞ½5@Ğ°€ØĞÃ\ÌØÀ°€ÈÔ™ÁÌ¤(´ÕÉ…Ñ¥½¸è€ÄÀÔØ¸ĞØÄĞäİ€Í•½¹‘Ì(´M!´ÈÔØè”áÜÔİˆÙ˜Ààá‰ˆÜÄääÜÙ”äÄÁ”Ù•‰”Å™„äÀİ•‰™™……ˆÅ‰˜ĞÌÌİ‰ÜÄÀäÔÈàÕ„ÜÉ€()Q¡”µ•‘¥„™¥±”¥Ì¥¹±Õ‘•…Ì…¸½İ¹•Èµ…ÕÑ¡½É¥é•É•™•É•¹”™¥áÑÕÉ”¸½İ¹±½…)¥Ğ……¥¸İ¥Ñ Ñ¡”½µµ…¹‰•±½Ü¥˜„±•…¸¡•­½ÕĞ¹••‘ÌÑ¼É•ÁÉ½‘Õ”¥Ğè()‰…Í )åĞµ‘±À€µ˜€Äà€´µµ•É”µ½ÕÑÁÕĞµ™½Éµ…ĞµÀĞp(€€µ¼€Ñ•ÍÑ}µ•‘¥„½±¥¹½}±½±}Ñ•ÍÑ}Á…ÑÑ•É¸¸”¡•áĞ¥Ìœp(€€¡ÑÑÁÌè¼½İİÜ¹å½ÕÑÕ‰”¹½´½İ…Ñ ıØõ)Ñ™5)aÙÁhÀœ)€()=Ù•ÉÉ¥‘”Ñ¡”Ñ•ÍĞ…ÍÍ•Ğİ¥Ñ MU}QMQ}Y%<ô½Á…Ñ ½Ñ¼½™¥±”¹µÀÑ€¸((ŒŒÕ‘¥¼É•™•É•¹”()Q¡”5@Ì™¥áÑÕÉ”¥Ì½Á¥•™É½´€½¡½µ”½•ÉÉ½È½5ÕÍ¥¬½1¥¹¼…ÍÔ€´II=H¹µÀÍ€è((´1½…°™¥áÑÕÉ”è±¥¹½}…ÍÕ}•ÉÉ½È¹µÀÍ€(´½‘•Œè5@Ì°€Ğà­!è°ÍÑ•É•¼°…ÁÁÉ½á¥µ…Ñ•±ä€ÄàÌ¸ÜÔÈ­ˆ½Ì(´ÕÉ…Ñ¥½¸è€ÈÜØ¸ØÌääÜå€Í•½¹‘Ì(´M!´ÈÔØè€ÈÄààÅäàÄÀá‰˜äÀÌáá˜å‰ˆÔÌå˜äĞÀĞİ”ÀÁ‘ŒÁ˜ÉˆÈá˜ÕÜàĞå”ÄØààÙ„äåˆÑ€(´Q¡”™¥±”½¹Ñ…¥¹Ì…¸•µ‰•‘‘•A9½Ù•Èµ…ÉĞÍÑÉ•…´ìMT…¹…±åÍ•ÌÑ¡”5@Ì(€…Õ‘¥¼ÍÑÉ•…´…¹ÁÉ•Í•ÉÙ•ÌÑ¡”Í½ÕÉ”µ•Ñ…‘…Ñ„‰½Õ¹‘…Éä¸()=Ù•ÉÉ¥‘”¥Ğİ¥Ñ MU}QMQ}U%<ô½Á…Ñ ½Ñ¼½™¥±”¹µÀÍ€¸((ŒŒ‘‘¥Ñ¥½¹…°½İ¹•ÈµÁÉ½Ù¥‘•™¥áÑÕÉ•Ì((´¥…¹…É±¼¹µÀÑ€İ¥Ñ Ñ¡”•¹•É…Ñ•¥…¹…É±¼¹µÀĞ¹…ÍÕ€Í¥‘•…È(´±¥¹½}…ÍÕ}•ÉÉ½É}½É¥¥¹…°¹µÀÍ€°Ñ¡”½É¥¥¹…°…Õ‘¥¼ÍÕÁÁ±¥•™½ÈÁ±…å‰…¬Ñ•ÍÑÌ()Q¡”Í¥‘•…È¥Ì½ÁÑ¥½¹…°µ•Ñ…‘…Ñ„¸Q¡”½É¥¥¹…°5@Ğ½5@ÌÉ•µ…¥¹ÌÑ¡”…¹½¹¥…°)Í½ÕÉ”…¹É•µ…¥¹ÌÕÍ…‰±”‰ä½É‘¥¹…Éäµ•‘¥„Á±…å•ÉÌ¸(
