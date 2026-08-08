@@ -15,7 +15,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from casu.core import ANALYSIS_MODES, CasuError, analyze
+from casu.core import ANALYSIS_MODES, CasuError, analyze, ffprobe, duration
 
 BG = "#090B0D"
 PANEL = "#111418"
@@ -36,6 +36,8 @@ class CASUConverter(tk.Tk):
         self.mode = tk.StringVar(value="strict")
         self.fps = tk.DoubleVar(value=10.0)
         self.status = tk.StringVar(value="Choose an MP4 or MP3 source.")
+        self.source_info = tk.StringVar(value="No source inspected")
+        self.output_info = tk.StringVar(value="The original source is never modified.")
         self._build()
 
     def _build(self) -> None:
@@ -45,6 +47,10 @@ class CASUConverter(tk.Tk):
         except tk.TclError: pass
         style.configure("CASU.TButton", background=PANEL_ALT, foreground=TEXT, borderwidth=0, padding=(10, 6))
         style.map("CASU.TButton", background=[("active", "#3A1015")])
+        try:
+            self.iconphoto(True, tk.PhotoImage(file=str(Path(__file__).resolve().parent / "assets" / "casu_codec_logo_header.png")))
+        except (tk.TclError, OSError):
+            pass
         root = tk.Frame(self, bg=BG, padx=22, pady=20)
         root.pack(fill="both", expand=True)
         logo_path = Path(__file__).resolve().parent / "assets" / "casu_codec_logo_header.png"
@@ -60,6 +66,11 @@ class CASUConverter(tk.Tk):
             tk.Label(row, text=label, width=16, bg=BG, fg=TEXT, anchor="w").pack(side="left")
             ttk.Entry(row, textvariable=variable).pack(side="left", fill="x", expand=True)
             ttk.Button(row, text="Browse…", style="CASU.TButton", command=command).pack(side="left", padx=(8, 0))
+        info = tk.Frame(root, bg=PANEL_ALT, padx=14, pady=10)
+        info.pack(fill="x", pady=(8, 4))
+        tk.Label(info, text="SOURCE INSPECTION", bg=PANEL_ALT, fg=RED, font=("TkDefaultFont", 8, "bold")).pack(anchor="w")
+        tk.Label(info, textvariable=self.source_info, bg=PANEL_ALT, fg=TEXT, anchor="w", justify="left").pack(fill="x", pady=(4, 0))
+        tk.Label(info, textvariable=self.output_info, bg=PANEL_ALT, fg=SECONDARY, anchor="w").pack(fill="x", pady=(3, 0))
         options = tk.Frame(root, bg=BG); options.pack(fill="x", pady=12)
         ttk.Label(options, text="Analysis mode").pack(side="left")
         ttk.Combobox(options, textvariable=self.mode, values=sorted(ANALYSIS_MODES), state="readonly", width=18).pack(side="left", padx=8)
@@ -77,10 +88,21 @@ class CASUConverter(tk.Tk):
         if path:
             self.source.set(path)
             if not self.output.get(): self.output.set(path + ".casu")
+            self.inspect_source(Path(path))
 
     def choose_output(self) -> None:
         path = filedialog.asksaveasfilename(defaultextension=".casu", filetypes=[("CASU manifest", "*.casu")])
         if path: self.output.set(path)
+
+    def inspect_source(self, path: Path) -> None:
+        try:
+            probe = ffprobe(path)
+            streams = probe.get("streams", [])
+            kinds = ", ".join(sorted({str(item.get("codec_type", "unknown")) for item in streams})) or "no streams"
+            codecs = ", ".join(str(item.get("codec_name")) for item in streams if item.get("codec_name")) or "unknown codec"
+            self.source_info.set(f"{path.name}  ·  {kinds}  ·  {codecs}  ·  {duration(probe):.3f} s")
+        except (CasuError, OSError, ValueError) as exc:
+            self.source_info.set(f"Inspection unavailable: {exc}")
 
     def convert(self) -> None:
         source = Path(self.source.get()).expanduser()
