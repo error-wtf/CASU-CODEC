@@ -97,6 +97,12 @@ class LibVLCBackend:
         self._install("libvlc_audio_get_track", ctypes.c_int, [ctypes.c_void_p])
         self._install("libvlc_audio_set_track", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int])
         self._audio_description_api = self._install_descriptions("libvlc_audio_get_track_description")
+        self._video_track_api = all(self._optional_install(name, restype, args) for name, restype, args in (
+            ("libvlc_video_get_track_count", ctypes.c_int, [ctypes.c_void_p]),
+            ("libvlc_video_get_track", ctypes.c_int, [ctypes.c_void_p]),
+            ("libvlc_video_set_track", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int]),
+        ))
+        self._video_description_api = self._install_descriptions("libvlc_video_get_track_description")
         self._subtitle_api = all(self._optional_install(name, restype, args) for name, restype, args in (
             ("libvlc_video_get_spu_count", ctypes.c_int, [ctypes.c_void_p]),
             ("libvlc_video_get_spu", ctypes.c_int, [ctypes.c_void_p]),
@@ -250,6 +256,21 @@ class LibVLCBackend:
 
     def audio_track_descriptions(self) -> list[tuple[int, str]]:
         return self._track_descriptions(self.libvlc_audio_get_track_description) if self._audio_description_api and self.player else []
+
+    def video_track_count(self) -> int:
+        return max(0, int(self.libvlc_video_get_track_count(self.player) if self._video_track_api and self.player else 0))
+
+    def video_track(self) -> int:
+        return int(self.libvlc_video_get_track(self.player) if self._video_track_api and self.player else -1)
+
+    def set_video_track(self, track: int) -> None:
+        if not self._video_track_api:
+            raise BackendError("video track selection is unavailable in this libVLC build")
+        if self.player and self.libvlc_video_set_track(self.player, int(track)) != 0:
+            raise BackendError(f"libVLC rejected video track {track}")
+
+    def video_track_descriptions(self) -> list[tuple[int, str]]:
+        return self._track_descriptions(self.libvlc_video_get_track_description) if self._video_description_api and self.player else []
 
     def subtitle_track_count(self) -> int:
         if not self._subtitle_api:

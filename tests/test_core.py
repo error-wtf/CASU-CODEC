@@ -286,6 +286,13 @@ def test_backend_exposes_active_playback_diagnostic():
     assert "did not enter active playback" in player
 
 
+def test_backend_exposes_optional_video_track_selection():
+    source = Path("mpcasu_backend.py").read_text(encoding="utf-8")
+    assert "libvlc_video_get_track_count" in source
+    assert "def set_video_track" in source
+    assert "def video_track_descriptions" in source
+
+
 def test_libvlc_library_candidates_are_platform_independent():
     # The backend must keep a shared-library fallback chain instead of
     # assuming a Debian x86_64 soname in its public source contract.
