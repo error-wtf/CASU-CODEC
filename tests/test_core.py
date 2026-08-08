@@ -84,6 +84,26 @@ def test_manifest_rejects_nonfinite_deadline():
     assert any("deadline_s must be finite" in error for error in validate_manifest(manifest))
 
 
+def test_manifest_rejects_duplicate_ids_and_invalid_segment_metadata():
+    manifest = {
+        "format": {"magic": "MPCASU\\0"},
+        "casu": {"name": "CASU", "container_extension": ".casu", "version": "1.0.0"},
+        "source": {"filename": "sample.mp4", "duration_s": 2},
+        "video": {"segments": [
+            {"start_s": 0, "end_s": 1, "state": "static", "segment_id": "same",
+             "lifecycle": "HOLD", "priority": 1, "region": {"x": 0, "y": 0, "w": 8, "h": 8}},
+            {"start_s": 1, "end_s": 2, "state": "motion", "segment_id": "same",
+             "lifecycle": "UNKNOWN", "priority": "high", "region": {"x": -1, "y": 0, "w": 8, "h": 8}},
+        ]},
+        "integrity": {"timestamps_are_source_of_truth": True},
+    }
+    errors = validate_manifest(manifest)
+    assert any("segment_id must be unique" in error for error in errors)
+    assert any("lifecycle is unsupported" in error for error in errors)
+    assert any("priority must be a bounded integer" in error for error in errors)
+    assert any("region.x must be a non-negative integer" in error for error in errors)
+
+
 def test_analysis_rejects_invalid_fps():
     with pytest.raises(CasuError, match="analysis FPS"):
         analyze(VIDEO, analysis_fps=0)

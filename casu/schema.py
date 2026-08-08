@@ -13,6 +13,8 @@ MAX_SEGMENTS_PER_STREAM = 1_000_000
 MAX_STREAMS = 256
 MAX_METADATA_KEYS = 256
 MAX_TEXT_LENGTH = 4096
+MAX_SEGMENT_PRIORITY = 1_000_000
+SEGMENT_LIFECYCLES = frozenset({"CREATE", "UPDATE", "HOLD", "MOVE", "REPLACE", "INVALIDATE", "RELEASE"})
 
 
 class CasuManifestError(ValueError):
@@ -112,6 +114,7 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
             errors.append(f"{media_key}.segments exceeds safety limit of {MAX_SEGMENTS_PER_STREAM}")
             continue
         previous_end = 0.0
+        segment_ids: set[str] = set()
         for index, segment in enumerate(segments):
             if not isinstance(segment, dict):
                 errors.append(f"{media_key}.segments[{index}] must be an object")
@@ -121,7 +124,7 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
             except (KeyError, TypeError, ValueError):
                 errors.append(f"{media_key}.segments[{index}] lacks numeric start/end")
                 continue
-            if not math.isfinite(start) or not math.isfinite(end) or start < 0 or end < start or end > duration + 0.5:
+            if not math.isfinite(start) or not math.isfinite(end) or start < 0 or end <= start or end > duration + 0.5:
                 errors.append(f"{media_key}.segments[{index}] is outside source duration")
             if "duration_s" in segment:
                 try:
@@ -139,6 +142,32 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
                 errors.append(f"{media_key}.segments[{index}].state must be a non-empty string")
             elif len(segment["state"]) > MAX_TEXT_LENGTH:
                 errors.append(f"{media_key}.segments[{index}].state is too long")
+            segment_id = segment.get("segment_id")
+            if segment_id is not None:
+                if not isinstance(segment_id, str) or not segment_id.strip() or len(segment_id) > MAX_TEXT_LENGTH:
+                    errors.append(f"{media_key}.segments[{index}].segment_id must be a bounded non-empty string")
+                elif segment_id in segment_ids:
+                    errors.append(f"{media_key}.segments[{index}].segment_id must be unique")
+                else:
+                    segment_ids.add(segment_id)
+            lifecycle = segment.get("lifecycle", "UPDATE")
+            if lifecycle not in SEGMENT_LIFECYCLES:
+                errors.append(f"{media_key}.segments[{index}].lifecycle is unsupported")
+            priority = segment.get("priority", 0)
+            if isinstance(priority, bool) or not isinstance(priority, int) or abs(priority) > MAX_SEGMENT_PRIORITY:
+                errors.append(f"{media_key}.segments[{index}].priority must be a bounded integer")
+            reference_state = segment.get("reference_state")
+            if reference_state is not None and (not isinstance(reference_state, str) or len(reference_state) > MAX_TEXT_LENGTH):
+                errors.append(f"{media_key}.segments[{index}].reference_state is invalid")
+            region = segment.get("region")
+            if region is not None:
+                if not isinstance(region, dict):
+                    errors.append(f"{media_key}.segments[{index}].region must be an object")
+                else:
+                    for region_key in ("x", "y", "w", "h"):
+                        value = region.get(region_key)
+                        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                            errors.append(f"{media_key}.segments[{index}].region.{region_key} must be a non-negative integer")
             for timing_key in ("valid_until_s", "deadline_s"):
                 if timing_key in segment:
                     try:
