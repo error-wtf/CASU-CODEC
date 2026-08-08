@@ -18,6 +18,7 @@ from pathlib import Path
 from casu.core import CasuError, resolve_casu_source
 from casu.schema import validate_manifest
 import json
+from urllib.parse import urlparse
 
 
 class PlaybackState(str, Enum):
@@ -81,11 +82,44 @@ class LibVLCBackend:
         function.restype = restype; function.argtypes = args
         return function
 
+    @staticmethod
+    def supports(source: str | Path) -> bool:
+        """Return whether the universal backend can accept this source form."""
+        value = str(source)
+        parsed = urlparse(value)
+        return isinstance(source, Path) or not parsed.scheme or parsed.scheme in {
+            "file", "http", "https", "rtsp", "rtp", "udp", "ftp", "smb"
+        }
+
+    def capabilities(self) -> dict[str, str]:
+        """Expose runtime facts instead of claiming a static format matrix."""
+        version = self._call("libvlc_get_version", ctypes.c_char_p, [])()
+        return {
+            "backend": "libVLC shared library",
+            "version": version.decode("utf-8", "replace") if version else "unknown",
+            "network": "available",
+            "hardware_decode": "delegated to installed libVLC modules",
+            "player_process": "none",
+        }
+
     def open(self, path: Path) -> None:
+        self.open_source(path)
+
+    def open_source(self, source: str | Path) -> None:
+        if not self.supports(source):
+            raise BackendError(f"unsupported media source: {source}")
         self.close_media()
-        self.path = path.resolve(); self._state = PlaybackState.LOADING
-        self.media = self.libvlc_media_new_path(self.instance, os_path(self.path))
-        if not self.media: self._state = PlaybackState.ERROR; raise BackendError(f"libVLC could not open {path}")
+        self.path = Path(source).resolve() if isinstance(source, Path) else None
+        self._state = PlaybackState.LOADING
+        value = str(source)
+        parsed = urlparse(value)
+        if parsed.scheme and parsed.scheme != "file":
+            self._install("libvlc_media_new_location", ctypes.c_void_p, [ctypes.c_void_p, ctypes.c_char_p])
+            self.media = self.libvlc_media_new_location(self.instance, value.encode("utf-8"))
+        else:
+            local = self.path or Path(parsed.path)
+            self.media = self.libvlc_media_new_path(self.instance, os_path(local))
+        if not self.media: self._state = PlaybackState.ERROR; raise BackendError(f"libVLC could not open {source}")
         self.player = self.libvlc_media_player_new_from_media(self.media)
         if not self.player: self._state = PlaybackState.ERROR; raise BackendError("libVLC could not create media player")
         if sys.platform.startswith("linux"):
