@@ -104,6 +104,10 @@ class MPCASUPlayer(tk.Tk):
             return
         try:
             manifest = json.loads(path.read_text(encoding="utf-8"))
+            errors = validate_manifest(manifest)
+            if errors:
+                self._visual_state = "invalid CASU: " + errors[0]
+                return
             sections = [manifest.get("video", {}).get("segments", []), manifest.get("audio", {}).get("segments", [])]
             self._visual_segments = [segment for section in sections for segment in section if isinstance(segment, dict)]
             self._visual_state = "CASU state map" if self._visual_segments else "CASU empty map"
@@ -210,16 +214,17 @@ class MPCASUPlayer(tk.Tk):
     def _source_for(self, path: Path) -> Path:
         if path.suffix.lower() != ".casu":
             return path
-        source = resolve_casu_source(path)
         try:
-            import json
             manifest = json.loads(path.read_text(encoding="utf-8"))
             errors = validate_manifest(manifest)
         except (OSError, ValueError, TypeError) as exc:
             raise CasuError(f"invalid CASU manifest: {path}") from exc
         if errors:
             raise CasuError(f"invalid CASU manifest: {errors[0]}")
-        return source
+        try:
+            return resolve_casu_source(path)
+        except CasuError as exc:
+            raise CasuError(f"CASU source unavailable: {exc}") from exc
 
     def _probe_duration(self, path: Path) -> float:
         try:
