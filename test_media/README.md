@@ -33,3 +33,11 @@ The MP3 fixture is copied from `/home/error/Musik/Lino Casu - ERROR.mp3`:
   audio stream and preserves the source metadata boundary.
 
 Override it with `CASU_TEST_AUDIO=/path/to/file.mp3`.
+
+## Additional owner-provided fixtures
+
+- `giancarlo.mp4` with the generated `giancarlo.mp4.casu` sidecar
+- `lino_casu_error_original.mp3`, the original audio supplied for playback tests
+
+The sidecar is optional metadata. The original MP4/MP3 remains the canonical
+source and remains usable by ordinary media players.
