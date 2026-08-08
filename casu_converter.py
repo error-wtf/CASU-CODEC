@@ -25,6 +25,18 @@ TEXT = "#F2F2F2"
 SECONDARY = "#A7ABB0"
 
 
+def _asset_path(name: str) -> Path:
+    """Resolve bundled assets from a source tree or installed wheel."""
+    local = Path(__file__).resolve().parent / "assets" / name
+    if local.is_file():
+        return local
+    for root in (Path("/usr/share/casu-codec/assets"), Path("/usr/local/share/casu-codec/assets")):
+        candidate = root / name
+        if candidate.is_file():
+            return candidate
+    return local
+
+
 class CASUConverter(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
@@ -49,7 +61,7 @@ class CASUConverter(tk.Tk):
         style.map("CASU.TButton", background=[("active", "#3A1015")])
         root = tk.Frame(self, bg=BG, padx=22, pady=20)
         root.pack(fill="both", expand=True)
-        logo_path = Path(__file__).resolve().parent / "assets" / "casu_codec_logo_header.png"
+        logo_path = _asset_path("casu_codec_logo_header.png")
         self._logo_image = None
         try:
             image = tk.PhotoImage(file=str(logo_path)); self._logo_image = image.subsample(max(1, image.width() // 140), max(1, image.height() // 60))

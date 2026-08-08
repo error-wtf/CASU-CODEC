@@ -39,6 +39,18 @@ SECONDARY = "#A7ABB0"
 MUTED = "#686E75"
 
 
+def _asset_path(name: str) -> Path:
+    """Resolve bundled assets for source trees, wheels and Debian installs."""
+    local = Path(__file__).resolve().parent / "assets" / name
+    if local.is_file():
+        return local
+    for root in (Path("/usr/share/casu-codec/assets"), Path("/usr/local/share/casu-codec/assets")):
+        candidate = root / name
+        if candidate.is_file():
+            return candidate
+    return local
+
+
 def presentation_mode(probe: dict) -> str:
     """Return a stream-derived presentation mode without mistaking cover art for video."""
     kinds = {
@@ -111,7 +123,7 @@ class MPCASUPlayer(tk.Tk):
         root.pack(fill="both", expand=True)
         top = tk.Frame(root, bg=BG, height=76); top.pack(fill="x", padx=18, pady=(10, 6)); top.pack_propagate(False)
         logo = tk.Frame(top, bg=BG); logo.pack(side="left")
-        icon_path = Path(__file__).resolve().parent / "assets" / "mpcasu_player_icon.png"
+        icon_path = _asset_path("mpcasu_player_icon.png")
         if icon_path.is_file() and Image is not None:
             try:
                 icon = Image.open(icon_path).convert("RGBA")
@@ -120,7 +132,7 @@ class MPCASUPlayer(tk.Tk):
                 self.iconphoto(True, self._icon_image)
             except (OSError, ValueError):
                 self._icon_image = None
-        logo_path = Path(__file__).resolve().parent / "assets" / "mpcasu_player_logo_header.png"
+        logo_path = _asset_path("mpcasu_player_logo_header.png")
         try:
             if logo_path.is_file():
                 if Image is not None:

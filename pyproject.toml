@@ -21,7 +21,18 @@ mpcasu = "mpcasu_player:main"
 include = ["casu*"]
 
 [tool.setuptools]
-py-modules = ["mpcasu_player", "casu_converter"]
+py-modules = ["mpcasu_player", "mpcasu_backend", "mpcasu_playback", "casu_converter"]
+
+[tool.setuptools.data-files]
+"share/casu-codec/assets" = [
+  "assets/casu_codec_logo.png",
+  "assets/casu_codec_logo_header.png",
+  "assets/casu_converter_icon.png",
+  "assets/mpcasu_player_icon.png",
+  "assets/mpcasu_player_logo.png",
+  "assets/mpcasu_player_logo_header.png",
+  "assets/mpcasu_player_mockup.png",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
