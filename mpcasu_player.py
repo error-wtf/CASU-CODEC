@@ -125,6 +125,8 @@ class MPCASUPlayer(tk.Tk):
         ttk.Button(actions, text="＋ Add media", style="MPC.TButton", command=self.add_dialog).pack(fill="x")
         ttk.Button(actions, text="↗ Open URL", style="MPC.TButton", command=self.open_url_dialog).pack(fill="x", pady=(5, 0))
         ttk.Button(actions, text="− Remove", style="MPC.TButton", command=self.remove_selected).pack(fill="x", pady=(5, 0))
+        ttk.Button(actions, text="▣ Save playlist", style="MPC.TButton", command=self.save_playlist).pack(fill="x", pady=(5, 0))
+        ttk.Button(actions, text="□ Load playlist", style="MPC.TButton", command=self.load_playlist).pack(fill="x", pady=(5, 0))
 
         center = tk.Frame(body, bg=PANEL); center.pack(side="left", fill="both", expand=True)
         self.canvas = tk.Canvas(center, background="#0D1013", highlightthickness=0)
@@ -143,6 +145,7 @@ class MPCASUPlayer(tk.Tk):
             ttk.Button(bar, text=label, style="MPC.TButton", command=command).pack(side="left", padx=3)
         ttk.Button(bar, text="Mute", style="MPC.TButton", command=self.toggle_mute).pack(side="right", padx=3)
         ttk.Button(bar, text="Audio", style="MPC.TButton", command=lambda: self.status.set("Audio track selection is unavailable in this backend")).pack(side="right", padx=3)
+        ttk.Button(bar, text="Info", style="MPC.TButton", command=self.show_media_info).pack(side="right", padx=3)
         ttk.Button(bar, text="Fullscreen", style="MPC.TButton", command=lambda: self.attributes("-fullscreen", not self.attributes("-fullscreen"))).pack(side="right", padx=3)
         tk.Label(center, textvariable=self.status, bg=PANEL, fg=SECONDARY, anchor="w").pack(fill="x", padx=14, pady=(0, 8))
 
@@ -166,6 +169,7 @@ class MPCASUPlayer(tk.Tk):
         self.bind("<space>", lambda _event: self.pause())
         self.bind("<Control-o>", lambda _event: self.add_dialog())
         self.bind("<Control-l>", lambda _event: self.open_url_dialog())
+        self.bind("<Control-i>", lambda _event: self.show_media_info())
         self.bind("<Left>", lambda _event: self.seek_by(-10))
         self.bind("<Right>", lambda _event: self.seek_by(10))
         self.bind("<Up>", lambda _event: self.change_volume(5))
@@ -324,6 +328,49 @@ class MPCASUPlayer(tk.Tk):
             self.library.delete(index)
             if index < self.queue.size():
                 self.queue.delete(index)
+
+    def save_playlist(self):
+        target = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("MPCASU playlist", "*.json"), ("All files", "*.*")])
+        if not target:
+            return
+        try:
+            Path(target).write_text(json.dumps({"version": 1, "items": list(self.library.get(0, "end"))}, indent=2) + "\n", encoding="utf-8")
+            self.status.set(f"Playlist saved · {Path(target).name}")
+        except OSError as exc:
+            messagebox.showerror("MPCASU", f"Could not save playlist: {exc}")
+
+    def load_playlist(self):
+        source = filedialog.askopenfilename(filetypes=[("MPCASU playlist", "*.json"), ("All files", "*.*")])
+        if not source:
+            return
+        try:
+            payload = json.loads(Path(source).read_text(encoding="utf-8"))
+            items = payload.get("items", [])
+            if not isinstance(items, list):
+                raise ValueError("items must be an array")
+            self.add_files([Path(item) for item in items if isinstance(item, str)])
+            self.status.set(f"Playlist loaded · {Path(source).name}")
+        except (OSError, ValueError, TypeError) as exc:
+            messagebox.showerror("MPCASU", f"Could not load playlist: {exc}")
+
+    def show_media_info(self):
+        path = self.current or self.selected_path()
+        if not path or not path.is_file():
+            self.status.set("No local media selected for information")
+            return
+        try:
+            probe = ffprobe(path)
+            lines = [f"File: {path.name}", f"Container: {probe.get('format', {}).get('format_name', 'unknown')}", f"Duration: {probe.get('format', {}).get('duration', 'unknown')} s"]
+            for index, stream in enumerate(probe.get("streams", [])):
+                details = [f"stream {index}: {stream.get('codec_type', 'unknown')}", str(stream.get('codec_name', 'unknown'))]
+                if stream.get("width") and stream.get("height"): details.append(f"{stream['width']}×{stream['height']}")
+                if stream.get("sample_rate"): details.append(f"{stream['sample_rate']} Hz")
+                lines.append(" · ".join(details))
+            dialog = tk.Toplevel(self); dialog.title("Media information"); dialog.configure(bg=BG); dialog.transient(self)
+            text = tk.Text(dialog, width=76, height=max(8, len(lines) + 2), bg=PANEL_ALT, fg=TEXT, relief="flat", wrap="word")
+            text.insert("1.0", "\n".join(lines)); text.configure(state="disabled"); text.pack(padx=16, pady=16)
+        except (CasuError, OSError, ValueError) as exc:
+            messagebox.showerror("MPCASU", f"Media information unavailable: {exc}")
 
     def selected_path(self) -> Path | None:
         selected = self.library.curselection()
