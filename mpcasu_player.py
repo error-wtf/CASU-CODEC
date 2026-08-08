@@ -601,14 +601,24 @@ class MPCASUPlayer(tk.Tk):
             self.status.set("No local media selected for information")
             return
         try:
-            source = self._source_for(path)
-            probe = ffprobe(source)
+            native = path.suffix.lower() == ".casu" and path.read_bytes()[:8] == b"CASUNAT1"
+            if native:
+                manifest = read_native(path, verify_payload=True).manifest
+                source = path
+                probe = {"streams": manifest.get("streams", []),
+                         "format": {"format_name": "CASU native container",
+                                    "duration": manifest.get("source", {}).get("duration_s", "unknown"),
+                                    "size": path.stat().st_size}}
+            else:
+                source = self._source_for(path)
+                probe = ffprobe(source)
             lines = [f"File: {path.name}", f"Source: {source.name}",
                      f"Container: {probe.get('format', {}).get('format_name', 'unknown')}",
                      f"Duration: {probe.get('format', {}).get('duration', 'unknown')} s",
                      f"Size: {probe.get('format', {}).get('size', 'unknown')} bytes"]
             if path.suffix.lower() == ".casu":
-                lines.extend(["CASU: validated manifest", f"Segment hints: {len(self._visual_segments)}"])
+                lines.extend(["CASU: verified native container" if native else "CASU: validated sidecar manifest",
+                              f"Segment hints: {len(self._visual_segments)}"])
             for index, stream in enumerate(probe.get("streams", [])):
                 details = [f"stream {index}: {stream.get('codec_type', 'unknown')}", str(stream.get('codec_name', 'unknown'))]
                 if stream.get("tags", {}).get("language"):
@@ -621,7 +631,7 @@ class MPCASUPlayer(tk.Tk):
             dialog = tk.Toplevel(self); dialog.title("Media information"); dialog.configure(bg=BG); dialog.transient(self)
             text = tk.Text(dialog, width=76, height=max(8, len(lines) + 2), bg=PANEL_ALT, fg=TEXT, relief="flat", wrap="word")
             text.insert("1.0", "\n".join(lines)); text.configure(state="disabled"); text.pack(padx=16, pady=16)
-        except (CasuError, OSError, ValueError) as exc:
+        except (CasuError, NativeCasuError, OSError, ValueError) as exc:
             messagebox.showerror("MPCASU", f"Media information unavailable: {exc}")
 
     def selected_path(self) -> Path | None:
