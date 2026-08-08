@@ -1,5 +1,8 @@
 # CASU codec deep audit — 2026-08-08
 
+The authoritative release gates are maintained in
+[`RELEASE_POLICY.md`](RELEASE_POLICY.md).
+
 ## Executive result
 
 The repository currently contains a careful **legacy sidecar analyzer** and
