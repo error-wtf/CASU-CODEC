@@ -13,7 +13,9 @@ from casu.scheduler import CasuScheduler
 from casu.native import NativeCasuError, read_native, write_native
 from casu.native_v2 import (ChunkType, NativeChunk, NativeV2Error, TileStateCache,
                             decode_audio_block, encode_audio_block, encode_key_state,
-                            encode_tile_update, read_native_v2, write_native_v2)
+                            encode_tile_update, read_native_v2, write_native_v2,
+                            SubtitlePacket, decode_chapter_table, decode_subtitle_packet,
+                            encode_chapter_table, encode_subtitle_packet)
 from casu.tiles import (TileStateError, compare_tile_frames, state_map_from_frames,
                         tile_regions)
 from casu.cli import atomic_write_text
@@ -638,3 +640,22 @@ def test_presentation_mode_ignores_attached_cover_art():
         {"codec_type": "video", "disposition": {"attached_pic": 1}},
         {"codec_type": "audio"},
     ]}) == "AUDIO"
+
+
+def test_native_v2_subtitle_and_chapter_payloads_are_deterministic():
+    packet = SubtitlePacket(100, 220, "Grüße", "de", "text")
+    encoded = encode_subtitle_packet(packet)
+    assert decode_subtitle_packet(encoded) == packet
+    chapters = [{"start_pts": 0, "end_pts": 1000, "title": "Intro", "language": "de"}]
+    chapter_payload = encode_chapter_table(chapters)
+    assert decode_chapter_table(chapter_payload) == chapters
+    assert encode_chapter_table(chapters) == encode_chapter_table(list(reversed(chapters)))
+
+
+def test_native_v2_text_payloads_fail_closed():
+    with pytest.raises(ValueError):
+        encode_subtitle_packet(SubtitlePacket(2, 1, "bad"))
+    with pytest.raises(ValueError):
+        decode_subtitle_packet(b"{}")
+    with pytest.raises(ValueError):
+        encode_chapter_table([{"start_pts": 2, "end_pts": 1, "title": "bad"}])
