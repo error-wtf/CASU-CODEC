@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
 # SPDX-FileCopyrightText: 2026 Lino Casu
 set -euo pipefail
+export SOURCE_DATE_EPOCH=0
 root=$(cd "$(dirname "$0")/.." && pwd)
 version=1.0.0
 out="$root/dist"
@@ -23,6 +24,8 @@ Description: $description
  CASU/MPCASU legacy-compatible segmented media tools.
 EOF
   "$@" "$stage"
+  # Normalize archive metadata so identical inputs produce identical packages.
+  find "$stage" -exec touch -h -d '@0' {} +
   dpkg-deb --build --root-owner-group "$stage" "$out/${name}_${version}_all.deb" >/dev/null
   rm -rf "$stage"
 }
