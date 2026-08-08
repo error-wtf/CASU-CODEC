@@ -153,14 +153,31 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
     previous = None
     deltas: list[float] = []
     states: list[str] = []
+    tile_changes: list[float] = []
+    tile_width = max(1, min(16, width // 8))
+    tile_height = max(1, min(16, height // 8))
     while True:
         raw = process.stdout.read(size)
         if len(raw) != size:
             break
         frame = np.frombuffer(raw, dtype=np.uint8).astype(np.int16)
         delta = 1.0 if previous is None else float(np.abs(frame - previous).mean() / 255.0)
+        if previous is None:
+            changed_ratio = 1.0
+        else:
+            current_grid = frame.reshape(height, width)
+            previous_grid = previous.reshape(height, width)
+            changed = 0
+            total = 0
+            for y in range(0, height, tile_height):
+                for x in range(0, width, tile_width):
+                    tile_delta = np.abs(current_grid[y:y + tile_height, x:x + tile_width] - previous_grid[y:y + tile_height, x:x + tile_width]).mean() / 255.0
+                    changed += int(tile_delta > 0.01)
+                    total += 1
+            changed_ratio = changed / max(1, total)
         state = "motion" if delta >= 0.010 else "low_motion" if delta >= 0.0015 else "static"
         deltas.append(delta)
+        tile_changes.append(changed_ratio)
         states.append(state)
         previous = frame
     error = process.stderr.read().decode("utf-8", errors="replace") if process.stderr else ""
@@ -180,6 +197,15 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
         "activity_ratio": {key: round(value / total, 6) for key, value in counts.items()},
         "mean_frame_delta": round(float(np.mean(deltas)) if deltas else 0.0, 8),
         "p95_frame_delta": round(float(np.percentile(deltas, 95)) if deltas else 0.0, 8),
+        "spatial_analysis": {
+            "method": "decoded grayscale tile change ratio",
+            "tile_size": [tile_width, tile_height],
+            "tile_grid": [int(np.ceil(width / tile_width)), int(np.ceil(height / tile_height))],
+            "mean_changed_tile_ratio": round(float(np.mean(tile_changes)) if tile_changes else 0.0, 8),
+            "p95_changed_tile_ratio": round(float(np.percentile(tile_changes, 95)) if tile_changes else 0.0, 8),
+            "strict_pixel_identical_available": True,
+            "state_is_hint_only": True,
+        },
         "segments": rle(states, 1.0 / analysis_fps, duration(probe)),
         "state_is_hint_only": True,
     }
