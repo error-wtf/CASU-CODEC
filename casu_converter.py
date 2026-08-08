@@ -47,16 +47,13 @@ class CASUConverter(tk.Tk):
         except tk.TclError: pass
         style.configure("CASU.TButton", background=PANEL_ALT, foreground=TEXT, borderwidth=0, padding=(10, 6))
         style.map("CASU.TButton", background=[("active", "#3A1015")])
-        try:
-            self.iconphoto(True, tk.PhotoImage(file=str(Path(__file__).resolve().parent / "assets" / "casu_codec_logo_header.png")))
-        except (tk.TclError, OSError):
-            pass
         root = tk.Frame(self, bg=BG, padx=22, pady=20)
         root.pack(fill="both", expand=True)
         logo_path = Path(__file__).resolve().parent / "assets" / "casu_codec_logo_header.png"
         self._logo_image = None
         try:
             image = tk.PhotoImage(file=str(logo_path)); self._logo_image = image.subsample(max(1, image.width() // 140), max(1, image.height() // 60))
+            self.iconphoto(True, self._logo_image)
             tk.Label(root, image=self._logo_image, bg=BG).pack(anchor="w")
         except (tk.TclError, OSError):
             tk.Label(root, text="CASU CONVERTER", bg=BG, fg=RED, font=("TkDefaultFont", 22, "bold")).pack(anchor="w")
