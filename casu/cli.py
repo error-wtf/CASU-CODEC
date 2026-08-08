@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .core import ANALYSIS_MODES, CasuError, analyze, play, resolve_casu_source
 from .schema import validate_manifest
+from .native import NativeCasuError, read_native, write_native
 from . import __version__
 
 
@@ -48,6 +49,13 @@ def parser() -> argparse.ArgumentParser:
     c.add_argument("--mode", choices=sorted(ANALYSIS_MODES), default="strict",
                    help="state-analysis policy; strict is the reference mode")
     c.add_argument("--force", action="store_true", help="replace an existing output atomically")
+    n = sub.add_parser("pack", help="write a standalone native CASU container with a lossless source payload")
+    n.add_argument("input", type=Path)
+    n.add_argument("-o", "--output", type=Path, required=True)
+    n.add_argument("--analysis-fps", type=float, default=10.0)
+    n.add_argument("--mode", choices=sorted(ANALYSIS_MODES), default="strict")
+    ni = sub.add_parser("native-info", help="verify and inspect a native CASU container")
+    ni.add_argument("input", type=Path)
     v = sub.add_parser("play", help="validate a media path for MPCASU in-process playback")
     v.add_argument("input", type=Path)
     x = sub.add_parser("validate", help="validate a .casu manifest")
@@ -94,6 +102,24 @@ def main() -> int:
             if args.output:
                 atomic_write_text(args.output, payload)
             print(payload, end="")
+            return 0
+        if args.command == "pack":
+            if args.analysis_fps <= 0:
+                raise CasuError("analysis FPS must be positive")
+            source = args.input.expanduser().resolve()
+            output = args.output.expanduser().resolve()
+            manifest = analyze(source, args.analysis_fps, args.mode)
+            native = write_native(output, source, manifest)
+            print(json.dumps({"container": str(native), "native_version": 1,
+                              "payload_bytes": source.stat().st_size,
+                              "mode": args.mode}, indent=2))
+            return 0
+        if args.command == "native-info":
+            container = read_native(args.input)
+            print(json.dumps({"container": str(container.path), "native_version": 1,
+                              "payload_bytes": container.payload_length,
+                              "payload_sha256": container.payload_sha256,
+                              "manifest": container.manifest}, indent=2, ensure_ascii=False))
             return 0
         if args.command == "analyze":
             if args.analysis_fps <= 0:
@@ -215,7 +241,7 @@ def main() -> int:
             print(f"VALID CASU manifest: {args.manifest}")
             return 0
         raise CasuError("unknown command")
-    except CasuError as exc:
+    except (CasuError, NativeCasuError) as exc:
         print(f"casu: error: {exc}")
         return 2
 

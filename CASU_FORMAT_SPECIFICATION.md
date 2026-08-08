@@ -3,7 +3,7 @@
 
 CASU means **Codec for All Segmented Units** and uses the `.casu` extension.
 
-## Current 1.0 compatibility format
+## Current compatibility and native formats
 
 The released CASU 1.0 implementation is a validated, deterministic JSON
 sidecar. The original media file remains the source of truth and is never
@@ -25,6 +25,13 @@ This is intentionally not described as a native compressed elementary-stream
 container yet. It is a legacy-compatible state/provenance layer. Missing,
 stale or ambiguous sidecars must fall back to full-fidelity legacy playback.
 
+The repository also provides a **native lossless envelope revision 1** through
+`casu pack` and `casu.native`. It embeds the original source bytes after a
+versioned header and validated manifest and protects both sections with SHA-256
+digests. This makes the file standalone and recoverable at the byte-container
+level, but it is not yet a segmented compressed payload: tile deltas, key-state
+reconstruction and native CASU playback remain future gates.
+
 ## Timing and state rules
 
 `start_s`, `end_s` and `duration_s` are finite, non-negative seconds. Segments
@@ -38,8 +45,9 @@ The current sidecar verifies manifest structure and, when a source hash and
 size are recorded, verifies the immutable source before CASU playback. The
 current release does not yet claim native segment/index/footer checksums,
 cryptographic signatures, in-file recovery key states, attachments, or
-compressed media payloads. Those are reserved for a versioned native CASU
-container and must not be inferred from this JSON sidecar.
+compressed segmented media payloads. The native envelope verifies its embedded
+manifest and payload hashes, but must not be mistaken for the future segmented
+codec payload.
 
 ## Version policy
 

@@ -12,8 +12,8 @@ incorrect.
 | Area | Status | Evidence |
 |---|---|---|
 | Versioned format | PARTIAL | JSON identity uses `MPCASU\\0`, schema `0.2`, package version `1.0.0`; no native binary format version negotiation. |
-| Native reader/writer | MISSING | No payload writer, reader, footer, stream chunks or binary index exist. |
-| Standalone media | MISSING | `.casu` depends on the original MP4/MP3 path and SHA-256; it cannot decode without the source. |
+| Native reader/writer | PARTIAL | `casu.native` now provides a versioned lossless envelope reader/writer with header, manifest/payload hashes and atomic output; segmented payload chunks and playback are still absent. |
+| Standalone media | PARTIAL | Native envelope files embed original bytes; legacy JSON sidecars still depend on the original MP4/MP3 path. |
 | Video codec preservation | MISSING | FFmpeg only emits reduced grayscale analysis frames; no video payload is encoded or copied into CASU. |
 | Audio codec preservation | MISSING | Audio is downmixed to mono float PCM for RMS hints; no audio payload or channel-preserving stream exists. |
 | Subtitle/chapter/attachment preservation | MISSING | Probe metadata is not written as native stream payloads; tags, chapters, fonts, cover art and attachments are lost. |

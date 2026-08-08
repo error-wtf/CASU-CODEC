@@ -10,6 +10,7 @@ import pytest
 from casu.core import CasuCancelled, CasuError, analyze, play, resolve_casu_source, rle
 from casu.schema import validate_manifest
 from casu.scheduler import CasuScheduler
+from casu.native import NativeCasuError, read_native, write_native
 from casu.tiles import (TileStateError, compare_tile_frames, state_map_from_frames,
                         tile_regions)
 from casu.cli import atomic_write_text
@@ -100,6 +101,22 @@ def test_cli_convert_expands_directories_and_writes_report(tmp_path, monkeypatch
     assert json.loads(report_path.read_text(encoding="utf-8"))["files"][0]["status"] == "converted"
 
 
+def test_cli_pack_uses_native_writer(tmp_path, monkeypatch, capsys):
+    source = tmp_path / "clip.mp4"; source.write_bytes(b"clip")
+    target = tmp_path / "clip.casu"
+    monkeypatch.setattr("casu.cli.analyze", lambda *_args: {
+        "format": {"magic": "MPCASU\\0"},
+        "casu": {"name": "CASU", "container_extension": ".casu", "version": "1.0.0"},
+        "source": {"filename": source.name, "duration_s": 1, "size_bytes": source.stat().st_size},
+        "integrity": {"timestamps_are_source_of_truth": True},
+        "seek_index": {"entries": [], "native_key_states": False},
+    })
+    monkeypatch.setattr("casu.cli.write_native", lambda output, _source, _manifest: output)
+    monkeypatch.setattr("sys.argv", ["casu", "pack", str(source), "-o", str(target)])
+    assert casu_cli_main() == 0
+    assert json.loads(capsys.readouterr().out)["native_version"] == 1
+
+
 def test_info_output_exposes_seek_and_native_payload_status(tmp_path, monkeypatch, capsys):
     manifest = tmp_path / "sample.casu"
     manifest.write_text(json.dumps({
@@ -152,6 +169,26 @@ def test_tile_primitives_fail_closed_for_noncanonical_frames():
     np = __import__("numpy")
     with pytest.raises(TileStateError):
         compare_tile_frames(np.zeros((2, 2), dtype="float32"), np.zeros((2, 2), dtype="uint8"))
+
+
+def test_native_casu_roundtrip_is_standalone_and_integrity_checked(tmp_path):
+    source = tmp_path / "source.bin"
+    source.write_bytes(b"native payload\x00" * 100)
+    manifest = {
+        "format": {"magic": "MPCASU\\0"},
+        "casu": {"name": "CASU", "container_extension": ".casu", "version": "1.0.0"},
+        "source": {"filename": source.name, "duration_s": 1, "size_bytes": source.stat().st_size},
+        "integrity": {"timestamps_are_source_of_truth": True},
+        "seek_index": {"entries": [], "native_key_states": False},
+    }
+    native = write_native(tmp_path / "native.casu", source, manifest)
+    container = read_native(native)
+    assert container.payload_length == source.stat().st_size
+    extracted = container.extract_payload(tmp_path / "restored.bin")
+    assert extracted.read_bytes() == source.read_bytes()
+    native.write_bytes(native.read_bytes()[:-1])
+    with pytest.raises(NativeCasuError, match="file size|truncated|integrity"):
+        read_native(native)
 
 
 def test_manifest_rejects_non_hex_digest():
