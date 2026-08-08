@@ -43,6 +43,7 @@ def parser() -> argparse.ArgumentParser:
     c = sub.add_parser("convert", help="convert legacy media to a CASU manifest without changing the source")
     c.add_argument("input", type=Path, nargs="+")
     c.add_argument("-o", "--output", type=Path)
+    c.add_argument("--report", type=Path, help="write the machine-readable batch report to this path")
     c.add_argument("--analysis-fps", type=float, default=10.0)
     c.add_argument("--mode", choices=sorted(ANALYSIS_MODES), default="strict",
                    help="state-analysis policy; strict is the reference mode")
@@ -116,10 +117,19 @@ def main() -> int:
         if args.command == "convert":
             if args.analysis_fps <= 0:
                 raise CasuError("analysis FPS must be positive")
-            inputs = [item.expanduser().resolve() for item in args.input]
-            if any(not item.is_file() for item in inputs):
-                missing = next(item for item in inputs if not item.is_file())
-                raise CasuError(f"input media does not exist: {missing}")
+            inputs: list[Path] = []
+            for item in args.input:
+                candidate = item.expanduser().resolve()
+                if candidate.is_dir():
+                    inputs.extend(sorted(path for path in candidate.rglob("*")
+                                         if path.is_file() and path.suffix.lower() != ".casu"))
+                elif candidate.is_file():
+                    inputs.append(candidate)
+                else:
+                    raise CasuError(f"input media does not exist: {candidate}")
+            inputs = list(dict.fromkeys(inputs))
+            if not inputs:
+                raise CasuError("no source files found in the requested inputs")
             if args.output:
                 output = args.output.expanduser().resolve()
                 if len(inputs) > 1 and output.suffix.lower() == ".casu":
@@ -154,6 +164,8 @@ def main() -> int:
                     report.append({"source": str(source), "output": str(target), "status": "failed", "error": str(exc)})
             payload = json.dumps({"version": 1, "mode": args.mode, "analysis_fps": args.analysis_fps,
                                   "files": report}, indent=2, ensure_ascii=False) + "\n"
+            if args.report:
+                atomic_write_text(args.report, payload)
             print(payload, end="")
             return 0 if all(item["status"] == "converted" for item in report) else 1
         if args.command == "play":

@@ -86,6 +86,20 @@ def test_cli_convert_supports_multiple_inputs_and_reports_failures(tmp_path, mon
     assert (output_dir / "one.casu").is_file()
 
 
+def test_cli_convert_expands_directories_and_writes_report(tmp_path, monkeypatch, capsys):
+    source_dir = tmp_path / "sources"; source_dir.mkdir()
+    source = source_dir / "clip.mp4"; source.write_bytes(b"clip")
+    output_dir = tmp_path / "out"
+    report_path = tmp_path / "batch.json"
+    monkeypatch.setattr("casu.cli.analyze", lambda *_args: {
+        "source": {"duration_s": 2}, "video": {"segments": []}, "audio": {"segments": []}
+    })
+    monkeypatch.setattr("sys.argv", ["casu", "convert", str(source_dir), "-o", str(output_dir), "--report", str(report_path)])
+    assert casu_cli_main() == 0
+    assert (output_dir / "clip.casu").is_file()
+    assert json.loads(report_path.read_text(encoding="utf-8"))["files"][0]["status"] == "converted"
+
+
 def test_info_output_exposes_seek_and_native_payload_status(tmp_path, monkeypatch, capsys):
     manifest = tmp_path / "sample.casu"
     manifest.write_text(json.dumps({
