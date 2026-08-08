@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import re
+from pathlib import PurePath
 from typing import Any
 
 
@@ -53,6 +54,11 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
         source = {}
     if not isinstance(source.get("filename"), str) or not source.get("filename"):
         errors.append("source.filename must be a non-empty string")
+    elif (len(source["filename"]) > MAX_TEXT_LENGTH
+          or "\\" in source["filename"]
+          or PurePath(source["filename"]).name != source["filename"]
+          or source["filename"] in {".", ".."}):
+        errors.append("source.filename must be a bounded basename without path traversal")
     if "duration_s" not in source:
         errors.append("source.duration_s is required")
     try:
