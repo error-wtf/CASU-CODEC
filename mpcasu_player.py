@@ -218,6 +218,8 @@ class MPCASUPlayer(tk.Tk):
         ttk.Button(bar, text="Video", style="MPC.TButton", command=self.cycle_video_track).pack(side="right", padx=3)
         ttk.Button(bar, text="Subtitles", style="MPC.TButton", command=self.cycle_subtitle_track).pack(side="right", padx=3)
         ttk.Button(bar, text="Load subtitle", style="MPC.TButton", command=self.load_external_subtitle).pack(side="right", padx=3)
+        ttk.Button(bar, text="Chapter", style="MPC.TButton", command=self.next_chapter).pack(side="right", padx=3)
+        ttk.Button(bar, text="Frame", style="MPC.TButton", command=self.next_frame).pack(side="right", padx=3)
         ttk.Button(bar, text="Info", style="MPC.TButton", command=self.show_media_info).pack(side="right", padx=3)
         ttk.Button(bar, text="Fullscreen", style="MPC.TButton", command=self.toggle_fullscreen).pack(side="right", padx=3)
         tk.Label(center, textvariable=self.status, bg=PANEL, fg=SECONDARY, anchor="w").pack(fill="x", padx=14, pady=(0, 8))
@@ -834,6 +836,32 @@ class MPCASUPlayer(tk.Tk):
             self.status.set(f"External subtitle loaded · {Path(subtitle).name}")
         except (BackendError, OSError) as exc:
             self.status.set(f"Could not load subtitle: {exc}")
+
+    def next_chapter(self):
+        if not self.backend:
+            self.status.set("No active media backend")
+            return
+        try:
+            count = self.backend.chapter_count()
+            if count <= 0:
+                self.status.set("No chapters reported by libVLC")
+                return
+            current = self.backend.chapter()
+            self.backend.set_chapter((current + 1) % count)
+            self.status.set(f"Chapter {(current + 1) % count + 1}/{count}")
+        except BackendError as exc:
+            self.status.set(str(exc))
+
+    def next_frame(self):
+        if not self.backend:
+            self.status.set("No active media backend")
+            return
+        try:
+            self.backend.next_frame()
+            self._paused = True
+            self.status.set("Advanced one decoded frame")
+        except BackendError as exc:
+            self.status.set(str(exc))
 
     def toggle_fullscreen(self):
         self.attributes("-fullscreen", not bool(self.attributes("-fullscreen")))

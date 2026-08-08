@@ -96,6 +96,15 @@ class LibVLCBackend:
         self._install("libvlc_media_player_get_time", ctypes.c_int64, [ctypes.c_void_p])
         self._install("libvlc_media_player_get_length", ctypes.c_int64, [ctypes.c_void_p])
         self._install("libvlc_media_player_set_time", None, [ctypes.c_void_p, ctypes.c_int64])
+        self._chapter_api = all(self._optional_install(name, restype, args) for name, restype, args in (
+            ("libvlc_media_player_get_title_count", ctypes.c_int, [ctypes.c_void_p]),
+            ("libvlc_media_player_get_title", ctypes.c_int, [ctypes.c_void_p]),
+            ("libvlc_media_player_set_title", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int]),
+            ("libvlc_media_player_get_chapter_count", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int]),
+            ("libvlc_media_player_get_chapter", ctypes.c_int, [ctypes.c_void_p]),
+            ("libvlc_media_player_set_chapter", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int]),
+        ))
+        self._frame_step_api = self._optional_install("libvlc_media_player_next_frame", ctypes.c_int, [ctypes.c_void_p])
         self._install("libvlc_media_player_set_rate", ctypes.c_int, [ctypes.c_void_p, ctypes.c_float])
         self._install("libvlc_media_player_get_rate", ctypes.c_float, [ctypes.c_void_p])
         self._install("libvlc_audio_set_volume", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int])
@@ -273,6 +282,27 @@ class LibVLCBackend:
 
     def seek(self, seconds: float):
         if self.player: self.libvlc_media_player_set_time(self.player, int(max(0.0, seconds) * 1000))
+
+    def next_frame(self) -> None:
+        if not self._frame_step_api or not self.player:
+            raise BackendError("frame stepping is unavailable in this libVLC build")
+        if self.libvlc_media_player_next_frame(self.player) != 0:
+            raise BackendError("libVLC rejected frame step")
+
+    def chapter_count(self) -> int:
+        if not self._chapter_api or not self.player:
+            return 0
+        title = int(self.libvlc_media_player_get_title(self.player))
+        return max(0, int(self.libvlc_media_player_get_chapter_count(self.player, title)))
+
+    def chapter(self) -> int:
+        return int(self.libvlc_media_player_get_chapter(self.player)) if self._chapter_api and self.player else -1
+
+    def set_chapter(self, chapter: int) -> None:
+        if not self._chapter_api or not self.player:
+            raise BackendError("chapter selection is unavailable in this libVLC build")
+        if self.libvlc_media_player_set_chapter(self.player, int(chapter)) != 0:
+            raise BackendError(f"libVLC rejected chapter {chapter}")
 
     def set_rate(self, rate: float) -> float:
         if not self.player:
