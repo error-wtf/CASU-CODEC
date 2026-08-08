@@ -190,6 +190,20 @@ def test_casu_scheduler_returns_deterministic_state():
     assert scheduler.state_at(2.0) is None
 
 
+def test_casu_scheduler_preserves_segment_metadata_and_index_lookup():
+    scheduler = CasuScheduler.from_manifest({"video": {"segments": [
+        {"start_s": 0, "end_s": 1, "state": "static", "segment_id": "s0",
+         "region": {"x": 0, "y": 0, "w": 16, "h": 9}, "lifecycle": "HOLD",
+         "priority": 3, "deadline_s": 0.9, "reference_state": "key-0"},
+        {"start_s": 1, "end_s": 2, "state": "motion", "segment_id": "s1"},
+    ]}})
+    assert scheduler.state_at(0.25).segment_id == "s0"
+    summary = scheduler.summary(0.25)
+    assert summary["active_lifecycle"] == "HOLD"
+    assert summary["active_priority"] == 3
+    assert summary["active_deadline_s"] == 0.9
+
+
 class _FakePlaybackBackend:
     def __init__(self):
         self.calls = []
