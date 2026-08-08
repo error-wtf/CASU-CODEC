@@ -76,6 +76,7 @@ class MPCASUPlayer(tk.Tk):
             if logo_path.is_file():
                 source_logo = tk.PhotoImage(file=str(logo_path))
                 self._logo_image = source_logo.subsample(max(1, source_logo.width() // 140), max(1, source_logo.height() // 60))
+                self.iconphoto(True, self._logo_image)
                 tk.Label(logo, image=self._logo_image, bg=BG).pack(anchor="w")
             else:
                 raise tk.TclError("logo asset unavailable")
