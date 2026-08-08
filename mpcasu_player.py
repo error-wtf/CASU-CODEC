@@ -56,6 +56,7 @@ class MPCASUPlayer(tk.Tk):
         self._visual_segments: list[dict] = []
         self._visual_video_segments: list[dict] = []
         self._visual_audio_segments: list[dict] = []
+        self._logo_image = None
         self._build()
         if initial:
             self.add_files(initial if isinstance(initial, list) else [initial])
@@ -71,8 +72,17 @@ class MPCASUPlayer(tk.Tk):
         root.pack(fill="both", expand=True)
         top = tk.Frame(root, bg=BG, height=62); top.pack(fill="x", padx=18, pady=(12, 6)); top.pack_propagate(False)
         logo = tk.Frame(top, bg=BG); logo.pack(side="left")
-        tk.Label(logo, text="◈ MPCASU", bg=BG, fg=RED, font=("TkDefaultFont", 19, "bold")).pack(anchor="w")
-        tk.Label(logo, text="PLAYER", bg=BG, fg=SECONDARY, font=("TkDefaultFont", 8, "bold")).pack(anchor="w", padx=(30, 0))
+        logo_path = Path(__file__).resolve().parent / "assets" / "mpcasu_player_logo_header.png"
+        try:
+            if logo_path.is_file():
+                source_logo = tk.PhotoImage(file=str(logo_path))
+                self._logo_image = source_logo.subsample(max(1, source_logo.width() // 140), max(1, source_logo.height() // 60))
+                tk.Label(logo, image=self._logo_image, bg=BG).pack(anchor="w")
+            else:
+                raise tk.TclError("logo asset unavailable")
+        except tk.TclError:
+            tk.Label(logo, text="◈ MPCASU", bg=BG, fg=RED, font=("TkDefaultFont", 19, "bold")).pack(anchor="w")
+            tk.Label(logo, text="PLAYER", bg=BG, fg=SECONDARY, font=("TkDefaultFont", 8, "bold")).pack(anchor="w", padx=(30, 0))
         self.now_playing = tk.Label(top, text="NO MEDIA SELECTED", bg=BG, fg=SECONDARY, font=("TkDefaultFont", 10, "bold")); self.now_playing.pack(side="left", padx=42)
         tk.Label(top, text="CASU · LEGACY SAFE", bg=BG, fg=MUTED, font=("TkDefaultFont", 9)).pack(side="right")
 

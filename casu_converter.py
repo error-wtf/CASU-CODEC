@@ -17,6 +17,13 @@ from tkinter import filedialog, messagebox, ttk
 
 from casu.core import ANALYSIS_MODES, CasuError, analyze
 
+BG = "#090B0D"
+PANEL = "#111418"
+PANEL_ALT = "#14181D"
+RED = "#FF1E2D"
+TEXT = "#F2F2F2"
+SECONDARY = "#A7ABB0"
+
 
 class CASUConverter(tk.Tk):
     def __init__(self) -> None:
@@ -32,26 +39,38 @@ class CASUConverter(tk.Tk):
         self._build()
 
     def _build(self) -> None:
-        root = ttk.Frame(self, padding=18)
+        self.configure(bg=BG)
+        style = ttk.Style(self)
+        try: style.theme_use("clam")
+        except tk.TclError: pass
+        style.configure("CASU.TButton", background=PANEL_ALT, foreground=TEXT, borderwidth=0, padding=(10, 6))
+        style.map("CASU.TButton", background=[("active", "#3A1015")])
+        root = tk.Frame(self, bg=BG, padx=22, pady=20)
         root.pack(fill="both", expand=True)
-        ttk.Label(root, text="CASU Converter", font=("TkDefaultFont", 22, "bold")).pack(anchor="w")
-        ttk.Label(root, text="Codec for All Segmented Units · source media remains untouched").pack(anchor="w", pady=(0, 18))
+        logo_path = Path(__file__).resolve().parent / "assets" / "casu_codec_logo_header.png"
+        self._logo_image = None
+        try:
+            image = tk.PhotoImage(file=str(logo_path)); self._logo_image = image.subsample(max(1, image.width() // 140), max(1, image.height() // 60))
+            tk.Label(root, image=self._logo_image, bg=BG).pack(anchor="w")
+        except (tk.TclError, OSError):
+            tk.Label(root, text="CASU CONVERTER", bg=BG, fg=RED, font=("TkDefaultFont", 22, "bold")).pack(anchor="w")
+        tk.Label(root, text="Codec for All Segmented Units · source media remains untouched", bg=BG, fg=SECONDARY).pack(anchor="w", pady=(0, 18))
         for label, variable, command in (("Source media", self.source, self.choose_source), ("CASU output", self.output, self.choose_output)):
             row = ttk.Frame(root); row.pack(fill="x", pady=5)
-            ttk.Label(row, text=label, width=16).pack(side="left")
+            tk.Label(row, text=label, width=16, bg=BG, fg=TEXT, anchor="w").pack(side="left")
             ttk.Entry(row, textvariable=variable).pack(side="left", fill="x", expand=True)
-            ttk.Button(row, text="Browse…", command=command).pack(side="left", padx=(8, 0))
-        options = ttk.Frame(root); options.pack(fill="x", pady=12)
+            ttk.Button(row, text="Browse…", style="CASU.TButton", command=command).pack(side="left", padx=(8, 0))
+        options = tk.Frame(root, bg=BG); options.pack(fill="x", pady=12)
         ttk.Label(options, text="Analysis mode").pack(side="left")
         ttk.Combobox(options, textvariable=self.mode, values=sorted(ANALYSIS_MODES), state="readonly", width=18).pack(side="left", padx=8)
         ttk.Label(options, text="FPS").pack(side="left")
         ttk.Spinbox(options, from_=0.1, to=120.0, increment=0.5, textvariable=self.fps, width=8).pack(side="left", padx=8)
         self.progress = ttk.Progressbar(root, mode="indeterminate")
         self.progress.pack(fill="x", pady=(8, 4))
-        ttk.Label(root, textvariable=self.status, wraplength=680).pack(anchor="w", pady=5)
-        actions = ttk.Frame(root); actions.pack(anchor="e", pady=(12, 0))
-        ttk.Button(actions, text="Convert", command=self.convert).pack(side="left")
-        ttk.Button(actions, text="Close", command=self.destroy).pack(side="left", padx=8)
+        tk.Label(root, textvariable=self.status, wraplength=680, bg=BG, fg=SECONDARY, anchor="w", justify="left").pack(fill="x", pady=5)
+        actions = tk.Frame(root, bg=BG); actions.pack(anchor="e", pady=(12, 0))
+        ttk.Button(actions, text="Convert", style="CASU.TButton", command=self.convert).pack(side="left")
+        ttk.Button(actions, text="Close", style="CASU.TButton", command=self.destroy).pack(side="left", padx=8)
 
     def choose_source(self) -> None:
         path = filedialog.askopenfilename(filetypes=[("Media", "*.mp4 *.mp3 *.mkv *.mov *.m4a *.wav"), ("All files", "*.*")])

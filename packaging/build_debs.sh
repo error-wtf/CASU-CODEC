@@ -53,6 +53,7 @@ EOF
 install_player() {
   local stage="$1"; mkdir -p "$stage/usr/share/casu-codec" "$stage/usr/bin"
   cp "$root/mpcasu_player.py" "$stage/usr/share/casu-codec/"
+  if [ -d "$root/assets" ]; then cp -a "$root/assets" "$stage/usr/share/casu-codec/"; fi
   cat > "$stage/usr/bin/mpcasu" <<'EOF'
 #!/bin/sh
 export PYTHONPATH=/usr/share/casu-codec${PYTHONPATH:+:$PYTHONPATH}
