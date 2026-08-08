@@ -229,20 +229,42 @@ def analyze_audio(path: Path, probe: dict[str, Any], sample_rate: int = 16000,
         return {}
     command = ["ffmpeg", "-v", "error", "-i", str(path), "-map", "0:a:0", "-vn",
                "-ac", "1", "-ar", str(sample_rate), "-f", "f32le", "pipe:1"]
-    try:
-        result = subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    except subprocess.CalledProcessError as exc:
-        raise CasuError(f"audio analysis failed: {exc.stderr.decode(errors='replace').strip()}") from exc
-    samples = np.frombuffer(result.stdout, dtype=np.float32)
     window = max(1, int(sample_rate * window_ms / 1000))
-    count = (len(samples) + window - 1) // window
+    window_bytes = window * np.dtype(np.float32).itemsize
+    states: list[str] = []
+    db_values: list[float] = []
+    pending = bytearray()
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if process.stdout is None:
+        raise CasuError("could not open FFmpeg audio output")
+    while True:
+        chunk = process.stdout.read(max(window_bytes, 64 * 1024))
+        if not chunk:
+            break
+        pending.extend(chunk)
+        complete = (len(pending) // window_bytes) * window_bytes
+        if not complete:
+            continue
+        raw = bytes(pending[:complete])
+        del pending[:complete]
+        samples = np.frombuffer(raw, dtype=np.float32).reshape(-1, window)
+        db = 20.0 * np.log10(np.sqrt(np.mean(samples * samples, axis=1) + 1e-12) + 1e-12)
+        db_values.extend(float(value) for value in db)
+        states.extend(np.where(db < -55.0, "silence", np.where(db < -38.0, "low_level", "active")).tolist())
+    if pending:
+        tail = np.frombuffer(bytes(pending), dtype=np.float32)
+        if tail.size:
+            padded = np.zeros(window, dtype=np.float32)
+            padded[:tail.size] = tail
+            value = float(20.0 * np.log10(np.sqrt(np.mean(padded * padded) + 1e-12) + 1e-12))
+            db_values.append(value)
+            states.append("silence" if value < -55.0 else "low_level" if value < -38.0 else "active")
+    error = process.stderr.read().decode("utf-8", errors="replace") if process.stderr else ""
+    if process.wait() != 0:
+        raise CasuError(f"audio analysis failed: {error.strip()}")
+    count = len(states)
     if not count:
         return {"source_codec": audio.get("codec_name"), "segments": []}
-    padded = np.zeros(count * window, dtype=np.float32)
-    padded[:len(samples)] = samples
-    samples = padded.reshape(count, window)
-    db = 20.0 * np.log10(np.sqrt(np.mean(samples * samples, axis=1) + 1e-12) + 1e-12)
-    states = np.where(db < -55.0, "silence", np.where(db < -38.0, "low_level", "active")).tolist()
     counts = {name: states.count(name) for name in ("silence", "low_level", "active")}
     total = max(1, len(states))
     return {
@@ -252,7 +274,7 @@ def analyze_audio(path: Path, probe: dict[str, Any], sample_rate: int = 16000,
         "window_ms": window_ms,
         "sample_windows": count,
         "activity_ratio": {key: round(value / total, 6) for key, value in counts.items()},
-        "mean_dbfs": round(float(np.mean(db)), 3),
+        "mean_dbfs": round(float(np.mean(db_values)), 3),
         "segments": rle(states, window_ms / 1000, duration(probe)),
         "state_is_hint_only": True,
     }
