@@ -9,6 +9,11 @@ manifest with the `.casu` extension.
 ```bash
 casu convert input.mp4 --output input.casu
 casu convert input.mp3 --output input.casu
+casu benchmark input.mp4 --output benchmark.json
+
+The benchmark report measures analysis time, source size, duration and segment
+counts. Energy is reported as unavailable unless a real telemetry backend is
+present; no savings are inferred from file size alone.
 casu validate input.casu
 casu validate --verify-source input.casu
 casu play input.casu

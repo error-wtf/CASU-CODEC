@@ -35,6 +35,7 @@ python3 -m pip install -e .
 casu analyze /path/to/movie.mp4
 casu analyze /path/to/song.mp3
 casu convert /path/to/movie.mp4 --output movie.casu
+casu benchmark /path/to/movie.mp4 --output benchmark.json
 casu play /path/to/movie.mp4
 casu play /path/to/song.mp3
 casu play movie.casu
