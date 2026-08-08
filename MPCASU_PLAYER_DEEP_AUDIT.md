@@ -13,7 +13,7 @@ tests. A button or a status label alone is not evidence.
 | Real video presentation | PARTIAL | A Tk Canvas is used as the libVLC surface; the app does not verify a presented frame and still paints diagnostic text on that same canvas when idle. |
 | Audio output | PARTIAL | Audio is delegated to libVLC; there is no enumerated device, output selection, latency, channel-layout or underrun model. |
 | A/V clock | MISSING | Position is polled every 500 ms; no audio-master clock, event timestamps, drift measurement or correction exists. |
-| Playback events | MISSING | No `libvlc_event_manager` registration for opening, playing, paused, buffering, time, length, end or error events. |
+| Playback events | PARTIAL | Optional `libvlc_event_manager` registration now maps lifecycle events into backend state; time/position events, UI dispatch and platform validation remain. |
 | Error presentation | PARTIAL | Some media-state errors are mapped, but decoder/output failures are not consistently surfaced with actionable technical details. |
 | Seeking | PARTIAL | libVLC time seeking exists, but decoder flush, exact target verification and post-seek state reconstruction are absent. |
 | Track selection | PARTIAL | Audio/video/SPU cycling exists, but selection is a cycle button rather than a complete named track model with language, codec, channels, default and forced metadata. |

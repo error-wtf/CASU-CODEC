@@ -14,6 +14,7 @@ import os
 import sys
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
 from casu.core import CasuError, resolve_casu_source
 from casu.schema import validate_manifest
@@ -76,6 +77,10 @@ class LibVLCBackend:
             raise BackendError("libVLC could not be initialized")
         self.media = None; self.player = None; self.path: Path | None = None
         self._state = PlaybackState.EMPTY
+        self._event_manager = None
+        self._event_callback_type = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p)
+        self._event_callbacks: list[tuple[int, Any]] = []
+        self._event_api = False
         self._install("libvlc_media_new_path", ctypes.c_void_p, [ctypes.c_void_p, ctypes.c_char_p])
         self._install("libvlc_media_player_new_from_media", ctypes.c_void_p, [ctypes.c_void_p])
         self._install("libvlc_media_player_release", None, [ctypes.c_void_p])
@@ -110,6 +115,11 @@ class LibVLCBackend:
             ("libvlc_video_set_spu", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int]),
         ))
         self._subtitle_description_api = self._install_descriptions("libvlc_video_get_spu_description")
+        self._event_api = all(self._optional_install(name, restype, args) for name, restype, args in (
+            ("libvlc_media_player_event_manager", ctypes.c_void_p, [ctypes.c_void_p]),
+            ("libvlc_event_attach", ctypes.c_int, [ctypes.c_void_p, ctypes.c_uint, self._event_callback_type, ctypes.c_void_p]),
+            ("libvlc_event_detach", None, [ctypes.c_void_p, ctypes.c_uint, self._event_callback_type, ctypes.c_void_p]),
+        ))
         if sys.platform.startswith("linux"):
             self._install("libvlc_media_player_set_xwindow", None, [ctypes.c_void_p, ctypes.c_uint32])
         elif sys.platform.startswith("win"):
@@ -187,7 +197,35 @@ class LibVLCBackend:
             self.libvlc_media_player_set_hwnd(self.player, ctypes.c_void_p(self.widget.winfo_id()))
         elif sys.platform == "darwin":
             self.libvlc_media_player_set_nsobject(self.player, ctypes.c_void_p(self.widget.winfo_id()))
+        self._attach_events()
         self._state = PlaybackState.READY
+
+    def _attach_events(self) -> None:
+        """Map libVLC lifecycle events to the backend state machine."""
+        if not self._event_api or not self.player:
+            return
+        manager = self.libvlc_media_player_event_manager(self.player)
+        if not manager:
+            return
+        self._event_manager = manager
+        # Values are libvlc_event_e media-player constants.  Keeping this
+        # optional lets older/minimal libVLC builds continue through polling.
+        event_states = {
+            0x102: PlaybackState.LOADING,  # Opening
+            0x103: PlaybackState.LOADING,  # Buffering
+            0x104: PlaybackState.PLAYING,
+            0x105: PlaybackState.PAUSED,
+            0x106: PlaybackState.STOPPED,
+            0x109: PlaybackState.ERROR,
+            0x110: PlaybackState.READY,    # LengthChanged
+            0x11B: PlaybackState.ENDED,   # EndReached
+        }
+        for event_type, state in event_states.items():
+            def callback(_event, _user_data, state=state):
+                self._state = state
+            callback_ref = self._event_callback_type(callback)
+            if self.libvlc_event_attach(manager, event_type, callback_ref, None) == 0:
+                self._event_callbacks.append((event_type, callback_ref))
 
     def play(self):
         if not self.player or self.libvlc_media_player_play(self.player) != 0: raise BackendError("libVLC playback could not start")
@@ -322,6 +360,14 @@ class LibVLCBackend:
         return values
 
     def close_media(self):
+        if self._event_manager and self._event_api:
+            for event_type, callback_ref in self._event_callbacks:
+                try:
+                    self.libvlc_event_detach(self._event_manager, event_type, callback_ref, None)
+                except (OSError, ctypes.ArgumentError):
+                    pass
+        self._event_callbacks.clear()
+        self._event_manager = None
         if self.player: self.libvlc_media_player_stop(self.player); self.libvlc_media_player_release(self.player)
         if self.media: self.libvlc_media_release(self.media)
         self.player = self.media = None
