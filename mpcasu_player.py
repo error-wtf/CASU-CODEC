@@ -24,6 +24,7 @@ from casu.core import CasuError, resolve_casu_source, ffprobe
 from casu.schema import validate_manifest
 from casu.scheduler import CasuScheduler
 from mpcasu_backend import BackendError, CasuBackend, LibVLCBackend, PlaybackState
+from mpcasu_playback import PlaybackController
 
 
 MEDIA = {".mp4", ".mp3", ".mkv", ".m4v", ".mov", ".flac", ".wav", ".ogg", ".webm", ".m4a", ".aac", ".opus", ".aiff", ".alac", ".casu"}
@@ -46,6 +47,7 @@ class MPCASUPlayer(tk.Tk):
         self.minsize(980, 620)
         self.configure(bg=BG)
         self.backend: LibVLCBackend | None = None
+        self.controller = PlaybackController()
         self.current: Path | None = None
         self.duration = 0.0
         self.position = tk.DoubleVar(value=0.0)
@@ -227,13 +229,14 @@ class MPCASUPlayer(tk.Tk):
         try:
             self.backend = LibVLCBackend(self.canvas)
             self.backend.open_source(source)
-            self.backend.play()
+            self.controller.attach(self.backend, source)
+            self.controller.play()
             self.duration = self.backend.duration()
             self.timeline.configure(to=max(self.duration, 1.0))
             capabilities = self.backend.capabilities()
-            self.status.set(f"{path.name} · {state} · {capabilities.get('version', 'libVLC')}")
-            self.status.set("Playing network source · timing owned by libVLC")
+            self.status.set(f"Playing network source · {capabilities.get('version', 'libVLC')} · timing owned by libVLC")
         except (BackendError, OSError) as exc:
+            self.controller.close()
             self.backend = None
             self.status.set(f"Could not open network source: {exc}")
             messagebox.showerror("MPCASU", str(exc))
@@ -269,8 +272,8 @@ class MPCASUPlayer(tk.Tk):
             temporary.replace(self._session_file)
         except OSError:
             pass
-        if self.backend:
-            self.backend.close()
+        self.controller.close()
+        self.backend = None
         self.destroy()
 
     def _load_visual_state(self, path: Path):
@@ -425,11 +428,14 @@ class MPCASUPlayer(tk.Tk):
             self.backend = CasuBackend(self.canvas) if path.suffix.lower() == ".casu" else LibVLCBackend(self.canvas)
             if path.suffix.lower() == ".casu": self.backend.open_casu(path)
             else: self.backend.open(source)
-            self.backend.play()
+            self.controller.attach(self.backend, path)
+            self.controller.play()
             self.duration = self.backend.duration()
             self.timeline.configure(to=max(self.duration, 1.0))
+            capabilities = self.backend.capabilities()
+            self.status.set(f"{path.name} · {state} · {capabilities.get('version', 'libVLC')}")
         except (BackendError, CasuError, OSError) as exc:
-            if self.backend: self.backend.close()
+            self.controller.close()
             self.backend = None
             self.status.set("Cannot play — internal media backend unavailable")
             messagebox.showerror("MPCASU", f"Could not start internal playback: {exc}")
@@ -508,18 +514,19 @@ class MPCASUPlayer(tk.Tk):
     def pause(self):
         if self.backend and self.backend.state() not in {PlaybackState.EMPTY, PlaybackState.STOPPED, PlaybackState.ENDED}:
             if self._paused:
-                self.backend.resume()
+                self.controller.pause_or_resume()
                 self._paused = False
                 self.status.set("Playing — source timing is preserved")
             else:
                 self._sync_position()
-                self.backend.pause()
+                self.controller.pause_or_resume()
                 self._paused = True
                 self.status.set("Paused — source timing is preserved")
 
     def stop(self):
         if self.backend:
-            self.backend.close()
+            self.controller.stop()
+            self.controller.close()
         self.backend = None
         self._paused = False
 
@@ -543,8 +550,8 @@ class MPCASUPlayer(tk.Tk):
             return
         try:
             if self.backend:
-                self.backend.seek(offset)
-                self.backend.play()
+                self.controller.seek(offset)
+                self.controller.play()
         except (BackendError, CasuError, OSError) as exc:
             self.status.set(f"Cannot seek — internal media backend failed: {exc}")
             return

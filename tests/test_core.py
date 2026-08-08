@@ -11,6 +11,7 @@ from casu.core import CasuError, analyze, play, resolve_casu_source, rle
 from casu.schema import validate_manifest
 from casu.scheduler import CasuScheduler
 from mpcasu_backend import LibVLCBackend
+from mpcasu_playback import ControllerState, PlaybackController
 
 
 VIDEO = Path(os.environ.get("CASU_TEST_VIDEO", "test_media/lino_lol_test_pattern.mp4"))
@@ -157,3 +158,35 @@ def test_casu_scheduler_returns_deterministic_state():
     assert scheduler.state_at(0.5).state == "static"
     assert scheduler.summary(1.5)["active_state"] == "motion"
     assert scheduler.state_at(2.0) is None
+
+
+class _FakePlaybackBackend:
+    def __init__(self):
+        self.calls = []
+        self._position = 0.0
+
+    def play(self): self.calls.append("play")
+    def pause(self): self.calls.append("pause")
+    def resume(self): self.calls.append("resume")
+    def stop(self): self.calls.append("stop")
+    def seek(self, seconds): self.calls.append(("seek", seconds)); self._position = seconds
+    def position(self): return self._position
+    def duration(self): return 12.0
+    def close(self): self.calls.append("close")
+
+
+def test_playback_controller_owns_transport_state():
+    backend = _FakePlaybackBackend()
+    controller = PlaybackController()
+    controller.attach(backend, "sample.mp4")
+    assert controller.state is ControllerState.READY
+    controller.play()
+    assert controller.state is ControllerState.PLAYING
+    controller.pause_or_resume()
+    assert controller.state is ControllerState.PAUSED
+    controller.pause_or_resume()
+    controller.seek(3.5)
+    controller.stop()
+    controller.close()
+    assert backend.calls == ["play", "pause", "resume", ("seek", 3.5), "stop", "close"]
+    assert controller.state is ControllerState.EMPTY
