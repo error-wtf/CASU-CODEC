@@ -41,7 +41,7 @@ def parser() -> argparse.ArgumentParser:
     a.add_argument("--mode", choices=sorted(ANALYSIS_MODES), default="strict",
                    help="state-analysis policy; strict is the reference mode")
     c = sub.add_parser("convert", help="convert legacy media to a CASU manifest without changing the source")
-    c.add_argument("input", type=Path)
+    c.add_argument("input", type=Path, nargs="+")
     c.add_argument("-o", "--output", type=Path)
     c.add_argument("--analysis-fps", type=float, default=10.0)
     c.add_argument("--mode", choices=sorted(ANALYSIS_MODES), default="strict",
@@ -94,7 +94,7 @@ def main() -> int:
                 atomic_write_text(args.output, payload)
             print(payload, end="")
             return 0
-        if args.command in {"analyze", "convert"}:
+        if args.command == "analyze":
             if args.analysis_fps <= 0:
                 raise CasuError("analysis FPS must be positive")
             result = analyze(args.input, args.analysis_fps, args.mode)
@@ -113,6 +113,49 @@ def main() -> int:
                               "audio_segments": len(result["audio"].get("segments", [])),
                               "mode": result["casu"]["analysis_mode"]}, indent=2))
             return 0
+        if args.command == "convert":
+            if args.analysis_fps <= 0:
+                raise CasuError("analysis FPS must be positive")
+            inputs = [item.expanduser().resolve() for item in args.input]
+            if any(not item.is_file() for item in inputs):
+                missing = next(item for item in inputs if not item.is_file())
+                raise CasuError(f"input media does not exist: {missing}")
+            if args.output:
+                output = args.output.expanduser().resolve()
+                if len(inputs) > 1 and output.suffix.lower() == ".casu":
+                    raise CasuError("multiple inputs require an output directory, not one .casu file")
+                output_dir = output if len(inputs) > 1 or output.suffix.lower() != ".casu" else output.parent
+            else:
+                output_dir = inputs[0].parent
+            output_dir.mkdir(parents=True, exist_ok=True)
+            report: list[dict[str, object]] = []
+            targets: set[Path] = set()
+            for source in inputs:
+                if len(inputs) == 1 and args.output and args.output.suffix.lower() == ".casu":
+                    target = args.output.expanduser().resolve()
+                elif len(inputs) == 1 and not args.output:
+                    target = source.with_suffix(source.suffix + ".casu")
+                else:
+                    target = output_dir / f"{source.stem}.casu"
+                target = target.resolve()
+                if target in targets:
+                    raise CasuError(f"multiple inputs map to the same output: {target}")
+                targets.add(target)
+                try:
+                    if target == source:
+                        raise CasuError("output must differ from source media")
+                    if target.exists() and not args.force:
+                        raise CasuError(f"output exists (use --force): {target}")
+                    result = analyze(source, args.analysis_fps, args.mode)
+                    atomic_write_text(target, json.dumps(result, indent=2, ensure_ascii=False) + "\n")
+                    report.append({"source": str(source), "output": str(target), "status": "converted",
+                                   "duration_s": result["source"].get("duration_s")})
+                except (CasuError, OSError, ValueError) as exc:
+                    report.append({"source": str(source), "output": str(target), "status": "failed", "error": str(exc)})
+            payload = json.dumps({"version": 1, "mode": args.mode, "analysis_fps": args.analysis_fps,
+                                  "files": report}, indent=2, ensure_ascii=False) + "\n"
+            print(payload, end="")
+            return 0 if all(item["status"] == "converted" for item in report) else 1
         if args.command == "play":
             play(args.input)
             return 0

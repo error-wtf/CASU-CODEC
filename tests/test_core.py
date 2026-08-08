@@ -70,6 +70,22 @@ def test_cli_refuses_output_equal_to_source(tmp_path, monkeypatch):
     assert source.read_bytes() == b"source"
 
 
+def test_cli_convert_supports_multiple_inputs_and_reports_failures(tmp_path, monkeypatch, capsys):
+    first = tmp_path / "one.mp4"; second = tmp_path / "two.mp4"
+    first.write_bytes(b"one"); second.write_bytes(b"two")
+    def fake_analyze(path, *_args):
+        if path.name == "two.mp4":
+            raise CasuError("unsupported fixture")
+        return {"source": {"duration_s": 1}, "video": {"segments": []}, "audio": {"segments": []}}
+    monkeypatch.setattr("casu.cli.analyze", fake_analyze)
+    output_dir = tmp_path / "out"
+    monkeypatch.setattr("sys.argv", ["casu", "convert", str(first), str(second), "-o", str(output_dir)])
+    assert casu_cli_main() == 1
+    report = json.loads(capsys.readouterr().out)
+    assert [item["status"] for item in report["files"]] == ["converted", "failed"]
+    assert (output_dir / "one.casu").is_file()
+
+
 def test_info_output_exposes_seek_and_native_payload_status(tmp_path, monkeypatch, capsys):
     manifest = tmp_path / "sample.casu"
     manifest.write_text(json.dumps({
