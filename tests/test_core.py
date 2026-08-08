@@ -166,6 +166,15 @@ def test_libvlc_backend_source_capability_detection():
     assert not LibVLCBackend.supports("gopher://example.invalid/media")
 
 
+def test_libvlc_library_candidates_are_platform_independent():
+    # The backend must keep a shared-library fallback chain instead of
+    # assuming a Debian x86_64 soname in its public source contract.
+    source = Path("mpcasu_backend.py").read_text(encoding="utf-8")
+    assert '"libvlc.so.5", "libvlc.so"' in source
+    assert '"libvlc.dylib"' in source
+    assert '"libvlc.dll", "libvlc-5.dll"' in source
+
+
 def test_casu_scheduler_returns_deterministic_state():
     scheduler = CasuScheduler.from_manifest({"video": {"segments": [
         {"start_s": 0, "end_s": 1, "state": "static"},

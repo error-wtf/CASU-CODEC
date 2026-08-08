@@ -38,17 +38,30 @@ class LibVLCBackend:
         # Python/ctypes does not inherit the plugin-path setup that the VLC
         # launcher normally performs. Point libVLC at its installed modules so
         # H.264/AAC and other codecs are discovered by the in-process player.
-        plugin_path = "/usr/lib/x86_64-linux-gnu/vlc/plugins"
-        if os.path.isdir(plugin_path):
+        plugin_candidates = []
+        configured_plugins = os.environ.get("VLC_PLUGIN_PATH")
+        if configured_plugins:
+            plugin_candidates.append(configured_plugins)
+        if sys.platform.startswith("linux"):
+            plugin_candidates.extend(("/usr/lib/x86_64-linux-gnu/vlc/plugins", "/usr/lib/vlc/plugins"))
+        elif sys.platform == "darwin":
+            plugin_candidates.append("/Applications/VLC.app/Contents/MacOS/plugins")
+        plugin_path = next((candidate for candidate in plugin_candidates if os.path.isdir(candidate)), None)
+        if plugin_path:
             os.environ.setdefault("VLC_PLUGIN_PATH", plugin_path)
-        try:
-            self.lib = ctypes.CDLL("libvlc.so.5")
-        except OSError as exc:
-            raise BackendError("libVLC shared library is unavailable") from exc
+        library_names = (["libvlc.dll", "libvlc-5.dll"] if sys.platform.startswith("win")
+                         else ["libvlc.dylib"] if sys.platform == "darwin"
+                         else ["libvlc.so.5", "libvlc.so"])
+        load_error = None
+        for library_name in library_names:
+            try:
+                self.lib = ctypes.CDLL(library_name)
+                break
+            except OSError as exc:
+                load_error = exc
+        else:
+            raise BackendError("libVLC shared library is unavailable") from load_error
         self.widget = video_widget
-        # VLC 3.x discovers modules through VLC_PLUGIN_PATH. The historical
-        # --plugin-path command-line option is no longer accepted and can
-        # prevent codec modules from loading in embedded libVLC builds.
         # VLC 3.x discovers modules through VLC_PLUGIN_PATH. The historical
         # --plugin-path command-line option is no longer accepted and can
         # prevent codec modules from loading in embedded libVLC builds.
@@ -86,6 +99,10 @@ class LibVLCBackend:
         ))
         if sys.platform.startswith("linux"):
             self._install("libvlc_media_player_set_xwindow", None, [ctypes.c_void_p, ctypes.c_uint32])
+        elif sys.platform.startswith("win"):
+            self._install("libvlc_media_player_set_hwnd", None, [ctypes.c_void_p, ctypes.c_void_p])
+        elif sys.platform == "darwin":
+            self._install("libvlc_media_player_set_nsobject", None, [ctypes.c_void_p, ctypes.c_void_p])
 
     def _install(self, name, restype, args):
         setattr(self, name, self._call(name, restype, args))
@@ -145,6 +162,10 @@ class LibVLCBackend:
         if not self.player: self._state = PlaybackState.ERROR; raise BackendError("libVLC could not create media player")
         if sys.platform.startswith("linux"):
             self.libvlc_media_player_set_xwindow(self.player, self.widget.winfo_id())
+        elif sys.platform.startswith("win"):
+            self.libvlc_media_player_set_hwnd(self.player, ctypes.c_void_p(self.widget.winfo_id()))
+        elif sys.platform == "darwin":
+            self.libvlc_media_player_set_nsobject(self.player, ctypes.c_void_p(self.widget.winfo_id()))
         self._state = PlaybackState.READY
 
     def play(self):
