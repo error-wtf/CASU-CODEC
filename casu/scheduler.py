@@ -1,1 +1,84 @@
-¨¥yÛhr·šµë-­æ¦}Ó©z¶­Š‰ç¢Ú^®h­µçEj)^vÚ­æ­zËky©Ÿtê^­«b¢yè¶—«š+myÑZŠW¶‡+y«^²ÚÞjgÝ:—«jØ¨žz-¥êæŠÛ^tŒMA`µ1¥•¹Í”µ%‘•¹Ñ¥™¥•Èè1¥•¹Í•I•˜µMTµ¹Ñ¥…Á¥Ñ…±¥ÍÐ´Ä¸Ð(ŒMA`µ¥±•½ÁåÉ¥¡ÑQ•áÐè€ÈÀÈØ1¥¹¼…ÍÔ(ˆˆ‰•Ñ•Éµ¥¹¥ÍÑ¥ŒMTÍÑ…Ñ”Í¡•‘Õ±•È™½ÈÙ…±¥‘…Ñ•Í¥‘•…Èµ…¹¥™•ÍÑÌ¸()Q¡¥Ì±…å•È‘•±¥‰•É…Ñ•±äÍ¡•‘Õ±•Ì€©µ•Ñ…‘…Ñ„ÍÑ…Ñ•Ì¨½¹±ä¸%Ð¹•Ù•È¥¹Ù•¹ÑÌ„)™É…µ”°¡…¹•ÌÍ½ÕÉ”Ñ¥µ•ÍÑ…µÁÌ°½ÈÉ•Á±…•ÌÑ¡”µ•‘¥„‘•½‘•È¸(ˆˆˆ)™É½´}}™ÕÑÕÉ•}|¥µÁ½ÉÐ…¹¹½Ñ…Ñ¥½¹Ì()™É½´‘…Ñ…±…ÍÍ•Ì¥µÁ½ÉÐ‘…Ñ…±…ÍÌ)™É½´ÑåÁ¥¹œ¥µÁ½ÉÐ¹ä°%Ñ•É…‰±”(()‘…Ñ…±…ÍÌ¡™É½é•¸õQÉÕ”¤)±…ÍÌM•µ•¹ÑMÑ…Ñ”è(€€€ÍÑ…ÉÑ}Ìè™±½…Ð(€€€•¹‘}Ìè™±½…Ð(€€€ÍÑ…Ñ”èÍÑÈ(€€€Í½ÕÉ”èÍÑÈ(()±…ÍÌ…ÍÕM¡•‘Õ±•Èè(€€€‘•˜}}¥¹¥Ñ}|¡Í•±˜°Í•µ•¹ÑÌè%Ñ•É…‰±•mM•µ•¹ÑMÑ…Ñ•t¤è(€€€€€€€Í•±˜¹}Í•µ•¹ÑÌ€ôÑÕÁ±”¡Í½ÉÑ•¡Í•µ•¹ÑÌ°­•äõ±…µ‰‘„¥Ñ•´è€¡¥Ñ•´¹ÍÑ…ÉÑ}Ì°¥Ñ•´¹•¹‘}Ì¤¤¤((€€€±…ÍÍµ•Ñ¡½(€€€‘•˜™É½µ}µ…¹¥™•ÍÐ¡±Ì°µ…¹¥™•ÍÐè‘¥ÑmÍÑÈ°¹åt°Í½ÕÉ”èÍÑÈ€ô€‰Ù¥‘•¼ˆ¤€´ø€‰…ÍÕM¡•‘Õ±•Èˆè(€€€€€€€Í•Ñ¥½¸€ôµ…¹¥™•ÍÐ¹•Ð¡Í½ÕÉ”¤½Èíô(€€€€€€€É…Ü€ôÍ•Ñ¥½¸¹•Ð ‰Í•µ•¹ÑÌˆ°mt¤¥˜¥Í¥¹ÍÑ…¹”¡Í•Ñ¥½¸°‘¥Ð¤•±Í”mt(€€€€€€€Á…ÉÍ•è±¥ÍÑmM•µ•¹ÑMÑ…Ñ•t€ômt(€€€€€€€™½È¥Ñ•´¥¸É…Üè(€€€€€€€€€€€¥˜¹½Ð¥Í¥¹ÍÑ…¹”¡¥Ñ•´°‘¥Ð¤è(€€€€€€€€€€€€€€€½¹Ñ¥¹Õ”(€€€€€€€€€€€ÑÉäè(€€€€€€€€€€€€€€€Á…ÉÍ•¹…ÁÁ•¹¡M•µ•¹ÑMÑ…Ñ”¡™±½…Ð¡¥Ñ•µl‰ÍÑ…ÉÑ}Ì‰t¤°™±½…Ð¡¥Ñ•µl‰•¹‘}Ì‰t¤°ÍÑÈ¡¥Ñ•µl‰ÍÑ…Ñ”‰t¤°Í½ÕÉ”¤¤(€€€€€€€€€€€•á•ÁÐ€¡-•åÉÉ½È°QåÁ•ÉÉ½È°Y…±Õ•ÉÉ½È¤è(€€€€€€€€€€€€€€€½¹Ñ¥¹Õ”(€€€€€€€É•ÑÕÉ¸±Ì¡Á…ÉÍ•¤((€€€‘•˜ÍÑ…Ñ•}…Ð¡Í•±˜°Ñ¥µ•ÍÑ…µÁ}Ìè™±½…Ð¤€´øM•µ•¹ÑMÑ…Ñ”ð9½¹”è(€€€€€€€€ˆˆ‰I•ÑÕÉ¸Ñ¡”ÍÑ…Ñ”…Ñ¥Ù”…Ð„Í½ÕÉ”Ñ¥µ•ÍÑ…µÀ°¥˜½Ù•É•¸ˆˆˆ(€€€€€€€Ù…±Õ”€ô™±½…Ð¡Ñ¥µ•ÍÑ…µÁ}Ì¤(€€€€€€€™½ÈÍ•µ•¹Ð¥¸Í•±˜¹}Í•µ•¹ÑÌè(€€€€€€€€€€€¥˜Í•µ•¹Ð¹ÍÑ…ÉÑ}Ì€ðôÙ…±Õ”€ðÍ•µ•¹Ð¹•¹‘}Ìè(€€€€€€€€€€€€€€€É•ÑÕÉ¸Í•µ•¹Ð(€€€€€€€É•ÑÕÉ¸9½¹”((€€€‘•˜ÍÕµµ…Éä¡Í•±˜°Ñ¥µ•ÍÑ…µÁ}Ìè™±½…Ð¤€´ø‘¥ÑmÍÑÈ°¹åtè(€€€€€€€…Ñ¥Ù”€ôÍ•±˜¹ÍÑ…Ñ•}…Ð¡Ñ¥µ•ÍÑ…µÁ}Ì¤(€€€€€€€É•ÑÕÉ¸ì(€€€€€€€€€€€€‰Í½ÕÉ”ˆèÍ•±˜¹}Í•µ•¹ÑÍlÁt¹Í½ÕÉ”¥˜Í•±˜¹}Í•µ•¹ÑÌ•±Í”€‰Õ¹­¹½Ý¸ˆ°(€€€€€€€€€€€€‰Í•µ•¹Ñ}½Õ¹Ðˆè±•¸¡Í•±˜¹}Í•µ•¹ÑÌ¤°(€€€€€€€€€€€€‰…Ñ¥Ù•}ÍÑ…Ñ”ˆè…Ñ¥Ù”¹ÍÑ…Ñ”¥˜…Ñ¥Ù”•±Í”9½¹”°(€€€€€€€€€€€€‰…Ñ¥Ù•}¥¹Ñ•ÉÙ…°ˆèm…Ñ¥Ù”¹ÍÑ…ÉÑ}Ì°…Ñ¥Ù”¹•¹‘}Ít¥˜…Ñ¥Ù”•±Í”9½¹”°(€€€€€€€€€€€€‰½Ù•É•ˆè…Ñ¥Ù”¥Ì¹½Ð9½¹”°(€€€€€€€ô(
+# SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
+# SPDX-FileCopyrightText: 2026 Lino Casu
+"""Deterministic CASU state scheduler for validated sidecar manifests.
+
+This layer deliberately schedules *metadata states* only. It never invents a
+frame, changes source timestamps, or replaces the media decoder.
+"""
+from __future__ import annotations
+
+from bisect import bisect_right
+from dataclasses import dataclass
+from typing import Any, Iterable
+
+
+@dataclass(frozen=True)
+class SegmentState:
+    start_s: float
+    end_s: float
+    state: str
+    source: str
+    segment_id: str | None = None
+    region: dict[str, Any] | None = None
+    lifecycle: str = "UPDATE"
+    priority: int = 0
+    deadline_s: float | None = None
+    reference_state: str | None = None
+
+
+class CasuScheduler:
+    def __init__(self, segments: Iterable[SegmentState]):
+        self._segments = tuple(sorted(segments, key=lambda item: (item.start_s, item.end_s)))
+        # Manifests are validated as non-overlapping intervals.  Keeping a
+        # parallel start index makes timeline lookup logarithmic instead of
+        # scanning every segment on every UI tick.
+        self._starts = tuple(item.start_s for item in self._segments)
+
+    @classmethod
+    def from_manifest(cls, manifest: dict[str, Any], source: str = "video") -> "CasuScheduler":
+        section = manifest.get(source) or {}
+        raw = section.get("segments", []) if isinstance(section, dict) else []
+        parsed: list[SegmentState] = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            try:
+                region = item.get("region")
+                parsed.append(SegmentState(
+                    float(item["start_s"]),
+                    float(item["end_s"]),
+                    str(item["state"]),
+                    source,
+                    str(item["segment_id"]) if item.get("segment_id") is not None else None,
+                    dict(region) if isinstance(region, dict) else None,
+                    str(item.get("lifecycle", "UPDATE")),
+                    int(item.get("priority", 0)),
+                    float(item["deadline_s"]) if item.get("deadline_s") is not None else None,
+                    str(item["reference_state"]) if item.get("reference_state") is not None else None,
+                ))
+            except (KeyError, TypeError, ValueError):
+                continue
+        return cls(parsed)
+
+    def state_at(self, timestamp_s: float) -> SegmentState | None:
+        """Return the state active at a source timestamp, if covered."""
+        value = float(timestamp_s)
+        index = bisect_right(self._starts, value) - 1
+        if index < 0:
+            return None
+        segment = self._segments[index]
+        return segment if value < segment.end_s else None
+
+    def summary(self, timestamp_s: float) -> dict[str, Any]:
+        active = self.state_at(timestamp_s)
+        return {
+            "source": self._segments[0].source if self._segments else "unknown",
+            "segment_count": len(self._segments),
+            "active_state": active.state if active else None,
+            "active_interval": [active.start_s, active.end_s] if active else None,
+            "active_segment_id": active.segment_id if active else None,
+            "active_lifecycle": active.lifecycle if active else None,
+            "active_priority": active.priority if active else None,
+            "active_deadline_s": active.deadline_s if active else None,
+            "covered": active is not None,
+        }
