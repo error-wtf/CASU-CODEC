@@ -6,13 +6,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "casu-codec"
-version = "0.2.0"
+version = "1.0.0"
 description = "CASU (Codec for All Segmented Units): legacy-compatible segmented-state codec/container for MP4 and MP3"
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.24"]
 
 [project.scripts]
 casu = "casu.cli:main"
+casu-converter = "casu_converter:main"
 mpc = "casu.cli:main"
 mpcasu = "mpcasu_player:main"
 
@@ -20,7 +21,7 @@ mpcasu = "mpcasu_player:main"
 include = ["casu*"]
 
 [tool.setuptools]
-py-modules = ["mpcasu_player"]
+py-modules = ["mpcasu_player", "casu_converter"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
