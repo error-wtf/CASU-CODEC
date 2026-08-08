@@ -12,12 +12,14 @@ from __future__ import annotations
 import ctypes
 import os
 import sys
+import tempfile
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
 from casu.core import CasuError, resolve_casu_source
 from casu.schema import validate_manifest
+from casu.native import NativeCasuError, read_native
 import json
 from urllib.parse import urlparse
 
@@ -76,6 +78,7 @@ class LibVLCBackend:
         if not self.instance:
             raise BackendError("libVLC could not be initialized")
         self.media = None; self.player = None; self.path: Path | None = None
+        self._native_temp: Path | None = None
         self._state = PlaybackState.EMPTY
         self._event_manager = None
         self._event_callback_type = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p)
@@ -431,6 +434,12 @@ class LibVLCBackend:
         if self.player: self.libvlc_media_player_stop(self.player); self.libvlc_media_player_release(self.player)
         if self.media: self.libvlc_media_release(self.media)
         self.player = self.media = None
+        if self._native_temp is not None:
+            try:
+                self._native_temp.unlink(missing_ok=True)
+            except OSError:
+                pass
+            self._native_temp = None
 
     def close(self):
         self.close_media()
@@ -447,14 +456,39 @@ class CasuBackend(LibVLCBackend):
 
     def capabilities(self) -> dict[str, str]:
         values = super().capabilities()
-        values.update({"backend_path": "CASU sidecar compatibility", "native_casu_payload": "unavailable"})
+        values.update({"backend_path": "CASU native payload or sidecar compatibility",
+                       "native_casu_payload": "available via verified extraction"})
         return values
 
     def open_casu(self, manifest_path: Path) -> None:
-        try: manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc: raise BackendError(f"invalid CASU manifest: {manifest_path}") from exc
+        manifest_path = manifest_path.expanduser().resolve()
+        try:
+            with manifest_path.open("rb") as handle:
+                is_native = handle.read(8) == b"CASUNAT1"
+        except OSError as exc:
+            raise BackendError(f"could not read CASU file: {manifest_path}") from exc
+        if is_native:
+            try:
+                container = read_native(manifest_path, verify_payload=True)
+                suffix = Path(container.manifest.get("source", {}).get("filename", "media.bin")).suffix or ".bin"
+                fd, temporary = tempfile.mkstemp(prefix="mpcasu-native-", suffix=suffix)
+                os.close(fd)
+                extracted = container.extract_payload(Path(temporary))
+                # open_source closes any previous media; assign ownership only
+                # after it succeeds so cleanup cannot remove the active file.
+                self.open_source(extracted)
+                self._native_temp = extracted
+                self.path = manifest_path
+                return
+            except (NativeCasuError, OSError, BackendError) as exc:
+                raise BackendError(f"invalid native CASU container: {exc}") from exc
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise BackendError(f"invalid CASU manifest: {manifest_path}") from exc
         errors = validate_manifest(manifest)
-        if errors: raise BackendError(f"invalid CASU manifest: {errors[0]}")
+        if errors:
+            raise BackendError(f"invalid CASU manifest: {errors[0]}")
         self.open(resolve_casu_source(manifest_path))
 
 

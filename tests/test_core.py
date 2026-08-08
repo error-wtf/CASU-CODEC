@@ -465,7 +465,7 @@ def test_libvlc_library_candidates_are_platform_independent():
 def test_casu_backend_does_not_claim_native_payload_playback():
     source = Path("mpcasu_backend.py").read_text(encoding="utf-8")
     player = Path("mpcasu_player.py").read_text(encoding="utf-8")
-    assert '"native_casu_payload": "unavailable"' in source
+    assert '"native_casu_payload": "available via verified extraction"' in source
     assert "Native CASU manifest" not in player
 
 

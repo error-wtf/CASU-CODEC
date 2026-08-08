@@ -870,6 +870,15 @@ class MPCASUPlayer(tk.Tk):
         if path.suffix.lower() != ".casu":
             return path
         try:
+            with path.open("rb") as handle:
+                if handle.read(8) == b"CASUNAT1":
+                    # Native containers are verified and extracted by
+                    # CasuBackend; do not attempt to parse their binary bytes
+                    # as a JSON sidecar here.
+                    return path
+        except OSError as exc:
+            raise CasuError(f"could not read CASU container: {path}") from exc
+        try:
             manifest = json.loads(path.read_text(encoding="utf-8"))
             errors = validate_manifest(manifest)
         except (OSError, ValueError, TypeError) as exc:
