@@ -36,6 +36,10 @@ def test_reference_video_manifest_preserves_source_metadata(tmp_path):
     assert manifest["video"]["spatial_analysis"]["tile_grid"]
     assert 0.0 <= manifest["video"]["spatial_analysis"]["mean_changed_tile_ratio"] <= 1.0
     assert manifest["video"]["spatial_analysis"]["strict_pixel_identical_available"] is False
+    assert manifest["video"]["segments"][0]["segment_id"].startswith("video-")
+    assert manifest["audio"]["segments"][0]["segment_id"].startswith("audio-")
+    assert manifest["seek_index"]["native_key_states"] is False
+    assert manifest["seek_index"]["entries"]
 
 
 def test_manifest_json_roundtrip(tmp_path):
@@ -49,6 +53,8 @@ def test_rle_clamps_final_partial_interval_to_source_duration():
     segments = rle(["active", "active", "silence"], 0.2, end_s=0.5)
     assert segments[-1]["end_s"] == 0.5
     assert segments[-1]["duration_s"] == 0.1
+    assert segments[0]["segment_id"] == "segment-000000"
+    assert segments[0]["lifecycle"] == "CREATE"
 
 
 def test_manifest_rejects_non_hex_digest():
