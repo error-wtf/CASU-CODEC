@@ -39,6 +39,16 @@ SECONDARY = "#A7ABB0"
 MUTED = "#686E75"
 
 
+def presentation_mode(probe: dict) -> str:
+    """Return a stream-derived presentation mode without inspecting suffixes."""
+    kinds = {item.get("codec_type") for item in probe.get("streams", []) if isinstance(item, dict)}
+    if "video" in kinds:
+        return "VIDEO"
+    if "audio" in kinds:
+        return "AUDIO"
+    return "ERROR"
+
+
 class MPCASUPlayer(tk.Tk):
     def __init__(self, initial: Path | list[Path] | None = None):
         super().__init__()
@@ -488,14 +498,23 @@ class MPCASUPlayer(tk.Tk):
     def _update_presentation(self, path: Path):
         """Choose a presentation mode from probed streams, not file suffixes."""
         try:
-            probe = ffprobe(path)
-            kinds = {item.get("codec_type") for item in probe.get("streams", [])}
-            if "video" in kinds:
+            # A CASU sidecar is metadata; stream presentation comes from the
+            # immutable source it references, never from the JSON manifest.
+            source = self._source_for(path)
+            probe = ffprobe(source)
+            streams = probe.get("streams", [])
+            kinds = {item.get("codec_type") for item in streams}
+            mode = presentation_mode(probe)
+            if mode == "VIDEO":
                 self.canvas.itemconfigure("title", text=path.name)
-                self.canvas.itemconfigure("subtitle", text="Video stream · original timestamps preserved")
-            elif "audio" in kinds:
+                audio_note = " + audio" if "audio" in kinds else ""
+                self.canvas.itemconfigure("subtitle", text=f"Video stream{audio_note} · original timestamps preserved")
+            elif mode == "AUDIO":
                 self.canvas.itemconfigure("title", text="AUDIO MODE")
-                self.canvas.itemconfigure("subtitle", text="Audio stream · measured visualization unavailable")
+                self.canvas.itemconfigure("subtitle", text="Audio stream · visualization unavailable until PCM analysis is enabled")
+            else:
+                self.canvas.itemconfigure("title", text="UNSUPPORTED PRESENTATION")
+                self.canvas.itemconfigure("subtitle", text="No video or audio stream was reported by the probe")
         except (CasuError, OSError, ValueError):
             self.status.set("Stream presentation metadata unavailable")
 

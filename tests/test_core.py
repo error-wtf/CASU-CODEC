@@ -12,6 +12,7 @@ from casu.schema import validate_manifest
 from casu.scheduler import CasuScheduler
 from mpcasu_backend import LibVLCBackend
 from mpcasu_playback import ControllerState, PlaybackController
+from mpcasu_player import presentation_mode
 
 
 VIDEO = Path(os.environ.get("CASU_TEST_VIDEO", "test_media/lino_lol_test_pattern.mp4"))
@@ -196,3 +197,9 @@ def test_player_runtime_does_not_launch_external_player():
     source = (Path(__file__).resolve().parents[1] / "mpcasu_player.py").read_text(encoding="utf-8").lower()
     assert "ffplay" not in source
     assert "vlc.exe" not in source
+
+
+def test_presentation_mode_is_stream_derived():
+    assert presentation_mode({"streams": [{"codec_type": "video"}, {"codec_type": "audio"}]}) == "VIDEO"
+    assert presentation_mode({"streams": [{"codec_type": "audio"}]}) == "AUDIO"
+    assert presentation_mode({"streams": []}) == "ERROR"
