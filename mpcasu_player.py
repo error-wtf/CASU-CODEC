@@ -146,7 +146,7 @@ class MPCASUPlayer(tk.Tk):
         for label, command in (("−10 s", lambda: self.seek_by(-10)), ("Back", lambda: self.seek_by(-10)), ("Play / Pause", self.toggle_playback), ("Stop", self.stop), ("Forward", lambda: self.seek_by(10))):
             ttk.Button(bar, text=label, style="MPC.TButton", command=command).pack(side="left", padx=3)
         ttk.Button(bar, text="Mute", style="MPC.TButton", command=self.toggle_mute).pack(side="right", padx=3)
-        ttk.Button(bar, text="Audio", style="MPC.TButton", command=lambda: self.status.set("Audio track selection is unavailable in this backend")).pack(side="right", padx=3)
+        ttk.Button(bar, text="Audio", style="MPC.TButton", command=self.cycle_audio_track).pack(side="right", padx=3)
         ttk.Button(bar, text="Info", style="MPC.TButton", command=self.show_media_info).pack(side="right", padx=3)
         ttk.Button(bar, text="Fullscreen", style="MPC.TButton", command=lambda: self.attributes("-fullscreen", not self.attributes("-fullscreen"))).pack(side="right", padx=3)
         tk.Label(center, textvariable=self.status, bg=PANEL, fg=SECONDARY, anchor="w").pack(fill="x", padx=14, pady=(0, 8))
@@ -461,6 +461,22 @@ class MPCASUPlayer(tk.Tk):
             try: self.backend.set_mute(self._muted)
             except BackendError as exc: self.status.set(str(exc)); return
         self.status.set("Muted" if self._muted else f"Volume {self._volume}%")
+
+    def cycle_audio_track(self):
+        if not self.backend:
+            self.status.set("No active media backend")
+            return
+        try:
+            count = self.backend.audio_track_count()
+            if count <= 0:
+                self.status.set("No selectable audio tracks reported by libVLC")
+                return
+            current = self.backend.audio_track()
+            next_track = (current + 1) % count
+            self.backend.set_audio_track(next_track)
+            self.status.set(f"Audio track {next_track + 1}/{count}")
+        except BackendError as exc:
+            self.status.set(str(exc))
 
     def _source_for(self, path: Path) -> Path:
         if path.suffix.lower() != ".casu":

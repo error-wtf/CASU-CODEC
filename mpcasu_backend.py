@@ -70,6 +70,9 @@ class LibVLCBackend:
         self._install("libvlc_audio_set_volume", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int])
         self._install("libvlc_audio_get_volume", ctypes.c_int, [ctypes.c_void_p])
         self._install("libvlc_audio_set_mute", None, [ctypes.c_void_p, ctypes.c_int])
+        self._install("libvlc_audio_get_track_count", ctypes.c_int, [ctypes.c_void_p])
+        self._install("libvlc_audio_get_track", ctypes.c_int, [ctypes.c_void_p])
+        self._install("libvlc_audio_set_track", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int])
         if sys.platform.startswith("linux"):
             self._install("libvlc_media_player_set_xwindow", None, [ctypes.c_void_p, ctypes.c_uint32])
 
@@ -166,6 +169,16 @@ class LibVLCBackend:
 
     def set_mute(self, muted: bool) -> None:
         if self.player: self.libvlc_audio_set_mute(self.player, int(bool(muted)))
+
+    def audio_track_count(self) -> int:
+        return max(0, int(self.libvlc_audio_get_track_count(self.player) if self.player else 0))
+
+    def audio_track(self) -> int:
+        return int(self.libvlc_audio_get_track(self.player) if self.player else -1)
+
+    def set_audio_track(self, track: int) -> None:
+        if self.player and self.libvlc_audio_set_track(self.player, int(track)) != 0:
+            raise BackendError(f"libVLC rejected audio track {track}")
 
     def close_media(self):
         if self.player: self.libvlc_media_player_stop(self.player); self.libvlc_media_player_release(self.player)

@@ -14,7 +14,7 @@ implemented. A control is not marked complete merely because a widget exists.
 | Original + CASU playlist comparison | yes | yes | manual | COMPLETE |
 | Runtime libVLC capability report | yes | not yet exposed | unit | PARTIAL |
 | URL source opening in backend | yes | not yet exposed | unit | PARTIAL |
-| Audio/video track selection | not yet exposed | placeholder intentionally unavailable | no | OPEN |
+| Audio track selection | libVLC track count/select | cycle control | unit/smoke | PARTIAL |
 | Embedded/external subtitles | not yet exposed | not shown as complete | no | OPEN |
 | Native CASU segment scheduler and renderer | not yet present | diagnostic unavailable | no | OPEN |
 | PCM waveform / spectrum | not implemented | unavailable state | no | OPEN |
