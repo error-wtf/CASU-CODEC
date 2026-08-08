@@ -190,3 +190,9 @@ def test_playback_controller_owns_transport_state():
     controller.close()
     assert backend.calls == ["play", "pause", "resume", ("seek", 3.5), "stop", "close"]
     assert controller.state is ControllerState.EMPTY
+
+
+def test_player_runtime_does_not_launch_external_player():
+    source = (Path(__file__).resolve().parents[1] / "mpcasu_player.py").read_text(encoding="utf-8").lower()
+    assert "ffplay" not in source
+    assert "vlc.exe" not in source

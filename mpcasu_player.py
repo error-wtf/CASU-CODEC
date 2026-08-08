@@ -66,6 +66,7 @@ class MPCASUPlayer(tk.Tk):
         self._icon_image = None
         self._volume = 100
         self._muted = False
+        self._diagnostic_vars: dict[str, tk.StringVar] = {}
         self._session_file = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "mpcasu" / "session.json"
         self._build()
         self._restore_session()
@@ -173,10 +174,12 @@ class MPCASUPlayer(tk.Tk):
         tk.Label(right, text="QUEUE · SHUFFLE · REPEAT", bg=PANEL, fg=MUTED, font=("TkDefaultFont", 8)).pack(anchor="w", padx=12, pady=(0, 12))
 
         diagnostics = tk.Frame(root, bg=BG); diagnostics.pack(fill="x", padx=18, pady=(10, 4))
-        for title, text in (("SEGMENTED PLAYBACK", "Segment data unavailable"), ("ENERGY SAVE", "Telemetry unavailable"), ("INTEGRITY MODE", "Checked on CASU load"), ("CASU SUPPORT", "Legacy fallback ready")):
+        for title, text in (("SEGMENTED PLAYBACK", "unavailable"), ("ENERGY SAVE", "unavailable"), ("INTEGRITY MODE", "unavailable"), ("CASU SUPPORT", "Legacy backend")):
             card = tk.Frame(diagnostics, bg=PANEL_ALT, padx=12, pady=8); card.pack(side="left", fill="x", expand=True, padx=(0, 8))
             tk.Label(card, text=title, bg=PANEL_ALT, fg=RED, font=("TkDefaultFont", 8, "bold")).pack(anchor="w")
-            tk.Label(card, text=text, bg=PANEL_ALT, fg=SECONDARY, font=("TkDefaultFont", 9)).pack(anchor="w", pady=(3, 0))
+            variable = tk.StringVar(value=text)
+            self._diagnostic_vars[title] = variable
+            tk.Label(card, textvariable=variable, bg=PANEL_ALT, fg=SECONDARY, font=("TkDefaultFont", 9)).pack(anchor="w", pady=(3, 0))
         statusbar = tk.Frame(root, bg=BG); statusbar.pack(fill="x", padx=18, pady=(4, 10))
         tk.Label(statusbar, text="MPCASU 1.0.0  ● Ready", bg=BG, fg=SECONDARY).pack(side="left")
         tk.Label(statusbar, text="Optimized for performance and integrity", bg=BG, fg=MUTED).pack(side="left", padx=28)
@@ -204,8 +207,24 @@ class MPCASUPlayer(tk.Tk):
         tk.Label(parent, text=heading, bg=PANEL, fg=MUTED, font=("TkDefaultFont", 8, "bold"), anchor="w").pack(fill="x", padx=14, pady=(14, 5))
         for entry in entries:
             row = tk.Frame(parent, bg=PANEL, height=27); row.pack(fill="x", padx=7, pady=1); row.pack_propagate(False)
-            tk.Label(row, text="◆", bg=PANEL, fg=RED if entry == "Now Playing" else MUTED, width=3, anchor="e").pack(side="left")
-            tk.Label(row, text=entry, bg=PANEL, fg=TEXT if entry == "Now Playing" else SECONDARY, anchor="w").pack(side="left", padx=6)
+            label = tk.Label(row, text="◆", bg=PANEL, fg=RED if entry == "Now Playing" else MUTED, width=3, anchor="e")
+            label.pack(side="left")
+            text_label = tk.Label(row, text=entry, bg=PANEL, fg=TEXT if entry == "Now Playing" else SECONDARY, anchor="w")
+            text_label.pack(side="left", padx=6)
+            for widget in (row, label, text_label):
+                widget.bind("<Button-1>", lambda _event, name=entry: self.status.set(f"{name}: view not available in this release"))
+
+    def _set_diagnostics(self, *, support: str | None = None, integrity: str | None = None,
+                         segmented: str | None = None, energy: str | None = None) -> None:
+        values = {
+            "CASU SUPPORT": support,
+            "INTEGRITY MODE": integrity,
+            "SEGMENTED PLAYBACK": segmented,
+            "ENERGY SAVE": energy,
+        }
+        for key, value in values.items():
+            if value is not None and key in self._diagnostic_vars:
+                self._diagnostic_vars[key].set(value)
 
     def _play_queue_item(self, _event=None):
         selected = self.queue.curselection()
@@ -242,6 +261,7 @@ class MPCASUPlayer(tk.Tk):
             self.backend.open_source(source)
             self.controller.attach(self.backend, source)
             self.controller.play()
+            self._set_diagnostics(support="Legacy network backend", integrity="unavailable", segmented="unavailable", energy="unavailable — not measured")
             self.duration = self.backend.duration()
             self.timeline.configure(to=max(self.duration, 1.0))
             capabilities = self.backend.capabilities()
@@ -427,6 +447,17 @@ class MPCASUPlayer(tk.Tk):
             self.queue.see(selected[0])
         sidecar = path if path.suffix.lower() == ".casu" else self._sidecar(path)
         self._load_visual_state(sidecar if sidecar.exists() else path)
+        if path.suffix.lower() == ".casu":
+            self._set_diagnostics(
+                support="Native CASU manifest",
+                integrity="verified source manifest" if not self._visual_state.startswith("invalid") else "failed manifest validation",
+                segmented=f"{len(self._visual_segments)} segments" if self._visual_segments else "no segment data",
+            )
+        elif sidecar.exists():
+            self._set_diagnostics(support="Legacy + CASU sidecar", integrity="sidecar available; source checked on load", segmented=f"{len(self._visual_segments)} segments" if self._visual_segments else "no segment data")
+        else:
+            self._set_diagnostics(support="Legacy backend", integrity="unavailable", segmented="unavailable")
+        self._set_diagnostics(energy="unavailable — not measured")
         try:
             source = self._source_for(path)
         except CasuError as exc:
@@ -540,6 +571,7 @@ class MPCASUPlayer(tk.Tk):
             self.controller.close()
         self.backend = None
         self._paused = False
+        self._set_diagnostics(support="Legacy backend", integrity="unavailable", segmented="unavailable", energy="unavailable — not measured")
 
     def seek_by(self, seconds: float):
         self.position.set(max(0.0, min(self.duration, self.position.get() + seconds)))
