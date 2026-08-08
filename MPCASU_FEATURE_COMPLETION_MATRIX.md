@@ -15,7 +15,8 @@ implemented. A control is not marked complete merely because a widget exists.
 | Runtime libVLC capability report | yes | not yet exposed | unit | PARTIAL |
 | URL source opening in backend | yes | not yet exposed | unit | PARTIAL |
 | Audio track selection | libVLC track count/select | cycle control | unit/smoke | PARTIAL |
-| Embedded/external subtitles | not yet exposed | not shown as complete | no | OPEN |
+| Subtitle track selection | optional libVLC SPU count/select | cycle control | unit/smoke | PARTIAL |
+| Embedded/external subtitles | embedded selection partial; external not yet exposed | cycle control only | no | OPEN |
 | Native CASU segment scheduler and renderer | not yet present | diagnostic unavailable | no | OPEN |
 | PCM waveform / spectrum | not implemented | unavailable state | no | OPEN |
 | Energy measurement | not implemented | unavailable state | no | OPEN |
