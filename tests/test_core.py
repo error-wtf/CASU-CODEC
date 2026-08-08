@@ -13,7 +13,7 @@ from casu.scheduler import CasuScheduler
 from casu.native import NativeCasuError, read_native, write_native
 from casu.native_v2 import (ChunkType, NativeChunk, NativeV2Error, TileStateCache,
                             decode_audio_block, encode_audio_block, encode_key_state,
-                            encode_tile_update, read_native_v2, write_native_v2,
+                            encode_tile_update, read_native_v2, recover_native_v2, write_native_v2,
                             SubtitlePacket, decode_chapter_table, decode_subtitle_packet,
                             encode_chapter_table, encode_subtitle_packet)
 from casu.tiles import (TileStateError, compare_tile_frames, state_map_from_frames,
@@ -299,6 +299,19 @@ def test_native_v2_recovery_points_and_reader_limits(tmp_path):
     assert all(point["key_state_offsets"] for point in container.recovery_points)
     with pytest.raises(NativeV2Error, match="size limit"):
         read_native_v2(target, max_file_bytes=1)
+
+
+def test_native_v2_recovers_last_complete_prefix_after_truncation(tmp_path):
+    target = tmp_path / "interrupted.casu"
+    chunks = [NativeChunk(ChunkType.VIDEO_KEY_STATE, 0, i, bytes([i])) for i in range(4)]
+    write_native_v2(target, {"format": "CASUNAT2"}, chunks, recovery_interval=1)
+    raw = target.read_bytes()
+    target.write_bytes(raw[:-17])
+    snapshot = recover_native_v2(target)
+    assert snapshot.recovery_point["last_complete_chunk_offset"] == snapshot.complete_chunk_offset
+    assert snapshot.chunks
+    with pytest.raises(NativeV2Error, match="missing END|truncated"):
+        read_native_v2(target)
 
 
 def test_native_v2_audio_block_roundtrip_preserves_pcm_and_timing():

@@ -48,5 +48,7 @@ sample rate, channel layout, sample format, sample count and PTS metadata.
 
 CASUNAT2 now writes periodic recovery-point chunks and the reader enforces
 manifest, chunk-count, chunk-size and total-file limits while validating
-truncation, chunk types, recovery offsets and SHA-256 integrity. Fuzzing and a
-complete corrupt-file corpus remain open.
+truncation, chunk types, recovery offsets and SHA-256 integrity. A recovery API
+now returns only the last writer-declared complete prefix after interruption;
+tests cover truncation before END. Fuzzing and a complete corrupt-file corpus
+remain open.
