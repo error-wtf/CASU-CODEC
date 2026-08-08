@@ -68,6 +68,22 @@ def test_cli_refuses_output_equal_to_source(tmp_path, monkeypatch):
     assert source.read_bytes() == b"source"
 
 
+def test_info_output_exposes_seek_and_native_payload_status(tmp_path, monkeypatch, capsys):
+    manifest = tmp_path / "sample.casu"
+    manifest.write_text(json.dumps({
+        "casu": {"name": "CASU", "container_extension": ".casu", "version": "1.0.0"},
+        "format": {"magic": "MPCASU\\0"},
+        "source": {"filename": "sample.mp4", "duration_s": 1},
+        "integrity": {"timestamps_are_source_of_truth": True},
+        "seek_index": {"entries": [], "native_key_states": False},
+    }), encoding="utf-8")
+    monkeypatch.setattr("sys.argv", ["casu", "info", str(manifest)])
+    assert casu_cli_main() == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["seek_index_entries"] == 0
+    assert output["native_payload"] is False
+
+
 def test_rle_clamps_final_partial_interval_to_source_duration():
     segments = rle(["active", "active", "silence"], 0.2, end_s=0.5)
     assert segments[-1]["end_s"] == 0.5
