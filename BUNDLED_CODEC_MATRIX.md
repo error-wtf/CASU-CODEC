@@ -60,7 +60,11 @@ Authorization header and plays PCM; MPCASU strips URL userinfo from UI,
 controller and error strings. A growing HLS playlist is requested at least
 twice; libVLC fetches its later-published final segment and plays beyond the
 initial two-segment window. HTTPS, interactive 401 handling, sliding media
-sequences, discontinuities and hostile-network cases remain open.
+sequences and hostile-network cases remain open.
+A separate `EXT-X-DISCONTINUITY` playlist crosses from 44.1-kHz to 48-kHz AAC
+in independently muxed TS segments. Both are requested in order and libVLC
+reaches `ENDED` without backend error. VLC 3 rebases its public millisecond
+clock at the boundary; continuous-clock behavior is not claimed.
 
 A generated MP4 contains two AAC audio tracks and two embedded `mov_text`
 subtitle tracks with German/English metadata. libVLC exposes both linked-list

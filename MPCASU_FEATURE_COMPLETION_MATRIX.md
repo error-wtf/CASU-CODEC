@@ -3,7 +3,7 @@
 | Feature | Backend | UI | Evidence | Status |
 |---|---|---|---|---|
 | Installed-libVLC legacy playback | in-process shared library | embedded surface/controls | generated matrix: 6 audio + Rawvideo + 3 subtitle + FLAC transport-control pass, 9 compressed-video runtime XFAIL | PARTIAL |
-| URL playback | libVLC locations without scheme allow-list; false empty EOF normalized; URL userinfo redacted | real URL dialog | HTTP redirect + PCM/seek + 404 + HLS AAC-in-TS VOD/growing reload + Basic-auth | PARTIAL HTTPS/interactive-401/sliding/discontinuity/hostile-network matrix |
+| URL playback | libVLC locations without scheme allow-list; false empty EOF normalized; URL userinfo redacted | real URL dialog | HTTP redirect + PCM/seek + 404 + HLS VOD/growing/discontinuity + Basic-auth | PARTIAL HTTPS/interactive-401/sliding/hostile-network matrix |
 | CASUNAT1/sidecar compatibility | verified extraction/source | labeled compatibility | unit/media tests | PASS |
 | Native CASUNAT2 video | indexed key/tile reconstruction | Tk frame sink | digest + player tests | PASS reference path |
 | Native CASUNAT2 audio | timestamped PCM + bounded measured libpulse-simple latency + monotonic absolute-PTS clock | volume/mute | byte-exact plus six-hour/21,600-block zero-accumulation simulation | PASS instrumented reference; hardware drift open |

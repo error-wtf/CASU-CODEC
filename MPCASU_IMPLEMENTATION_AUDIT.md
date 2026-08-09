@@ -35,11 +35,11 @@ broader malformed/platform subtitle matrix and responsive Qt target remain open.
 
 ## Acceptance evidence
 
-- fast suite: 139 passed, 66 media tests deselected;
-- exact-runtime generated libVLC matrix: 19 passed, 9 xfailed; real FLAC
+- fast suite: 139 passed, 67 media tests deselected;
+- exact-runtime generated libVLC matrix: 20 passed, 9 xfailed; real FLAC
   rate/delay/pause/resume and pixel-distinct Rawvideo frame-step pass, while
-  HTTP HLS-AAC playback/seek, growing-playlist reload and credential-redacted
-  Basic-auth PCM also pass;
+  HTTP HLS-AAC playback/seek, growing-playlist reload, 44.1/48-kHz AAC
+  discontinuity and credential-redacted Basic-auth PCM also pass;
   nine video cases xfail because the
   installed runtime delivered no video callback frame;
 - combined generated STRICT/native-v2/native-player/installed-libVLC suites:

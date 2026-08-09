@@ -492,6 +492,84 @@ def test_installed_libvlc_reloads_growing_http_hls_playlist(tmp_path):
 @pytest.mark.skipif(
     not ctypes.util.find_library("vlc") or not shutil.which("ffmpeg"),
     reason="libVLC/FFmpeg unavailable")
+def test_installed_libvlc_crosses_hls_audio_discontinuity(tmp_path):
+    """Cross an explicit HLS discontinuity with changed AAC sample rate."""
+    segment_specs = (("before.ts", 440, 44100), ("after.ts", 990, 48000))
+    for filename, frequency, sample_rate in segment_specs:
+        generated = subprocess.run([
+            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+            "-f", "lavfi", "-i",
+            f"sine=frequency={frequency}:sample_rate={sample_rate}",
+            "-t", "2.0", "-c:a", "aac", "-b:a", "128k",
+            "-f", "mpegts", str(tmp_path / filename),
+        ], capture_output=True, text=True, check=False)
+        if generated.returncode != 0:
+            pytest.skip(
+                f"FFmpeg AAC/TS mux unavailable: {generated.stderr.strip()}")
+
+    playlist = tmp_path / "discontinuity.m3u8"
+    playlist.write_text("""#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-TARGETDURATION:2
+#EXT-X-MEDIA-SEQUENCE:0
+#EXTINF:2.0,
+before.ts
+#EXT-X-DISCONTINUITY
+#EXTINF:2.0,
+after.ts
+#EXT-X-ENDLIST
+""", encoding="utf-8")
+    segment_requests = []
+
+    class DiscontinuityHandler(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, _format, *_args):
+            return None
+
+        def do_GET(self):
+            if self.path.endswith(".ts"):
+                segment_requests.append(self.path.lstrip("/"))
+            super().do_GET()
+
+    handler = functools.partial(DiscontinuityHandler, directory=str(tmp_path))
+    try:
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    except PermissionError:
+        pytest.skip("loopback sockets are blocked by the test sandbox")
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    backend = LibVLCBackend(
+        _HeadlessSurface(), runtime_options=("--aout=dummy", "--vout=dummy"))
+    try:
+        host, port = server.server_address
+        backend.open_source(f"http://{host}:{port}/{playlist.name}")
+        backend.play()
+        deadline = time.monotonic() + 8.0
+        observed_position = 0.0
+        while time.monotonic() < deadline:
+            observed_position = max(observed_position, backend.position())
+            state = backend.state()
+            if state is PlaybackState.ENDED and "after.ts" in segment_requests:
+                break
+            assert state is not PlaybackState.ERROR
+            time.sleep(0.02)
+        assert segment_requests[:2] == ["before.ts", "after.ts"]
+        assert backend.audio_track_count() > 0
+        assert backend.state() is PlaybackState.ENDED
+        # VLC 3 rebases its public millisecond clock at this discontinuity;
+        # clean end-of-stream and ordered requests are the stable contract.
+        assert observed_position >= 0.1
+    finally:
+        backend.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2.0)
+        assert not thread.is_alive()
+
+
+@pytest.mark.media
+@pytest.mark.skipif(
+    not ctypes.util.find_library("vlc") or not shutil.which("ffmpeg"),
+    reason="libVLC/FFmpeg unavailable")
 def test_installed_libvlc_plays_http_basic_auth_source(tmp_path):
     fixture = tmp_path / "protected.wav"
     generated = subprocess.run([

@@ -100,7 +100,11 @@ creates the audio track, advances playback and seeks to three seconds. Mutable
 playlist reload is separately proven by publishing two AAC/TS segments first,
 then expanding the same HLS playlist: libVLC reloads it, requests the final
 newly published segment and plays beyond the initial window. Sliding media
-sequences, discontinuities and hostile-network behavior remain open.
+sequences and hostile-network behavior remain open.
+A discontinuity fixture joins independent AAC/TS segments at 44.1 and 48 kHz.
+libVLC requests both in order, reconfigures its AAC packetizer and reaches clean
+end-of-stream. VLC 3 rebases the exposed millisecond clock at this boundary, so
+the test records that runtime behavior instead of claiming a continuous clock.
 A Basic-auth loopback fixture additionally proves that credentialed HTTP URLs
 reach libVLC and produce a real PCM track. URL userinfo is removed from the
 Now Playing label, retained controller state and backend exception text; the

@@ -46,7 +46,8 @@ Current execution dashboard (evidence, not optimism):
   HTTP HLS VOD with AAC-in-TS playback/seek also passes. Dummy-sink volume is
   not physical-volume proof. Basic-auth PCM passes with URL credentials removed
   from UI/controller/errors. Growing HLS reload and later-segment discovery
-  pass; HTTPS/interactive-401/sliding-sequence/discontinuity remain open.
+  pass; a 44.1/48-kHz AAC discontinuity reaches clean end with VLC 3 clock
+  rebase recorded. HTTPS/interactive-401/sliding-sequence remain open.
   Responsive Qt, physical-output, broader network and complete cross-platform
   build/shipping matrices remain.
 
