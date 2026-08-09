@@ -275,7 +275,10 @@ def test_installed_libvlc_handles_local_http_redirect_seek_and_404(tmp_path):
             super().do_GET()
 
     handler = functools.partial(QuietHandler, directory=str(tmp_path))
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    try:
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    except PermissionError:
+        pytest.skip("loopback sockets are blocked by the test sandbox")
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     backend = LibVLCBackend(
@@ -381,5 +384,54 @@ def test_installed_libvlc_switches_real_embedded_audio_and_subtitle_tracks(tmp_p
         for identifier, _label in subtitle_tracks[:2]:
             backend.set_subtitle_track(identifier)
             assert backend.subtitle_track() == identifier
+    finally:
+        backend.close()
+
+
+@pytest.mark.media
+@pytest.mark.skipif(
+    not ctypes.util.find_library("vlc") or not shutil.which("ffmpeg"),
+    reason="libVLC/FFmpeg unavailable")
+def test_installed_libvlc_reads_and_selects_real_mp4_chapters(tmp_path):
+    metadata = tmp_path / "chapters.ffmeta"
+    metadata.write_text(""";FFMETADATA1
+[CHAPTER]
+TIMEBASE=1/1000
+START=0
+END=1000
+title=Intro
+[CHAPTER]
+TIMEBASE=1/1000
+START=1000
+END=2500
+title=Second
+""", encoding="utf-8")
+    fixture = tmp_path / "chapters.m4a"
+    generated = subprocess.run([
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "sine=frequency=523:sample_rate=48000",
+        "-i", str(metadata), "-map_metadata", "1", "-t", "2.5",
+        "-c:a", "aac", str(fixture),
+    ], capture_output=True, text=True, check=False)
+    if generated.returncode != 0:
+        pytest.skip(f"FFmpeg chapter mux unavailable: {generated.stderr.strip()}")
+
+    backend = LibVLCBackend(
+        _HeadlessSurface(), runtime_options=("--aout=dummy", "--vout=dummy"))
+    try:
+        backend.open(fixture)
+        backend.play()
+        deadline = time.monotonic() + 4.0
+        while time.monotonic() < deadline:
+            if backend.chapter_count() >= 2:
+                break
+            if backend.state() is PlaybackState.ERROR:
+                break
+            time.sleep(0.02)
+        assert backend.state() is not PlaybackState.ERROR
+        assert backend.chapter_count() >= 2
+        assert len(backend.chapter_descriptors()) >= 2
+        backend.set_chapter(1)
+        assert backend.chapter() == 1
     finally:
         backend.close()

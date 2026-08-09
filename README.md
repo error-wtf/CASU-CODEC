@@ -98,6 +98,9 @@ does not stand in for HTTPS, authentication or live-stream testing.
 A generated MP4 with two AAC audio tracks and two embedded `mov_text`
 subtitle tracks additionally proves real runtime descriptions and live
 selection of each track through the backend API.
+A separate AAC/MP4 fixture carries two chapters; libVLC enumerates them and
+successfully jumps to the second chapter through its correctly typed `void`
+setter API.
 Rapid seeks serialize worker transitions; a blocked old PCM write must stop
 before cache invalidation, sink flush and a new generation can start. A timeout
 fails closed instead of allowing stale audio to cross the seek boundary.

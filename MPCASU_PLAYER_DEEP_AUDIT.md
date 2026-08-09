@@ -9,7 +9,7 @@ This file records implemented behavior, not widget presence.
 | Native CASUNAT2 audio | PASS instrumented reference | Exact timestamped s16le blocks feed direct libpulse-simple; absolute-PTS clock is monotonic, latency-bounded and shows zero cumulative drift over a 21,600-block/six-hour 1.5× simulation. Hardware drift remains open. |
 | Native playback rate | PASS speed/pitch reference path | 0.25×–4× deterministic channel-aligned PCM resampling, bounded clipping, rate-scaled audio clock and transactional live restart pass; pitch-preserving time-stretch remains open. |
 | Native seek | PASS reference path | Serializes lifecycle transitions, refuses restart while an old PCM write remains blocked, then flushes/invalidate/reconstructs; four rapid directional seeks deliver only the final generation. |
-| Native subtitles/chapters | PASS reference matrix | UTF-8 packets, ASS/SSA libass RGBA with bounded embedded fonts, and typed alpha-bounded PGS/DVD/DVB/XSub RGBA render/clear/seek; delays and chapter seek work. |
+| Native subtitles/chapters | PASS reference matrix | UTF-8 packets, ASS/SSA libass RGBA with bounded embedded fonts, and typed alpha-bounded PGS/DVD/DVB/XSub RGBA render/clear/seek; native and real two-chapter libVLC MP4 seek work. |
 | CASUNAT2 tempfile | REMOVED | Test forces tempfile creation to fail while native A/V playback completes. |
 | Track/output selection | PASS native instrumented / PARTIAL platform matrix | Live native A/V/subtitle/device switches restart transactionally; real libVLC MP4 two-AAC/two-mov_text descriptions and selections pass. Bounded PipeWire Audio/Sink inventory feeds stable node names to Pulse with default fallback. Physical-hotplug/platform matrix remains. |
 | Events/clock | PARTIAL | Lifecycle events and monotonic native scheduler work; position poll remains for timeline and audio hardware clock/drift evidence is open. |
@@ -37,6 +37,6 @@ This file records implemented behavior, not widget presence.
    deletion, are decode-budgeted and render in the native audio canvas/library.
 
 Current evidence: 134 fast behavior tests, a generated libVLC matrix with
-13 passes/9 runtime XFAILs, 56 earlier targeted generated/probe/PGS/cover cases,
+14 passes/9 runtime XFAILs, 56 earlier targeted generated/probe/PGS/cover cases,
 native A/V/subtitle/no-tempfile sinks, both Tk construction smokes, clean wheel
 and Debian package inspection. Stable 1.0 remains blocked by the live gate file.

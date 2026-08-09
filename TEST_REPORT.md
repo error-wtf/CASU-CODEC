@@ -2,8 +2,8 @@
 
 ## 2026-08-09 — current consolidated verification
 
-- Fast behavior suite: **134 passed, 60 media tests deselected**.
-- Generated exact-runtime libVLC matrix: **13 passed, 9 xfailed**. Six audio
+- Fast behavior suite: **134 passed, 61 media tests deselected**.
+- Generated exact-runtime libVLC matrix: **14 passed, 9 xfailed**. Six audio
   combinations expose real tracks and advance playback; SRT, WebVTT and ASS
   load as external tracks; Rawvideo/AVI writes real RV32 callback frames. Nine
   compressed-video combinations deliver no callback frame in the privileged
@@ -20,6 +20,8 @@
   `ERROR`, not VLC 3's misleading zero-track/zero-time EOF.
 - A real MP4 with two AAC and two embedded `mov_text` tracks exposes linked-list
   descriptions and accepts selection of both audio and both subtitle IDs.
+- A real AAC/MP4 fixture exposes two chapters and jumps to chapter 2 after
+  correcting libVLC's `void` chapter/title setter ABI declarations.
 - Empty EOF classification waits through an explicit monotonic asynchronous
   startup grace period before declaring an opening failure.
 - Generated STRICT + CASUNAT2 + native-player + installed-libVLC suites,

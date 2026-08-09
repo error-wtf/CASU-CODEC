@@ -59,6 +59,8 @@ authentication, adaptive/live protocols and hostile-network cases remain open.
 A generated MP4 contains two AAC audio tracks and two embedded `mov_text`
 subtitle tracks with German/English metadata. libVLC exposes both linked-list
 description sets and accepts live selection of every concrete track identifier.
+An AAC/MP4 chapter fixture exposes two chapters and accepts a real jump to
+chapter index 1; the libVLC `set_title`/`set_chapter` ABI is bound as `void`.
 
 The release matrix still must add representative MP4/MKV/MOV/WebM/TS,
 H.264/HEVC/VP8/VP9/AV1/MPEG-2, AAC/MP3/Opus/Vorbis/FLAC/PCM, subtitle formats,

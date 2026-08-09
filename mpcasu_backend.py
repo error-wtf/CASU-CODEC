@@ -141,10 +141,10 @@ class LibVLCBackend:
         self._chapter_api = all(self._optional_install(name, restype, args) for name, restype, args in (
             ("libvlc_media_player_get_title_count", ctypes.c_int, [ctypes.c_void_p]),
             ("libvlc_media_player_get_title", ctypes.c_int, [ctypes.c_void_p]),
-            ("libvlc_media_player_set_title", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int]),
+            ("libvlc_media_player_set_title", None, [ctypes.c_void_p, ctypes.c_int]),
             ("libvlc_media_player_get_chapter_count", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int]),
             ("libvlc_media_player_get_chapter", ctypes.c_int, [ctypes.c_void_p]),
-            ("libvlc_media_player_set_chapter", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int]),
+            ("libvlc_media_player_set_chapter", None, [ctypes.c_void_p, ctypes.c_int]),
         ))
         self._frame_step_api = self._optional_install("libvlc_media_player_next_frame", ctypes.c_int, [ctypes.c_void_p])
         self._install("libvlc_media_player_set_rate", ctypes.c_int, [ctypes.c_void_p, ctypes.c_float])
@@ -388,8 +388,7 @@ class LibVLCBackend:
     def set_chapter(self, chapter: int) -> None:
         if not self._chapter_api or not self.player:
             raise BackendError("chapter selection is unavailable in this libVLC build")
-        if self.libvlc_media_player_set_chapter(self.player, int(chapter)) != 0:
-            raise BackendError(f"libVLC rejected chapter {chapter}")
+        self.libvlc_media_player_set_chapter(self.player, int(chapter))
 
     def chapter_descriptors(self) -> tuple[ChapterDescriptor, ...]:
         return tuple(ChapterDescriptor(index, 0.0, f"Chapter {index + 1}")
