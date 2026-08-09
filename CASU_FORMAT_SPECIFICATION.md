@@ -45,7 +45,9 @@ enforce per-font and aggregate budgets before passing them to a font engine.
 `SUBTITLE_BITMAP` stores a 1/1000-timed RGBA alpha-bounding region, its canvas
 geometry, decoded byte length and SHA-256. PGS/DVD/DVB/XSub conversion uses
 FFmpeg's bitmap-subtitle `sub2video` path; transparent states end intervals
-without being stored as invented video frames.
+without being stored as invented video frames. The stream descriptor records
+the canonical canvas; DVD subtitles use full-D1 PAL/NTSC coordinates even when
+the associated video is half-D1 or VCD-sized.
 
 Each seek entry stores a real file byte offset to a matching video key state and
 the first dependency offset. A reader seeks there, validates stream/PTS/type,
@@ -73,7 +75,7 @@ allocation; source probes have monitored byte/time budgets and decoded frames
 have dimension/byte ceilings. Readers validate types, offsets, ordering, state hashes and the integrity
 digest. Unknown versions fail closed. The bounded 10,000-case parser campaign
 passes. Cover-art conversion and native/library presentation are behavior-tested.
-Signatures, broader DVD/DVB/XSub subtitle fixtures and broader
+Signatures, broader malformed/language/platform subtitle fixtures and broader
 platform/network stress remain open, so the product version stays
 `1.0.0rc8`.
 

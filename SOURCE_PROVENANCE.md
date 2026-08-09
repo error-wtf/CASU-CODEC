@@ -36,6 +36,11 @@
 No research-only project has been vendored or modified. If that changes, this
 file must record an exact revision, purpose, patch set and license location.
 
-The PGS acceptance fixture is read directly from VideoLAN's public stream test
-collection during authorized local testing and is not copied into the repository
-or release artifacts.
+The PGS, DVD, DVB and XSub acceptance fixtures are read directly from VideoLAN's
+public stream test collection during authorized local testing. They are not
+copied into the repository or release artifacts:
+
+- `https://streams.videolan.org/samples/sub/PGS/`
+- `https://streams.videolan.org/samples/sub/DVD-short/`
+- `https://streams.videolan.org/samples/sub/dvbsub/`
+- `https://streams.videolan.org/samples/sub/divx_xsub/`

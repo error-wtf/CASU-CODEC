@@ -19,7 +19,8 @@ there is no honest universal static list of “all codecs”. The contract is:
 - Native rich subtitles: distribution libass ABI 9 renders preserved ASS/SSA
   documents to bounded transparent RGBA. Real PGS streams convert through
   FFmpeg's decoded subtitle-video boundary into typed, hashed, alpha-bounded
-  RGBA regions; DVD/DVB/XSub fixtures remain open.
+  RGBA regions. Authorized PGS/DVD/DVB/XSub source-deletion fixtures pass;
+  broader malformed/language/platform coverage remains open.
 
 ## Current automated evidence
 

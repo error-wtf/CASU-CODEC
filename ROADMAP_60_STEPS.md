@@ -23,8 +23,9 @@ Current execution dashboard (evidence, not optimism):
   queue isolation/retry, SQLite library, settings and dynamic controls exist.
   Hash-verified restart/resume, attached cover art and bounded metadata are wired
   into CLI/GUI/native playback; ASS/SSA source styling is retained beside a text
-  fallback and rendered through native libass. Typed alpha-bounded PGS bitmap
-  conversion/playback/seek passes; DVD/DVB/XSub and product matrices remain.
+  fallback and rendered through native libass. Typed alpha-bounded PGS/DVD/DVB/
+  XSub conversion/source-deletion/playback/seek passes; broader product and
+  platform matrices remain.
 - Steps 57–60: OPEN — responsive Qt migration and complete cross-platform
   playback/build/shipping matrices remain.
 

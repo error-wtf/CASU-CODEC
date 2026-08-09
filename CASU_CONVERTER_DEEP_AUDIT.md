@@ -25,7 +25,7 @@ ffprobe stream/frame inventory
 | Multi-video/audio streams | IMPLEMENTED, matrix open | Stream descriptors and per-stream payload mapping exist; broad corpus pending. |
 | Seek/verify/info | PASS | Real byte-offset validation and SHA-256 verification; CLI smoke passes. |
 | Atomic output/cancel cleanup | PASS core | Engine cancellation is fail-closed and journaled; interactive GUI cancellation matrix remains. |
-| Subtitle/chapter/attachments | PARTIAL matrix | Text, ASS/SSA libass+font and typed PGS bitmap paths pass; chapters, attachments, covers and bounded metadata pass. DVD/DVB/XSub fixtures remain. |
+| Subtitle/chapter/attachments | PASS reference matrix | Text, ASS/SSA libass+font and typed PGS/DVD/DVB/XSub bitmap paths pass source deletion; chapters, attachments, covers and bounded metadata pass. |
 | Batch queue/retry/journal | PASS core | Recursive GUI queue, CLI retry, per-file isolation and collision-resistant hash-verified journal resume are behavior-tested. |
 | Progress/ETA/reports | PARTIAL | Shared progress callbacks and JSON batch results exist; calibrated ETA remains open. |
 | Hostile-input budgets | PARTIAL | Reader/decompression limits plus monitored probe time/output and decoded-frame dimension/byte ceilings exist; broader decoder/corpus stress remains. |
@@ -35,7 +35,7 @@ ffprobe stream/frame inventory
 
 1. Add GUI controls for per-job retry counts and a detailed prior-run result
    view; hash-verified restart/resume is implemented.
-2. Expand the working typed PGS bitmap path across DVD/DVB/XSub fixtures; native
+2. Expand the working typed PGS/DVD/DVB/XSub path across platforms and malformed
    libass ASS/SSA, text fallback, chapters/attachments, artwork, bounded tags
    and complete dispositions already pass.
 3. Add calibrated ETA; recursive batch jobs, retry/isolation and

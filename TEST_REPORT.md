@@ -2,9 +2,12 @@
 
 ## 2026-08-09 — current consolidated verification
 
-- Fast behavior suite: **108 passed, 29 media tests deselected**.
+- Fast behavior suite: **109 passed, 32 media tests deselected**.
 - Generated STRICT + CASUNAT2 + native-player + installed-libVLC suites:
   plus bounded-probe/libass and authorized real-PGS tests: **54 passed**.
+- Focused authorized bitmap matrix: **4 passed** for real PGS, DVD, DVB and
+  XSub inputs after deleting each source; DVB also proves malformed secondary
+  audio-stream isolation.
 - Native-player behavior alone: **11 passed**, including no-tempfile playback,
   A/V/subtitle delivery, transactional seek, overlapping PCM-block trim and
   pause/stop/close flush behavior.

@@ -19,7 +19,8 @@ from casu.native_v2 import (ChunkType, NativeChunk, NativeV2Error, TileStateCach
                             decode_bitmap_subtitle, encode_bitmap_subtitle,
                             SubtitlePacket, decode_chapter_table, decode_subtitle_packet,
                             encode_chapter_table, encode_subtitle_packet)
-from casu.native_v2.converter import NativeConversionError, _bounded_tags
+from casu.native_v2.converter import (NativeConversionError, _bitmap_canvas_size,
+                                       _bounded_tags)
 from casu.tiles import (TileStateError, compare_tile_frames, state_map_from_frames,
                         tile_regions)
 from casu.cli import atomic_write_text
@@ -425,6 +426,16 @@ def test_native_v2_bitmap_subtitle_roundtrip_is_bounded_and_hashed():
         encode_bitmap_subtitle(start_pts=0, end_pts=1, canvas_width=1_000_000,
                                canvas_height=1_000_000, x=0, y=0, width=1,
                                height=1, rgba=b"\0" * 4)
+
+
+def test_bitmap_subtitle_canvas_uses_stream_geometry_and_dvd_d1_standard():
+    overview = {"streams": [{"codec_type": "video", "width": 352, "height": 288,
+                              "avg_frame_rate": "25/1", "disposition": {}}]}
+    assert _bitmap_canvas_size({"codec_name": "dvd_subtitle"}, overview) == (720, 576)
+    overview["streams"][0].update(height=240, avg_frame_rate="30000/1001")
+    assert _bitmap_canvas_size({"codec_name": "dvd_subtitle"}, overview) == (720, 480)
+    assert _bitmap_canvas_size({"codec_name": "xsub", "width": 640, "height": 360},
+                               overview) == (640, 360)
 
 
 def test_cli_verify_accepts_native_container(tmp_path, monkeypatch, capsys):

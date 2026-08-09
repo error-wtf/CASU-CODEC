@@ -11,8 +11,8 @@
       "evidence": [
         "casu.strict canonical model preserves active native RGB/YUV/alpha planes, plane layout, 8/10/12/16-bit samples, color metadata, and rational PTS",
         "casu.core.analyze(mode='strict') invokes analyze_strict_video and never the 160x90 activity preview",
-        "pytest -q -m 'not media': 108 passed, 29 deselected",
-        "pytest -q tests/test_strict_acceptance.py -m media: 9 passed",
+        "pytest -q -m 'not media': 109 passed, 32 deselected",
+        "pytest -q tests/test_strict_acceptance.py -m media: 10 passed",
         "clean wheel build and isolated wheel STRICT smoke: PASS",
         "clean temporary-tree Debian build, package inspection, and extracted-package STRICT smoke: PASS",
         "python -m compileall and git diff --check: PASS"
@@ -26,7 +26,7 @@
         "Production pack-v2/native-v2 converter emits video key states, exact hash-linked tile updates and canonical timestamped PCM blocks",
         "Seek entries point to validated on-disk chunk byte offsets and reconstruct from the nearest key state",
         "Source-deletion acceptance reproduces every canonical video-frame digest and the full PCM SHA-256 digest",
-        "Generated STRICT/native-v2/native-player/libVLC/thumbnail plus bounded-probe/libass/authorized-PGS suites: 54 passed",
+        "Generated STRICT/native-v2/native-player/libVLC/thumbnail plus bounded-probe/libass/authorized-PGS suites: 54 passed; focused authorized PGS/DVD/DVB/XSub source-deletion matrix: 4 passed",
         "Real CLI pack-v2, verify and info smoke: PASS"
       ]
     },
@@ -48,7 +48,7 @@
       "evidence": [
         "NativeCasuBackend is independent of LibVLCBackend and performs no legacy extraction",
         "Byte-indexed reconstruction, measured PulseAudio-latency clock with monotonic fallback, seek generation invalidation, Tk RGB presentation and direct libpulse-simple PCM sink are implemented",
-        "Text, native libass RGBA and typed PGS bitmap subtitle presentation/clearing/seek with bounded embedded-font registration, chapter seek, runtime track menus and audio-device selection are implemented",
+        "Text, native libass RGBA and typed PGS/DVD/DVB/XSub bitmap subtitle presentation/clearing/seek with bounded embedded-font registration, chapter seek, runtime track menus and audio-device selection are implemented",
         "Instrumented behavior tests prove native A/V/subtitle delivery, seek invalidation, tracks/devices, and zero tempfile calls",
         "pytest -q tests/test_native_player_backend.py: 11 passed, including audio-only cover presentation, measured-latency/delay clock behavior, overlapping PCM seek trim, lifecycle flush and fail-closed unsupported audio rate; real-device long-run drift remains open"
       ]
@@ -61,7 +61,7 @@
         "CLI and GUI share ConversionEngine jobs/profiles, progress/cancellation, atomic output and collision-resistant hash-verified resumable batch journals",
         "Backend-neutral immutable track/chapter/device/event contracts exist",
         "SQLite library behavior tests cover scan, resume, favorites and playlists",
-        "Recursive batch isolation, CLI retry and CLI/GUI hash-verified journal resume are behavior-tested; text, native libass ASS/SSA and typed source-independent PGS RGBA subtitles, chapters, bounded attachments/covers/tags/dispositions convert/play; DVD/DVB/XSub and full product matrices remain open"
+        "Recursive batch isolation, CLI retry and CLI/GUI hash-verified journal resume are behavior-tested; text, native libass ASS/SSA and typed source-independent PGS/DVD/DVB/XSub RGBA subtitles, chapters, bounded attachments/covers/tags/dispositions convert/play; malformed secondary streams are isolated and recorded; broader product/platform matrices remain open"
       ]
     },
     {

@@ -70,7 +70,10 @@ native audio canvas and library thumbnail path. ASS/SSA styling renders through
 bounded libass RGBA with a text fallback. An authorized real PGS fixture converts
 through FFmpeg's bitmap subtitle-video boundary to typed, hashed, alpha-bounded
 RGBA regions, survives source deletion, and renders correctly after seeking into
-an active cue. DVD/DVB/XSub fixtures and the full runtime matrix remain open.
+an active cue. Authorized DVD, DVB and XSub fixtures now pass the same public
+source-deletion path; a malformed DVB secondary audio PID is isolated and
+reported without discarding valid streams. Broader platform and runtime
+matrices remain open.
 Bounded source-stat-versioned thumbnails, watched-folder
 rescans, SQLite library search and per-media track/audio-delay/subtitle-delay
 preferences are wired into the UI.

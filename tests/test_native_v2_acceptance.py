@@ -22,7 +22,12 @@ pytestmark = [
                        reason="ffmpeg/ffprobe unavailable"),
 ]
 
-PGS_SAMPLE = Path(os.environ.get("CASU_TEST_PGS", "")) if os.environ.get("CASU_TEST_PGS") else None
+BITMAP_SAMPLES = [
+    ("pgs", "CASU_TEST_PGS", "hdmv_pgs_subtitle", ".mkv"),
+    ("dvd", "CASU_TEST_DVDSUB", "dvd_subtitle", ".vob"),
+    ("dvb", "CASU_TEST_DVBSUB", "dvb_subtitle", ".ts"),
+    ("xsub", "CASU_TEST_XSUB", "xsub", ".divx"),
+]
 
 
 def _fixture(path):
@@ -167,22 +172,30 @@ def test_casunat2_preserves_ass_styles_with_playable_text_fallback(tmp_path):
     assert fallback and "Styled CASU" in fallback[0].text
 
 
-@pytest.mark.skipif(PGS_SAMPLE is None or not PGS_SAMPLE.is_file(),
-                    reason="set CASU_TEST_PGS to an authorized PGS sample")
-def test_casunat2_decodes_real_pgs_bitmap_after_source_deletion(tmp_path):
-    source = tmp_path / "pgs.mkv"
-    shutil.copy2(PGS_SAMPLE, source)
-    target = convert_media_to_native_v2(source, tmp_path / "pgs.casu")
+@pytest.mark.parametrize("name,environment,codec,suffix", BITMAP_SAMPLES)
+def test_casunat2_decodes_real_bitmap_after_source_deletion(
+        tmp_path, name, environment, codec, suffix):
+    configured = os.environ.get(environment)
+    sample = Path(configured) if configured else None
+    if sample is None or not sample.is_file():
+        pytest.skip(f"set {environment} to an authorized {name.upper()} sample")
+    source = tmp_path / f"{name}{suffix}"
+    shutil.copy2(sample, source)
+    target = convert_media_to_native_v2(source, tmp_path / f"{name}.casu")
     source.unlink()
     container = read_native_v2(target)
     descriptor = next(stream for stream in container.manifest["streams"]
-                      if stream.get("codec_origin") == "hdmv_pgs_subtitle")
+                      if stream.get("codec_origin") == codec)
     assert descriptor["canonical_format"] == "rgba-bitmap-region"
+    assert descriptor["canvas_size"][0] > 0 and descriptor["canvas_size"][1] > 0
     packets = [decode_bitmap_subtitle(chunk.payload) for chunk in container.chunks
                if chunk.chunk_type == ChunkType.SUBTITLE_BITMAP]
     assert packets and all(packet.end_pts > packet.start_pts for packet in packets)
     assert all(packet.canvas_rgba().shape ==
                (packet.canvas_height, packet.canvas_width, 4) for packet in packets)
+    if name == "dvb":
+        assert any(item["codec_origin"] == "mp3" for item in
+                   container.manifest["ignored_streams"])
 
 
 def test_casunat2_preserves_source_attachments(tmp_path):

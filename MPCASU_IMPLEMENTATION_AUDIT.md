@@ -12,7 +12,7 @@ A visible control counts only when it invokes tested behavior.
 | Native CASUNAT2 audio | PASS for reference path | Timestamped s16le PCM is written directly through libpulse-simple; measured sink latency feeds the media clock and instrumented sinks prove exact delivered bytes. |
 | Native seek | PASS for reference path | Seek changes generation, cancels pending work, invalidates video output, flushes audio, trims an overlapping PCM block to the target sample and resumes from indexed state. |
 | Temp legacy extraction for CASUNAT2 | REMOVED | Acceptance monkeypatches tempfile creation to fail and playback still completes. |
-| Native subtitle/chapter/device model | PARTIAL matrix | Text packets, libass RGBA and typed alpha-bounded PGS RGBA render/clear/seek; chapter seek and default Pulse device model work. DVD/DVB/XSub fixtures and the device-switching matrix remain. |
+| Native subtitle/chapter/device model | PARTIAL device matrix | Text packets, libass RGBA and typed alpha-bounded PGS/DVD/DVB/XSub RGBA render/clear/seek; chapter seek and default Pulse device model work. The device-switching/platform matrix remains. |
 | Long-run audio-master drift correction | PARTIAL | PulseAudio `pa_simple_get_latency` feedback drives the reference clock and is behavior-tested; real-device long-duration drift/prebuffer evidence is not complete. |
 
 ## User-facing behavior
@@ -31,13 +31,14 @@ exist. Video and source-independent cover thumbnails decode into a bounded
 source-stat-versioned cache without blocking the UI. ASS/SSA source styling is
 rendered through bounded libass RGBA with text fallback. Real PGS subtitles use
 typed, hashed, alpha-bounded RGBA regions and survive source deletion; the
-DVD/DVB/XSub fixture matrix and responsive Qt target remain open.
+broader malformed/platform subtitle matrix and responsive Qt target remain open.
 
 ## Acceptance evidence
 
-- fast suite: 108 passed, 29 media tests deselected;
+- fast suite: 109 passed, 32 media tests deselected;
 - combined generated STRICT/native-v2/native-player/installed-libVLC suites:
-  54 passed, including an authorized real-PGS source-deletion round trip;
+  54 passed, plus a focused 4-format authorized PGS/DVD/DVB/XSub
+  source-deletion matrix;
 - native-player backend: video/PCM delivery, tracks, transactional seek,
   display dimensions and fail-on-tempfile tests all pass;
 - native converter media tests reproduce video and audio after source deletion;

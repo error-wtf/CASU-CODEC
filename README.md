@@ -91,9 +91,9 @@ retain their bounded, hashed stylesheet/dialogue payload and the native player
 renders it through system libass into a transparent RGBA overlay; a plain-text
 fallback remains when libass rejects a document. Bounded embedded TTF/OTF/font
 attachments are registered with the same renderer before font selection.
-PGS bitmap subtitles convert to bounded, hashed RGBA regions and remain
-selectable/seekable native subtitle overlays; DVD/DVB/XSub use the same code
-path but still need a broader fixture matrix. Hardware A/V
+PGS, DVD, DVB and XSub bitmap subtitles convert to bounded, hashed RGBA regions
+and remain selectable/seekable native subtitle overlays after source deletion.
+Broader malformed, language and platform cases remain. Hardware A/V
 drift evidence and release
 playback matrices remain open gates.
 Native PCM timing uses measured PulseAudio sink latency when available and a

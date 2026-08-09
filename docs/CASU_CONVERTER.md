@@ -42,6 +42,10 @@ aggregate/per-font/name limits before libass renderer creation.
 PGS/DVD/DVB/XSub streams use FFmpeg's decoded bitmap-to-video boundary, coalesce
 duplicate timestamp states, discard transparent HOLD states and store only each
 nontransparent alpha bounding rectangle as a lossless `SUBTITLE_BITMAP` chunk.
+The converter supplies the canonical stream canvas explicitly; DVD half-D1/VCD
+video therefore cannot truncate full-D1 PAL/NTSC subtitle coordinates. A
+malformed secondary stream with no decodable format is recorded in
+`ignored_streams` while independently valid A/V/subtitle streams still convert.
 
 `--mode strict` is the reference sidecar analysis engine. It performs exact
 source-resolution native-plane comparisons. `visually_lossless` and `adaptive`

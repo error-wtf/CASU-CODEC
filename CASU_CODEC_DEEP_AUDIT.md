@@ -19,7 +19,7 @@ CASUNAT1 remains a compatibility envelope and JSON `.casu` remains a sidecar.
 | Standalone audio | PASS | Timestamped s16le blocks reproduce the complete canonical PCM digest after source deletion. |
 | Key states/tile dependencies | PASS | Start/interval keys plus base/new tile hashes; invalid dependencies fail closed. |
 | Random access | PASS | Reader seeks to the nearest indexed on-disk key-state offset and reconstructs through target PTS. |
-| Subtitle/chapter primitives | PARTIAL matrix | Text and ASS/SSA+fonts render natively; typed alpha-bounded PGS RGBA conversion/playback/seek passes. DVD/DVB/XSub fixtures remain. |
+| Subtitle/chapter primitives | PASS reference matrix | Text and ASS/SSA+fonts render natively; typed alpha-bounded PGS/DVD/DVB/XSub RGBA conversion, source deletion and playback/seek pass. |
 | Attachments/full metadata | PASS reference path | Bounded hashed files and attached covers survive source deletion; bounded tags and complete dispositions are retained. |
 | Recovery/integrity | PASS bounded campaign | SHA-256, declared-prefix recovery, hostile limits and the deterministic 10,000-case campaign pass; larger fuzzing remains ongoing work. |
 | Native playback | PARTIAL | Direct video/PCM sinks and no-tempfile behavior pass; drift/device/subtitle matrices remain open. |
@@ -42,8 +42,8 @@ CASUNAT2 header + bounded manifest
 
 ## Remaining blockers
 
-1. Complete the DVD/DVB/XSub subtitle and device/platform matrix; the shared
-   typed bitmap renderer already passes real PGS.
+1. Expand the passing PGS/DVD/DVB/XSub reference matrix across platforms,
+   malformed streams and languages; complete the device/platform matrix.
 2. Expand the bounded probe/parser campaign with larger decoder/network corpora.
 3. Long-running A/V drift, rapid-seek and real audio-device matrix.
 4. Complete the responsive UI and clean cross-platform package/runtime

@@ -8,7 +8,7 @@ This file records implemented behavior, not widget presence.
 | Native CASUNAT2 video | PASS reference path | Lazy on-disk chunks, indexed key/tile reconstruction, source-sized CPU RGB conversion and Tk presentation. |
 | Native CASUNAT2 audio | PASS reference path | Exact timestamped s16le blocks feed an instrumented sink and direct libpulse-simple output. Hardware latency/master-clock drift remains open. |
 | Native seek | PASS reference path | Cancels generation, flushes audio, invalidates video/subtitle output and reconstructs from indexed state. |
-| Native subtitles/chapters | PARTIAL matrix | UTF-8 packets, ASS/SSA libass RGBA with bounded embedded fonts, and typed alpha-bounded PGS RGBA render/clear/seek; delays and chapter seek work. DVD/DVB/XSub fixtures remain. |
+| Native subtitles/chapters | PASS reference matrix | UTF-8 packets, ASS/SSA libass RGBA with bounded embedded fonts, and typed alpha-bounded PGS/DVD/DVB/XSub RGBA render/clear/seek; delays and chapter seek work. |
 | CASUNAT2 tempfile | REMOVED | Test forces tempfile creation to fail while native A/V playback completes. |
 | Track/output selection | PARTIAL matrix | Backend-neutral descriptors and dynamic menus use only reported tracks/devices; native default Pulse and libVLC enumeration exist. |
 | Events/clock | PARTIAL | Lifecycle events and monotonic native scheduler work; position poll remains for timeline and audio hardware clock/drift evidence is open. |
@@ -21,9 +21,9 @@ This file records implemented behavior, not widget presence.
 
 1. Make native audio device time the measured A/V master and run long drift,
    pause/resume, rapid-seek and underrun tests on real hardware.
-2. Complete DVD/DVB/XSub bitmap fixtures, chapter timeline markers and the
-   hotplug device matrix; the shared PGS renderer, text delay controls and
-   chapter names already work.
+2. Expand bitmap fixtures across platforms and malformed inputs, add chapter
+   timeline markers and complete the hotplug device matrix; the shared
+   PGS/DVD/DVB/XSub renderer, text-delay controls and chapter names work.
 3. Add exact-runtime VLC parity fixtures for common containers/codecs/subtitles/
    network protocols on Linux, Windows and macOS.
 4. Consolidate the duplicated Tk list presentation behind one playlist model,
@@ -31,6 +31,6 @@ This file records implemented behavior, not widget presence.
 5. Add broader artwork formats/matrices; attached covers already survive source
    deletion and render in the native audio canvas and library.
 
-Current evidence: 108 fast behavior tests, 54 targeted generated/probe/libVLC/PGS cases,
+Current evidence: 109 fast behavior tests, 54 targeted generated/probe/libVLC/PGS cases,
 native A/V/subtitle/no-tempfile sinks, both Tk construction smokes, clean wheel
 and Debian package inspection. Stable 1.0 remains blocked by the live gate file.

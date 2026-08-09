@@ -271,6 +271,29 @@ _BITMAP_SUBTITLE_CODECS = {"hdmv_pgs_subtitle", "dvd_subtitle",
                            "dvb_subtitle", "xsub"}
 
 
+def _bitmap_canvas_size(stream: dict, overview: dict) -> tuple[int, int] | None:
+    """Resolve the subtitle coordinate system before FFmpeg creates sub2video."""
+    width, height = int(stream.get("width") or 0), int(stream.get("height") or 0)
+    if width > 0 and height > 0:
+        return width, height
+    videos = [item for item in overview.get("streams", [])
+              if item.get("codec_type") == "video"
+              and not item.get("disposition", {}).get("attached_pic")]
+    video = videos[0] if videos else {}
+    codec = str(stream.get("codec_name") or "").lower()
+    if codec == "dvd_subtitle":
+        video_height = int(video.get("height") or 0)
+        try:
+            rate = Fraction(str(video.get("avg_frame_rate") or "0/1"))
+        except (ValueError, ZeroDivisionError):
+            rate = Fraction(0)
+        # DVD SPU coordinates use a full D1 canvas even when the accompanying
+        # MPEG video is a half-D1/VCD-sized PAL or NTSC stream.
+        return (720, 480) if video_height in {240, 480} or rate > 27 else (720, 576)
+    width, height = int(video.get("width") or 0), int(video.get("height") or 0)
+    return (width, height) if width > 0 and height > 0 else None
+
+
 def _packed_rgba(frame: StrictFrame) -> np.ndarray:
     height, width = frame.frame.shape
     packed = frame.frame.planes[0].reshape(height, width, 4)
@@ -285,19 +308,27 @@ def _packed_rgba(frame: StrictFrame) -> np.ndarray:
 
 def _bitmap_subtitle_chunks(source: Path, stream_id: int, relative_index: int,
                             duration_seconds: float,
-                            cancel: Any | None) -> Iterator[NativeChunk]:
+                            cancel: Any | None,
+                            canvas_size: tuple[int, int] | None = None) -> Iterator[NativeChunk]:
     """Decode PGS/DVD/DVB/XSub through FFmpeg sub2video to bounded RGBA states."""
     if cancel is not None and getattr(cancel, "is_set", lambda: False)():
         raise NativeConversionError("native conversion cancelled")
     duration_ms = max(1, round(max(0.0, duration_seconds) * 1000))
     with tempfile.TemporaryDirectory(prefix="casu-bitmap-subtitle-") as directory:
         rendered = Path(directory) / "overlay.mkv"
-        command = [
-            "ffmpeg", "-v", "error", "-i", str(source),
+        command = ["ffmpeg", "-v", "error"]
+        if canvas_size is not None:
+            width, height = (int(value) for value in canvas_size)
+            if (width <= 0 or height <= 0 or width > 16_384 or height > 16_384
+                    or width * height * 4 > 256 * 1024 * 1024):
+                raise NativeConversionError("bitmap subtitle canvas exceeds limits")
+            command.extend([f"-canvas_size:s:{relative_index}", f"{width}x{height}"])
+        command.extend([
+            "-i", str(source),
             "-filter_complex", f"[0:s:{relative_index}]format=rgba[out]",
             "-map", "[out]", "-fps_mode", "passthrough", "-c:v", "ffv1",
             "-pix_fmt", "rgba", "-y", str(rendered),
-        ]
+        ])
         try:
             run_bounded(command, max_output_bytes=1024 * 1024,
                         timeout_seconds=600,
@@ -448,6 +479,7 @@ def convert_media_to_native_v2(source: str | Path, target: str | Path, *,
         raise NativeConversionError("source has no decodable video or audio stream")
 
     descriptors: list[dict] = []
+    ignored_streams: list[dict] = []
     inventories: dict[int, list[dict]] = {}
     mappings: list[tuple[int, str, int, dict]] = []
     for stream_id, (stream, kind, relative) in enumerate(source_streams, start=1):
@@ -457,37 +489,53 @@ def convert_media_to_native_v2(source: str | Path, target: str | Path, *,
             probed, frames = stream, []
         else:
             probed, frames = _inventory(src, f"{kind[0]}:{relative}")
+        effective = dict(stream)
+        effective.update(probed)
+        if kind == "audio" and (int(effective.get("sample_rate") or 0) <= 0
+                                or int(effective.get("channels") or 0) <= 0):
+            ignored_streams.append({
+                "source_index": int(stream.get("index", relative)),
+                "type": "audio", "codec_origin": stream.get("codec_name"),
+                "reason": "decoder reported no usable sample rate/channels",
+            })
+            continue
         inventories[stream_id] = frames
         descriptor = {
             "stream_id": stream_id,
             "type": "attachment" if kind == "cover-art" else kind,
-            "source_index": int(stream.get("index", relative)),
-            "codec_origin": stream.get("codec_name"),
+            "source_index": int(effective.get("index", relative)),
+            "codec_origin": effective.get("codec_name"),
             "time_base": ([1, 1000] if kind == "subtitle" else
                           [1, 1] if kind in {"attachment", "cover-art"} else
                           list(_fraction(str(probed.get("time_base"))))),
-            "language": stream.get("tags", {}).get("language"),
-            "default": bool(stream.get("disposition", {}).get("default")),
-            "forced": bool(stream.get("disposition", {}).get("forced")),
+            "language": effective.get("tags", {}).get("language"),
+            "default": bool(effective.get("disposition", {}).get("default")),
+            "forced": bool(effective.get("disposition", {}).get("forced")),
             "frame_timeline": _frame_pts(frames),
-            "disposition": _disposition(stream.get("disposition")),
-            "tags": _bounded_tags(stream.get("tags")),
+            "disposition": _disposition(effective.get("disposition")),
+            "tags": _bounded_tags(effective.get("tags")),
         }
         if kind == "cover-art":
             descriptor["role"] = "cover-art"
-        if kind == "subtitle" and str(stream.get("codec_name") or "").lower() in {"ass", "ssa"}:
+        if kind == "subtitle" and str(effective.get("codec_name") or "").lower() in {"ass", "ssa"}:
             descriptor["rich_source_attachment"] = True
             descriptor["playback_fallback"] = "utf8-webvtt-text"
-        if kind == "subtitle" and str(stream.get("codec_name") or "").lower() in _BITMAP_SUBTITLE_CODECS:
+        if kind == "subtitle" and str(effective.get("codec_name") or "").lower() in _BITMAP_SUBTITLE_CODECS:
             descriptor["canonical_format"] = "rgba-bitmap-region"
+            canvas = _bitmap_canvas_size(effective, overview)
+            if canvas is not None:
+                descriptor["canvas_size"] = list(canvas)
         for key in ("width", "height", "pix_fmt", "color_range", "color_space",
                     "color_transfer", "color_primaries", "chroma_location",
                     "sample_rate", "channels", "channel_layout"):
-            if stream.get(key) is not None:
-                descriptor[key] = stream[key]
+            if effective.get(key) is not None:
+                descriptor[key] = effective[key]
         descriptors.append(descriptor)
-        mappings.append((stream_id, kind, relative, stream))
+        mappings.append((stream_id, kind, relative, effective))
         notify(0.05 + 0.15 * stream_id / len(source_streams))
+
+    if not any(item["type"] in {"video", "audio"} for item in descriptors):
+        raise NativeConversionError("source has no usable video or audio stream")
 
     manifest = {
         "format": "CASUNAT2",
@@ -496,6 +544,7 @@ def convert_media_to_native_v2(source: str | Path, target: str | Path, *,
                               "sha256": _sha256(src),
                               "duration_s": float(overview.get("format", {}).get("duration") or 0.0)},
         "metadata": _bounded_tags(overview.get("format", {}).get("tags")),
+        "ignored_streams": ignored_streams,
         "streams": descriptors,
         "video_policy": {"fidelity": "SOURCE_RESOLUTION_STRICT",
                          "tile_size": [tile_width, tile_height],
@@ -526,7 +575,8 @@ def convert_media_to_native_v2(source: str | Path, target: str | Path, *,
                 if codec in _BITMAP_SUBTITLE_CODECS:
                     yield from _bitmap_subtitle_chunks(
                         src, stream_id, relative,
-                        float(overview.get("format", {}).get("duration") or 0.0), cancel)
+                        float(overview.get("format", {}).get("duration") or 0.0), cancel,
+                        _bitmap_canvas_size(stream, overview))
                 else:
                     rich = _rich_subtitle_source_chunk(src, stream_id, relative,
                                                        stream, cancel)
