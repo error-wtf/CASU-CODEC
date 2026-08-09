@@ -15,7 +15,7 @@
 | Audio/video track selection | both backends | dynamic menus | runtime state tests | PARTIAL matrix |
 | Subtitle/chapter selection | libVLC plus native text/libass/bitmap/chapter path | dynamic controls + clickable bounded timeline markers | runtime RGBA/text/chapter/seek behavior tests | PASS reference matrix |
 | Native text/rich/bitmap subtitle/chapter | decoded packets, ASS/SSA libass RGBA, typed alpha-bounded PGS/DVD/DVB/XSub RGBA and chapter seek | transparent/text/bitmap overlay + dynamic chapter menu/timeline | generated and authorized 4-format source-deletion + RGBA/sink/GUI tests | PASS reference matrix; broader platform/malformed coverage open |
-| Playlist reorder/save/load | player model | controls | runtime methods | PARTIAL product |
+| Playlist reorder/save/load | one bounded duplicate-free player model | synchronized library/queue controls | unit + real Tk add/move/remove behavior | PASS reference product |
 | Functional navigation | concrete actions only | sidebar/compact rail | pseudo entries removed | PASS |
 | Source-resolution STRICT | production converter | mode selection | unit + generated media | PASS |
 | PCM waveform/spectrum | absent | explicitly unavailable | truthful state | OPEN |

@@ -55,3 +55,25 @@ def test_chapter_timeline_draws_and_clicks_real_markers():
     finally:
         app.backend = None
         app.destroy()
+
+
+def test_playlist_model_keeps_both_real_listboxes_in_sync(tmp_path):
+    first = tmp_path / "first.mp4"; first.write_bytes(b"first")
+    second = tmp_path / "second.casu"; second.write_bytes(b"second")
+    app = MPCASUPlayer()
+    try:
+        app.add_files([first, second, first])
+        assert app.playlist_model.items == (first.resolve(), second.resolve())
+        assert app.library.get(0, "end") == (str(first.resolve()), str(second.resolve()))
+        assert app.queue.get(0, "end") == ("first.mp4", "second.casu")
+        app.queue.selection_set(0)
+        app.move_queue(1)
+        assert app.playlist_model.items == (second.resolve(), first.resolve())
+        assert app.library.get(0) == str(second.resolve())
+        assert app.queue.get(0) == "second.casu"
+        app.library.selection_clear(0, "end"); app.library.selection_set(0)
+        app.remove_selected()
+        assert app.playlist_model.items == (first.resolve(),)
+        assert app.library.size() == app.queue.size() == 1
+    finally:
+        app.destroy()

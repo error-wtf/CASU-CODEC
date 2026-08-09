@@ -80,6 +80,8 @@ writes s16le blocks directly through libpulse-simple. It neither inherits the
 libVLC backend nor creates a temporary MP4. Full subtitle/chapter/device models,
 SQLite scan/resume/favorites/playlists now exist as a tested shared core;
 atomic playback settings and dynamic track/output/chapter menus are also implemented.
+The sidebar and queue are synchronized views of one bounded, duplicate-free
+playlist model used by navigation, session persistence and playlist files.
 Library search and watched-folder rescans are wired to the persistent SQLite
 core. Per-media audio/video/subtitle selections and audio/subtitle delays are
 persisted and restored. Source-stat-versioned thumbnails decode asynchronously

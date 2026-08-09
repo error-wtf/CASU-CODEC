@@ -26,11 +26,11 @@ This file records implemented behavior, not widget presence.
    chapter timeline, text-delay controls and chapter names work.
 3. Add exact-runtime VLC parity fixtures for common containers/codecs/subtitles/
    network protocols on Linux, Windows and macOS.
-4. Consolidate the duplicated Tk list presentation behind one playlist model,
-   then migrate views incrementally to Qt without replacing tested backends.
+4. Migrate views incrementally to Qt without replacing the tested shared
+   playlist model or playback backends.
 5. Add broader artwork formats/matrices; attached covers already survive source
    deletion and render in the native audio canvas and library.
 
-Current evidence: 110 fast behavior tests, 54 targeted generated/probe/libVLC/PGS cases,
+Current evidence: 112 fast behavior tests, 54 targeted generated/probe/libVLC/PGS cases,
 native A/V/subtitle/no-tempfile sinks, both Tk construction smokes, clean wheel
 and Debian package inspection. Stable 1.0 remains blocked by the live gate file.

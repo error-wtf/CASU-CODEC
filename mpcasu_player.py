@@ -26,6 +26,7 @@ from casu.schema import validate_manifest
 from casu.scheduler import CasuScheduler
 from casu.library import MediaLibrary, PlaybackPreferences
 from casu.media import TrackKind
+from casu.playlist import PlaylistError, PlaylistModel
 from casu.settings import PlayerSettings, SettingsStore
 from casu.thumbnail import thumbnail_for
 from mpcasu_backend import BackendError, CasuBackend, LibVLCBackend, PlaybackState
@@ -129,6 +130,7 @@ class MPCASUPlayer(tk.Tk):
         self._layout_mode = "wide"
         self._advancing = False
         self._end_handled = False
+        self.playlist_model = PlaylistModel()
         self._session_file = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "mpcasu" / "session.json"
         self.settings_store = SettingsStore(self._session_file.parent / "settings.json")
         effective_settings = self.settings_store.load()
@@ -599,6 +601,17 @@ class MPCASUPlayer(tk.Tk):
         if selected:
             self.library.selection_clear(0, "end"); self.library.selection_set(selected[0]); self.play_selected()
 
+    def _render_playlist(self, selected: int | None = None) -> None:
+        self.library.delete(0, "end")
+        self.queue.delete(0, "end")
+        for path in self.playlist_model.items:
+            self.library.insert("end", str(path))
+            self.queue.insert("end", path.name)
+        if selected is not None and 0 <= selected < len(self.playlist_model):
+            self.library.selection_set(selected); self.library.see(selected)
+            self.queue.selection_set(selected); self.queue.see(selected)
+        self._sync_queue_empty()
+
     def move_queue(self, delta: int) -> None:
         """Reorder the real playlist and keep its display models aligned."""
         selected = self.queue.curselection()
@@ -606,24 +619,17 @@ class MPCASUPlayer(tk.Tk):
             return
         index = selected[0]
         target = index + int(delta)
-        if target < 0 or target >= self.queue.size():
-            return
-        queue_values = list(self.queue.get(0, "end"))
-        library_values = list(self.library.get(0, "end"))
-        queue_values[index], queue_values[target] = queue_values[target], queue_values[index]
-        library_values[index], library_values[target] = library_values[target], library_values[index]
-        self.queue.delete(0, "end"); self.library.delete(0, "end")
-        for value in queue_values: self.queue.insert("end", value)
-        for value in library_values: self.library.insert("end", value)
-        self.queue.selection_set(target); self.queue.see(target)
-        self.library.selection_set(target); self.library.see(target)
-        self._sync_queue_empty()
+        try:
+            target = self.playlist_model.move(index, delta)
+        except PlaylistError as exc:
+            self.status.set(str(exc)); return
+        self._render_playlist(target)
 
     def clear_playlist(self) -> None:
         if self.backend:
             self.stop()
-        self.library.delete(0, "end")
-        self.queue.delete(0, "end")
+        self.playlist_model.clear()
+        self._render_playlist()
         self.current = None
         self.now_playing.configure(text="NOW PLAYING · NO MEDIA SELECTED")
         self.status.set("Playlist cleared")
@@ -632,8 +638,9 @@ class MPCASUPlayer(tk.Tk):
     def play_next(self):
         """Advance to the next queued media item."""
         selected = self.library.curselection()
-        index = selected[0] if selected else -1
-        if index + 1 >= self.library.size():
+        current_index = self.playlist_model.index_of(self.current) if self.current else None
+        index = selected[0] if selected else (-1 if current_index is None else current_index)
+        if index + 1 >= len(self.playlist_model):
             self.status.set("End of playlist")
             return
         self.library.selection_clear(0, "end")
@@ -644,7 +651,8 @@ class MPCASUPlayer(tk.Tk):
     def play_previous(self):
         """Return to the previous queued media item."""
         selected = self.library.curselection()
-        index = selected[0] if selected else 0
+        current_index = self.playlist_model.index_of(self.current) if self.current else None
+        index = selected[0] if selected else (0 if current_index is None else current_index)
         if index <= 0:
             self.status.set("Beginning of playlist")
             return
@@ -700,15 +708,20 @@ class MPCASUPlayer(tk.Tk):
             messagebox.showerror("MPCASU", str(exc))
 
     def add_files(self, paths: list[Path]):
+        added: list[Path] = []
         for path in paths:
-            if path.exists() and str(path) not in self.library.get(0, "end"):
-                self.library.insert("end", str(path))
-                self.queue.insert("end", path.name)
+            if path.is_file():
                 try:
-                    self.media_library.upsert(path)
-                except OSError:
-                    pass
-        self._sync_queue_empty()
+                    if self.playlist_model.add((path,), existing_only=True):
+                        added.append(path.expanduser().resolve())
+                except PlaylistError as exc:
+                    self.status.set(str(exc)); break
+        for path in added:
+            try:
+                self.media_library.upsert(path)
+            except OSError:
+                pass
+        self._render_playlist()
 
     def add_watched_folder(self):
         selected = filedialog.askdirectory(mustexist=True)
@@ -843,7 +856,7 @@ class MPCASUPlayer(tk.Tk):
             self._session_file.parent.mkdir(parents=True, exist_ok=True)
             temporary = self._session_file.with_suffix(".tmp")
             temporary.write_text(json.dumps({
-                "playlist": list(self.library.get(0, "end")),
+                "playlist": [str(item) for item in self.playlist_model.items],
                 "volume": self._volume,
                 "muted": self._muted,
                 "rate": self._rate,
@@ -945,18 +958,19 @@ class MPCASUPlayer(tk.Tk):
 
     def remove_selected(self):
         selected = list(self.library.curselection())
-        for index in reversed(selected):
-            self.library.delete(index)
-            if index < self.queue.size():
-                self.queue.delete(index)
-        self._sync_queue_empty()
+        try:
+            self.playlist_model.remove(selected)
+        except PlaylistError as exc:
+            self.status.set(str(exc)); return
+        self._render_playlist()
 
     def save_playlist(self):
         target = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("MPCASU playlist", "*.json"), ("All files", "*.*")])
         if not target:
             return
         try:
-            Path(target).write_text(json.dumps({"version": 1, "items": list(self.library.get(0, "end"))}, indent=2) + "\n", encoding="utf-8")
+            Path(target).write_text(json.dumps(self.playlist_model.to_payload(),
+                                               indent=2) + "\n", encoding="utf-8")
             self.status.set(f"Playlist saved · {Path(target).name}")
         except OSError as exc:
             messagebox.showerror("MPCASU", f"Could not save playlist: {exc}")
@@ -967,12 +981,10 @@ class MPCASUPlayer(tk.Tk):
             return
         try:
             payload = json.loads(Path(source).read_text(encoding="utf-8"))
-            items = payload.get("items", [])
-            if not isinstance(items, list):
-                raise ValueError("items must be an array")
-            self.add_files([Path(item) for item in items if isinstance(item, str)])
+            loaded = PlaylistModel.from_payload(payload, existing_only=True)
+            self.add_files(list(loaded.items))
             self.status.set(f"Playlist loaded · {Path(source).name}")
-        except (OSError, ValueError, TypeError) as exc:
+        except (OSError, PlaylistError, ValueError, TypeError) as exc:
             messagebox.showerror("MPCASU", f"Could not load playlist: {exc}")
 
     def show_media_info(self):
@@ -1051,10 +1063,13 @@ class MPCASUPlayer(tk.Tk):
             # Opening a file from the command line or file manager populates
             # the queue without creating a Listbox selection.  The first queue
             # item is the deterministic playback target in that case.
-            if self.library.size():
-                return Path(self.library.get(0))
+            if len(self.playlist_model):
+                return self.playlist_model.item(0)
             return None
-        return Path(self.library.get(selected[0]))
+        try:
+            return self.playlist_model.item(selected[0])
+        except PlaylistError:
+            return None
 
     def _sidecar(self, path: Path) -> Path:
         return path.with_suffix(path.suffix + ".casu")
@@ -1069,10 +1084,15 @@ class MPCASUPlayer(tk.Tk):
         self.current = path
         self.now_playing.configure(text=path.name.upper())
         selected = self.library.curselection()
-        if selected:
+        selected_index = (selected[0] if selected
+                          else self.playlist_model.index_of(path))
+        if selected_index is not None:
+            self.library.selection_clear(0, "end")
+            self.library.selection_set(selected_index)
+            self.library.see(selected_index)
             self.queue.selection_clear(0, "end")
-            self.queue.selection_set(selected[0])
-            self.queue.see(selected[0])
+            self.queue.selection_set(selected_index)
+            self.queue.see(selected_index)
         sidecar = path if path.suffix.lower() == ".casu" else self._sidecar(path)
         self._load_visual_state(sidecar if sidecar.exists() else path)
         if path.suffix.lower() == ".casu":

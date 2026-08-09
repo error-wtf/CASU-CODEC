@@ -11,7 +11,7 @@
       "evidence": [
         "casu.strict canonical model preserves active native RGB/YUV/alpha planes, plane layout, 8/10/12/16-bit samples, color metadata, and rational PTS",
         "casu.core.analyze(mode='strict') invokes analyze_strict_video and never the 160x90 activity preview",
-        "pytest -q -m 'not media': 110 passed, 33 deselected",
+        "pytest -q -m 'not media': 112 passed, 34 deselected",
         "pytest -q tests/test_strict_acceptance.py -m media: 10 passed",
         "clean wheel build and isolated wheel STRICT smoke: PASS",
         "clean temporary-tree Debian build, package inspection, and extracted-package STRICT smoke: PASS",
@@ -60,7 +60,7 @@
       "evidence": [
         "CLI and GUI share ConversionEngine jobs/profiles, progress/cancellation, atomic output and collision-resistant hash-verified resumable batch journals",
         "Backend-neutral immutable track/chapter/device/event contracts exist",
-        "SQLite library behavior tests cover scan, resume, favorites and playlists",
+        "SQLite library behavior tests cover scan, resume, favorites and playlists; one bounded duplicate-free PlaylistModel drives both synchronized Tk list presentations, persistence and navigation",
         "Recursive batch isolation, CLI retry and CLI/GUI hash-verified journal resume are behavior-tested; text, native libass ASS/SSA and typed source-independent PGS/DVD/DVB/XSub RGBA subtitles, chapters, bounded attachments/covers/tags/dispositions convert/play; malformed secondary streams are isolated and recorded; broader product/platform matrices remain open"
       ]
     },
@@ -71,7 +71,7 @@
       "evidence": [
         "Functional navigation and dynamic backend-reported track/output/chapter menus replace placeholder views/cycle buttons",
         "Atomic validated settings and SQLite scan/search/resume/favorites/playlists/per-media track and delay preferences are behavior-tested; watched-folder configuration survives save/reload",
-        "MPCASU and converter construction smoke under isolated X display: PASS",
+        "MPCASU and converter construction smoke plus real playlist add/move/remove synchronization under isolated X display: PASS",
         "Headless installed-libVLC playback advanced time but reported unavailable H.264 decode and no audio device; full runtime matrix remains correctly open",
         "Bounded source-stat-versioned FFmpeg thumbnails, including source-independent CASUNAT2 cover attachments, are rendered asynchronously in the library UI; audio-only native playback presents the cover on its canvas",
         "Qt migration, cross-platform packages and complete runtime matrix remain open"

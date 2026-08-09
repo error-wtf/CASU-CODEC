@@ -17,7 +17,7 @@ A visible control counts only when it invokes tested behavior.
 
 ## User-facing behavior
 
-Real play/pause/resume/stop/seek, rate, volume/mute, playlist reorder/save/load,
+Real play/pause/resume/stop/seek, rate, volume/mute, model-backed playlist reorder/save/load,
 URL opening, dynamic track/output/chapter menus and frame controls where supported,
 fullscreen, session resume and media information are wired. Visible sidebar entries now
 route to concrete file, URL, playlist, focus or selection actions. Removed
@@ -35,7 +35,7 @@ broader malformed/platform subtitle matrix and responsive Qt target remain open.
 
 ## Acceptance evidence
 
-- fast suite: 110 passed, 33 media tests deselected;
+- fast suite: 112 passed, 34 media tests deselected;
 - combined generated STRICT/native-v2/native-player/installed-libVLC suites:
   54 passed, plus a focused 4-format authorized PGS/DVD/DVB/XSub
   source-deletion matrix;

@@ -64,6 +64,9 @@ size and SHA-256 still match the exact prior job/profile list. Independent
 batches in one directory receive deterministic distinct journal identifiers.
 Immutable backend-neutral track/chapter/device/event models and a transactional
 SQLite library (scan, resume, favorites, playlists) is behavior-tested.
+The player queue and sidebar now render from one bounded, duplicate-free
+`PlaylistModel`; session/playlist persistence, selection, reordering and removal
+no longer treat Tk widgets as independent data stores.
 Attached cover pictures now convert to bounded hashed PNG attachments, remain
 audio-only in stream selection, survive source deletion and display in both the
 native audio canvas and library thumbnail path. ASS/SSA styling renders through
