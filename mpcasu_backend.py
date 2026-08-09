@@ -246,10 +246,17 @@ class LibVLCBackend:
     def supports(source: str | Path) -> bool:
         """Return whether the universal backend can accept this source form."""
         value = str(source)
+        # Protocol support belongs to the installed libVLC access modules.
+        # MPCASU rejects only values that cannot be passed safely through the
+        # C API; it does not maintain a smaller protocol marketing list.
+        return bool(value) and "\x00" not in value
+
+    @staticmethod
+    def _is_location(value: str) -> bool:
         parsed = urlparse(value)
-        return isinstance(source, Path) or not parsed.scheme or parsed.scheme in {
-            "file", "http", "https", "rtsp", "rtp", "udp", "ftp", "smb"
-        }
+        windows_drive = (len(parsed.scheme) == 1 and len(value) >= 3
+                         and value[1] == ":" and value[2] in {"/", "\\"})
+        return bool(parsed.scheme and parsed.scheme != "file" and not windows_drive)
 
     def capabilities(self) -> dict[str, str]:
         """Expose runtime facts instead of claiming a static format matrix."""
@@ -278,7 +285,7 @@ class LibVLCBackend:
         self._state = PlaybackState.LOADING
         value = str(source)
         parsed = urlparse(value)
-        if parsed.scheme and parsed.scheme != "file":
+        if self._is_location(value):
             self._install("libvlc_media_new_location", ctypes.c_void_p, [ctypes.c_void_p, ctypes.c_char_p])
             self.media = self.libvlc_media_new_location(self.instance, value.encode("utf-8"))
         else:

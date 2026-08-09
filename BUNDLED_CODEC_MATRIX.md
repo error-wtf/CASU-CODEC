@@ -10,6 +10,10 @@ there is no honest universal static list of “all codecs”. The contract is:
 > without rejecting it by filename extension. If that same runtime can play it
 > directly but MPCASU cannot, the result is an MPCASU compatibility bug.
 
+The same rule applies to URI schemes: non-empty, NUL-free locations reach
+libVLC, whose installed access modules make the actual protocol decision.
+Windows drive paths and `file:` URIs remain local-path inputs.
+
 ## Inspected development runtime
 
 - libVLC/libvlccore/VLC base plugins: Ubuntu `3.0.23-1`.

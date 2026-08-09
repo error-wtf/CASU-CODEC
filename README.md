@@ -73,7 +73,9 @@ MPCASU has two explicit playback paths. Ordinary media, URLs, sidecars and the
 CASUNAT1 compatibility envelope use the installed libVLC shared library in
 process. There is no extension allow-list: if the installed libVLC build and
 its modules can open a source, MPCASU passes it through. Exact codec support is
-therefore a runtime fact, not a hard-coded marketing list. CASUNAT2 uses the
+therefore a runtime fact, not a hard-coded marketing list. URI schemes are also
+passed to libVLC's installed access modules instead of being restricted by a
+smaller MPCASU protocol list. CASUNAT2 uses the
 independent `NativeCasuBackend`: it seeks to byte-indexed key states, applies
 tile dependencies, presents reconstructed frames to the Tk video sink and
 writes s16le blocks directly through libpulse-simple. It neither inherits the

@@ -12,6 +12,9 @@
   runner identity therefore remains an explicit matrix dimension.
 - Real libVLC subtitle descriptions traverse the ABI's linked list past the
   synthetic `-1` Disable node; SRT/WebVTT/ASS menus expose concrete tracks.
+- Legacy URLs are passed to installed libVLC access modules without a smaller
+  MPCASU scheme list; empty/NUL sources fail safely and Windows drive paths are
+  kept on the local-path API.
 - Generated STRICT + CASUNAT2 + native-player + installed-libVLC suites,
   including bounded-probe/libass, authorized real-PGS and the added JPEG/WebP
   cover variants: **56 passed**.

@@ -659,7 +659,13 @@ def test_reference_mp3_manifest_preserves_audio_stream():
 def test_libvlc_backend_source_capability_detection():
     assert LibVLCBackend.supports("https://example.invalid/video.m3u8")
     assert LibVLCBackend.supports("rtsp://example.invalid/live")
-    assert not LibVLCBackend.supports("gopher://example.invalid/media")
+    # Unknown protocols reach libVLC; installed access modules decide support.
+    assert LibVLCBackend.supports("gopher://example.invalid/media")
+    assert not LibVLCBackend.supports("")
+    assert not LibVLCBackend.supports("bad\x00location")
+    assert LibVLCBackend._is_location("https://example.invalid/media")
+    assert not LibVLCBackend._is_location("C:\\Media\\movie.mp4")
+    assert not LibVLCBackend._is_location("file:///tmp/movie.mp4")
 
 
 def test_primary_video_stream_excludes_attached_cover_art():
