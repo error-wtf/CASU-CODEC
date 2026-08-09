@@ -47,6 +47,7 @@ class VideoSink(Protocol):
 class AudioSink(Protocol):
     def write(self, block: AudioBlock) -> None: ...
     def flush(self) -> None: ...
+    def reset_format(self) -> None: ...
     def close(self) -> None: ...
     def set_volume(self, value: int) -> None: ...
     def set_mute(self, muted: bool) -> None: ...
@@ -81,6 +82,9 @@ class NullAudioSink:
         pass
 
     def flush(self) -> None:
+        pass
+
+    def reset_format(self) -> None:
         pass
 
     def close(self) -> None:
@@ -357,6 +361,13 @@ class PulseAudioSink:
         if self._handle:
             error = ctypes.c_int()
             self.lib.pa_simple_flush(self._handle, ctypes.byref(error))
+
+    def reset_format(self) -> None:
+        """Drop the current Pulse stream so a new track may change format."""
+        if self._handle:
+            self.lib.pa_simple_free(self._handle)
+        self._handle = None
+        self._format = None
 
     def set_volume(self, value: int) -> None:
         self._volume = max(0, min(200, int(value)))
@@ -885,16 +896,45 @@ class NativeCasuBackend:
         if identifier != "default":
             raise BackendError("native PulseAudio reference sink currently supports the default device only")
 
+    def _select_track(self, attribute: str, track: int,
+                      descriptions: list[tuple[int, str]], kind: str) -> None:
+        selected = int(track)
+        if selected != -1 and selected not in dict(descriptions):
+            raise BackendError(f"unknown native {kind} stream {selected}")
+        with self._transition_lock:
+            with self._lock:
+                if int(getattr(self, attribute)) == selected:
+                    return
+                position = self.position()
+                playing = self._state == PlaybackState.PLAYING
+            if playing:
+                self._stop_thread()
+            with self._lock:
+                setattr(self, attribute, selected)
+                self._offset = position
+                self._reset_audio_clock()
+                self.audio_sink.flush()
+                if attribute == "_selected_audio":
+                    resetter = getattr(self.audio_sink, "reset_format", None)
+                    if callable(resetter):
+                        resetter()
+                self.video_sink.invalidate()
+                clearer = getattr(self.video_sink, "clear_subtitle", None)
+                if callable(clearer):
+                    clearer()
+                self._present_cover()
+                if playing:
+                    self._notify(PlaybackState.READY)
+            if playing:
+                self.play()
+
     def set_audio_track(self, track: int) -> None:
-        if track not in dict(self.audio_track_descriptions()):
-            raise BackendError(f"unknown native audio stream {track}")
-        self._selected_audio = int(track)
-        self._reset_audio_clock()
+        self._select_track("_selected_audio", track,
+                           self.audio_track_descriptions(), "audio")
 
     def set_video_track(self, track: int) -> None:
-        if track not in dict(self.video_track_descriptions()):
-            raise BackendError(f"unknown native video stream {track}")
-        self._selected_video = int(track)
+        self._select_track("_selected_video", track,
+                           self.video_track_descriptions(), "video")
 
     def subtitle_track_count(self) -> int:
         return sum(item.get("type") == "subtitle" for item in self.container.manifest.get("streams", [])) if self.container else 0
@@ -906,18 +946,8 @@ class NativeCasuBackend:
         return self._descriptions("subtitle")
 
     def set_subtitle_track(self, track: int) -> None:
-        clearer = getattr(self.video_sink, "clear_subtitle", None)
-        if callable(clearer):
-            clearer()
-        if track == -1:
-            self._selected_subtitle = -1
-            presenter = getattr(self.video_sink, "present_subtitle", None)
-            if presenter:
-                presenter(None, self.position())
-            return
-        if track not in dict(self.subtitle_track_descriptions()):
-            raise BackendError(f"unknown native subtitle stream {track}")
-        self._selected_subtitle = int(track)
+        self._select_track("_selected_subtitle", track,
+                           self.subtitle_track_descriptions(), "subtitle")
 
     def chapter_count(self) -> int:
         return len(self._chapters)

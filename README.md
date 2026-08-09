@@ -81,6 +81,10 @@ libVLC backend nor creates a temporary MP4.
 Rapid seeks serialize worker transitions; a blocked old PCM write must stop
 before cache invalidation, sink flush and a new generation can start. A timeout
 fails closed instead of allowing stale audio to cross the seek boundary.
+Live audio/video/subtitle track changes use the same transactional boundary.
+They restart at the measured media position, discard queued output, clear the
+old subtitle and reopen PulseAudio when the new track changes sample rate or
+channel geometry.
 Full subtitle/chapter/device models and SQLite scan/resume/favorites/playlists
 now exist as a tested shared core;
 atomic playback settings and dynamic track/output/chapter menus are also implemented.

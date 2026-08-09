@@ -76,6 +76,7 @@ class InstrumentedAudioSink:
     def __init__(self):
         self.blocks = []
         self.flushes = 0
+        self.format_resets = 0
         self.volume = 100
         self.muted = False
 
@@ -84,6 +85,9 @@ class InstrumentedAudioSink:
 
     def flush(self):
         self.flushes += 1
+
+    def reset_format(self):
+        self.format_resets += 1
 
     def close(self):
         pass
@@ -130,6 +134,49 @@ def _native_fixture(path):
             {"start_pts": 0, "end_pts": 20_000_000, "title": "Intro"}])),
     ])
     return first, second
+
+
+def _multi_track_fixture(path):
+    black = canonical_frame(np.zeros((2, 6), dtype=np.uint8),
+                            pixel_format="rgb24", source_shape=(2, 2))
+    white = canonical_frame(np.full((2, 6), 255, dtype=np.uint8),
+                            pixel_format="rgb24", source_shape=(2, 2))
+    manifest = {
+        "format": "CASUNAT2", "version": 2,
+        "streams": [
+            {"stream_id": 1, "type": "video", "codec_origin": "black",
+             "time_base": [1, 1000], "frame_timeline": [
+                 {"pts": 200, "duration_pts": 100}]},
+            {"stream_id": 2, "type": "audio", "language": "de",
+             "time_base": [1, 1000], "sample_rate": 1000, "channels": 1},
+            {"stream_id": 3, "type": "subtitle", "language": "de",
+             "time_base": [1, 1000]},
+            {"stream_id": 4, "type": "audio", "language": "en",
+             "time_base": [1, 1000], "sample_rate": 2000, "channels": 2,
+             "channel_layout": "stereo"},
+            {"stream_id": 5, "type": "subtitle", "language": "en",
+             "time_base": [1, 1000]},
+            {"stream_id": 6, "type": "video", "codec_origin": "white",
+             "time_base": [1, 1000], "frame_timeline": [
+                 {"pts": 200, "duration_pts": 100}]},
+        ],
+    }
+    def audio(value, sample_rate=1000, channels=1):
+        return encode_audio_block(
+            pcm=np.full(10 * channels, value, dtype="<i2").tobytes(), pts=200,
+            time_base_num=1, time_base_den=1000, sample_rate=sample_rate,
+            channels=channels, sample_count=10)
+    write_native_v2(path, manifest, [
+        NativeChunk(ChunkType.VIDEO_KEY_STATE, 1, 200, encode_key_state(black)),
+        NativeChunk(ChunkType.AUDIO_BLOCK, 2, 200, audio(100)),
+        NativeChunk(ChunkType.SUBTITLE_PACKET, 3, 100, encode_subtitle_packet(
+            SubtitlePacket(100, 300, "Deutsch", "de", "text"))),
+        NativeChunk(ChunkType.AUDIO_BLOCK, 4, 200, audio(200, 2000, 2)),
+        NativeChunk(ChunkType.SUBTITLE_PACKET, 5, 100, encode_subtitle_packet(
+            SubtitlePacket(100, 300, "English", "en", "text"))),
+        NativeChunk(ChunkType.VIDEO_KEY_STATE, 6, 200, encode_key_state(white)),
+    ])
+    return black, white
 
 
 def test_native_playback_creates_no_legacy_tempfile(tmp_path, monkeypatch):
@@ -375,6 +422,30 @@ def test_native_backend_track_controls_are_behavioral(tmp_path):
     backend.set_audio_device("default")
     assert backend.set_volume(125) == 125
     backend.set_mute(True)
+    backend.close()
+
+
+def test_native_live_track_switch_restarts_only_selected_streams(tmp_path):
+    source = tmp_path / "tracks.casu"
+    _black, white = _multi_track_fixture(source)
+    video, audio = InstrumentedVideoSink(), InstrumentedAudioSink()
+    backend = NativeCasuBackend(video, audio)
+    backend.open_casu(source); backend.play()
+    backend.set_audio_track(4)
+    backend.set_video_track(6)
+    backend.set_subtitle_track(5)
+    deadline = time.monotonic() + 1
+    while backend.state() not in {PlaybackState.ENDED, PlaybackState.ERROR} and time.monotonic() < deadline:
+        time.sleep(0.005)
+    assert backend.state() == PlaybackState.ENDED
+    assert [digest for _pts, digest in video.frames] == [white.digest()]
+    assert [int(np.frombuffer(block.pcm, dtype="<i2")[0])
+            for block in audio.blocks] == [200]
+    assert [(block.sample_rate, block.channels) for block in audio.blocks] == [(2000, 2)]
+    assert [text for _pts, text in video.subtitles if text] == ["English"]
+    assert audio.flushes == 3 and video.invalidations == 3
+    assert audio.format_resets == 1
+    assert video.subtitle_clears >= 3
     backend.close()
 
 

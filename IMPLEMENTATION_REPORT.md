@@ -48,6 +48,11 @@ a blocking PCM write past the bounded join timeout, seek refuses the restart
 and retains the stop signal; it never clears cancellation and starts a competing
 generation. Rapid forward/backward seek tests prove that only the final video
 frame generation and correctly trimmed PCM samples reach the sinks.
+Live audio, video and subtitle selection now uses the same serialized restart
+at the measured position. It flushes old PCM, invalidates queued canvas work,
+clears the prior subtitle and reopens the PulseAudio stream for a new audio
+sample-rate/channel geometry. A two-video/two-audio/two-subtitle fixture proves
+that only the selected English stereo/2-kHz PCM, video and subtitle arrive.
 Native audio rates from 0.25× through 4× use bounded deterministic linear PCM
 resampling with channel alignment and s16le clipping. Rate changes stop the old
 worker, flush pending PCM, reset the audio clock and restart at the measured
