@@ -52,7 +52,14 @@ class BackendError(CasuError):
 
 
 class _TrackDescription(ctypes.Structure):
-    _fields_ = [("identifier", ctypes.c_int), ("name", ctypes.c_char_p)]
+    pass
+
+
+_TrackDescription._fields_ = [
+    ("identifier", ctypes.c_int),
+    ("name", ctypes.c_char_p),
+    ("next", ctypes.POINTER(_TrackDescription)),
+]
 
 
 class _AudioOutputDevice(ctypes.Structure):
@@ -532,13 +539,18 @@ class LibVLCBackend:
             return []
         values: list[tuple[int, str]] = []
         try:
-            index = 0
-            while index < 256:
-                item = pointer[index]
-                if item.identifier == -1:
-                    break
-                values.append((int(item.identifier), (item.name or b"").decode("utf-8", "replace")))
-                index += 1
+            current = pointer
+            seen = 0
+            while current and seen < 256:
+                item = current.contents
+                # libVLC commonly prepends a synthetic -1 "Disable" entry.
+                # It is not a media track, but it must not terminate traversal.
+                if item.identifier >= 0:
+                    values.append((
+                        int(item.identifier),
+                        (item.name or b"").decode("utf-8", "replace")))
+                current = item.next
+                seen += 1
         finally:
             self.libvlc_track_description_release(pointer)
         return values

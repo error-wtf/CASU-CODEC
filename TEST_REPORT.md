@@ -2,12 +2,16 @@
 
 ## 2026-08-09 — current consolidated verification
 
-- Fast behavior suite: **129 passed, 53 media tests deselected**.
-- Generated exact-runtime libVLC matrix: **10 passed, 5 xfailed**. Six audio
-  combinations expose real tracks and advance playback; H.264/MP4,
-  MPEG-4/MOV and MPEG-2/TS do the same for video. HEVC, VP8, VP9, AV1 and FFV1
-  expose no decoded video track on this exact VLC 3.0.23 host and remain
-  explicitly failed runtime coverage rather than advertised support.
+- Fast behavior suite: **130 passed, 58 media tests deselected**.
+- Generated exact-runtime libVLC matrix: **11 passed, 9 xfailed**. Six audio
+  combinations expose real tracks and advance playback; SRT, WebVTT and ASS
+  load as external tracks; Rawvideo/AVI writes real RV32 callback frames. Nine
+  compressed-video combinations deliver no callback frame in the privileged
+  harness and remain failed runtime coverage rather than advertised support.
+  The same H.264 callback probe delivers one frame as the non-root desktop user;
+  runner identity therefore remains an explicit matrix dimension.
+- Real libVLC subtitle descriptions traverse the ABI's linked list past the
+  synthetic `-1` Disable node; SRT/WebVTT/ASS menus expose concrete tracks.
 - Generated STRICT + CASUNAT2 + native-player + installed-libVLC suites,
   including bounded-probe/libass, authorized real-PGS and the added JPEG/WebP
   cover variants: **56 passed**.

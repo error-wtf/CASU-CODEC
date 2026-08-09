@@ -32,12 +32,16 @@ there is no honest universal static list of “all codecs”. The contract is:
 | libVLC adapter | generated exact-runtime demux/decode/track/clock matrix using bounded explicit dummy sinks |
 
 The 2026-08-09 generated headless matrix isolates physical output from decode
-by passing bounded `--aout=dummy --vout=dummy` options to the same in-process
+with bounded dummy audio and in-memory video callbacks on the same in-process
 backend. PCM/WAV, FLAC, MP3, Vorbis/Ogg, Opus and AAC/M4A all expose an audio
-track and advance the clock. H.264/MP4, MPEG-4/MOV and MPEG-2/TS expose a video
-track and advance the clock. HEVC/MKV, VP8/WebM, VP9/WebM, AV1/MKV and FFV1/MKV
-advance to EOF but expose no decoded video track on this exact VLC 3.0.23 host,
-so they are reported as five runtime `XFAIL`s rather than support. The Debian
+track and advance the clock; external SRT, WebVTT and ASS tracks load against a
+decoded Rawvideo/AVI base. A video codec passes only after libVLC writes a real
+RV32 frame into the callback buffer. Rawvideo/AVI passes; H.264/MP4,
+MPEG-4/MOV, MJPEG/AVI, HEVC/MKV, VP8/WebM, VP9/WebM, AV1/MKV, MPEG-2/TS and
+FFV1/MKV deliver no frame in the privileged headless harness and are nine
+runtime `XFAIL`s rather than support. The same H.264 callback probe delivered a
+frame as the non-root desktop user, so runner identity is recorded as part of
+the matrix and is not generalized into a release pass. The Debian
 player package depends explicitly on `vlc-plugin-base` and
 `vlc-plugin-video-output`; physical audio/video output remains a separate host
 matrix and stable release remains blocked until clean supported hosts pass it.

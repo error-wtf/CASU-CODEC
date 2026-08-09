@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
 # SPDX-FileCopyrightText: 2026 Lino Casu
+import ctypes
 import json
 import os
 import shutil
@@ -27,6 +28,7 @@ from casu.cli import atomic_write_text
 from casu.cli import main as casu_cli_main
 from mpcasu_backend import (BackendError, CasuBackend, LibVLCBackend,
                             LIBVLC_PLAYER_EVENT_STATES, PlaybackState)
+from mpcasu_backend import _TrackDescription
 from mpcasu_native_backend import NativeCasuBackend
 from mpcasu_playback import ControllerState, PlaybackController
 from mpcasu_player import MPCASUPlayer, chapter_marker_positions, presentation_mode
@@ -785,6 +787,19 @@ def test_libvlc_runtime_options_are_explicit_and_bounded():
         LibVLCBackend.validate_runtime_options(("--name=bad\x00value",))
     with pytest.raises(BackendError, match="too many"):
         LibVLCBackend.validate_runtime_options(tuple("--x" for _ in range(17)))
+
+
+def test_libvlc_track_descriptions_follow_linked_list_past_disable_entry():
+    third = _TrackDescription(7, b"English", None)
+    second = _TrackDescription(3, b"Deutsch", ctypes.pointer(third))
+    first = _TrackDescription(-1, b"Disable", ctypes.pointer(second))
+    backend = LibVLCBackend.__new__(LibVLCBackend)
+    backend.player = object()
+    released = []
+    backend.libvlc_track_description_release = lambda pointer: released.append(pointer)
+    assert backend._track_descriptions(lambda _player: ctypes.pointer(first)) == [
+        (3, "Deutsch"), (7, "English")]
+    assert len(released) == 1
 
 
 def test_native_casu_backend_is_independent_from_libvlc_compatibility():

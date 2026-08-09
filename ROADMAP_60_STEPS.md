@@ -37,10 +37,11 @@ Current execution dashboard (evidence, not optimism):
   XSub conversion/source-deletion/playback/seek passes; broader product and
   platform matrices remain.
 - Steps 57–60: PARTIAL — the generated exact-runtime libVLC matrix now proves
-  six audio codec/container and three video codec/container paths and reports
-  five missing decoded-video-track combinations as `XFAIL`; responsive Qt,
-  physical-output, network and complete cross-platform build/shipping matrices
-  remain.
+  six audio codec/container paths, one callback-delivered video path and three
+  external subtitle formats. Nine compressed-video combinations deliver no
+  frame in the privileged harness and remain `XFAIL` there; the non-root H.264
+  callback succeeds, so responsive Qt, physical-output, network and complete
+  cross-platform build/shipping matrices remain.
 
 ## Gate A — source-resolution STRICT
 
