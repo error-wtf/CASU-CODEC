@@ -9,15 +9,16 @@ from __future__ import annotations
 
 import json
 import math
-import os
-import tempfile
 import threading
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from casu.core import ANALYSIS_MODES, CasuCancelled, CasuError, analyze, ffprobe, duration
-from casu.native import NativeCasuError, read_native, write_native
+from casu.core import ANALYSIS_MODES, CasuCancelled, CasuError, ffprobe, duration
+from casu.jobs import (ConversionEngine, ConversionJob, ConversionProfile,
+                       conversion_journal_path)
+from casu.native import NativeCasuError, read_native
+from casu.native_v2 import NativeV2Error, read_native_v2
 from casu.schema import validate_manifest
 
 BG = "#090B0D"
@@ -54,6 +55,7 @@ class CASUConverter(tk.Tk):
         # Sidecar remains the safe default until the native envelope is wired
         # into the player's CASU reader; users can explicitly opt into it.
         self.native_output = tk.BooleanVar(value=False)
+        self.resume_jobs = tk.BooleanVar(value=True)
         self.fps = tk.DoubleVar(value=10.0)
         self.status = tk.StringVar(value="Choose an MP4 or MP3 source.")
         self.source_info = tk.StringVar(value="No source inspected")
@@ -106,7 +108,8 @@ class CASUConverter(tk.Tk):
         ttk.Combobox(options, textvariable=self.mode, values=sorted(ANALYSIS_MODES), state="readonly", width=18).pack(side="left", padx=8)
         ttk.Label(options, text="FPS").pack(side="left")
         ttk.Spinbox(options, from_=0.1, to=120.0, increment=0.5, textvariable=self.fps, width=8).pack(side="left", padx=8)
-        ttk.Checkbutton(options, text="Standalone native CASU (experimental)", variable=self.native_output).pack(side="left", padx=12)
+        ttk.Checkbutton(options, text="Standalone segmented CASUNAT2", variable=self.native_output).pack(side="left", padx=12)
+        ttk.Checkbutton(options, text="Resume verified jobs", variable=self.resume_jobs).pack(side="left", padx=4)
         self.progress = ttk.Progressbar(root, mode="determinate", maximum=100.0)
         self.progress.pack(fill="x", pady=(8, 4))
         tk.Label(root, textvariable=self.status, wraplength=680, bg=BG, fg=SECONDARY, anchor="w", justify="left").pack(fill="x", pady=5)
@@ -206,7 +209,9 @@ class CASUConverter(tk.Tk):
         self.pause_button.configure(state="normal", text="Pause queue")
         self.progress.configure(value=0.0)
         self.status.set("Analyzing decoded source activity…")
-        threading.Thread(target=self._worker, args=(sources, output_dir, fps, mode, self.native_output.get()), daemon=True).start()
+        threading.Thread(target=self._worker, args=(sources, output_dir, fps, mode,
+                                                    self.native_output.get(),
+                                                    self.resume_jobs.get()), daemon=True).start()
 
     def _target_for(self, source: Path, output_dir: Path) -> Path:
         """Map a source to a deterministic output without flattening folders."""
@@ -219,52 +224,45 @@ class CASUConverter(tk.Tk):
             return (output_dir / relative).with_suffix(".casu")
         return output_dir / f"{source.stem}.casu"
 
-    def _worker(self, sources: list[Path], output_dir: Path, fps: float, mode: str, native: bool) -> None:
+    def _worker(self, sources: list[Path], output_dir: Path, fps: float, mode: str,
+                native: bool, resume: bool) -> None:
         try:
             total = len(sources)
-            results: list[dict[str, object]] = []
-            for index, source in enumerate(sources):
-                while not self._pause_event.wait(0.1):
-                    if self._cancel_event.is_set():
-                        raise CasuCancelled("conversion cancelled")
-                output = self._target_for(source, output_dir)
-                output.parent.mkdir(parents=True, exist_ok=True)
-                def report(value: float, index=index, source=source) -> None:
-                    overall = (index + max(0.0, min(1.0, value))) / total
-                    self.after(0, lambda overall=overall, source=source: (
-                        self.progress.configure(value=overall * 100.0),
-                        self.status.set(f"Converting {source.name} ({index + 1}/{total})"),
-                    ))
-                try:
-                    self.after(0, lambda source=source, index=index: self.status.set(f"Analyzing {source.name} ({index + 1}/{total})"))
-                    result = analyze(source, fps, mode, progress=report, cancel=self._cancel_event)
-                    payload = json.dumps(result, indent=2, ensure_ascii=False) + "\n"
-                    self.after(0, lambda source=source, index=index: self.status.set(f"Writing {source.name} ({index + 1}/{total})"))
-                    fd, temporary = tempfile.mkstemp(prefix=f".{output.name}.", dir=output.parent, text=True)
-                    try:
-                        if native:
-                            os.close(fd)
-                            os.unlink(temporary)
-                            write_native(output, source, result)
-                        else:
-                            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                                handle.write(payload); handle.flush(); os.fsync(handle.fileno())
-                            os.replace(temporary, output)
-                    finally:
-                        if os.path.exists(temporary): os.unlink(temporary)
-                    results.append({"source": str(source), "output": str(output), "status": "converted",
-                                    "container": "native" if native else "sidecar",
-                                    "duration_s": result["source"].get("duration_s")})
-                except CasuCancelled:
-                    raise
-                except (CasuError, NativeCasuError, OSError, ValueError) as exc:
-                    # One unsupported/corrupt file must not discard successful
-                    # conversions from the same folder job.
-                    results.append({"source": str(source), "output": str(output),
-                                    "status": "failed", "error": str(exc)})
+            profile = ConversionProfile(
+                container="native-v2" if native else "sidecar",
+                mode=mode,
+                analysis_fps=fps,
+            )
+            jobs = [ConversionJob(source, self._target_for(source, output_dir), profile)
+                    for source in sources]
+            positions = {job.source.expanduser().resolve(): index
+                         for index, job in enumerate(jobs)}
+
+            def report(job: ConversionJob, value: float) -> None:
+                index = positions[job.source.expanduser().resolve()]
+                overall = (index + max(0.0, min(1.0, value))) / total
+                self.after(0, lambda overall=overall, job=job, index=index: (
+                    self.progress.configure(value=overall * 100.0),
+                    self.status.set(
+                        f"Converting {job.source.name} ({index + 1}/{total})"
+                    ),
+                ))
+
+            engine = ConversionEngine(
+                journal=conversion_journal_path(output_dir, jobs)
+            )
+            converted_results = engine.run(
+                jobs,
+                force=True,
+                cancel=self._cancel_event,
+                pause=self._pause_event,
+                progress=report,
+                resume=resume,
+            )
+            results = [item.__dict__ for item in converted_results]
             report_path = output_dir / "casu_batch_report.json"
             report_path.write_text(json.dumps({"version": 1, "mode": mode,
-                                               "container": "native" if native else "sidecar",
+                                               "container": "native-v2" if native else "sidecar",
                                                "analysis_fps": fps, "files": results},
                                               indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
             converted = sum(item["status"] == "converted" for item in results)
@@ -274,7 +272,7 @@ class CASUConverter(tk.Tk):
             ))
         except CasuCancelled:
             self.after(0, lambda: self._done("Conversion cancelled; no incomplete CASU output was kept.", error=False, cancelled=True))
-        except (CasuError, NativeCasuError, OSError, ValueError) as exc:
+        except (CasuError, NativeCasuError, NativeV2Error, OSError, ValueError) as exc:
             self.after(0, lambda: self._done(f"Conversion failed: {exc}", error=True))
 
     def verify_output(self) -> None:
@@ -295,13 +293,16 @@ class CASUConverter(tk.Tk):
                     magic = handle.read(8)
                 if magic == b"CASUNAT1":
                     read_native(path, verify_payload=True)
+                elif magic == b"CASUNAT2":
+                    read_native_v2(path)
                 else:
                     manifest = json.loads(path.read_text(encoding="utf-8"))
                     errors = validate_manifest(manifest)
                     if errors:
                         raise ValueError(errors[0])
                 passed += 1
-            except (OSError, ValueError, json.JSONDecodeError, NativeCasuError) as exc:
+            except (OSError, ValueError, json.JSONDecodeError, NativeCasuError,
+                    NativeV2Error) as exc:
                 failures.append(f"{path.name}: {exc}")
         report = directory / "casu_verify_report.json"
         report.write_text(json.dumps({"version": 1, "checked": len(files),

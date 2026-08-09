@@ -11,6 +11,7 @@ class ChunkType(IntEnum):
     VIDEO_FORMAT_CHANGE = 18
     AUDIO_BLOCK = 32
     SUBTITLE_PACKET = 48
+    SUBTITLE_BITMAP = 49
     CHAPTER_TABLE = 64
     ATTACHMENT = 65
     RECOVERY_POINT = 224
@@ -36,4 +37,3 @@ class SeekEntry:
     key_state_pts: int
     key_state_offset: int
     first_update_offset: int
-

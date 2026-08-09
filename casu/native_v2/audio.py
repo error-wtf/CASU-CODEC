@@ -13,6 +13,9 @@ class AudioPayloadError(ValueError):
     pass
 
 
+MAX_DECODED_AUDIO_BYTES = 256 * 1024 * 1024
+
+
 @dataclass(frozen=True)
 class AudioBlock:
     pts: int
@@ -31,11 +34,13 @@ def encode_audio_block(*, pcm: bytes, pts: int, time_base_num: int, time_base_de
                        channel_layout: str | None = None, sample_count: int) -> bytes:
     values = [pcm, int(pts), int(time_base_num), int(time_base_den), int(sample_rate),
               int(channels), str(sample_format), int(sample_count)]
-    if time_base_den <= 0 or sample_rate <= 0 or channels <= 0 or sample_count < 0:
+    if time_base_num <= 0 or time_base_den <= 0 or sample_rate <= 0 or channels <= 0 or sample_count < 0:
         raise AudioPayloadError("invalid audio timing or format")
     if not isinstance(pcm, (bytes, bytearray, memoryview)):
         raise AudioPayloadError("pcm must be bytes-like")
     raw = bytes(pcm)
+    if sample_format != "s16le" or len(raw) != sample_count * channels * 2:
+        raise AudioPayloadError("PCM byte length does not match samples/channels/format")
     compressed = zlib.compress(raw, level=9)
     meta = {"pts": values[1], "time_base": [values[2], values[3]],
             "sample_rate": values[4], "channels": values[5],
@@ -54,8 +59,14 @@ def decode_audio_block(payload: bytes) -> AudioBlock:
         raise AudioPayloadError("invalid audio block metadata length")
     try:
         meta = json.loads(payload[_U32.size:_U32.size + length])
-        raw = zlib.decompress(payload[_U32.size + length:])
         num, den = (int(v) for v in meta["time_base"])
+        expected = int(meta["raw_length"])
+        if expected < 0 or expected > MAX_DECODED_AUDIO_BYTES:
+            raise AudioPayloadError("decoded audio block exceeds safety limit")
+        decoder = zlib.decompressobj()
+        raw = decoder.decompress(payload[_U32.size + length:], expected + 1)
+        if len(raw) != expected or not decoder.eof or decoder.unconsumed_tail or decoder.unused_data:
+            raise AudioPayloadError("audio block decompressed length mismatch")
         block = AudioBlock(int(meta["pts"]), num, den, int(meta["sample_rate"]),
                            int(meta["channels"]), meta.get("channel_layout"),
                            str(meta["sample_format"]), int(meta["sample_count"]), raw)
@@ -63,6 +74,9 @@ def decode_audio_block(payload: bytes) -> AudioBlock:
         raise AudioPayloadError("invalid audio block") from exc
     if len(raw) != int(meta.get("raw_length", -1)) or len(payload) != _U32.size + length + int(meta.get("compressed_length", -1)):
         raise AudioPayloadError("audio block length mismatch")
-    if block.time_base_den <= 0 or block.sample_rate <= 0 or block.channels <= 0:
+    if (block.time_base_num <= 0 or block.time_base_den <= 0 or
+            block.sample_rate <= 0 or block.channels <= 0):
         raise AudioPayloadError("invalid audio block format")
+    if block.sample_format != "s16le" or len(raw) != block.sample_count * block.channels * 2:
+        raise AudioPayloadError("audio PCM layout does not match sample metadata")
     return block

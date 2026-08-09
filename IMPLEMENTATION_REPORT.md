@@ -1,8 +1,83 @@
 # Implementation report
 
-## 2026-08-08
+## 2026-08-09
 
-### Gate 2 — Source-resolution STRICT: PARTIAL
+### Gate 2 — Source-resolution STRICT: PASS
+
+The production `analyze(..., mode="strict")` and converter path now use the
+source-resolution STRICT decoder and state builder. The reduced 160×90 Gray8
+analyzer is retained only as `preview_activity_analysis` for non-STRICT hints.
+
+Implemented and behavior-tested:
+
+- immutable padding-free active native planes with explicit layout;
+- RGB/alpha and YUV 4:2:0, 4:2:2, and 4:4:4 geometry;
+- 8/10/12/16-bit unsigned samples with fail-closed range checks;
+- relevant color metadata in canonical and tile identity;
+- rational source PTS/time-base validity bounds and decoded duration;
+- presentation-order VFR and B-frame decoding without an FPS filter;
+- coordinate/geometry/layout/metadata/active-byte tile hashes;
+- exact HOLD, one-sample UPDATE, and format-change KEY_STATE behavior;
+- unsupported layouts and non-monotonic presentation PTS fail closed.
+
+Evidence is recorded in `RELEASE_GATE_STATUS.json` and `TEST_REPORT.md`.
+This PASS closes only the STRICT gate. It does not close CASUNAT2, native
+playback, converter completion, product UI, or release gates.
+
+### Gate 2 — Native CASUNAT2 payload: PASS
+
+`casu pack-v2` and `casu convert --container native-v2` now run the same real
+source-to-native pipeline. It stores complete canonical key states, hash-linked
+plane-aware tile updates, source-time-base frame timelines and canonical s16le
+PCM blocks. The seek index contains validated file byte offsets. Generated-media
+acceptance tests remove the source, reconstruct every target video state and
+compare the concatenated PCM digest. CASUNAT1 remains a labeled compatibility
+envelope.
+
+### Gate 4 — Native player path: PARTIAL
+
+`NativeCasuBackend` is independent from `LibVLCBackend`. It reconstructs video
+from CASUNAT2 byte-indexed states, schedules video and PCM from measured
+PulseAudio sink latency when available with a monotonic video-only fallback,
+invalidates pending output transactionally on seek, trims an overlapping PCM
+block to the seek sample, flushes audio on pause/stop/close, presents RGB frames
+in the MPCASU canvas and writes s16le through libpulse-simple. Instrumented
+tests prove frame/audio/subtitle delivery and make any tempfile creation fail.
+The backend rejects non-1.0 native audio rates because no resampler has been
+implemented. Real-device long-duration drift evidence and the device matrix
+remain open.
+
+### Gate 3 — Integrity, recovery and hostile-input safety: PASS
+
+The main reader is streaming and enforces file/manifest/chunk/count budgets.
+Key/tile/audio decompression is constrained to exact metadata-derived output
+lengths. Integrity/footer/order/offset checks and declared-prefix recovery fail
+closed. A deterministic 10,000-mutation campaign completed with zero unexpected
+accepts, crashes or hangs; exact evidence is in `FUZZ_REPORT.md`.
+
+### Gate 5 — Media/converter product core: PARTIAL
+
+CLI and GUI share `ConversionEngine`, profiles and jobs with real progress,
+fail-closed cancellation, per-file failure isolation, CLI retry and an atomic
+machine-readable journal/report. CLI and GUI can resume only outputs whose
+size and SHA-256 still match the exact prior job/profile list. Independent
+batches in one directory receive deterministic distinct journal identifiers.
+Immutable backend-neutral track/chapter/device/event models and a transactional
+SQLite library (scan, resume, favorites, playlists) is behavior-tested.
+Attached cover pictures now convert to bounded hashed PNG attachments, remain
+audio-only in stream selection, survive source deletion and display in both the
+native audio canvas and library thumbnail path. ASS/SSA styling renders through
+bounded libass RGBA with a text fallback. An authorized real PGS fixture converts
+through FFmpeg's bitmap subtitle-video boundary to typed, hashed, alpha-bounded
+RGBA regions, survives source deletion, and renders correctly after seeking into
+an active cue. DVD/DVB/XSub fixtures and the full runtime matrix remain open.
+Bounded source-stat-versioned thumbnails, watched-folder
+rescans, SQLite library search and per-media track/audio-delay/subtitle-delay
+preferences are wired into the UI.
+
+## 2026-08-08 (previous state)
+
+### Gate 2 — Source-resolution STRICT: PARTIAL (superseded by 2026-08-09 evidence)
 
 Implemented `casu.strict` with:
 
@@ -27,7 +102,7 @@ hint and is not used as proof of STRICT identity.
 
 No 1.0 release claim is made while this gate is PARTIAL.
 
-### Gate 1 — Native CASUNAT2 payload: PARTIAL
+### Gate 1 — Native CASUNAT2 payload: PARTIAL (superseded by 2026-08-09 PASS)
 
 Implemented `casu.native_v2` as a standalone deterministic binary container
 primitive with typed chunks, atomic writing, key-state/update byte offsets,
@@ -44,7 +119,7 @@ media.
 Lossless timestamped CASUNAT2 audio blocks are now implemented with explicit
 sample rate, channel layout, sample format, sample count and PTS metadata.
 
-### Gate 6 — Integrity/recovery/resource limits: PARTIAL
+### Gate 6 — Integrity/recovery/resource limits: PARTIAL (superseded by 2026-08-09 PASS)
 
 CASUNAT2 now writes periodic recovery-point chunks and the reader enforces
 manifest, chunk-count, chunk-size and total-file limits while validating

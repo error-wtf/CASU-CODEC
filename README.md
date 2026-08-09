@@ -6,9 +6,9 @@ See [`LICENSE`](LICENSE). Third-party components retain their own licenses.
 
 **CASU** means **Codec for All Segmented Units** in this project. “Casu” also
 preserves the author's surname and is the `.casu` container/sidecar identity.
-CASU is a conservative, legacy-compatible segmented-state codec/container, not
-a replacement for the original MP4/MP3 stream. **MPCASU** is reserved for the
-future VLC-/Winamp-inspired media player built on CASU.
+CASU is a conservative segmented-state codec/container project. **MPCASU** is
+its media player. This repository is currently a release candidate under active
+gate development; it is not a finished native 1.0 product.
 
 The core abstraction is:
 
@@ -19,38 +19,49 @@ The core abstraction is:
 rather than treating a media stream as only `Frame + Frame + Frame`. The
 legacy decoded stream remains authoritative; CASU records where a state holds,
 what changed and which source timestamps govern presentation.
-It accepts ordinary MP4 and MP3 files, keeps the original media as the source of
-truth, and adds an optional temporal-state sidecar for future schedulers,
-compositors and segmented displays.
+It accepts ordinary media through established decoder infrastructure. The
+legacy sidecar and CASUNAT1 compatibility paths keep the original media as the
+source of truth. CASUNAT2 is the standalone segmented-container path: its
+key states, exact tile updates, source PTS and canonical PCM survive deletion
+of the input. CASUNAT1 is never presented as a substitute for it.
 
 This repository is a new implementation informed by the supplied SSC briefs.
 The original prototype is preserved unchanged as
 [`legacy_ssc_codec_v01.py`](legacy_ssc_codec_v01.py); the reference documents
 are copied into `docs/` for provenance and are not modified.
 
-## First working slice
+## Current command-line slice
 
 ```bash
 python3 -m pip install -e .
 casu analyze /path/to/movie.mp4
 casu analyze /path/to/song.mp3
 casu convert /path/to/movie.mp4 --output movie.casu
+casu pack-v2 /path/to/movie.mkv --output movie.casu
+casu convert /path/to/movie.mkv --container native-v2 --output movie.casu
+casu convert /path/to/folder --container native-v2 --output /path/to/output --retry 1 --resume
 casu benchmark /path/to/movie.mp4 --output benchmark.json
-casu play /path/to/movie.mp4
-casu play /path/to/song.mp3
-casu play movie.casu
-casu validate movie.casu
-casu validate --verify-source movie.casu
+casu verify movie.casu
+casu info movie.casu
 ```
 
-Conversion supports three explicit analysis policies:
-`--mode strict` (the reference/default policy), `--mode visually_lossless`, and
-`--mode adaptive`. All three remain advisory state analyses; only `strict`
-is suitable for reference comparisons, and none permits a decoder to alter
-source timestamps or claim pixel identity without a separate comparison.
+Conversion supports three explicit policies. `--mode strict` uses the real
+source-resolution decoder and exact native-plane tile identity with rational
+source PTS. It has no FPS filter, downscale, threshold, SSIM, or hidden color
+conversion. `--mode visually_lossless` and `--mode adaptive` still use the
+separate reduced activity-preview analyzer and are experimental hints; they do
+not provide STRICT fidelity.
 
-The `mpc` command remains a compatibility alias while the future MPCASU player
-is developed separately.
+STRICT prefers the optional library-level PyAV/libav adapter when installed
+(`pip install 'casu-codec[libav]'`) and otherwise uses the tested FFmpeg CLI
+adapter. Both adapters preserve active native planes and decoded presentation
+PTS; neither uses an FPS filter. The fallback remains supported for minimal
+distribution packages while the library adapter gains wider platform coverage.
+FFprobe inventories run through a shared monitored runner with explicit output
+and time budgets; decoded STRICT frames also have dimension and byte ceilings.
+
+The `mpc` command remains a CLI compatibility alias. Playback belongs to the
+separate `mpcasu` application.
 
 Launch the first MPCASU player prototype:
 
@@ -58,11 +69,41 @@ Launch the first MPCASU player prototype:
 mpcasu /path/to/movie.mp4
 ```
 
-It provides a library list, play/pause/stop, seek controls, CASU sidecar
-detection and a safe legacy fallback. Decoding runs through the in-process
-libVLC shared-library backend; no external player executable is launched.
+MPCASU has two explicit playback paths. Ordinary media, URLs, sidecars and the
+CASUNAT1 compatibility envelope use the installed libVLC shared library in
+process. There is no extension allow-list: if the installed libVLC build and
+its modules can open a source, MPCASU passes it through. Exact codec support is
+therefore a runtime fact, not a hard-coded marketing list. CASUNAT2 uses the
+independent `NativeCasuBackend`: it seeks to byte-indexed key states, applies
+tile dependencies, presents reconstructed frames to the Tk video sink and
+writes s16le blocks directly through libpulse-simple. It neither inherits the
+libVLC backend nor creates a temporary MP4. Full subtitle/chapter/device models,
+SQLite scan/resume/favorites/playlists now exist as a tested shared core;
+atomic playback settings and dynamic track/output/chapter menus are also implemented.
+Library search and watched-folder rescans are wired to the persistent SQLite
+core. Per-media audio/video/subtitle selections and audio/subtitle delays are
+persisted and restored. Source-stat-versioned thumbnails decode asynchronously
+through FFmpeg. Attached pictures are normalized into bounded, hashed CASUNAT2
+`cover-art` attachments, displayed by the native audio player and reused by the
+library after the source is deleted. Bounded container/stream tags and complete
+demuxer dispositions are retained in the standalone manifest. ASS/SSA sources
+retain their bounded, hashed stylesheet/dialogue payload and the native player
+renders it through system libass into a transparent RGBA overlay; a plain-text
+fallback remains when libass rejects a document. Bounded embedded TTF/OTF/font
+attachments are registered with the same renderer before font selection.
+PGS bitmap subtitles convert to bounded, hashed RGBA regions and remain
+selectable/seekable native subtitle overlays; DVD/DVB/XSub use the same code
+path but still need a broader fixture matrix. Hardware A/V
+drift evidence and release
+playback matrices remain open gates.
+Native PCM timing uses measured PulseAudio sink latency when available and a
+monotonic fallback otherwise. Native audio deliberately remains 1.0× until a
+real resampler is implemented; rate changes are not faked by retiming video.
 
-The same converter is also available as a small Tk interface:
+The same atomic, journaled job engine is also available through a small Tk
+interface. It supports recursive queues, pause/cancel, per-file failure
+isolation, hash-verified journal resume, verification and machine-readable
+batch reports:
 
 ```bash
 casu-converter
@@ -75,11 +116,10 @@ film.casu → CASU codec/container → MPCASU player → audio/video output
 legacy MP4/MP3/MKV ───────────────────────────────→ MPCASU fallback
 ```
 
-The CLI `play` command validates a path for MPCASU but does not launch an
-external player. MPCASU does not transcode, retimestamp, stretch, or otherwise
-modify the input. If a sidecar is missing or invalid, safe fallback is explicit.
-`analyze` decodes a small inspection stream and writes
-`movie.mp4.casu` or `song.mp3.casu`.
+The CLI `play` command intentionally rejects external playback and directs the
+user to MPCASU. `analyze --mode strict` decodes active samples at source
+resolution and writes a rational-PTS tile state map. Non-STRICT modes use the
+explicitly labelled activity preview. Neither path retimestamps the source.
 
 ## Compatibility contract
 
@@ -89,14 +129,16 @@ modify the input. If a sidecar is missing or invalid, safe fallback is explicit.
   colour/HDR changes are performed by this first slice.
 - Uncertainty falls back to the full-fidelity legacy path.
 - A sidecar is optional and can be deleted without making the media unplayable.
+- A CASUNAT2 file is standalone; acceptance tests delete its source and then
+  reproduce every video digest and the complete canonical PCM digest.
 
-The current analyzer uses decoded luma activity for video and decoded PCM RMS
-windows for audio. These are conservative temporal hints, not perceptual truth
-and not a replacement for the source timestamps. Each segment records
-`start_s`, `end_s`, `valid_until_s`, `deadline_s`, `priority` and `change_type`,
-so a future scheduler has explicit timing data and never has to infer a
-deadline from a frame rate. `casu validate --verify-source` additionally
-resolves the recorded media and checks its SHA-256 digest.
+STRICT video canonicalizes padding-free active RGB/YUV/alpha planes, preserves
+8/10/12/16-bit samples and relevant color metadata, and records exact
+`pts/time_base` validity bounds. A tile is `HOLD` only when its complete
+canonical identity is byte-identical; stream start and format changes produce
+`KEY_STATE`. The reduced 160×90 Gray8 video analyzer and decoded PCM RMS audio
+analyzer are activity hints only. `casu validate --verify-source` additionally
+resolves legacy sidecar media and checks its SHA-256 digest.
 
 ## Test media
 
@@ -116,14 +158,17 @@ reproducible rather than silently committed. The bundled fixtures have checked
 SHA-256 values in [`test_media/README.md`](test_media/README.md), and their
 portable CASU manifests are generated by the same converter used in production.
 
-## Roadmap
+## Gate roadmap
 
-1. Timestamp-aware frame inventory and strict pixel-identical tile detection.
-2. Tile state maps with HOLD/ADAPTIVE/REALTIME/LOSSLESS_REALTIME classes.
-3. Seek-safe cache invalidation and full-frame fallback.
-4. Reference-vs-segmented playback comparison and A/V-sync reports.
-5. Optional visual state-display report; no native proprietary bitstream until
-   the legacy path is independently validated.
+The binding implementation order is documented in
+[`ROADMAP_60_STEPS.md`](ROADMAP_60_STEPS.md). The short form is:
+
+1. source-resolution STRICT;
+2. standalone CASUNAT2 payload and byte-offset seek;
+3. integrity, recovery, limits, and fuzzing;
+4. native CASU playback without legacy extraction;
+5. converter engine, media management, library/settings, responsive UI;
+6. full playback/build/package regression before a stable 1.0 claim.
 
 See [`docs/FORMAT_SPEC.md`](docs/FORMAT_SPEC.md),
 [`docs/CASU_FORMAT_SPEC.md`](docs/CASU_FORMAT_SPEC.md),
@@ -132,11 +177,26 @@ See [`docs/FORMAT_SPEC.md`](docs/FORMAT_SPEC.md),
 [`docs/PLAYER_PROVENANCE.md`](docs/PLAYER_PROVENANCE.md),
 [`docs/LEGACY_MEDIA_REQUIREMENTS.md`](docs/LEGACY_MEDIA_REQUIREMENTS.md) and
 [`docs/DEVELOPMENT_PATH.md`](docs/DEVELOPMENT_PATH.md).
-Release details are in [`RELEASE_NOTES_v1.0.0.md`](RELEASE_NOTES_v1.0.0.md).
+Historical release-note drafts are not release evidence. Current evidence is
+recorded in `RELEASE_GATE_STATUS.json`, `IMPLEMENTATION_REPORT.md`, and
+`TEST_REPORT.md`.
+
+## Upstream foundations and research boundary
+
+Legacy playback follows the public [VLC/libVLC](https://github.com/videolan/vlc)
+embedding model and its [media-player API](https://videolan.videolan.me/vlc/master/group__libvlc__media__player.html).
+Source probing/decoding follows [FFmpeg's timestamp rules](https://ffmpeg.org/ffmpeg.html)
+and deliberately avoids output `-r`/FPS filters in STRICT. The supplied
+[Webamp embed](https://github.com/error-wtf/webamp-embed),
+[MP3 codec](https://github.com/ggrandes-clones/mp3_codec),
+[LAME](https://github.com/lameproject/lame), and
+[libde265](https://github.com/strukturag/libde265) repositories were treated as
+architectural/licensing research, not copied into CASU. Their licenses remain
+independent; CASU does not claim their implementations as its own.
 
 ## Status
 
-`CASU 1.0.0 · LEGACY PLAYBACK, CONVERSION AND ANALYSIS SLICE · REVIEW OPEN`
+`CASU 1.0.0rc8 · DEVELOPMENT / RELEASE CANDIDATE · GATES OPEN`
 
 This is a media-systems experiment. A passing analyzer test is not evidence of
 display-power savings or a physical claim about human perception.

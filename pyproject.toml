@@ -8,8 +8,13 @@ build-backend = "setuptools.build_meta"
 name = "casu-codec"
 version = "1.0.0rc8"
 description = "CASU (Codec for All Segmented Units): legacy-compatible segmented-state codec/container for MP4 and MP3"
+readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+libav = ["av>=14"]
 
 [project.scripts]
 casu = "casu.cli:main"
@@ -21,7 +26,7 @@ mpcasu = "mpcasu_player:main"
 include = ["casu*"]
 
 [tool.setuptools]
-py-modules = ["mpcasu_player", "mpcasu_backend", "mpcasu_playback", "casu_converter"]
+py-modules = ["mpcasu_player", "mpcasu_backend", "mpcasu_native_backend", "mpcasu_playback", "casu_converter"]
 
 [tool.setuptools.data-files]
 "share/casu-codec/assets" = [
@@ -33,6 +38,18 @@ py-modules = ["mpcasu_player", "mpcasu_backend", "mpcasu_playback", "casu_conver
   "assets/mpcasu_player_logo.png",
   "assets/mpcasu_player_logo_header.png",
   "assets/mpcasu_player_mockup.png",
+]
+"share/doc/casu-codec" = [
+  "README.md",
+  "CASU_FORMAT_SPECIFICATION.md",
+  "ROADMAP_60_STEPS.md",
+  "RELEASE_GATE_STATUS.json",
+  "THIRD_PARTY_COMPONENTS.md",
+  "SOURCE_PROVENANCE.md",
+  "BUNDLED_CODEC_MATRIX.md",
+]
+"share/doc/casu-codec/THIRD_PARTY_LICENSES" = [
+  "THIRD_PARTY_LICENSES/README.md",
 ]
 
 [tool.pytest.ini_options]

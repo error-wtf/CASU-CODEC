@@ -8,13 +8,31 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from casu.strict.canonical import CanonicalFrame, canonical_frame
+from casu.strict.canonical import CanonicalFrame, PlaneLayout, canonical_frame
+from casu.strict.tiles import canonical_tile_hash
 
 _U32 = struct.Struct(">I")
 
 
 class VideoPayloadError(ValueError):
     pass
+
+
+MAX_DECODED_PLANE_BYTES = 512 * 1024 * 1024
+
+
+def _decompress_exact(compressed: bytes, expected: int) -> bytes:
+    if expected < 0 or expected > MAX_DECODED_PLANE_BYTES:
+        raise VideoPayloadError("decoded video plane exceeds safety limit")
+    decoder = zlib.decompressobj()
+    try:
+        raw = decoder.decompress(compressed, expected + 1)
+    except zlib.error as exc:
+        raise VideoPayloadError("invalid compressed video plane") from exc
+    if (len(raw) != expected or not decoder.eof or decoder.unconsumed_tail
+            or decoder.unused_data):
+        raise VideoPayloadError("decoded plane length mismatch")
+    return raw
 
 
 def _meta(frame: CanonicalFrame) -> dict:
@@ -68,32 +86,48 @@ def decode_key_state(payload: bytes) -> CanonicalFrame:
     meta, blobs = _unpack(payload)
     planes = []
     for descriptor, compressed in zip(meta["planes"], blobs):
-        raw = zlib.decompress(compressed)
-        if len(raw) != int(descriptor["raw_length"]):
-            raise VideoPayloadError("decoded plane length mismatch")
         shape = tuple(int(value) for value in descriptor["shape"])
-        array = np.frombuffer(raw, dtype=np.dtype(descriptor["dtype"])).reshape(shape).copy()
+        if len(shape) != 2 or any(value <= 0 for value in shape):
+            raise VideoPayloadError("invalid decoded plane shape")
+        dtype = np.dtype(descriptor["dtype"])
+        if dtype.kind != "u" or dtype.itemsize not in (1, 2):
+            raise VideoPayloadError("invalid decoded plane dtype")
+        expected = int(np.prod(shape, dtype=np.int64)) * dtype.itemsize
+        if expected != int(descriptor["raw_length"]):
+            raise VideoPayloadError("video plane metadata length mismatch")
+        raw = _decompress_exact(compressed, expected)
+        array = np.frombuffer(raw, dtype=dtype).reshape(shape).copy()
         planes.append(array)
     return canonical_frame(tuple(planes), pixel_format=str(meta["pixel_format"]),
                            source_shape=tuple(meta["source_shape"]),
                            color_metadata=meta.get("color_metadata", {}))
 
 
-def _slice(plane: np.ndarray, frame: CanonicalFrame, x: int, y: int, w: int, h: int):
-    ph, pw = plane.shape[:2]
-    sh, sw = frame.shape
-    x0, y0 = (x * pw) // sw, (y * ph) // sh
-    x1 = max(x0 + 1, ((x + w) * pw + sw - 1) // sw)
-    y1 = max(y0 + 1, ((y + h) * ph + sh - 1) // sh)
-    return plane[y0:min(y1, ph), x0:min(x1, pw)]
+def _bounds(layout: PlaneLayout, x: int, y: int, w: int, h: int):
+    x0 = (x >> layout.subsample_x) * layout.components
+    y0 = y >> layout.subsample_y
+    x1 = ((x + w + (1 << layout.subsample_x) - 1) >> layout.subsample_x) * layout.components
+    y1 = (y + h + (1 << layout.subsample_y) - 1) >> layout.subsample_y
+    return x0, y0, x1, y1
 
 
-def encode_tile_update(frame: CanonicalFrame, *, x: int, y: int, width: int, height: int) -> bytes:
+def _slice(plane: np.ndarray, layout: PlaneLayout, x: int, y: int, w: int, h: int):
+    x0, y0, x1, y1 = _bounds(layout, x, y, w, h)
+    return plane[y0:min(y1, plane.shape[0]), x0:min(x1, plane.shape[1])]
+
+
+def encode_tile_update(frame: CanonicalFrame, *, x: int, y: int, width: int, height: int,
+                       base_state_hash: str | None = None,
+                       new_state_hash: str | None = None) -> bytes:
     if min(x, y) < 0 or min(width, height) <= 0 or x + width > frame.shape[1] or y + height > frame.shape[0]:
         raise VideoPayloadError("tile is outside source frame")
-    parts = [_slice(plane, frame, x, y, width, height) for plane in frame.planes]
+    region = (x, y, width, height)
+    parts = [_slice(plane, layout, *region)
+             for plane, layout in zip(frame.planes, frame.plane_layouts)]
     meta = {"pixel_format": frame.pixel_format, "source_shape": list(frame.shape),
             "color_metadata": dict(frame.color_metadata), "region": [x, y, width, height],
+            "base_state_hash": base_state_hash,
+            "new_state_hash": new_state_hash or canonical_tile_hash(frame, region),
             "planes": [{"shape": list(part.shape), "dtype": str(part.dtype)} for part in parts]}
     blobs = []
     for index, part in enumerate(parts):
@@ -120,21 +154,32 @@ class TileStateCache:
         if tuple(meta["source_shape"]) != self.frame.shape or meta["pixel_format"] != self.frame.pixel_format:
             raise VideoPayloadError("tile update format differs from cached key state")
         x, y, width, height = (int(value) for value in meta["region"])
+        region = (x, y, width, height)
+        expected_base = meta.get("base_state_hash")
+        if expected_base is not None and canonical_tile_hash(self.frame, region) != expected_base:
+            raise VideoPayloadError("tile update base state hash mismatch")
         planes = [plane.copy() for plane in self.frame.planes]
         for index, (descriptor, compressed) in enumerate(zip(meta["planes"], blobs)):
-            raw = zlib.decompress(compressed)
             shape = tuple(int(value) for value in descriptor["shape"])
-            tile = np.frombuffer(raw, dtype=np.dtype(descriptor["dtype"])).reshape(shape)
+            dtype = np.dtype(descriptor["dtype"])
+            if len(shape) != 2 or any(value <= 0 for value in shape):
+                raise VideoPayloadError("invalid tile plane shape")
+            expected = int(np.prod(shape, dtype=np.int64)) * dtype.itemsize
+            if dtype.kind != "u" or dtype.itemsize not in (1, 2) or expected != int(descriptor["raw_length"]):
+                raise VideoPayloadError("invalid tile plane layout")
+            raw = _decompress_exact(compressed, expected)
+            tile = np.frombuffer(raw, dtype=dtype).reshape(shape)
             target = planes[index]
-            ph, pw = target.shape[:2]
-            sh, sw = self.frame.shape
-            x0, y0 = (x * pw) // sw, (y * ph) // sh
-            x1 = max(x0 + 1, ((x + width) * pw + sw - 1) // sw)
-            y1 = max(y0 + 1, ((y + height) * ph + sh - 1) // sh)
-            if tile.shape != target[y0:min(y1, ph), x0:min(x1, pw)].shape:
+            layout = self.frame.plane_layouts[index]
+            x0, y0, x1, y1 = _bounds(layout, x, y, width, height)
+            view = target[y0:min(y1, target.shape[0]), x0:min(x1, target.shape[1])]
+            if tile.shape != view.shape:
                 raise VideoPayloadError("tile plane shape mismatch")
-            target[y0:min(y1, ph), x0:min(x1, pw)] = tile
+            view[:] = tile
         self.frame = canonical_frame(tuple(planes), pixel_format=self.frame.pixel_format,
                                      source_shape=self.frame.shape,
                                      color_metadata=dict(self.frame.color_metadata))
+        expected_new = meta.get("new_state_hash")
+        if not isinstance(expected_new, str) or canonical_tile_hash(self.frame, region) != expected_new:
+            raise VideoPayloadError("tile update new state hash mismatch")
         return self.frame

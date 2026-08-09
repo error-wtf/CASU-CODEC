@@ -32,7 +32,12 @@ EOF
 
 install_codec() {
   local stage="$1"; mkdir -p "$stage/usr/share/casu-codec" "$stage/usr/bin" "$stage/usr/share/icons/hicolor/256x256/apps"
-  cp -a "$root/casu" "$root/LICENSE" "$root/CASU_FORMAT_SPECIFICATION.md" "$root/docs" "$root/assets" "$stage/usr/share/casu-codec/"
+  cp -a "$root/casu" "$root/LICENSE" "$root/README.md" \
+    "$root/CASU_FORMAT_SPECIFICATION.md" "$root/ROADMAP_60_STEPS.md" \
+    "$root/RELEASE_GATE_STATUS.json" "$root/THIRD_PARTY_COMPONENTS.md" \
+    "$root/SOURCE_PROVENANCE.md" "$root/BUNDLED_CODEC_MATRIX.md" \
+    "$root/THIRD_PARTY_LICENSES" "$root/docs" "$root/assets" \
+    "$stage/usr/share/casu-codec/"
   cp "$root/assets/casu_codec_icon.png" "$stage/usr/share/icons/hicolor/256x256/apps/casu-codec.png"
   cat > "$stage/usr/bin/casu" <<'EOF'
 #!/bin/sh
@@ -55,7 +60,7 @@ EOF
 }
 install_player() {
   local stage="$1"; mkdir -p "$stage/usr/share/casu-codec" "$stage/usr/bin" "$stage/usr/share/applications" "$stage/usr/share/icons/hicolor/256x256/apps"
-  cp "$root/mpcasu_player.py" "$root/mpcasu_backend.py" "$root/mpcasu_playback.py" "$root/MPCASU_IMPLEMENTATION_AUDIT.md" "$root/MPCASU_FEATURE_COMPLETION_MATRIX.md" "$stage/usr/share/casu-codec/"
+  cp "$root/mpcasu_player.py" "$root/mpcasu_backend.py" "$root/mpcasu_native_backend.py" "$root/mpcasu_playback.py" "$root/MPCASU_IMPLEMENTATION_AUDIT.md" "$root/MPCASU_FEATURE_COMPLETION_MATRIX.md" "$stage/usr/share/casu-codec/"
   cp "$root/packaging/mpcasu.desktop" "$stage/usr/share/applications/mpcasu.desktop"
   cp "$root/assets/mpcasu_player_icon.png" "$stage/usr/share/icons/hicolor/256x256/apps/mpcasu-player.png"
   cat > "$stage/usr/bin/mpcasu" <<'EOF'
@@ -68,6 +73,7 @@ EOF
 
 make_pkg casu-codec "CASU Codec for All Segmented Units" "python3 (>= 3.10), python3-numpy, ffmpeg" install_codec
 make_pkg casu-converter "CASU graphical media converter" "casu-codec (= $version), python3-tk" install_converter
-make_pkg mpcasu "MPCASU CASU and legacy media player" "casu-codec (= $version), python3-tk, libvlc5" install_player
-sha256sum "$out"/*.deb > "$out/SHA256SUMS"
+make_pkg mpcasu "MPCASU CASU and legacy media player" "casu-codec (= $version), python3-tk, libvlc5, vlc-plugin-base, vlc-plugin-video-output, libpulse0, libass9" install_player
+cd "$out"
+sha256sum ./*.deb | sed 's# \./# #' > SHA256SUMS
 printf 'Built CASU/MPCASU Debian packages version %s in %s\n' "$version" "$out"

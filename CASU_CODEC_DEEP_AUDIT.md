@@ -1,95 +1,52 @@
-# CASU codec deep audit — 2026-08-08
+# CASU codec deep audit — updated 2026-08-09
 
-The authoritative release gates are maintained in
-[`RELEASE_POLICY.md`](RELEASE_POLICY.md).
+The authoritative live result is [`RELEASE_GATE_STATUS.json`](RELEASE_GATE_STATUS.json).
+This audit distinguishes proved behavior from the remaining product gates.
 
-## Executive result
+## Current result
 
-The repository currently contains a careful **legacy sidecar analyzer** and
-some standalone tile-comparison primitives. It does not yet contain a codec or
-container runtime. Calling the current output a native CASU file would be
-incorrect.
+CASU now contains a real standalone native codec/container path. CASUNAT2 is
+not CASUNAT1 renamed: it stores complete source-resolution canonical video key
+states, exact hash-linked tile changes, source-timestamp timelines, canonical
+PCM audio, a byte-offset seek index, recovery points and an integrity footer.
+CASUNAT1 remains a compatibility envelope and JSON `.casu` remains a sidecar.
 
-## Capability matrix
-
-| Area | Status | Evidence |
+| Area | Status | Evidence / boundary |
 |---|---|---|
-| Versioned format | PARTIAL | JSON identity uses `MPCASU\\0`, schema `0.2`, package version `1.0.0`; no native binary format version negotiation. |
-| Native reader/writer | PARTIAL | `casu.native` now provides a versioned lossless envelope reader/writer with header, manifest/payload hashes and atomic output; segmented payload chunks and playback are still absent. |
-| Standalone media | PARTIAL | Native envelope files embed original bytes; legacy JSON sidecars still depend on the original MP4/MP3 path. |
-| Video codec preservation | MISSING | FFmpeg only emits reduced grayscale analysis frames; no video payload is encoded or copied into CASU. |
-| Audio codec preservation | MISSING | Audio is downmixed to mono float PCM for RMS hints; no audio payload or channel-preserving stream exists. |
-| Subtitle/chapter/attachment preservation | MISSING | Probe metadata is not written as native stream payloads; tags, chapters, fonts, cover art and attachments are lost. |
-| Exact strict identity | MISSING in runtime | `casu.tiles` can compare canonical uint8 arrays exactly, but the production analyzer still uses 160×90 grayscale previews and never calls the tile engine. |
-| Spatial state map | PARTIAL+ | `analyze_video` now persists a compact per-tile `S(x,y,t)` interval map for the decoded gray8 analysis plane; source-resolution PTS/payload integration remains absent. |
-| Temporal truth | PARTIAL | Source duration is retained, but sampled frame intervals use requested analysis FPS rather than every source PTS/VFR timestamp. |
-| Tile lifecycle | PARTIAL | Primitive records contain lifecycle/hash/region fields; scheduler consumes only global time intervals and ignores tile dependencies. |
-| Key states | MISSING | `native_key_states` is explicitly `False`; no reconstruction checkpoints exist. |
-| Seek index | PARTIAL | Sidecar segment-boundary hints exist; no byte offsets, key-state references or native random access. |
-| Recovery | MISSING | No truncation recovery, journal, footer recovery or damaged-segment continuation. |
-| Integrity | PARTIAL | Source size/SHA-256 and schema validation exist; no per-payload, index, segment checksum or signature. |
-| Determinism | PARTIAL | State IDs and JSON output are stable in normal runs, but analysis depends on FFmpeg build/filter behavior and absolute source paths. |
-| Scheduler/cache | PARTIAL | Indexed global interval lookup exists; no bounded tile cache, dependency graph, invalidation, release or deadline execution. |
-| Safety limits | PARTIAL | Manifest bounds exist; decoded frame count, dimensions, duration, memory, output size and CPU/time budgets are not bounded. |
-| API/library use | PARTIAL | Python functions are usable by CLI/tests; no stable public reader/writer/stream API. |
-| Round-trip tests | MISSING | No native `source → CASU → decode` test can run because no native payload exists. |
+| STRICT canonical video | PASS | RGB/YUV/alpha, 8/10/12/16-bit active planes, color metadata, VFR/B-frame presentation PTS and exact tile identity are media-tested. |
+| CASUNAT2 reader/writer | PASS | Versioned typed chunks, atomic writer, verified byte offsets, integrity footer and bounded parsing. |
+| Standalone video | PASS | Tests delete the source and reproduce every canonical frame digest. |
+| Standalone audio | PASS | Timestamped s16le blocks reproduce the complete canonical PCM digest after source deletion. |
+| Key states/tile dependencies | PASS | Start/interval keys plus base/new tile hashes; invalid dependencies fail closed. |
+| Random access | PASS | Reader seeks to the nearest indexed on-disk key-state offset and reconstructs through target PTS. |
+| Subtitle/chapter primitives | PARTIAL matrix | Text and ASS/SSA+fonts render natively; typed alpha-bounded PGS RGBA conversion/playback/seek passes. DVD/DVB/XSub fixtures remain. |
+| Attachments/full metadata | PASS reference path | Bounded hashed files and attached covers survive source deletion; bounded tags and complete dispositions are retained. |
+| Recovery/integrity | PASS bounded campaign | SHA-256, declared-prefix recovery, hostile limits and the deterministic 10,000-case campaign pass; larger fuzzing remains ongoing work. |
+| Native playback | PARTIAL | Direct video/PCM sinks and no-tempfile behavior pass; drift/device/subtitle matrices remain open. |
+| Stable release | OPEN | Version remains `1.0.0rc8` until every product gate passes. |
 
-## Concrete correctness gaps
-
-1. `analyze_video` still creates activity hints from a reduced grayscale stream;
-   its new state map is exact only for that analysis plane, and `strict` is
-   explicitly not a source-resolution identity proof.
-2. `casu.tiles` accepts only canonical `uint8` arrays. Real media may use
-   YUV planes, 10/12-bit samples, HDR transfer functions and pixel-aspect
-   metadata; canonicalization for those formats is undefined.
-3. The tile state map is persisted in the manifest and converter output, but is
-   not yet consumed by `CasuScheduler`, `CasuBackend` or a native renderer.
-4. State timestamps are derived from analysis cadence, not decoded PTS/DTS;
-   variable-frame-rate and decoder-reorder behavior are therefore not modeled.
-5. Segment validation checks ordering/overlap but not coverage, region bounds
-   against stream dimensions, hash encoding, dependency validity or state-map
-   continuity.
-6. Audio analysis decodes only the first audio stream and downmixes it to mono;
-   this cannot preserve multilingual, multichannel or bit-perfect audio.
-7. The manifest stores only a limited stream-field subset and drops most
-   metadata, chapters, subtitles, attachments and artwork.
-8. `resolve_casu_source` verifies the external source but cannot verify a
-   CASU payload because none exists.
-9. The claimed package version `1.0.0` describes the sidecar compatibility
-   release, not a native codec release. Native CASU should have an explicit
-   format version and separate release gate.
-
-## Required native architecture
+## Implemented native architecture
 
 ```text
-CASU header/version
-  ├─ stream table (video/audio/subtitle/attachments)
-  ├─ canonical timing table (source PTS/time-base)
-  ├─ key-state chunks
-  ├─ tile state/delta chunks
-  ├─ payload chunks
-  ├─ seek index (byte offsets + state references)
-  ├─ integrity table/signatures
-  └─ footer/recovery journal
+CASUNAT2 header + bounded manifest
+  ├─ stream descriptors and rational frame timelines
+  ├─ lossless VIDEO_KEY_STATE chunks
+  ├─ hash-linked VIDEO_TILE_UPDATE chunks
+  ├─ timestamped AUDIO_BLOCK PCM chunks
+  ├─ subtitle/chapter payload primitives
+  ├─ writer-declared recovery points
+  ├─ validated byte-offset seek index
+  ├─ SHA-256 integrity table
+  └─ END marker
 ```
 
-The reader must reconstruct a requested timestamp from the nearest key state
-and validated tile dependencies. The writer must reject unsupported fidelity
-claims rather than silently down-convert source data.
+## Remaining blockers
 
-## Codec release gates
+1. Complete the DVD/DVB/XSub subtitle and device/platform matrix; the shared
+   typed bitmap renderer already passes real PGS.
+2. Expand the bounded probe/parser campaign with larger decoder/network corpora.
+3. Long-running A/V drift, rapid-seek and real audio-device matrix.
+4. Complete the responsive UI and clean cross-platform package/runtime
+   regression before stable 1.0.
 
-CASU is not complete until all gates pass:
-
-1. Canonicalization tests for 8-bit, 10-bit, planar YUV, alpha and HDR metadata.
-2. Exact strict tile comparison integrated into decoded PTS-aware analysis.
-3. Persisted `S(x,y,t)` state map with hashes, dependencies and key states.
-4. Native binary reader/writer with standalone payload and random seek.
-5. Per-stream audio/subtitle/chapter/attachment preservation.
-6. Per-chunk/index/source integrity and damaged-file recovery tests.
-7. Native round-trip tests comparing timing, frame/audio samples and metadata.
-8. Fuzz tests and hard resource limits for malformed native files.
-
-Until then, the honest product name is **CASU legacy sidecar/state-analysis
-prototype**. The existing safety and validation work is useful foundation, but
-it does not constitute codec completion.
+The complete ordered work is in [`ROADMAP_60_STEPS.md`](ROADMAP_60_STEPS.md).

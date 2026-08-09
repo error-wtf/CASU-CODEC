@@ -43,7 +43,6 @@ def write_native_v2(path: str | Path, manifest: dict, chunks: Iterable[NativeChu
     manifest_bytes = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
     if len(manifest_bytes) > 64 * 1024 * 1024:
         raise ValueError("manifest exceeds CASUNAT2 limit")
-    values = list(chunks)
     seek: list[SeekEntry] = []
     with tempfile.NamedTemporaryFile(prefix=f".{target.name}.", dir=target.parent,
                                      delete=False) as handle:
@@ -52,48 +51,65 @@ def write_native_v2(path: str | Path, manifest: dict, chunks: Iterable[NativeChu
             handle.write(HEADER.pack(MAGIC, VERSION, 0, len(manifest_bytes)))
             handle.write(manifest_bytes)
             key_states: dict[int, tuple[int, int]] = {}
-            pending_updates: dict[int, int] = {}
+            seek_positions: dict[int, int] = {}
             if recovery_interval < 0:
                 raise ValueError("recovery_interval must be non-negative")
             key_offsets: dict[int, int] = {}
             audio_offsets: dict[int, int] = {}
-            for ordinal, chunk in enumerate(values, start=1):
+            chunk_hashes: list[dict[str, int | str]] = []
+            for ordinal, chunk in enumerate(chunks, start=1):
                 if len(chunk.payload) > max_chunk_bytes:
                     raise ValueError("chunk exceeds CASUNAT2 limit")
                 offset = handle.tell()
-                handle.write(_pack_chunk(chunk))
+                packed = _pack_chunk(chunk)
+                handle.write(packed)
+                chunk_hashes.append({"offset": offset,
+                                     "sha256": hashlib.sha256(packed).hexdigest()})
                 if chunk.chunk_type == ChunkType.VIDEO_KEY_STATE:
                     key_states[chunk.stream_id] = (chunk.pts, offset)
                     key_offsets[chunk.stream_id] = offset
-                    pending_updates.pop(chunk.stream_id, None)
+                    seek_positions[chunk.stream_id] = len(seek)
+                    seek.append(SeekEntry(chunk.stream_id, chunk.pts, chunk.pts,
+                                          offset, offset))
                 elif chunk.chunk_type == ChunkType.VIDEO_TILE_UPDATE:
-                    pending_updates.setdefault(chunk.stream_id, offset)
+                    position = seek_positions.get(chunk.stream_id)
+                    if position is None:
+                        raise ValueError("video tile update precedes its key state")
+                    entry = seek[position]
+                    if entry.first_update_offset == entry.key_state_offset:
+                        seek[position] = SeekEntry(entry.stream_id, entry.target_pts,
+                                                   entry.key_state_pts,
+                                                   entry.key_state_offset, offset)
                 elif chunk.chunk_type == ChunkType.AUDIO_BLOCK:
                     audio_offsets[chunk.stream_id] = offset
-                if chunk.chunk_type in (ChunkType.VIDEO_KEY_STATE, ChunkType.VIDEO_TILE_UPDATE):
-                    key = key_states.get(chunk.stream_id)
-                    if key:
-                        seek.append(SeekEntry(chunk.stream_id, chunk.pts, key[0], key[1],
-                                              pending_updates.get(chunk.stream_id, offset)))
                 if recovery_interval and ordinal % recovery_interval == 0:
                     recovery = {"version": 1, "last_complete_chunk_offset": offset,
                                 "key_state_offsets": dict(sorted(key_offsets.items())),
                                 "audio_block_offsets": dict(sorted(audio_offsets.items()))}
-                    handle.write(_pack_chunk(NativeChunk(
+                    recovery_packed = _pack_chunk(NativeChunk(
                         ChunkType.RECOVERY_POINT, 0, chunk.pts,
-                        json.dumps(recovery, sort_keys=True, separators=(",", ":")).encode("utf-8"))))
-            # Keep one deterministic entry per key state/stream.
-            unique = {(entry.stream_id, entry.key_state_offset): entry for entry in seek}
+                        json.dumps(recovery, sort_keys=True, separators=(",", ":")).encode("utf-8")))
+                    recovery_offset = handle.tell()
+                    handle.write(recovery_packed)
+                    chunk_hashes.append({"offset": recovery_offset,
+                                         "sha256": hashlib.sha256(recovery_packed).hexdigest()})
+            seek.sort(key=lambda entry: (entry.stream_id, entry.key_state_pts,
+                                         entry.key_state_offset))
             index_offset = handle.tell()
-            handle.write(_pack_chunk(NativeChunk(ChunkType.SEEK_INDEX, 0, 0,
-                                                 _index_payload(list(unique.values())))))
+            index_packed = _pack_chunk(NativeChunk(ChunkType.SEEK_INDEX, 0, 0,
+                                                   _index_payload(seek)))
+            handle.write(index_packed)
+            chunk_hashes.append({"offset": index_offset,
+                                 "sha256": hashlib.sha256(index_packed).hexdigest()})
             handle.flush()
             handle.seek(0)
             digest = hashlib.sha256(handle.read()).hexdigest().encode("ascii")
             handle.seek(0, os.SEEK_END)
-            handle.write(_pack_chunk(NativeChunk(ChunkType.INTEGRITY_TABLE, 0, index_offset,
-                                                 json.dumps({"sha256_before_integrity": digest.decode()},
-                                                            sort_keys=True).encode("utf-8"))))
+            handle.write(_pack_chunk(NativeChunk(
+                ChunkType.INTEGRITY_TABLE, 0, index_offset,
+                json.dumps({"sha256_before_integrity": digest.decode(),
+                            "chunk_sha256": chunk_hashes},
+                           sort_keys=True, separators=(",", ":")).encode("utf-8"))))
             handle.write(_pack_chunk(NativeChunk(ChunkType.END, 0, 0, b"")))
             handle.flush()
             os.fsync(handle.fileno())

@@ -14,6 +14,7 @@ import numpy as np
 
 from . import __version__
 from .tiles import compare_tile_frames, tile_regions
+from .strict import StrictDecoderError, iter_source_frames, iter_state_map
 
 
 class CasuError(RuntimeError):
@@ -161,10 +162,12 @@ def _interval(start: int, end: int, state: str, step: float,
     }
 
 
-def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
-                  width: int = 160, height: int = 90, mode: str = "strict",
-                  progress: Any | None = None,
-                  cancel: Any | None = None) -> dict[str, Any]:
+def preview_activity_analysis(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
+                              width: int = 160, height: int = 90,
+                              mode: str = "visually_lossless",
+                              progress: Any | None = None,
+                              cancel: Any | None = None) -> dict[str, Any]:
+    """Reduced activity hint. This function is never a STRICT fidelity proof."""
     if not np.isfinite(analysis_fps) or analysis_fps <= 0:
         raise CasuError("analysis FPS must be finite and positive")
     if width <= 0 or height <= 0:
@@ -307,6 +310,77 @@ def analyze_video(path: Path, probe: dict[str, Any], analysis_fps: float = 10.0,
     }
 
 
+# Compatibility name for callers that explicitly request the old preview API.
+analyze_video = preview_activity_analysis
+
+
+def analyze_strict_video(path: Path, probe: dict[str, Any], *,
+                         tile_width: int = 64, tile_height: int = 64,
+                         progress: Any | None = None,
+                         cancel: Any | None = None) -> dict[str, Any]:
+    """Build the production source-resolution, plane-aware STRICT state map."""
+    if _cancelled(cancel):
+        raise CasuCancelled("STRICT source decoding cancelled")
+    video = stream(probe, "video")
+    if not video:
+        return {}
+    expected = int(video.get("nb_frames") or 0)
+    if expected <= 0:
+        try:
+            rate_text = str(video.get("avg_frame_rate") or "0/1")
+            rate_num, rate_den = (int(value) for value in rate_text.split("/", 1))
+            expected = max(1, int(duration(probe) * rate_num / max(1, rate_den)))
+        except (TypeError, ValueError, ZeroDivisionError):
+            expected = 1
+    decoded = 0
+
+    def checked_frames():
+        nonlocal decoded
+        for frame in iter_source_frames(path):
+            if _cancelled(cancel):
+                raise CasuCancelled("STRICT source decoding cancelled")
+            decoded += 1
+            if progress is not None:
+                progress(min(0.99, decoded / expected))
+            yield frame
+
+    try:
+        state_map = list(iter_state_map(checked_frames(), tile_width=tile_width,
+                                        tile_height=tile_height))
+    except StrictDecoderError as exc:
+        raise CasuError(f"STRICT source decoding failed: {exc}") from exc
+    if progress is not None:
+        progress(1.0)
+    counts = {name: sum(item["state"] == name for item in state_map)
+              for name in ("KEY_STATE", "UPDATE", "HOLD")}
+    return {
+        "method": "source-resolution canonical plane identity",
+        "analysis_mode": "strict",
+        "source_width": video.get("width"),
+        "source_height": video.get("height"),
+        "source_codec": video.get("codec_name"),
+        "source_pixel_format": video.get("pix_fmt"),
+        "source_time_base": video.get("time_base"),
+        "decoded_frame_count": decoded,
+        "segments": [],
+        "state_is_hint_only": False,
+        "strict_pixel_identical_available": True,
+        "spatial_analysis": {
+            "method": "exact source-resolution canonical plane tile identity",
+            "tile_size": [tile_width, tile_height],
+            "tile_grid": [int(np.ceil(int(video.get("width") or 0) / tile_width)),
+                          int(np.ceil(int(video.get("height") or 0) / tile_height))],
+            "strict_pixel_identical_available": True,
+            "state_map": state_map,
+            "state_map_count": len(state_map),
+            "state_counts": counts,
+            "state_map_coordinate_system": "source-display-pixels",
+            "state_map_identity_scope": "all active native decoded planes and relevant color metadata",
+            "timing": "rational source PTS/time_base",
+        },
+    }
+
+
 def analyze_audio(path: Path, probe: dict[str, Any], sample_rate: int = 16000,
                   window_ms: int = 20, progress: Any | None = None,
                   cancel: Any | None = None) -> dict[str, Any]:
@@ -416,11 +490,19 @@ def analyze(path: Path, analysis_fps: float = 10.0, mode: str = "strict",
 
     has_video = bool(stream(probe, "video"))
     has_audio = bool(stream(probe, "audio"))
-    video_data = analyze_video(
-        path, probe, analysis_fps=analysis_fps, mode=mode,
-        progress=lambda value: phase(0.05 + 0.55 * value),
-        cancel=cancel,
-    ) if has_video else {}
+    if has_video and mode == "strict":
+        video_data = analyze_strict_video(
+            path, probe, progress=lambda value: phase(0.05 + 0.55 * value),
+            cancel=cancel,
+        )
+    elif has_video:
+        video_data = preview_activity_analysis(
+            path, probe, analysis_fps=analysis_fps, mode=mode,
+            progress=lambda value: phase(0.05 + 0.55 * value),
+            cancel=cancel,
+        )
+    else:
+        video_data = {}
     audio_data = analyze_audio(
         path, probe,
         progress=lambda value: phase(0.60 + 0.35 * value),

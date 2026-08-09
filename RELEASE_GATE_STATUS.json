@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "product_version": "1.0.0rc8",
+  "release_status": "DEVELOPMENT_RC",
+  "updated": "2026-08-09",
+  "gates": [
+    {
+      "id": 1,
+      "name": "Source-resolution STRICT",
+      "status": "PASS",
+      "evidence": [
+        "casu.strict canonical model preserves active native RGB/YUV/alpha planes, plane layout, 8/10/12/16-bit samples, color metadata, and rational PTS",
+        "casu.core.analyze(mode='strict') invokes analyze_strict_video and never the 160x90 activity preview",
+        "pytest -q -m 'not media': 108 passed, 29 deselected",
+        "pytest -q tests/test_strict_acceptance.py -m media: 9 passed",
+        "clean wheel build and isolated wheel STRICT smoke: PASS",
+        "clean temporary-tree Debian build, package inspection, and extracted-package STRICT smoke: PASS",
+        "python -m compileall and git diff --check: PASS"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "CASUNAT2 native payload",
+      "status": "PASS",
+      "evidence": [
+        "Production pack-v2/native-v2 converter emits video key states, exact hash-linked tile updates and canonical timestamped PCM blocks",
+        "Seek entries point to validated on-disk chunk byte offsets and reconstruct from the nearest key state",
+        "Source-deletion acceptance reproduces every canonical video-frame digest and the full PCM SHA-256 digest",
+        "Generated STRICT/native-v2/native-player/libVLC/thumbnail plus bounded-probe/libass/authorized-PGS suites: 54 passed",
+        "Real CLI pack-v2, verify and info smoke: PASS"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Integrity, recovery, and fuzzing",
+      "status": "PASS",
+      "evidence": [
+        "Streaming reader bounds file/manifest/chunk count/chunk bytes without loading the full container",
+        "Video/audio zlib output is limited to exact metadata-derived sizes before allocation",
+        "SHA-256 integrity, typed/ordered footer validation, byte-offset validation and writer-declared prefix recovery are behavior-tested; source probes enforce monitored output/time limits and STRICT frames enforce dimension/byte ceilings",
+        "Deterministic 10,000-case truncation/header/length/payload campaign (seed 20260809) with video/audio/bitmap seed chunks: 9,352 rejected, 648 fully verified, 0 unexpected"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Native player path",
+      "status": "PARTIAL",
+      "evidence": [
+        "NativeCasuBackend is independent of LibVLCBackend and performs no legacy extraction",
+        "Byte-indexed reconstruction, measured PulseAudio-latency clock with monotonic fallback, seek generation invalidation, Tk RGB presentation and direct libpulse-simple PCM sink are implemented",
+        "Text, native libass RGBA and typed PGS bitmap subtitle presentation/clearing/seek with bounded embedded-font registration, chapter seek, runtime track menus and audio-device selection are implemented",
+        "Instrumented behavior tests prove native A/V/subtitle delivery, seek invalidation, tracks/devices, and zero tempfile calls",
+        "pytest -q tests/test_native_player_backend.py: 11 passed, including audio-only cover presentation, measured-latency/delay clock behavior, overlapping PCM seek trim, lifecycle flush and fail-closed unsupported audio rate; real-device long-run drift remains open"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Media management and converter completion",
+      "status": "PARTIAL",
+      "evidence": [
+        "CLI and GUI share ConversionEngine jobs/profiles, progress/cancellation, atomic output and collision-resistant hash-verified resumable batch journals",
+        "Backend-neutral immutable track/chapter/device/event contracts exist",
+        "SQLite library behavior tests cover scan, resume, favorites and playlists",
+        "Recursive batch isolation, CLI retry and CLI/GUI hash-verified journal resume are behavior-tested; text, native libass ASS/SSA and typed source-independent PGS RGBA subtitles, chapters, bounded attachments/covers/tags/dispositions convert/play; DVD/DVB/XSub and full product matrices remain open"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Product UI, library, settings, and release regression",
+      "status": "PARTIAL",
+      "evidence": [
+        "Functional navigation and dynamic backend-reported track/output/chapter menus replace placeholder views/cycle buttons",
+        "Atomic validated settings and SQLite scan/search/resume/favorites/playlists/per-media track and delay preferences are behavior-tested; watched-folder configuration survives save/reload",
+        "MPCASU and converter construction smoke under isolated X display: PASS",
+        "Headless installed-libVLC playback advanced time but reported unavailable H.264 decode and no audio device; full runtime matrix remains correctly open",
+        "Bounded source-stat-versioned FFmpeg thumbnails, including source-independent CASUNAT2 cover attachments, are rendered asynchronously in the library UI; audio-only native playback presents the cover on its canvas",
+        "Qt migration, cross-platform packages and complete runtime matrix remain open"
+      ]
+    }
+  ]
+}

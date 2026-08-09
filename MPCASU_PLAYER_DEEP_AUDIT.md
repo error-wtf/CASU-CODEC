@@ -1,84 +1,36 @@
-# MPCASU player deep audit — 2026-08-08
+# MPCASU player deep audit — updated 2026-08-09
 
-This audit covers the current source tree, not the aspirational feature list.
-`COMPLETE` requires a real backend, visible UI integration, error handling and
-tests. A button or a status label alone is not evidence.
+This file records implemented behavior, not widget presence.
 
-## Release blockers
-
-| Area | Status | Evidence |
+| Area | Status | Evidence / open boundary |
 |---|---|---|
-| In-process legacy backend | PARTIAL | `mpcasu_backend.py` calls libVLC through ctypes and binds a native surface, but has no event manager, buffering model or device abstraction. |
-| Native CASU playback | MISSING | `CasuBackend` validates JSON then opens the referenced original media through libVLC. It has no CASU payload reader or renderer. |
-| Real video presentation | PARTIAL | A Tk Canvas is used as the libVLC surface; the app does not verify a presented frame and still paints diagnostic text on that same canvas when idle. |
-| Audio output | PARTIAL | Audio is delegated to libVLC; there is no enumerated device, output selection, latency, channel-layout or underrun model. |
-| A/V clock | MISSING | Position is polled every 500 ms; no audio-master clock, event timestamps, drift measurement or correction exists. |
-| Playback events | PARTIAL | Optional `libvlc_event_manager` registration now maps lifecycle events into backend state; time/position events, UI dispatch and platform validation remain. |
-| Error presentation | PARTIAL | Some media-state errors are mapped, but decoder/output failures are not consistently surfaced with actionable technical details. |
-| Seeking | PARTIAL | libVLC time seeking exists, but decoder flush, exact target verification and post-seek state reconstruction are absent. |
-| Track selection | PARTIAL | Audio/video/SPU cycling exists, but selection is a cycle button rather than a complete named track model with language, codec, channels, default and forced metadata. |
-| External subtitles | MISSING | No external subtitle load, parser, attachment or delay UI. |
-| Chapters/frame step/A-B repeat | MISSING | No backend or UI implementation. |
-| Audio presentation | PARTIAL | Audio mode is selected from probe metadata, but cover art rendering and real PCM waveform/FFT are unavailable. |
-| Playlist | PARTIAL | Add/remove/save/load/double-click/next/previous work locally; no drag/drop, reorder, multi-select, queue policy, shuffle/repeat, metadata rows or persistence validation. |
-| Library/navigation | MISSING | Sidebar entries still report `view not available in this release`; no indexed library, search, thumbnails or real views exist. |
-| History/resume | MISSING | Session stores playlist, volume, mute, rate and geometry only; no current item, position, track selection or resume prompt. |
-| Settings/hotkey persistence | MISSING | Shortcuts are hardcoded and preferences are absent. |
-| Fullscreen/PiP/mini player | PARTIAL | Window fullscreen toggle exists; no overlay auto-hide, cursor timeout, PiP or dedicated mini-player state. |
-| Responsive layout | PARTIAL | Three width modes hide panels, but minimum size is fixed at 980×620 and there is no tested compact/drawer/HiDPI behavior. |
-| Converter integration | MISSING | Player can consume sidecars, but cannot launch/monitor native conversion jobs or display conversion reports. |
+| Legacy media | PARTIAL release matrix | In-process libVLC 3.0.23 initializes, accepts paths independent of extension and exposes runtime version/plugins; broad codec/platform matrix remains. |
+| Native CASUNAT2 video | PASS reference path | Lazy on-disk chunks, indexed key/tile reconstruction, source-sized CPU RGB conversion and Tk presentation. |
+| Native CASUNAT2 audio | PASS reference path | Exact timestamped s16le blocks feed an instrumented sink and direct libpulse-simple output. Hardware latency/master-clock drift remains open. |
+| Native seek | PASS reference path | Cancels generation, flushes audio, invalidates video/subtitle output and reconstructs from indexed state. |
+| Native subtitles/chapters | PARTIAL matrix | UTF-8 packets, ASS/SSA libass RGBA with bounded embedded fonts, and typed alpha-bounded PGS RGBA render/clear/seek; delays and chapter seek work. DVD/DVB/XSub fixtures remain. |
+| CASUNAT2 tempfile | REMOVED | Test forces tempfile creation to fail while native A/V playback completes. |
+| Track/output selection | PARTIAL matrix | Backend-neutral descriptors and dynamic menus use only reported tracks/devices; native default Pulse and libVLC enumeration exist. |
+| Events/clock | PARTIAL | Lifecycle events and monotonic native scheduler work; position poll remains for timeline and audio hardware clock/drift evidence is open. |
+| Navigation | PASS current actions | Every visible entry performs a file/URL/playlist/focus action; catalog/hub/fake pages were removed. |
+| Library/resume/settings | PASS reference core | Transactional SQLite scan/search/favorites/resume/playlists, watched-folder UI, per-media track/delay preferences, bounded cached thumbnails and atomic settings exist. |
+| GUI construction | PASS | MPCASU and Converter instantiate/update/destroy under isolated X display. |
+| Energy/visualizer claims | HONESTLY ABSENT | Fake waveform/energy claims are not drawn; the unnecessary 50 ms visual timer was removed. |
 
-## Concrete correctness defects
+## Remaining P0/P1 work
 
-1. `LibVLCBackend.open_source` contains two consecutive
-   `libvlc_media_new_path` calls for local files. This is redundant and should
-   be removed before further backend work.
-2. The UI has two list widgets (`library` and `queue`) with duplicated state;
-   selection and reordering can diverge because there is no playlist model.
-3. Network sources set `current = None`, so position/history/next-item and
-   media-information behavior cannot be consistent for URLs.
-4. The playback controller changes state optimistically after calling the
-   backend. It has no rollback or event-driven transition when libVLC rejects,
-   buffers or asynchronously fails.
-5. `PlaybackController.attach` does not perform an open/probe contract; the UI
-   owns backend lifecycle and therefore cannot safely support backend fallback.
-6. The video Canvas is both the embedded libVLC surface and the diagnostic
-   drawing surface. This is not a clean renderer boundary and prevents a
-   reliable “frame actually presented” acceptance test.
-7. The 50 ms visual tick continuously redraws the Canvas even when the screen
-   is static. This conflicts with the project’s event-driven/damage-tracking
-   performance requirement.
-8. The 500 ms poll is used for EOF and position, so timeline latency and EOF
-   detection are bounded by polling rather than media events.
-9. `CasuBackend` advertises `native_casu_payload: unavailable`; the player
-   correctly avoids pretending otherwise, but this confirms CASU playback is
-   not implemented.
+1. Make native audio device time the measured A/V master and run long drift,
+   pause/resume, rapid-seek and underrun tests on real hardware.
+2. Complete DVD/DVB/XSub bitmap fixtures, chapter timeline markers and the
+   hotplug device matrix; the shared PGS renderer, text delay controls and
+   chapter names already work.
+3. Add exact-runtime VLC parity fixtures for common containers/codecs/subtitles/
+   network protocols on Linux, Windows and macOS.
+4. Consolidate the duplicated Tk list presentation behind one playlist model,
+   then migrate views incrementally to Qt without replacing tested backends.
+5. Add broader artwork formats/matrices; attached covers already survive source
+   deletion and render in the native audio canvas and library.
 
-## What is genuinely working
-
-- No ffplay/VLC executable is used in the runtime path.
-- Local legacy media is sent to an in-process libVLC backend.
-- Source probing chooses VIDEO versus AUDIO presentation mode.
-- Play/pause/stop/seek/volume/mute/rate and basic track cycling call real
-  backend APIs.
-- Manifest validation and source hash/size checks are fail-closed.
-- Official branding assets are resolved from source, package and system paths.
-- The fast automated suite currently passes (`36 passed, 5 deselected` in the
-  latest run); this does not prove actual GUI/audio/video output.
-
-## Required implementation order
-
-1. Add a real `MediaSource`/playlist model and remove duplicated Listbox state.
-2. Add a backend event bridge and explicit `LOADING/READY/BUFFERING/PLAYING/
-   PAUSED/SEEKING/ENDED/ERROR` transitions with rollback.
-3. Separate video surface, diagnostic overlay and audio presentation widgets;
-   add a reproducible actual-frame smoke test.
-4. Add device/track/chapter/subtitle models and selection menus.
-5. Implement persistent history/resume/settings and a real library model.
-6. Replace polling redraw with event-driven position updates and dirty-region
-   rendering.
-7. Only then connect the native CASU reader/state scheduler to the same
-   playback contract.
-
-Until the first three steps are tested with a real H.264/AAC fixture, MPCASU
-must remain classified as a playback prototype rather than a finished player.
+Current evidence: 108 fast behavior tests, 54 targeted generated/probe/libVLC/PGS cases,
+native A/V/subtitle/no-tempfile sinks, both Tk construction smokes, clean wheel
+and Debian package inspection. Stable 1.0 remains blocked by the live gate file.

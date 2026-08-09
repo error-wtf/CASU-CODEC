@@ -10,6 +10,7 @@ source is opened by the same in-process media pipeline.
 from __future__ import annotations
 
 import ctypes
+import ctypes.util
 import os
 import sys
 import tempfile
@@ -20,6 +21,8 @@ from typing import Any
 from casu.core import CasuError, resolve_casu_source
 from casu.schema import validate_manifest
 from casu.native import NativeCasuError, read_native
+from casu.media import (AudioDeviceDescriptor, ChapterDescriptor,
+                        TrackDescriptor, TrackKind)
 import json
 from urllib.parse import urlparse
 
@@ -30,12 +33,37 @@ class PlaybackState(str, Enum):
     ENDED = "ENDED"; ERROR = "ERROR"
 
 
+# Stable libvlc_event_e media-player values used by libVLC 2.x/3.x/4.x.
+# Keep this table explicit and tested: confusing EndReached (0x109) with
+# EncounteredError (0x10A) makes successful playback look like a decoder fault.
+LIBVLC_PLAYER_EVENT_STATES = {
+    0x102: PlaybackState.LOADING,  # MediaPlayerOpening
+    0x103: PlaybackState.LOADING,  # MediaPlayerBuffering
+    0x104: PlaybackState.PLAYING,  # MediaPlayerPlaying
+    0x105: PlaybackState.PAUSED,   # MediaPlayerPaused
+    0x106: PlaybackState.STOPPED,  # MediaPlayerStopped
+    0x109: PlaybackState.ENDED,    # MediaPlayerEndReached
+    0x10A: PlaybackState.ERROR,    # MediaPlayerEncounteredError
+}
+
+
 class BackendError(CasuError):
     pass
 
 
 class _TrackDescription(ctypes.Structure):
     _fields_ = [("identifier", ctypes.c_int), ("name", ctypes.c_char_p)]
+
+
+class _AudioOutputDevice(ctypes.Structure):
+    pass
+
+
+_AudioOutputDevice._fields_ = [
+    ("next", ctypes.POINTER(_AudioOutputDevice)),
+    ("device", ctypes.c_char_p),
+    ("description", ctypes.c_char_p),
+]
 
 
 class LibVLCBackend:
@@ -56,9 +84,7 @@ class LibVLCBackend:
         plugin_path = next((candidate for candidate in plugin_candidates if os.path.isdir(candidate)), None)
         if plugin_path:
             os.environ.setdefault("VLC_PLUGIN_PATH", plugin_path)
-        library_names = (["libvlc.dll", "libvlc-5.dll"] if sys.platform.startswith("win")
-                         else ["libvlc.dylib"] if sys.platform == "darwin"
-                         else ["libvlc.so.5", "libvlc.so"])
+        library_names = self.library_candidates(sys.platform)
         load_error = None
         for library_name in library_names:
             try:
@@ -113,10 +139,18 @@ class LibVLCBackend:
         self._install("libvlc_audio_set_volume", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int])
         self._install("libvlc_audio_get_volume", ctypes.c_int, [ctypes.c_void_p])
         self._install("libvlc_audio_set_mute", None, [ctypes.c_void_p, ctypes.c_int])
+        self._audio_delay_api = self._optional_install(
+            "libvlc_audio_set_delay", ctypes.c_int,
+            [ctypes.c_void_p, ctypes.c_int64])
         self._install("libvlc_audio_get_track_count", ctypes.c_int, [ctypes.c_void_p])
         self._install("libvlc_audio_get_track", ctypes.c_int, [ctypes.c_void_p])
         self._install("libvlc_audio_set_track", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int])
         self._audio_description_api = self._install_descriptions("libvlc_audio_get_track_description")
+        self._audio_device_api = all(self._optional_install(name, restype, args) for name, restype, args in (
+            ("libvlc_audio_output_device_enum", ctypes.POINTER(_AudioOutputDevice), [ctypes.c_void_p]),
+            ("libvlc_audio_output_device_list_release", None, [ctypes.POINTER(_AudioOutputDevice)]),
+            ("libvlc_audio_output_device_set", None, [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]),
+        ))
         self._video_track_api = all(self._optional_install(name, restype, args) for name, restype, args in (
             ("libvlc_video_get_track_count", ctypes.c_int, [ctypes.c_void_p]),
             ("libvlc_video_get_track", ctypes.c_int, [ctypes.c_void_p]),
@@ -129,6 +163,9 @@ class LibVLCBackend:
             ("libvlc_video_set_spu", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int]),
         ))
         self._subtitle_description_api = self._install_descriptions("libvlc_video_get_spu_description")
+        self._subtitle_delay_api = self._optional_install(
+            "libvlc_video_set_spu_delay", ctypes.c_int,
+            [ctypes.c_void_p, ctypes.c_int64])
         self._event_api = all(self._optional_install(name, restype, args) for name, restype, args in (
             ("libvlc_media_player_event_manager", ctypes.c_void_p, [ctypes.c_void_p]),
             ("libvlc_event_attach", ctypes.c_int, [ctypes.c_void_p, ctypes.c_uint, self._event_callback_type, ctypes.c_void_p]),
@@ -140,6 +177,16 @@ class LibVLCBackend:
             self._install("libvlc_media_player_set_hwnd", None, [ctypes.c_void_p, ctypes.c_void_p])
         elif sys.platform == "darwin":
             self._install("libvlc_media_player_set_nsobject", None, [ctypes.c_void_p, ctypes.c_void_p])
+
+    @staticmethod
+    def library_candidates(platform: str) -> list[str]:
+        if platform.startswith("win"):
+            return ["libvlc.dll", "libvlc-5.dll"]
+        if platform == "darwin":
+            return ["libvlc.dylib"]
+        discovered = ctypes.util.find_library("vlc")
+        return list(dict.fromkeys(value for value in
+                                  (discovered, "libvlc.so.5", "libvlc.so") if value))
 
     def _install(self, name, restype, args):
         setattr(self, name, self._call(name, restype, args))
@@ -177,9 +224,13 @@ class LibVLCBackend:
     def capabilities(self) -> dict[str, str]:
         """Expose runtime facts instead of claiming a static format matrix."""
         version = self._call("libvlc_get_version", ctypes.c_char_p, [])()
+        changeset_api = self._optional_install("libvlc_get_changeset", ctypes.c_char_p, [])
+        changeset = self.libvlc_get_changeset() if changeset_api else None
         return {
             "backend": "libVLC shared library",
             "version": version.decode("utf-8", "replace") if version else "unknown",
+            "changeset": changeset.decode("utf-8", "replace") if changeset else "unknown",
+            "plugin_path": os.environ.get("VLC_PLUGIN_PATH", "runtime default"),
             "network": "available",
             "hardware_decode": "delegated to installed libVLC modules",
             "player_process": "none",
@@ -244,17 +295,7 @@ class LibVLCBackend:
         self._event_manager = manager
         # Values are libvlc_event_e media-player constants.  Keeping this
         # optional lets older/minimal libVLC builds continue through polling.
-        event_states = {
-            0x102: PlaybackState.LOADING,  # Opening
-            0x103: PlaybackState.LOADING,  # Buffering
-            0x104: PlaybackState.PLAYING,
-            0x105: PlaybackState.PAUSED,
-            0x106: PlaybackState.STOPPED,
-            0x109: PlaybackState.ERROR,
-            0x110: PlaybackState.READY,    # LengthChanged
-            0x11B: PlaybackState.ENDED,   # EndReached
-        }
-        for event_type, state in event_states.items():
+        for event_type, state in LIBVLC_PLAYER_EVENT_STATES.items():
             def callback(_event, _user_data, state=state):
                 self._state = state
                 listener = self.on_event
@@ -307,6 +348,10 @@ class LibVLCBackend:
         if self.libvlc_media_player_set_chapter(self.player, int(chapter)) != 0:
             raise BackendError(f"libVLC rejected chapter {chapter}")
 
+    def chapter_descriptors(self) -> tuple[ChapterDescriptor, ...]:
+        return tuple(ChapterDescriptor(index, 0.0, f"Chapter {index + 1}")
+                     for index in range(self.chapter_count()))
+
     def set_rate(self, rate: float) -> float:
         if not self.player:
             raise BackendError("no active media player")
@@ -358,6 +403,22 @@ class LibVLCBackend:
     def set_mute(self, muted: bool) -> None:
         if self.player: self.libvlc_audio_set_mute(self.player, int(bool(muted)))
 
+    def set_audio_delay(self, milliseconds: float) -> float:
+        value = max(-5000.0, min(5000.0, float(milliseconds)))
+        if not self._audio_delay_api or not self.player:
+            raise BackendError("audio delay is unavailable in this libVLC build")
+        if self.libvlc_audio_set_delay(self.player, int(value * 1000)) != 0:
+            raise BackendError("libVLC rejected audio delay")
+        return value
+
+    def set_subtitle_delay(self, milliseconds: float) -> float:
+        value = max(-5000.0, min(5000.0, float(milliseconds)))
+        if not self._subtitle_delay_api or not self.player:
+            raise BackendError("subtitle delay is unavailable in this libVLC build")
+        if self.libvlc_video_set_spu_delay(self.player, int(value * 1000)) != 0:
+            raise BackendError("libVLC rejected subtitle delay")
+        return value
+
     def audio_track_count(self) -> int:
         return max(0, int(self.libvlc_audio_get_track_count(self.player) if self.player else 0))
 
@@ -405,6 +466,42 @@ class LibVLCBackend:
     def subtitle_track_descriptions(self) -> list[tuple[int, str]]:
         return self._track_descriptions(self.libvlc_video_get_spu_description) if self._subtitle_description_api and self.player else []
 
+    def track_descriptors(self, kind: TrackKind) -> tuple[TrackDescriptor, ...]:
+        getters = {
+            TrackKind.VIDEO: self.video_track_descriptions,
+            TrackKind.AUDIO: self.audio_track_descriptions,
+            TrackKind.SUBTITLE: self.subtitle_track_descriptions,
+        }
+        return tuple(TrackDescriptor(identifier, kind, label or f"{kind.value} {identifier}")
+                     for identifier, label in getters[TrackKind(kind)]())
+
+    def audio_devices(self) -> tuple[AudioDeviceDescriptor, ...]:
+        if not self._audio_device_api or not self.player:
+            return ()
+        pointer = self.libvlc_audio_output_device_enum(self.player)
+        if not pointer:
+            return ()
+        devices = []
+        current = pointer
+        try:
+            seen = 0
+            while current and seen < 1024:
+                item = current.contents
+                identifier = (item.device or b"").decode("utf-8", "replace")
+                label = (item.description or item.device or b"").decode("utf-8", "replace")
+                if identifier:
+                    devices.append(AudioDeviceDescriptor(identifier, label, "libVLC"))
+                current = item.next
+                seen += 1
+        finally:
+            self.libvlc_audio_output_device_list_release(pointer)
+        return tuple(devices)
+
+    def set_audio_device(self, identifier: str) -> None:
+        if not self._audio_device_api or not self.player:
+            raise BackendError("audio-device selection is unavailable in this libVLC build")
+        self.libvlc_audio_output_device_set(self.player, None, str(identifier).encode("utf-8"))
+
     def _track_descriptions(self, getter) -> list[tuple[int, str]]:
         pointer = getter(self.player)
         if not pointer:
@@ -447,17 +544,13 @@ class LibVLCBackend:
         self.instance = None; self._state = PlaybackState.EMPTY
 
 
-class CasuBackend(LibVLCBackend):
-    """Validated CASU sidecar path with immutable source provenance.
-
-    This is intentionally named as a compatibility path until CASU has a
-    native payload decoder; capability reporting must not imply otherwise.
-    """
+class LegacyCasuBackend(LibVLCBackend):
+    """CASUNAT1/JSON compatibility path, intentionally separate from CASUNAT2."""
 
     def capabilities(self) -> dict[str, str]:
         values = super().capabilities()
-        values.update({"backend_path": "CASU native payload or sidecar compatibility",
-                       "native_casu_payload": "available via verified extraction"})
+        values.update({"backend_path": "CASUNAT1 envelope or JSON sidecar via libVLC",
+                       "native_casu_payload": "no; verified compatibility extraction"})
         return values
 
     def open_casu(self, manifest_path: Path) -> None:
@@ -490,6 +583,11 @@ class CasuBackend(LibVLCBackend):
         if errors:
             raise BackendError(f"invalid CASU manifest: {errors[0]}")
         self.open(resolve_casu_source(manifest_path))
+
+
+# Public compatibility alias retained for existing callers.  The actual
+# native decoder is NativeCasuBackend in mpcasu_native_backend.py.
+CasuBackend = LegacyCasuBackend
 
 
 def os_path(path: Path) -> bytes:

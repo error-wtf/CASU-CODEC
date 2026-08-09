@@ -1,79 +1,94 @@
 <!-- SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4 | SPDX-FileCopyrightText: 2026 Lino Casu -->
-# CASU 1.0 format specification status
+# CASU release-candidate format specification status
 
-CASU means **Codec for All Segmented Units** and uses the `.casu` extension.
+CASU means **Codec for All Segmented Units** and uses `.casu`. Three explicitly
+different representations currently coexist:
 
-## Current compatibility and native formats
+1. JSON sidecar (`MPCASU\0`, schema 0.2): analysis/provenance referencing the
+   immutable source.
+2. CASUNAT1: standalone compatibility envelope containing the original source
+   bytes; it may be verified/extracted into the libVLC path.
+3. CASUNAT2: standalone native segmented video/audio codec/container.
 
-The released CASU 1.0 implementation is a validated, deterministic JSON
-sidecar. The original media file remains the source of truth and is never
-modified by conversion. A sidecar contains:
+## CASUNAT2 layout
 
-```text
-format.magic                 MPCASU\0
-casu.name                    CASU
-casu.container_extension     .casu
-casu.analysis_mode           strict | visually_lossless | adaptive
-source                       filename, duration, size, optional SHA-256
-streams                      probed source stream metadata
-video.segments               timestamped state hints
-audio.segments               timestamped state hints
-integrity                    source timing and validation policy
-```
-
-This is intentionally not described as a native compressed elementary-stream
-container yet. It is a legacy-compatible state/provenance layer. Missing,
-stale or ambiguous sidecars must fall back to full-fidelity legacy playback.
-
-The repository also provides a **native lossless envelope revision 1** through
-`casu pack` and `casu.native`. It embeds the original source bytes after a
-versioned header and validated manifest and protects both sections with SHA-256
-digests. This makes the file standalone and recoverable at the byte-container
-level, but it is not yet a segmented compressed payload: tile deltas, key-state
-reconstruction and native CASU playback remain future gates.
-
-## Timing and state rules
-
-`start_s`, `end_s` and `duration_s` are finite, non-negative seconds. Segments
-must be ordered and non-overlapping. The source timeline is authoritative:
-`HOLD` or `static` is a scheduler hint and never removes duration, samples or
-frames. Audio silence is also time and must not be collapsed.
-
-## Integrity and recovery boundary
-
-The current sidecar verifies manifest structure and, when a source hash and
-size are recorded, verifies the immutable source before CASU playback. The
-current release does not yet claim native segment/index/footer checksums,
-cryptographic signatures, in-file recovery key states, attachments, or
-compressed segmented media payloads. The native envelope verifies its embedded
-manifest and payload hashes, but must not be mistaken for the future segmented
-codec payload.
-
-## Version policy
-
-An experimental **CASUNAT2** binary revision now exists in `casu.native_v2`.
-It provides a deterministic header, typed chunks, a JSON manifest, byte-offset
-seek entries, an integrity table and an END marker. It is standalone and does
-not reference a source pathname. It remains a release-candidate building block:
-video tile reconstruction, audio block semantics and recovery points must be
-completed and conformance-tested before Gate 1 can be PASS.
-
-Readers must reject an unknown `format.magic`, invalid version fields, unsafe
-numeric values, overlapping intervals and manifests exceeding the validator's
-segment safety limit. Newer native formats require an explicit reader version;
-they must never be silently interpreted as an older sidecar.
-
-The detailed compatibility definition is maintained in
-[`docs/CASU_FORMAT_SPEC.md`](docs/CASU_FORMAT_SPEC.md). The CLI provides:
+The big-endian CASUNAT2 header declares magic, version, flags and bounded JSON
+manifest length. The manifest describes streams, source provenance without a
+pathname, bounded container/stream tags, demuxer dispositions, rational time
+bases and decoded frame timelines. Typed chunks follow:
 
 ```text
-casu analyze input.mp4
-casu convert input.mp4 -o output.casu
-casu verify output.casu
-    casu info output.casu
-    casu benchmark input.mp4 -o report.json
+STREAM_CONFIG
+VIDEO_KEY_STATE | VIDEO_TILE_UPDATE | VIDEO_FORMAT_CHANGE
+AUDIO_BLOCK | SUBTITLE_PACKET | SUBTITLE_BITMAP
+CHAPTER_TABLE | ATTACHMENT
+RECOVERY_POINT
+SEEK_INDEX
+INTEGRITY_TABLE
+END
 ```
 
-`benchmark` reports measured analysis time, source duration, segment counts
-and input size. It deliberately reports energy as unavailable unless a future
-platform telemetry backend supplies a real measurement.
+A video key state contains every padding-free active canonical plane, pixel
+format, source dimensions and color metadata. A tile update contains exact
+plane regions and required base/result hashes. Audio blocks contain compressed
+canonical s16le PCM plus PTS, time base, sample rate/count, channels and layout.
+Attachments contain a safe basename, media type, bounded compressed bytes and
+the SHA-256 of the decoded bytes. An attached-picture source stream becomes a
+PNG attachment with role `cover-art`, not a synthetic video timeline. HOLD is
+represented by state persistence: no redundant pixel payload is needed.
+ASS/SSA styling/dialogue documents may be retained as hashed attachments with
+role `subtitle-source`; the native player renders the document at media time
+through libass to a bounded transparent RGBA layer. The paired
+`SUBTITLE_PACKET` stream is the fail-closed plain-text fallback.
+Recognized bounded font attachments use role `subtitle-font`; consumers must
+enforce per-font and aggregate budgets before passing them to a font engine.
+`SUBTITLE_BITMAP` stores a 1/1000-timed RGBA alpha-bounding region, its canvas
+geometry, decoded byte length and SHA-256. PGS/DVD/DVB/XSub conversion uses
+FFmpeg's bitmap-subtitle `sub2video` path; transparent states end intervals
+without being stored as invented video frames.
+
+Each seek entry stores a real file byte offset to a matching video key state and
+the first dependency offset. A reader seeks there, validates stream/PTS/type,
+then applies key/update chunks through the target PTS. The integrity SHA-256
+covers every byte before `INTEGRITY_TABLE`; `END` is mandatory. Recovery exposes
+only a writer-declared complete prefix, never arbitrary truncated bytes.
+
+CASUNAT2 is source-independent. Acceptance removes the input and then compares
+every canonical frame digest and the complete canonical PCM digest.
+
+## Timing and fidelity
+
+Source presentation PTS and rational time bases are authoritative. Silence,
+static pictures and repeated states still occupy time. STRICT never uses an FPS
+filter, resolution reduction, threshold, interpolation, retiming, pitch change
+or hidden color conversion. Unsupported canonical layouts fail closed.
+
+JSON sidecar state labels remain hints only. CASUNAT1 remains a compatibility
+envelope and must never be advertised as CASUNAT2.
+
+## Safety and current release boundary
+
+Readers bound file, manifest, chunk count/size and decoded zlib output before
+allocation; source probes have monitored byte/time budgets and decoded frames
+have dimension/byte ceilings. Readers validate types, offsets, ordering, state hashes and the integrity
+digest. Unknown versions fail closed. The bounded 10,000-case parser campaign
+passes. Cover-art conversion and native/library presentation are behavior-tested.
+Signatures, broader DVD/DVB/XSub subtitle fixtures and broader
+platform/network stress remain open, so the product version stays
+`1.0.0rc8`.
+
+## Commands
+
+```bash
+casu analyze input.mp4 --mode strict
+casu convert input.mp4 -o input.casu
+casu pack-v2 input.mkv -o native.casu
+casu convert input.mkv --container native-v2 -o native.casu
+casu verify native.casu
+casu info native.casu
+casu repair-v2 damaged.casu -o recovered.casu
+```
+
+The detailed compatibility definition is in
+[`docs/CASU_FORMAT_SPEC.md`](docs/CASU_FORMAT_SPEC.md); live gate evidence is in
+[`RELEASE_GATE_STATUS.json`](RELEASE_GATE_STATUS.json).

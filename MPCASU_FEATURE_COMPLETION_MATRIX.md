@@ -1,30 +1,27 @@
-# MPCASU feature completion matrix
+# MPCASU feature completion matrix — updated 2026-08-09
 
-This matrix distinguishes visible controls from capabilities that are really
-implemented. A control is not marked complete merely because a widget exists.
+| Feature | Backend | UI | Evidence | Status |
+|---|---|---|---|---|
+| Installed-libVLC legacy playback | in-process shared library | embedded surface/controls | runtime API tests; full codec matrix open | PARTIAL |
+| URL playback | libVLC locations | real URL dialog | capability test | PARTIAL |
+| CASUNAT1/sidecar compatibility | verified extraction/source | labeled compatibility | unit/media tests | PASS |
+| Native CASUNAT2 video | indexed key/tile reconstruction | Tk frame sink | digest + player tests | PASS reference path |
+| Native CASUNAT2 audio | timestamped PCM + measured libpulse-simple latency | volume/mute | byte-exact/clock tests | PASS reference path |
+| CASUNAT2 cover art/tags | bounded hashed PNG attachment + bounded manifest metadata | native audio canvas + library thumbnail + media info | real attached-picture source deletion and limit tests | PASS reference path |
+| CASUNAT2 seek | generation cancel/cache invalidation + PCM trim | timeline/frame step | behavior test | PASS reference path |
+| No CASUNAT2 tempfile | independent backend | n/a | tempfile forced to fail | PASS |
+| Play/pause/resume/stop | both backends | controls/hotkeys | controller/backend tests | PASS reference path |
+| Playback rate | libVLC; native video-only | rate control | fail-closed native-audio test | PARTIAL — native audio is 1.0x until a real resampler exists |
+| Audio/video track selection | both backends | dynamic menus | runtime state tests | PARTIAL matrix |
+| Subtitle/chapter selection | libVLC plus native text/libass/PGS/chapter path | dynamic controls | runtime RGBA/text/seek behavior tests | PARTIAL DVD/DVB/XSub matrix |
+| Native text/rich/bitmap subtitle/chapter | decoded packets, ASS/SSA libass RGBA, typed alpha-bounded PGS RGBA and chapter seek | transparent/text/bitmap overlay + dynamic chapter menu | generated and real-PGS source-deletion + RGBA/sink/GUI tests | PARTIAL broader bitmap fixture matrix |
+| Playlist reorder/save/load | player model | controls | runtime methods | PARTIAL product |
+| Functional navigation | concrete actions only | sidebar/compact rail | pseudo entries removed | PASS |
+| Source-resolution STRICT | production converter | mode selection | unit + generated media | PASS |
+| PCM waveform/spectrum | absent | explicitly unavailable | truthful state | OPEN |
+| Energy telemetry | absent | explicitly unavailable | truthful state | OPEN |
+| SQLite library/settings/devices | transactional search/scan/resume/favorites/playlists + per-media tracks/delays | watched folders + library/sync menus + async thumbnails | behavior + real-media/GUI smoke | PASS reference core |
 
-| Feature | Backend | UI | Tested | Status |
-|---|---|---:|---:|---|
-| In-process legacy playback via libVLC | yes | yes | smoke | PARTIAL |
-| Native CASU manifest validation and source integrity | yes | yes | unit | COMPLETE |
-| Play / pause / resume / stop | yes | yes | smoke | PARTIAL |
-| Seek and timeline position | yes | yes | smoke | PARTIAL |
-| Volume and mute | yes | yes | smoke | PARTIAL |
-| Supplied MPCASU logo and red layout | n/a | yes | compile/manual | COMPLETE |
-| Original + CASU playlist comparison | yes | yes | manual | COMPLETE |
-| Runtime libVLC capability report | yes | not yet exposed | unit | PARTIAL |
-| URL source opening in backend | yes | not yet exposed | unit | PARTIAL |
-| Audio track selection | libVLC track count/select | cycle control | unit/smoke | PARTIAL |
-| Subtitle track selection | optional libVLC SPU count/select | cycle control | unit/smoke | PARTIAL |
-| Embedded/external subtitles | embedded selection partial; external not yet exposed | cycle control only | no | OPEN |
-| Native CASU segment scheduler and renderer | not yet present | diagnostic unavailable | no | OPEN |
-| PCM waveform / spectrum | not implemented | unavailable state | no | OPEN |
-| Energy measurement | not implemented | unavailable state | no | OPEN |
-| Persistent media library and settings | not implemented | minimal queue only | no | OPEN |
-| Source-resolution STRICT state builder | exact multi-plane unit core | no UI | unit | PARTIAL |
-| CASUNAT2 binary chunks/index/integrity primitive | yes | n/a | unit | PARTIAL |
-| CASUNAT2 lossless audio blocks | yes | n/a | unit | PARTIAL |
-| CASUNAT2 subtitle/chapter payload codecs | yes | n/a | unit | PARTIAL |
-
-`PARTIAL` and `OPEN` are deliberate release truthfulness: the player is a
-working in-process prototype, not a claim of feature parity with VLC.
+The exact legacy codec set is whatever the installed VLC build and its modules
+actually expose. MPCASU does not reject a libVLC-readable file by extension,
+but it will not claim an untested universal matrix before Gate E step 59.

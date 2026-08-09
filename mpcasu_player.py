@@ -12,9 +12,10 @@ import sys
 import json
 import math
 import os
+import threading
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 try:
     from PIL import Image, ImageTk
 except ImportError:  # pragma: no cover - optional presentation enhancement
@@ -23,8 +24,14 @@ except ImportError:  # pragma: no cover - optional presentation enhancement
 from casu.core import CasuError, resolve_casu_source, ffprobe
 from casu.schema import validate_manifest
 from casu.scheduler import CasuScheduler
+from casu.library import MediaLibrary, PlaybackPreferences
+from casu.media import TrackKind
+from casu.settings import PlayerSettings, SettingsStore
+from casu.thumbnail import thumbnail_for
 from mpcasu_backend import BackendError, CasuBackend, LibVLCBackend, PlaybackState
 from casu.native import NativeCasuError, read_native
+from casu.native_v2 import ChunkType, NativeV2Error, read_native_v2
+from mpcasu_native_backend import NativeCasuBackend, PulseAudioSink, TkCanvasVideoSink
 from mpcasu_playback import PlaybackController
 
 
@@ -76,7 +83,7 @@ class MPCASUPlayer(tk.Tk):
         self.geometry("1360x820")
         self.minsize(980, 620)
         self.configure(bg=BG)
-        self.backend: LibVLCBackend | None = None
+        self.backend: LibVLCBackend | NativeCasuBackend | None = None
         self.controller = PlaybackController()
         self.current: Path | None = None
         self.duration = 0.0
@@ -97,6 +104,8 @@ class MPCASUPlayer(tk.Tk):
         self._volume = 100
         self._muted = False
         self._rate = 1.0
+        self._audio_delay_ms = 0.0
+        self._subtitle_delay_ms = 0.0
         self._resume_source: str | None = None
         self._resume_position = 0.0
         self._diagnostic_vars: dict[str, tk.StringVar] = {}
@@ -105,6 +114,15 @@ class MPCASUPlayer(tk.Tk):
         self._advancing = False
         self._end_handled = False
         self._session_file = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "mpcasu" / "session.json"
+        self.settings_store = SettingsStore(self._session_file.parent / "settings.json")
+        effective_settings = self.settings_store.load()
+        self._volume = effective_settings.volume
+        self._muted = effective_settings.muted
+        self._rate = effective_settings.rate
+        self._audio_device = effective_settings.audio_device
+        self._watched_folders = list(effective_settings.watched_folders)
+        self.media_library = MediaLibrary(self._session_file.parent / "library.sqlite3")
+        self._thumbnail_directory = self._session_file.parent / "thumbnails"
         self._build()
         self._restore_session()
         if initial:
@@ -154,7 +172,6 @@ class MPCASUPlayer(tk.Tk):
         except tk.TclError:
             tk.Label(logo, text="◈ MPCASU", bg=BG, fg=RED, font=("TkDefaultFont", 19, "bold")).pack(anchor="w")
             tk.Label(logo, text="PLAYER", bg=BG, fg=SECONDARY, font=("TkDefaultFont", 8, "bold")).pack(anchor="w", padx=(30, 0))
-        ttk.Button(top, text="‹", style="MPC.TButton", command=lambda: self.status.set("Navigation back is not applicable in the player view")).pack(side="left", padx=(24, 4))
         self.now_playing = tk.Label(top, text="NOW PLAYING · NO MEDIA SELECTED", bg=BG, fg=RED, font=("TkDefaultFont", 10, "bold")); self.now_playing.pack(side="left", padx=8)
         tk.Label(top, text="CASU · LEGACY SAFE", bg=BG, fg=MUTED, font=("TkDefaultFont", 9)).pack(side="right")
 
@@ -171,10 +188,8 @@ class MPCASUPlayer(tk.Tk):
         left.bind("<Configure>", lambda _event: left_canvas.configure(scrollregion=left_canvas.bbox("all")))
         left_canvas.bind("<Configure>", lambda event: left_canvas.itemconfigure(left_window, width=event.width))
         left_canvas.bind_all("<MouseWheel>", lambda event: left_canvas.yview_scroll(-int(event.delta / 120), "units"))
-        self._nav(left, "LIBRARY", ["Now Playing", "Library", "CASU Files", "Movies", "TV Shows", "Music", "Playlists"])
-        self._nav(left, "DEVICES", ["Local Disk", "Media Drive", "Network Share"])
-        self._nav(left, "ONLINE", ["CASU Hub", "Web Videos", "Podcasts"])
-        self._nav(left, "PLAYLISTS", ["Favorites", "Recently Added", "4K Collection", "Workout Mix"])
+        self._nav(left, "LIBRARY", ["Now Playing", "Library", "CASU Files", "Video", "Music", "Playlists"])
+        self._nav(left, "SOURCES", ["Local Files", "Network Stream"])
         tk.Label(left, text="LOADED MEDIA", bg=PANEL, fg=MUTED, font=("TkDefaultFont", 8, "bold"), anchor="w").pack(fill="x", padx=14, pady=(12, 4))
         self.library = tk.Listbox(left, height=4, bg=PANEL_ALT, fg=SECONDARY, selectbackground=RED_DARK, selectforeground=TEXT, relief="flat", highlightthickness=0, activestyle="none", exportselection=False)
         self.library.pack(fill="x", padx=10)
@@ -185,6 +200,8 @@ class MPCASUPlayer(tk.Tk):
         ttk.Button(actions, text="− Remove", style="MPC.TButton", command=self.remove_selected).pack(fill="x", pady=(5, 0))
         ttk.Button(actions, text="▣ Save playlist", style="MPC.TButton", command=self.save_playlist).pack(fill="x", pady=(5, 0))
         ttk.Button(actions, text="□ Load playlist", style="MPC.TButton", command=self.load_playlist).pack(fill="x", pady=(5, 0))
+        ttk.Button(actions, text="⌕ Search library", style="MPC.TButton", command=self.show_library_dialog).pack(fill="x", pady=(5, 0))
+        ttk.Button(actions, text="＋ Watch folder", style="MPC.TButton", command=self.add_watched_folder).pack(fill="x", pady=(5, 0))
 
         # A real compact navigation rail keeps navigation available when the
         # full sidebar would steal too much video width.  It is deliberately
@@ -194,7 +211,7 @@ class MPCASUPlayer(tk.Tk):
         for symbol, name in (("▶", "Now Playing"), ("▦", "Library"), ("◆", "CASU Files"), ("♫", "Music"), ("☷", "Playlists")):
             ttk.Button(
                 compact_nav, text=symbol, width=3, style="MPC.TButton",
-                command=lambda label=name: self.status.set(f"{label}: compact navigation"),
+                command=lambda label=name: self._navigate(label),
             ).pack(fill="x", padx=7, pady=5)
         self.compact_nav = compact_nav
 
@@ -214,12 +231,18 @@ class MPCASUPlayer(tk.Tk):
         for label, command in (("Previous", self.play_previous), ("−10 s", lambda: self.seek_by(-10)), ("Play / Pause", self.toggle_playback), ("Stop", self.stop), ("+10 s", lambda: self.seek_by(10)), ("Next", self.play_next)):
             ttk.Button(bar, text=label, style="MPC.TButton", command=command).pack(side="left", padx=3)
         ttk.Button(bar, text="Mute", style="MPC.TButton", command=self.toggle_mute).pack(side="right", padx=3)
-        ttk.Button(bar, text="1×", style="MPC.TButton", command=self.cycle_rate).pack(side="right", padx=3)
-        ttk.Button(bar, text="Audio", style="MPC.TButton", command=self.cycle_audio_track).pack(side="right", padx=3)
-        ttk.Button(bar, text="Video", style="MPC.TButton", command=self.cycle_video_track).pack(side="right", padx=3)
-        ttk.Button(bar, text="Subtitles", style="MPC.TButton", command=self.cycle_subtitle_track).pack(side="right", padx=3)
+        self.rate_button = ttk.Button(bar, text=f"{self._rate:g}×",
+                                      style="MPC.TButton", command=self.cycle_rate)
+        self.rate_button.pack(side="right", padx=3)
+        self._track_menus = {}
+        self._track_vars = {}
+        self._make_track_menu(bar, "Audio", TrackKind.AUDIO)
+        self._make_track_menu(bar, "Video", TrackKind.VIDEO)
+        self._make_track_menu(bar, "Subtitles", TrackKind.SUBTITLE)
+        self._make_audio_device_menu(bar)
+        self._make_chapter_menu(bar)
+        self._make_sync_menu(bar)
         ttk.Button(bar, text="Load subtitle", style="MPC.TButton", command=self.load_external_subtitle).pack(side="right", padx=3)
-        ttk.Button(bar, text="Chapter", style="MPC.TButton", command=self.next_chapter).pack(side="right", padx=3)
         ttk.Button(bar, text="Frame", style="MPC.TButton", command=self.next_frame).pack(side="right", padx=3)
         ttk.Button(bar, text="Info", style="MPC.TButton", command=self.show_media_info).pack(side="right", padx=3)
         ttk.Button(bar, text="Fullscreen", style="MPC.TButton", command=self.toggle_fullscreen).pack(side="right", padx=3)
@@ -255,7 +278,7 @@ class MPCASUPlayer(tk.Tk):
             tk.Label(card, textvariable=variable, bg=PANEL_ALT, fg=SECONDARY, font=("TkDefaultFont", 9)).pack(anchor="w", pady=(3, 0))
         statusbar = tk.Frame(root, bg=BG); statusbar.pack(fill="x", padx=18, pady=(4, 10))
         self.statusbar = statusbar
-        tk.Label(statusbar, text="MPCASU 1.0.0  ● Ready", bg=BG, fg=SECONDARY).pack(side="left")
+        tk.Label(statusbar, text="MPCASU 1.0.0rc8  ● Pre-release", bg=BG, fg=SECONDARY).pack(side="left")
         tk.Label(statusbar, text="Optimized for performance and integrity", bg=BG, fg=MUTED).pack(side="left", padx=28)
         tk.Label(statusbar, text="CPU/RAM telemetry unavailable", bg=BG, fg=MUTED).pack(side="right")
         self.bind("<space>", lambda _event: self.pause())
@@ -276,7 +299,158 @@ class MPCASUPlayer(tk.Tk):
         self.canvas.bind("<Double-Button-1>", lambda _event: self.toggle_fullscreen())
         self.bind("<Configure>", self._responsive_layout)
         self.after(500, self._poll)
-        self.after(50, self._visual_tick)
+
+    def _menu_button(self, parent, text: str) -> tuple[tk.Menubutton, tk.Menu]:
+        button = tk.Menubutton(parent, text=text, bg=PANEL_ALT, fg=TEXT,
+                               activebackground=RED_DARK, activeforeground=TEXT,
+                               relief="flat", padx=8, pady=5, highlightthickness=0)
+        menu = tk.Menu(button, tearoff=False, bg=PANEL_ALT, fg=TEXT,
+                       activebackground=RED_DARK, activeforeground=TEXT)
+        button.configure(menu=menu); button.pack(side="right", padx=3)
+        return button, menu
+
+    def _make_track_menu(self, parent, label: str, kind: TrackKind) -> None:
+        button, menu = self._menu_button(parent, label)
+        variable = tk.IntVar(value=-1)
+        menu.configure(postcommand=lambda kind=kind: self._refresh_track_menu(kind))
+        self._track_menus[kind] = menu
+        self._track_vars[kind] = variable
+
+    def _refresh_track_menu(self, kind: TrackKind) -> None:
+        menu = self._track_menus[kind]; menu.delete(0, "end")
+        if not self.backend:
+            menu.add_command(label="No active media", state="disabled"); return
+        descriptors = self.backend.track_descriptors(kind)
+        current = {TrackKind.AUDIO: self.backend.audio_track,
+                   TrackKind.VIDEO: self.backend.video_track,
+                   TrackKind.SUBTITLE: self.backend.subtitle_track}[kind]()
+        self._track_vars[kind].set(current)
+        if kind is TrackKind.SUBTITLE:
+            menu.add_radiobutton(label="Off", variable=self._track_vars[kind], value=-1,
+                                 command=lambda: self._select_track(kind, -1))
+        if not descriptors:
+            menu.add_command(label="No tracks reported", state="disabled")
+        for item in descriptors:
+            details = [item.label]
+            if item.language and item.language not in item.label:
+                details.append(item.language)
+            if item.codec and item.codec not in item.label:
+                details.append(item.codec)
+            menu.add_radiobutton(label=" · ".join(details), variable=self._track_vars[kind],
+                                 value=item.identifier,
+                                 command=lambda value=item.identifier, kind=kind:
+                                 self._select_track(kind, value))
+
+    def _select_track(self, kind: TrackKind, identifier: int) -> None:
+        if not self.backend:
+            return
+        setters = {TrackKind.AUDIO: self.backend.set_audio_track,
+                   TrackKind.VIDEO: self.backend.set_video_track,
+                   TrackKind.SUBTITLE: self.backend.set_subtitle_track}
+        try:
+            setters[kind](identifier)
+            self._persist_media_preferences()
+            self.status.set(f"{kind.value.title()} track selected: {identifier}")
+        except BackendError as exc:
+            self.status.set(str(exc))
+
+    def _make_audio_device_menu(self, parent) -> None:
+        button, menu = self._menu_button(parent, "Output")
+        self._audio_device_menu = menu
+        menu.configure(postcommand=self._refresh_audio_devices)
+
+    def _make_chapter_menu(self, parent) -> None:
+        _button, menu = self._menu_button(parent, "Chapters")
+        self._chapter_menu = menu
+        menu.configure(postcommand=self._refresh_chapters)
+
+    def _make_sync_menu(self, parent) -> None:
+        _button, menu = self._menu_button(parent, "Sync")
+        menu.add_command(label="Audio delay…", command=self.set_audio_delay_dialog)
+        menu.add_command(label="Subtitle delay…", command=self.set_subtitle_delay_dialog)
+
+    def set_audio_delay_dialog(self) -> None:
+        value = simpledialog.askfloat(
+            "Audio delay", "Milliseconds (-5000 to 5000):",
+            initialvalue=self._audio_delay_ms, minvalue=-5000, maxvalue=5000,
+            parent=self,
+        )
+        if value is not None:
+            self._set_media_delay("audio", value)
+
+    def set_subtitle_delay_dialog(self) -> None:
+        value = simpledialog.askfloat(
+            "Subtitle delay", "Milliseconds (-5000 to 5000):",
+            initialvalue=self._subtitle_delay_ms, minvalue=-5000, maxvalue=5000,
+            parent=self,
+        )
+        if value is not None:
+            self._set_media_delay("subtitle", value)
+
+    def _set_media_delay(self, kind: str, milliseconds: float) -> None:
+        value = max(-5000.0, min(5000.0, float(milliseconds)))
+        if self.backend:
+            try:
+                if kind == "audio":
+                    value = self.backend.set_audio_delay(value)
+                else:
+                    value = self.backend.set_subtitle_delay(value)
+            except BackendError as exc:
+                self.status.set(str(exc)); return
+        if kind == "audio":
+            self._audio_delay_ms = value
+        else:
+            self._subtitle_delay_ms = value
+        self._persist_media_preferences()
+        self.status.set(f"{kind.title()} delay {value:+g} ms")
+
+    def _refresh_chapters(self) -> None:
+        self._chapter_menu.delete(0, "end")
+        if not self.backend:
+            self._chapter_menu.add_command(label="No active media", state="disabled")
+            return
+        chapters = self.backend.chapter_descriptors()
+        if not chapters:
+            self._chapter_menu.add_command(label="No chapters reported", state="disabled")
+            return
+        for chapter in chapters:
+            minutes, seconds = divmod(max(0, int(chapter.start_seconds)), 60)
+            self._chapter_menu.add_command(
+                label=f"{minutes:02d}:{seconds:02d} · {chapter.title}",
+                command=lambda identifier=chapter.identifier:
+                self._select_chapter(identifier),
+            )
+
+    def _select_chapter(self, identifier: int) -> None:
+        if not self.backend:
+            return
+        try:
+            self.backend.set_chapter(identifier)
+            self.status.set(f"Chapter selected: {identifier + 1}")
+        except BackendError as exc:
+            self.status.set(str(exc))
+
+    def _refresh_audio_devices(self) -> None:
+        self._audio_device_menu.delete(0, "end")
+        if not self.backend:
+            self._audio_device_menu.add_command(label="No active media", state="disabled"); return
+        devices = self.backend.audio_devices()
+        if not devices:
+            self._audio_device_menu.add_command(label="Runtime reported no devices", state="disabled")
+        for device in devices:
+            self._audio_device_menu.add_command(
+                label=device.label,
+                command=lambda identifier=device.identifier: self._select_audio_device(identifier))
+
+    def _select_audio_device(self, identifier: str) -> None:
+        if not self.backend:
+            return
+        try:
+            self.backend.set_audio_device(identifier)
+            self._audio_device = identifier
+            self.status.set(f"Audio output selected: {identifier}")
+        except BackendError as exc:
+            self.status.set(str(exc))
 
     def _nav(self, parent, heading: str, entries: list[str]) -> None:
         tk.Label(parent, text=heading, bg=PANEL, fg=MUTED, font=("TkDefaultFont", 8, "bold"), anchor="w").pack(fill="x", padx=14, pady=(14, 5))
@@ -287,7 +461,34 @@ class MPCASUPlayer(tk.Tk):
             text_label = tk.Label(row, text=entry, bg=PANEL, fg=TEXT if entry == "Now Playing" else SECONDARY, anchor="w")
             text_label.pack(side="left", padx=6)
             for widget in (row, label, text_label):
-                widget.bind("<Button-1>", lambda _event, name=entry: self.status.set(f"{name}: view not available in this release"))
+                widget.bind("<Button-1>", lambda _event, name=entry: self._navigate(name))
+
+    def _navigate(self, name: str) -> None:
+        """Route every visible navigation entry to a concrete player action."""
+        if name == "Now Playing":
+            if self.current:
+                self.canvas.focus_set()
+                self.status.set(f"Now playing · {self.current.name}")
+            else:
+                self.status.set("No media is currently playing")
+        elif name == "Library":
+            self.show_library_dialog()
+        elif name == "CASU Files":
+            self._add_dialog_filter("CASU media", "*.casu")
+        elif name == "Video":
+            self._add_dialog_filter("Video media", "*.mp4 *.mkv *.mov *.m4v *.webm *.avi")
+        elif name == "Music":
+            self._add_dialog_filter("Audio media", "*.mp3 *.flac *.wav *.ogg *.opus *.m4a *.aac *.aiff")
+        elif name == "Playlists":
+            self.load_playlist()
+        elif name == "Local Files":
+            self.add_dialog()
+        elif name == "Network Stream":
+            self.open_url_dialog()
+
+    def _add_dialog_filter(self, label: str, pattern: str) -> None:
+        paths = filedialog.askopenfilenames(filetypes=[(label, pattern), ("All files", "*.*")])
+        self.add_files([Path(path) for path in paths])
 
     def _responsive_layout(self, event=None):
         """Keep the video viewport usable instead of clipping side panels."""
@@ -432,7 +633,8 @@ class MPCASUPlayer(tk.Tk):
             self.backend.open_source(source)
             self.controller.attach(self.backend, source)
             self.controller.play()
-            self._rate = self.backend.set_rate(self._rate)
+            self._apply_playback_rate()
+            self._apply_backend_settings()
             self._set_diagnostics(support="Legacy network backend", integrity="unavailable", segmented="unavailable", energy="unavailable — not measured")
             self.duration = self.backend.duration()
             self.timeline.configure(to=max(self.duration, 1.0))
@@ -449,7 +651,117 @@ class MPCASUPlayer(tk.Tk):
             if path.exists() and str(path) not in self.library.get(0, "end"):
                 self.library.insert("end", str(path))
                 self.queue.insert("end", path.name)
+                try:
+                    self.media_library.upsert(path)
+                except OSError:
+                    pass
         self._sync_queue_empty()
+
+    def add_watched_folder(self):
+        selected = filedialog.askdirectory(mustexist=True)
+        if not selected:
+            return
+        folder = str(Path(selected).expanduser().resolve())
+        if folder not in self._watched_folders:
+            self._watched_folders.append(folder)
+        try:
+            scanned = self.media_library.scan([folder])
+            self._save_effective_settings()
+            self.status.set(f"Library scan complete · {len(scanned)} file(s) seen")
+        except (OSError, ValueError) as exc:
+            self.status.set(f"Library scan failed: {exc}")
+        self.show_library_dialog()
+
+    def refresh_watched_folders(self):
+        if not self._watched_folders:
+            self.status.set("No watched folders configured")
+            return
+        try:
+            scanned = self.media_library.scan(self._watched_folders)
+            self.status.set(f"Library refreshed · {len(scanned)} file(s) seen")
+        except (OSError, ValueError) as exc:
+            self.status.set(f"Library refresh failed: {exc}")
+
+    def show_library_dialog(self):
+        dialog = tk.Toplevel(self)
+        dialog.title("MPCASU Library")
+        dialog.geometry("760x480")
+        dialog.configure(bg=BG)
+        query = tk.StringVar()
+        top = tk.Frame(dialog, bg=BG, padx=12, pady=12); top.pack(fill="x")
+        tk.Label(top, text="Search", bg=BG, fg=TEXT).pack(side="left")
+        entry = ttk.Entry(top, textvariable=query); entry.pack(side="left", fill="x", expand=True, padx=8)
+        results = tk.Listbox(dialog, bg=PANEL_ALT, fg=TEXT,
+                             selectbackground=RED_DARK, relief="flat")
+        results.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+        preview = tk.Label(dialog, text="Select media for preview", bg=PANEL,
+                           fg=MUTED, height=10)
+        preview.pack(fill="x", padx=12, pady=(0, 8))
+        paths: list[Path] = []
+        preview_generation = [0]
+        preview_image = [None]
+
+        def refresh(*_args):
+            paths.clear(); results.delete(0, "end")
+            for item in self.media_library.search(query.get()):
+                paths.append(item.path)
+                marker = "★ " if item.favorite else ""
+                resume = f" · resume {item.resume_seconds:.1f}s" if item.resume_seconds else ""
+                results.insert("end", f"{marker}{item.path.name}{resume}  —  {item.path.parent}")
+
+        def add_selected(_event=None):
+            selected = results.curselection()
+            if selected:
+                self.add_files([paths[selected[0]]])
+                dialog.destroy()
+
+        def load_preview(_event=None):
+            selected = results.curselection()
+            if not selected:
+                return
+            source = paths[selected[0]]
+            preview_generation[0] += 1
+            generation = preview_generation[0]
+            preview.configure(image="", text="Decoding thumbnail…")
+
+            def worker():
+                thumbnail = thumbnail_for(source, self._thumbnail_directory)
+                def present():
+                    if (generation != preview_generation[0] or
+                            not dialog.winfo_exists()):
+                        return
+                    if thumbnail is None:
+                        preview.configure(image="", text="No video thumbnail available")
+                        return
+                    try:
+                        image = tk.PhotoImage(file=str(thumbnail))
+                    except (tk.TclError, OSError):
+                        preview.configure(image="", text="Thumbnail could not be displayed")
+                        return
+                    preview_image[0] = image
+                    preview.configure(image=image, text="")
+                try:
+                    self.after(0, present)
+                except tk.TclError:
+                    pass
+            threading.Thread(target=worker, name="mpcasu-thumbnail",
+                             daemon=True).start()
+
+        controls = tk.Frame(dialog, bg=BG, padx=12, pady=8); controls.pack(fill="x")
+        ttk.Button(controls, text="Refresh watched folders", style="MPC.TButton",
+                   command=lambda: (self.refresh_watched_folders(), refresh())).pack(side="left")
+        ttk.Button(controls, text="Add selected", style="MPC.TButton",
+                   command=add_selected).pack(side="right")
+        results.bind("<Double-Button-1>", add_selected)
+        results.bind("<<ListboxSelect>>", load_preview)
+        query.trace_add("write", refresh)
+        refresh(); entry.focus_set()
+
+    def _save_effective_settings(self) -> None:
+        self.settings_store.save(PlayerSettings(
+            self._volume, self._muted, self._rate, self._audio_device,
+            tuple(self._watched_folders),
+        ))
 
     def _sync_queue_empty(self):
         """Keep the playlist panel informative instead of showing dead empty space."""
@@ -463,9 +775,6 @@ class MPCASUPlayer(tk.Tk):
         try:
             payload = json.loads(self._session_file.read_text(encoding="utf-8"))
             self.add_files([Path(value) for value in payload.get("playlist", []) if Path(value).is_file()])
-            self._volume = max(0, min(200, int(payload.get("volume", self._volume))))
-            self._muted = bool(payload.get("muted", False))
-            self._rate = max(0.25, min(4.0, float(payload.get("rate", 1.0))))
             self._resume_source = str(payload.get("current", "")) or None
             self._resume_position = max(0.0, float(payload.get("position", 0.0)))
             geometry = payload.get("geometry")
@@ -475,6 +784,8 @@ class MPCASUPlayer(tk.Tk):
             pass
 
     def _shutdown(self):
+        resume_position = self.backend.position() if self.backend else self.position.get()
+        self._persist_media_preferences()
         try:
             self._session_file.parent.mkdir(parents=True, exist_ok=True)
             temporary = self._session_file.with_suffix(".tmp")
@@ -484,14 +795,25 @@ class MPCASUPlayer(tk.Tk):
                 "muted": self._muted,
                 "rate": self._rate,
                 "current": str(self.current) if self.current else None,
-                "position": self.backend.position() if self.backend else self.position.get(),
+                "position": resume_position,
                 "geometry": self.geometry(),
             }, indent=2) + "\n", encoding="utf-8")
             temporary.replace(self._session_file)
         except OSError:
             pass
+        if self.current and self.current.is_file():
+            try:
+                self.media_library.record_progress(self.current, resume_position,
+                                                   self.duration or None)
+            except OSError:
+                pass
+        try:
+            self._save_effective_settings()
+        except OSError:
+            pass
         self.controller.close()
         self.backend = None
+        self.media_library.close()
         self.destroy()
 
     def _load_visual_state(self, path: Path):
@@ -504,8 +826,19 @@ class MPCASUPlayer(tk.Tk):
             return
         try:
             with path.open("rb") as handle:
-                is_native = handle.read(8) == b"CASUNAT1"
-            manifest = (read_native(path, verify_payload=True).manifest if is_native
+                magic = handle.read(8)
+            if magic == b"CASUNAT2":
+                container = read_native_v2(path)
+                self._visual_state = "CASUNAT2 native state stream"
+                self._visual_segments = [
+                    {"start_s": 0.0, "end_s": 0.0, "state": chunk.chunk_type.name}
+                    for chunk in container.chunks
+                    if chunk.chunk_type in {ChunkType.VIDEO_KEY_STATE,
+                                            ChunkType.VIDEO_TILE_UPDATE}
+                ]
+                self._visual_video_segments = list(self._visual_segments)
+                return
+            manifest = (read_native(path, verify_payload=True).manifest if magic == b"CASUNAT1"
                         else json.loads(path.read_text(encoding="utf-8")))
             errors = validate_manifest(manifest)
             if errors:
@@ -516,7 +849,7 @@ class MPCASUPlayer(tk.Tk):
             self._visual_segments = self._visual_video_segments + self._visual_audio_segments
             self._scheduler = CasuScheduler.from_manifest(manifest, "video" if self._visual_video_segments else "audio")
             self._visual_state = "CASU state map" if self._visual_segments else "CASU empty map"
-        except (OSError, ValueError, TypeError, NativeCasuError):
+        except (OSError, ValueError, TypeError, NativeCasuError, NativeV2Error):
             self._visual_state = "invalid CASU"
 
     def _state_at_position(self) -> str:
@@ -557,12 +890,6 @@ class MPCASUPlayer(tk.Tk):
         self.canvas.create_text(width // 2, height // 2, anchor="center", text=label,
                                 fill=MUTED, font=("TkDefaultFont", 11), tags="viz")
 
-    def _visual_tick(self):
-        if self.backend and self.backend.state() == PlaybackState.PLAYING and not self._paused:
-            self._visual_phase += 0.16
-        self._draw_visualizer()
-        self.after(50, self._visual_tick)
-
     def remove_selected(self):
         selected = list(self.library.curselection())
         for index in reversed(selected):
@@ -602,10 +929,28 @@ class MPCASUPlayer(tk.Tk):
             return
         try:
             native = False
+            native_v2 = False
             if path.suffix.lower() == ".casu":
                 with path.open("rb") as handle:
-                    native = handle.read(8) == b"CASUNAT1"
-            if native:
+                    magic = handle.read(8)
+                    native = magic == b"CASUNAT1"
+                    native_v2 = magic == b"CASUNAT2"
+            if native_v2:
+                container = read_native_v2(path)
+                manifest = container.manifest
+                source = path
+                streams = []
+                for item in manifest.get("streams", []):
+                    stream = dict(item)
+                    stream["codec_type"] = stream.get("type")
+                    stream["codec_name"] = "casu-" + str(stream.get("type", "data"))
+                    streams.append(stream)
+                probe = {"streams": streams,
+                         "format": {"format_name": "CASUNAT2 segmented media",
+                                    "duration": self.backend.duration() if isinstance(self.backend, NativeCasuBackend) else "unknown",
+                                    "size": path.stat().st_size,
+                                    "tags": manifest.get("metadata", {})}}
+            elif native:
                 manifest = read_native(path, verify_payload=True).manifest
                 source = path
                 probe = {"streams": manifest.get("streams", []),
@@ -619,8 +964,16 @@ class MPCASUPlayer(tk.Tk):
                      f"Container: {probe.get('format', {}).get('format_name', 'unknown')}",
                      f"Duration: {probe.get('format', {}).get('duration', 'unknown')} s",
                      f"Size: {probe.get('format', {}).get('size', 'unknown')} bytes"]
+            metadata = probe.get("format", {}).get("tags", {})
+            if isinstance(metadata, dict):
+                for key in ("title", "artist", "album", "album_artist", "date", "genre"):
+                    value = metadata.get(key)
+                    if value not in (None, ""):
+                        lines.append(f"{key.replace('_', ' ').title()}: {value}")
             if path.suffix.lower() == ".casu":
-                lines.extend(["CASU: verified native container" if native else "CASU: validated sidecar manifest",
+                lines.extend(["CASU: verified native CASUNAT2" if native_v2 else
+                              "CASU: verified CASUNAT1 compatibility envelope" if native else
+                              "CASU: validated sidecar manifest",
                               f"Segment hints: {len(self._visual_segments)}"])
             for index, stream in enumerate(probe.get("streams", [])):
                 details = [f"stream {index}: {stream.get('codec_type', 'unknown')}", str(stream.get('codec_name', 'unknown'))]
@@ -634,7 +987,7 @@ class MPCASUPlayer(tk.Tk):
             dialog = tk.Toplevel(self); dialog.title("Media information"); dialog.configure(bg=BG); dialog.transient(self)
             text = tk.Text(dialog, width=76, height=max(8, len(lines) + 2), bg=PANEL_ALT, fg=TEXT, relief="flat", wrap="word")
             text.insert("1.0", "\n".join(lines)); text.configure(state="disabled"); text.pack(padx=16, pady=16)
-        except (CasuError, NativeCasuError, OSError, ValueError) as exc:
+        except (CasuError, NativeCasuError, NativeV2Error, OSError, ValueError) as exc:
             messagebox.showerror("MPCASU", f"Media information unavailable: {exc}")
 
     def selected_path(self) -> Path | None:
@@ -670,14 +1023,18 @@ class MPCASUPlayer(tk.Tk):
         sidecar = path if path.suffix.lower() == ".casu" else self._sidecar(path)
         self._load_visual_state(sidecar if sidecar.exists() else path)
         if path.suffix.lower() == ".casu":
+            magic = b""
             try:
-                native = path.read_bytes()[:8] == b"CASUNAT1"
+                magic = path.read_bytes()[:8]
+                native = magic in {b"CASUNAT1", b"CASUNAT2"}
             except OSError:
                 native = False
             self._set_diagnostics(
                 # The current .casu format is a validated sidecar compatibility
                 # manifest. Do not present it as a native decoded CASU payload.
-                support="CASU native payload + legacy backend" if native else "CASU sidecar + legacy backend",
+                support=("CASUNAT2 native key-state/tile/PCM" if magic == b"CASUNAT2" else
+                         "CASUNAT1 compatibility + libVLC" if native else
+                         "CASU sidecar + libVLC"),
                 integrity="verified source manifest" if not self._visual_state.startswith("invalid") else "failed manifest validation",
                 segmented=f"{len(self._visual_segments)} segments" if self._visual_segments else "no segment data",
             )
@@ -695,13 +1052,24 @@ class MPCASUPlayer(tk.Tk):
         state = "CASU manifest selected" if path.suffix.lower() == ".casu" else ("CASU sidecar found" if sidecar.exists() else "legacy fallback — no CASU sidecar")
         self.status.set(f"{path.name} · {state}")
         try:
-            self.backend = CasuBackend(self.canvas) if path.suffix.lower() == ".casu" else LibVLCBackend(self.canvas)
+            if path.suffix.lower() == ".casu" and NativeCasuBackend.supports(path):
+                try:
+                    audio_sink = PulseAudioSink()
+                except BackendError:
+                    # Video-only/headless systems still get native CASU video.
+                    audio_sink = None
+                self.backend = NativeCasuBackend(TkCanvasVideoSink(self.canvas), audio_sink)
+            else:
+                self.backend = CasuBackend(self.canvas) if path.suffix.lower() == ".casu" else LibVLCBackend(self.canvas)
             self.backend.on_event = self._backend_event
             if path.suffix.lower() == ".casu": self.backend.open_casu(path)
             else: self.backend.open(source)
             self.controller.attach(self.backend, path)
+            if isinstance(self.backend, NativeCasuBackend):
+                self._apply_media_preferences()
             self.controller.play()
-            self._rate = self.backend.set_rate(self._rate)
+            self._apply_playback_rate()
+            self._apply_backend_settings()
             self.duration = self.backend.duration()
             self.timeline.configure(to=max(self.duration, 1.0))
             if (self._resume_source and str(path) == self._resume_source
@@ -717,7 +1085,9 @@ class MPCASUPlayer(tk.Tk):
             # Check local playback after its asynchronous pipeline had time to
             # announce streams; never leave the UI claiming PLAYING forever
             # when no timed media was produced.
-            self.after(1500, self._check_playback_start)
+            if isinstance(self.backend, LibVLCBackend):
+                self.after(500, self._apply_media_preferences)
+                self.after(1500, self._check_playback_start)
         except (BackendError, CasuError, OSError) as exc:
             self.controller.close()
             self.backend = None
@@ -726,6 +1096,74 @@ class MPCASUPlayer(tk.Tk):
             return
         self._paused = False
         self._update_presentation(path)
+
+    def _apply_backend_settings(self) -> None:
+        if not self.backend:
+            return
+        self._volume = self.backend.set_volume(self._volume)
+        self.backend.set_mute(self._muted)
+        if self._audio_device:
+            try:
+                self.backend.set_audio_device(self._audio_device)
+            except BackendError:
+                # A stored device may have been unplugged; playback continues
+                # on the backend default and the stale choice is discarded.
+                self._audio_device = None
+
+    def _apply_playback_rate(self) -> None:
+        if not self.backend:
+            return
+        try:
+            self._rate = self.backend.set_rate(self._rate)
+        except BackendError:
+            if not isinstance(self.backend, NativeCasuBackend):
+                raise
+            self._rate = self.backend.set_rate(1.0)
+        self.rate_button.configure(text=f"{self._rate:g}×")
+
+    def _apply_media_preferences(self) -> None:
+        if not self.backend or not self.current or not self.current.is_file():
+            return
+        preferences = self.media_library.playback_preferences(self.current)
+        for identifier, setter in (
+            (preferences.audio_track, self.backend.set_audio_track),
+            (preferences.video_track, self.backend.set_video_track),
+            (preferences.subtitle_track, self.backend.set_subtitle_track),
+        ):
+            if identifier is not None:
+                try:
+                    setter(identifier)
+                except BackendError:
+                    pass
+        self._audio_delay_ms = preferences.audio_delay_ms
+        self._subtitle_delay_ms = preferences.subtitle_delay_ms
+        try:
+            self._audio_delay_ms = self.backend.set_audio_delay(self._audio_delay_ms)
+        except BackendError:
+            self._audio_delay_ms = 0.0
+        try:
+            self._subtitle_delay_ms = self.backend.set_subtitle_delay(
+                self._subtitle_delay_ms
+            )
+        except BackendError:
+            self._subtitle_delay_ms = 0.0
+
+    def _persist_media_preferences(self) -> None:
+        if not self.backend or not self.current or not self.current.is_file():
+            return
+        try:
+            audio_track = self.backend.audio_track()
+            video_track = self.backend.video_track()
+            preferences = PlaybackPreferences(
+                audio_track=audio_track if audio_track >= 0 else None,
+                video_track=video_track if video_track >= 0 else None,
+                subtitle_track=self.backend.subtitle_track(),
+                audio_delay_ms=self._audio_delay_ms,
+                subtitle_delay_ms=self._subtitle_delay_ms,
+            )
+            self.media_library.set_playback_preferences(self.current, preferences)
+        except (BackendError, OSError, ValueError):
+            pass
 
     def _backend_event(self, state: PlaybackState) -> None:
         """Receive libVLC events without touching Tk from its worker thread."""
@@ -766,10 +1204,18 @@ class MPCASUPlayer(tk.Tk):
             # A CASU sidecar is metadata; stream presentation comes from the
             # immutable source it references, never from the JSON manifest.
             native = False
+            native_v2 = False
             if path.suffix.lower() == ".casu":
                 with path.open("rb") as handle:
-                    native = handle.read(8) == b"CASUNAT1"
-            if native:
+                    magic = handle.read(8)
+                    native = magic == b"CASUNAT1"
+                    native_v2 = magic == b"CASUNAT2"
+            if native_v2:
+                manifest = read_native_v2(path).manifest
+                streams = [{**item, "codec_type": item.get("type")}
+                           for item in manifest.get("streams", [])]
+                probe = {"streams": streams, "format": {}}
+            elif native:
                 manifest = read_native(path, verify_payload=False).manifest
                 streams = manifest.get("streams", [])
                 probe = {"streams": streams, "format": {"duration": manifest.get("source", {}).get("duration_s", 0)}}
@@ -789,7 +1235,7 @@ class MPCASUPlayer(tk.Tk):
             else:
                 self.canvas.itemconfigure("title", text="UNSUPPORTED PRESENTATION")
                 self.canvas.itemconfigure("subtitle", text="No video or audio stream was reported by the probe")
-        except (CasuError, OSError, ValueError, NativeCasuError):
+        except (CasuError, OSError, ValueError, NativeCasuError, NativeV2Error):
             self.status.set("Stream presentation metadata unavailable")
 
     def toggle_playback(self):
@@ -822,6 +1268,7 @@ class MPCASUPlayer(tk.Tk):
             return
         try:
             self._rate = self.backend.set_rate(next_rate)
+            self.rate_button.configure(text=f"{self._rate:g}×")
             self.status.set(f"Playback rate {self._rate:g}×")
         except BackendError as exc:
             self.status.set(f"Playback rate unavailable: {exc}")
@@ -936,7 +1383,7 @@ class MPCASUPlayer(tk.Tk):
             return path
         try:
             with path.open("rb") as handle:
-                if handle.read(8) == b"CASUNAT1":
+                if handle.read(8) in {b"CASUNAT1", b"CASUNAT2"}:
                     # Native containers are verified and extracted by
                     # CasuBackend; do not attempt to parse their binary bytes
                     # as a JSON sidecar here.
@@ -969,6 +1416,7 @@ class MPCASUPlayer(tk.Tk):
 
     def stop(self):
         if self.backend:
+            self._persist_media_preferences()
             self.controller.stop()
             self.controller.close()
         self.backend = None

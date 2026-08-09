@@ -1,7 +1,11 @@
 <!-- SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4 | SPDX-FileCopyrightText: 2026 Lino Casu -->
-# CASU/MPCASU 1.0.0
+# Historical 1.0.0 compatibility-slice draft — not a current release
 
-This release contains the first complete compatibility slice:
+This file is retained for provenance. It is not release evidence and does not
+describe the current CASUNAT2 gate status. The active package version is
+`1.0.0rc8`; see `RELEASE_GATE_STATUS.json` and `TEST_REPORT.md`.
+
+The historical draft described this compatibility slice:
 
 - CASU manifest schema with source SHA-256, timing/deadline validation and
   full-fidelity fallback;

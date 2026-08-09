@@ -14,15 +14,21 @@ from casu.native import NativeCasuError, read_native, write_native
 from casu.native_v2 import (ChunkType, NativeChunk, NativeV2Error, TileStateCache,
                             decode_audio_block, encode_audio_block, encode_key_state,
                             encode_tile_update, read_native_v2, recover_native_v2, write_native_v2,
+                            repair_native_v2,
+                            decode_attachment, encode_attachment,
+                            decode_bitmap_subtitle, encode_bitmap_subtitle,
                             SubtitlePacket, decode_chapter_table, decode_subtitle_packet,
                             encode_chapter_table, encode_subtitle_packet)
+from casu.native_v2.converter import NativeConversionError, _bounded_tags
 from casu.tiles import (TileStateError, compare_tile_frames, state_map_from_frames,
                         tile_regions)
 from casu.cli import atomic_write_text
 from casu.cli import main as casu_cli_main
-from mpcasu_backend import LibVLCBackend
+from mpcasu_backend import (CasuBackend, LibVLCBackend,
+                            LIBVLC_PLAYER_EVENT_STATES, PlaybackState)
+from mpcasu_native_backend import NativeCasuBackend
 from mpcasu_playback import ControllerState, PlaybackController
-from mpcasu_player import presentation_mode
+from mpcasu_player import MPCASUPlayer, presentation_mode
 from casu.strict import StrictFrame, build_state_map, canonical_frame, iter_source_frames
 
 
@@ -42,15 +48,16 @@ def test_reference_video_manifest_preserves_source_metadata(tmp_path):
     assert manifest["streams"][0]["codec_type"] == "video"
     assert manifest["streams"][1]["codec_type"] == "audio"
     assert manifest["integrity"]["timestamps_are_source_of_truth"] is True
-    assert manifest["video"]["state_is_hint_only"] is True
+    assert manifest["video"]["state_is_hint_only"] is False
+    assert manifest["video"]["strict_pixel_identical_available"] is True
     assert manifest["audio"]["state_is_hint_only"] is True
     assert manifest["video"]["spatial_analysis"]["tile_grid"]
-    assert 0.0 <= manifest["video"]["spatial_analysis"]["mean_changed_tile_ratio"] <= 1.0
-    assert manifest["video"]["spatial_analysis"]["strict_pixel_identical_available"] is False
+    assert manifest["video"]["spatial_analysis"]["strict_pixel_identical_available"] is True
     state_map = manifest["video"]["spatial_analysis"]["state_map"]
     assert state_map and state_map[0]["tile_id"].startswith("tile-")
-    assert manifest["video"]["spatial_analysis"]["state_map_identity_scope"] == "decoded gray8 analysis plane only"
-    assert manifest["video"]["segments"][0]["segment_id"].startswith("video-")
+    assert manifest["video"]["spatial_analysis"]["state_map_identity_scope"].startswith(
+        "all active native decoded planes")
+    assert manifest["video"]["segments"] == []
     assert manifest["audio"]["segments"][0]["segment_id"].startswith("audio-")
     assert manifest["seek_index"]["native_key_states"] is False
     assert manifest["seek_index"]["entries"]
@@ -83,11 +90,11 @@ def test_cli_refuses_output_equal_to_source(tmp_path, monkeypatch):
 def test_cli_convert_supports_multiple_inputs_and_reports_failures(tmp_path, monkeypatch, capsys):
     first = tmp_path / "one.mp4"; second = tmp_path / "two.mp4"
     first.write_bytes(b"one"); second.write_bytes(b"two")
-    def fake_analyze(path, *_args):
+    def fake_analyze(path, *_args, **_kwargs):
         if path.name == "two.mp4":
             raise CasuError("unsupported fixture")
         return {"source": {"duration_s": 1}, "video": {"segments": []}, "audio": {"segments": []}}
-    monkeypatch.setattr("casu.cli.analyze", fake_analyze)
+    monkeypatch.setattr("casu.jobs.analyze", fake_analyze)
     output_dir = tmp_path / "out"
     monkeypatch.setattr("sys.argv", ["casu", "convert", str(first), str(second), "-o", str(output_dir)])
     assert casu_cli_main() == 1
@@ -101,7 +108,7 @@ def test_cli_convert_expands_directories_and_writes_report(tmp_path, monkeypatch
     source = source_dir / "clip.mp4"; source.write_bytes(b"clip")
     output_dir = tmp_path / "out"
     report_path = tmp_path / "batch.json"
-    monkeypatch.setattr("casu.cli.analyze", lambda *_args: {
+    monkeypatch.setattr("casu.jobs.analyze", lambda *_args, **_kwargs: {
         "source": {"duration_s": 2}, "video": {"segments": []}, "audio": {"segments": []}
     })
     monkeypatch.setattr("sys.argv", ["casu", "convert", str(source_dir), "-o", str(output_dir), "--report", str(report_path)])
@@ -110,10 +117,17 @@ def test_cli_convert_expands_directories_and_writes_report(tmp_path, monkeypatch
     assert json.loads(report_path.read_text(encoding="utf-8"))["files"][0]["status"] == "converted"
 
 
+def test_cli_convert_rejects_negative_retry(tmp_path, monkeypatch, capsys):
+    source = tmp_path / "clip.mp4"; source.write_bytes(b"clip")
+    monkeypatch.setattr("sys.argv", ["casu", "convert", str(source), "--retry", "-1"])
+    assert casu_cli_main() == 2
+    assert "retry count" in capsys.readouterr().out
+
+
 def test_cli_convert_native_container_mode_is_explicit(tmp_path, monkeypatch, capsys):
     source = tmp_path / "clip.mp4"; source.write_bytes(b"clip")
     output_dir = tmp_path / "out"
-    monkeypatch.setattr("casu.cli.analyze", lambda *_args: {
+    monkeypatch.setattr("casu.jobs.analyze", lambda *_args, **_kwargs: {
         "source": {"duration_s": 2}, "video": {"segments": []}, "audio": {"segments": []}
     })
     calls = []
@@ -122,7 +136,7 @@ def test_cli_convert_native_container_mode_is_explicit(tmp_path, monkeypatch, ca
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(b"native")
         return output
-    monkeypatch.setattr("casu.cli.write_native", fake_write)
+    monkeypatch.setattr("casu.jobs.write_native", fake_write)
     monkeypatch.setattr("sys.argv", ["casu", "convert", str(source), "-o", str(output_dir), "--container", "native"])
     assert casu_cli_main() == 0
     report = json.loads(capsys.readouterr().out)
@@ -204,13 +218,13 @@ def test_tile_primitives_fail_closed_for_noncanonical_frames():
 def test_source_resolution_strict_detects_single_chroma_or_alpha_sample():
     np = __import__("numpy")
     y = np.zeros((4, 4), dtype="uint8")
-    chroma = np.zeros((4, 4), dtype="uint8")
-    previous = canonical_frame((y, chroma), pixel_format="yuv420p")
+    chroma = np.zeros((2, 2), dtype="uint8")
+    previous = canonical_frame((y, chroma, chroma), pixel_format="yuv420p")
     changed_chroma = chroma.copy(); changed_chroma[1, 1] = 1
-    current = canonical_frame((y, changed_chroma), pixel_format="yuv420p")
+    current = canonical_frame((y, changed_chroma, chroma), pixel_format="yuv420p")
     frames = [StrictFrame(0, 1, 1, previous), StrictFrame(1, 1, 1, current)]
     states = build_state_map(frames, tile_width=4, tile_height=4)
-    assert states[0]["state"] == "UPDATE"
+    assert states[0]["state"] == "KEY_STATE"
     assert states[0]["fidelity"] == "SOURCE_RESOLUTION_STRICT"
     assert states[0]["valid_from_s"] == 0.0
     assert states[1]["state"] == "UPDATE"
@@ -218,7 +232,8 @@ def test_source_resolution_strict_detects_single_chroma_or_alpha_sample():
 
 def test_source_resolution_strict_holds_identical_multiplane_frame():
     np = __import__("numpy")
-    planes = (np.zeros((2, 2), dtype="uint16"), np.ones((2, 2), dtype="uint16"))
+    planes = (np.zeros((2, 2), dtype="uint16"), np.ones((1, 1), dtype="uint16"),
+              np.ones((1, 1), dtype="uint16"))
     frame = canonical_frame(planes, pixel_format="yuv420p10le")
     states = build_state_map([StrictFrame(10, 1, 1000, frame), StrictFrame(20, 1, 1000, frame)], tile_width=2, tile_height=2)
     assert states[1]["state"] == "HOLD"
@@ -301,17 +316,45 @@ def test_native_v2_recovery_points_and_reader_limits(tmp_path):
         read_native_v2(target, max_file_bytes=1)
 
 
+def test_native_v2_lazy_reader_keeps_payloads_on_disk(tmp_path):
+    target = tmp_path / "lazy.casu"
+    payload = b"x" * 100_000
+    write_native_v2(target, {"format": "CASUNAT2"}, [
+        NativeChunk(ChunkType.VIDEO_KEY_STATE, 1, 0, payload),
+    ])
+    container = read_native_v2(target, load_payloads=False)
+    summary = next(chunk for chunk in container.chunks
+                   if chunk.chunk_type == ChunkType.VIDEO_KEY_STATE)
+    assert summary.payload == b""
+    offset = container.offsets[container.chunks.index(summary)]
+    loaded, _ = container.read_chunk_at(offset)
+    assert loaded.payload == payload
+    with target.open("r+b") as handle:
+        handle.seek(offset + 28)
+        value = handle.read(1)
+        handle.seek(offset + 28)
+        handle.write(bytes([value[0] ^ 1]))
+    with pytest.raises(NativeV2Error, match="changed after verification"):
+        container.read_chunk_at(offset)
+
+
 def test_native_v2_recovers_last_complete_prefix_after_truncation(tmp_path):
     target = tmp_path / "interrupted.casu"
     chunks = [NativeChunk(ChunkType.VIDEO_KEY_STATE, 0, i, bytes([i])) for i in range(4)]
     write_native_v2(target, {"format": "CASUNAT2"}, chunks, recovery_interval=1)
     raw = target.read_bytes()
+    with pytest.raises(NativeV2Error, match="recovery size limit"):
+        recover_native_v2(target, max_file_bytes=1)
     target.write_bytes(raw[:-17])
     snapshot = recover_native_v2(target)
     assert snapshot.recovery_point["last_complete_chunk_offset"] == snapshot.complete_chunk_offset
     assert snapshot.chunks
     with pytest.raises(NativeV2Error, match="missing END|truncated"):
         read_native_v2(target)
+    repaired_path = repair_native_v2(target, tmp_path / "repaired.casu")
+    repaired = read_native_v2(repaired_path)
+    assert repaired.integrity_verified is True
+    assert repaired.manifest["recovery"]["status"] == "RECOVERED_PREFIX"
 
 
 def test_native_v2_audio_block_roundtrip_preserves_pcm_and_timing():
@@ -324,6 +367,64 @@ def test_native_v2_audio_block_roundtrip_preserves_pcm_and_timing():
     assert block.pts == 480
     assert block.channel_layout == "stereo"
     assert block.sample_count == 16
+    with pytest.raises(ValueError, match="PCM byte length"):
+        encode_audio_block(pcm=b"short", pts=0, time_base_num=1, time_base_den=1,
+                           sample_rate=48000, channels=2, sample_count=16)
+    with pytest.raises(ValueError, match="timing"):
+        encode_audio_block(pcm=b"", pts=0, time_base_num=0, time_base_den=1,
+                           sample_rate=48000, channels=2, sample_count=0)
+
+
+def test_native_v2_attachment_roundtrip_is_bounded_and_hashed():
+    payload = encode_attachment("font.txt", "text/plain", b"CASU attachment",
+                                role="subtitle-font")
+    attachment = decode_attachment(payload)
+    assert attachment.filename == "font.txt"
+    assert attachment.media_type == "text/plain"
+    assert attachment.data == b"CASU attachment"
+    assert attachment.role == "subtitle-font"
+    with pytest.raises(ValueError, match="safe basename"):
+        encode_attachment("../escape.txt", "text/plain", b"bad")
+
+
+def test_native_v2_metadata_is_canonical_and_bounded():
+    assert _bounded_tags({"title": "CASU", "artist": "Lino"}) == {
+        "artist": "Lino", "title": "CASU",
+    }
+    with pytest.raises(NativeConversionError, match="value exceeds"):
+        _bounded_tags({"comment": "x" * 4097})
+    with pytest.raises(NativeConversionError, match="count"):
+        _bounded_tags({str(index): "x" for index in range(257)})
+
+
+def test_native_v2_text_payloads_enforce_resource_limits():
+    with pytest.raises(ValueError, match="exceeds limit"):
+        encode_subtitle_packet(SubtitlePacket(0, 1, "x" * (1024 * 1024 + 1)))
+    with pytest.raises(ValueError, match="chapter count"):
+        encode_chapter_table([{"start_pts": 0, "end_pts": 1, "title": "x"}] * 100_001)
+
+
+def test_native_v2_bitmap_subtitle_roundtrip_is_bounded_and_hashed():
+    rgba = bytes([255, 0, 0, 255] * 6)
+    payload = encode_bitmap_subtitle(
+        start_pts=100, end_pts=900, canvas_width=10, canvas_height=8,
+        x=2, y=3, width=3, height=2, rgba=rgba)
+    packet = decode_bitmap_subtitle(payload)
+    assert packet.rgba == rgba and packet.sha256
+    canvas = packet.canvas_rgba()
+    assert canvas.shape == (8, 10, 4)
+    assert canvas[3:5, 2:5].tobytes() == rgba
+    damaged = bytearray(payload); damaged[-1] ^= 1
+    with pytest.raises(ValueError, match="invalid bitmap"):
+        decode_bitmap_subtitle(bytes(damaged))
+    with pytest.raises(ValueError, match="geometry"):
+        encode_bitmap_subtitle(start_pts=1, end_pts=0, canvas_width=1,
+                               canvas_height=1, x=0, y=0, width=1,
+                               height=1, rgba=b"\0" * 4)
+    with pytest.raises(ValueError, match="geometry"):
+        encode_bitmap_subtitle(start_pts=0, end_pts=1, canvas_width=1_000_000,
+                               canvas_height=1_000_000, x=0, y=0, width=1,
+                               height=1, rgba=b"\0" * 4)
 
 
 def test_cli_verify_accepts_native_container(tmp_path, monkeypatch, capsys):
@@ -542,42 +643,87 @@ def test_libvlc_backend_source_capability_detection():
     assert not LibVLCBackend.supports("gopher://example.invalid/media")
 
 
+def test_libvlc_event_codes_distinguish_eof_from_decoder_error():
+    assert LIBVLC_PLAYER_EVENT_STATES[0x109] is PlaybackState.ENDED
+    assert LIBVLC_PLAYER_EVENT_STATES[0x10A] is PlaybackState.ERROR
+    assert 0x11B not in LIBVLC_PLAYER_EVENT_STATES
+
+
 def test_backend_exposes_active_playback_diagnostic():
-    source = Path("mpcasu_backend.py").read_text(encoding="utf-8")
-    player = Path("mpcasu_player.py").read_text(encoding="utf-8")
-    assert "def is_actively_playing" in source
-    assert "did not enter active playback" in player
+    backend = LibVLCBackend.__new__(LibVLCBackend)
+    backend.player = object()
+    backend.libvlc_media_player_is_playing = lambda _player: 1
+    assert backend.is_actively_playing() is True
+    backend.libvlc_media_player_is_playing = lambda _player: 0
+    assert backend.is_actively_playing() is False
 
 
 def test_backend_exposes_optional_video_track_selection():
-    source = Path("mpcasu_backend.py").read_text(encoding="utf-8")
-    assert "libvlc_video_get_track_count" in source
-    assert "def set_video_track" in source
-    assert "def video_track_descriptions" in source
-    player = Path("mpcasu_player.py").read_text(encoding="utf-8")
-    assert "def cycle_video_track" in player
+    selected = []
+    backend = LibVLCBackend.__new__(LibVLCBackend)
+    backend.player = object(); backend._video_track_api = True
+    backend.libvlc_video_get_track_count = lambda _player: 3
+    backend.libvlc_video_get_track = lambda _player: 7
+    backend.libvlc_video_set_track = lambda _player, value: selected.append(value) or 0
+    assert backend.video_track_count() == 3
+    assert backend.video_track() == 7
+    backend.set_video_track(9)
+    assert selected == [9]
+
+
+def test_libvlc_chapter_descriptors_reflect_runtime_count():
+    backend = LibVLCBackend.__new__(LibVLCBackend)
+    backend.chapter_count = lambda: 2
+    chapters = backend.chapter_descriptors()
+    assert [item.identifier for item in chapters] == [0, 1]
+    assert [item.title for item in chapters] == ["Chapter 1", "Chapter 2"]
+
+
+def test_player_resets_stored_rate_for_native_audio():
+    class RateButton:
+        def __init__(self): self.text = None
+        def configure(self, **values): self.text = values.get("text")
+
+    player = MPCASUPlayer.__new__(MPCASUPlayer)
+    player.backend = NativeCasuBackend()
+    player.backend._selected_audio = 1
+    player._rate = 2.0
+    player.rate_button = RateButton()
+    player._apply_playback_rate()
+    assert player._rate == 1.0
+    assert player.rate_button.text == "1×"
+
+
+def test_libvlc_delay_controls_convert_milliseconds_to_microseconds():
+    calls = []
+    backend = LibVLCBackend.__new__(LibVLCBackend)
+    backend.player = object()
+    backend._audio_delay_api = backend._subtitle_delay_api = True
+    backend.libvlc_audio_set_delay = lambda _player, value: calls.append(("audio", value)) or 0
+    backend.libvlc_video_set_spu_delay = lambda _player, value: calls.append(("subtitle", value)) or 0
+    assert backend.set_audio_delay(125.5) == 125.5
+    assert backend.set_subtitle_delay(-250) == -250
+    assert calls == [("audio", 125500), ("subtitle", -250000)]
 
 
 def test_backend_maps_libvlc_media_error_state():
-    source = Path("mpcasu_backend.py").read_text(encoding="utf-8")
-    assert "libvlc_media_get_state" in source
-    assert "media_state == 7" in source
+    backend = LibVLCBackend.__new__(LibVLCBackend)
+    backend._media_state_api = True; backend.media = object(); backend.player = None
+    backend._state = PlaybackState.READY
+    backend.libvlc_media_get_state = lambda _media: 7
+    assert backend.state() is PlaybackState.ERROR
 
 
 def test_libvlc_library_candidates_are_platform_independent():
-    # The backend must keep a shared-library fallback chain instead of
-    # assuming a Debian x86_64 soname in its public source contract.
-    source = Path("mpcasu_backend.py").read_text(encoding="utf-8")
-    assert '"libvlc.so.5", "libvlc.so"' in source
-    assert '"libvlc.dylib"' in source
-    assert '"libvlc.dll", "libvlc-5.dll"' in source
+    linux = LibVLCBackend.library_candidates("linux")
+    assert "libvlc.so.5" in linux and "libvlc.so" in linux
+    assert LibVLCBackend.library_candidates("darwin") == ["libvlc.dylib"]
+    assert LibVLCBackend.library_candidates("win32") == ["libvlc.dll", "libvlc-5.dll"]
 
 
-def test_casu_backend_does_not_claim_native_payload_playback():
-    source = Path("mpcasu_backend.py").read_text(encoding="utf-8")
-    player = Path("mpcasu_player.py").read_text(encoding="utf-8")
-    assert '"native_casu_payload": "available via verified extraction"' in source
-    assert "Native CASU manifest" not in player
+def test_native_casu_backend_is_independent_from_libvlc_compatibility():
+    assert issubclass(CasuBackend, LibVLCBackend)
+    assert not issubclass(NativeCasuBackend, LibVLCBackend)
 
 
 def test_casu_scheduler_returns_deterministic_state():
@@ -636,10 +782,16 @@ def test_playback_controller_owns_transport_state():
     assert controller.state is ControllerState.EMPTY
 
 
-def test_player_runtime_does_not_launch_external_player():
-    source = (Path(__file__).resolve().parents[1] / "mpcasu_player.py").read_text(encoding="utf-8").lower()
-    assert "ffplay" not in source
-    assert "vlc.exe" not in source
+def test_legacy_playback_delegates_to_in_process_libvlc_api():
+    calls = []
+    backend = LibVLCBackend.__new__(LibVLCBackend)
+    backend.player = object(); backend.media = None; backend._media_state_api = False
+    backend._state = PlaybackState.READY
+    backend.libvlc_media_player_play = lambda player: calls.append(player) or 0
+    backend.libvlc_media_player_is_playing = lambda _player: 1
+    backend.play()
+    assert calls == [backend.player]
+    assert backend.state() is PlaybackState.PLAYING
 
 
 def test_presentation_mode_is_stream_derived():
