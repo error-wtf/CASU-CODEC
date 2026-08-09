@@ -7,6 +7,7 @@ import pytest
 
 import casu_converter
 from casu_converter import CASUConverter
+from casu.jobs import ConversionCancelled
 
 
 pytestmark = [pytest.mark.media,
@@ -54,5 +55,35 @@ def test_converter_opens_bounded_last_report_view(tmp_path):
                    if child.winfo_class() == "Toplevel"
                    and child.title() == "CASU · Last conversion report"]
         assert len(reports) == 1
+    finally:
+        app.destroy()
+
+
+def test_converter_cancel_reaches_engine_and_publishes_cancelled_report(
+        tmp_path, monkeypatch):
+    source = tmp_path / "input.mp4"; source.write_bytes(b"input")
+
+    class CancellingEngine:
+        def __init__(self, **_kwargs):
+            pass
+
+        def run(self, jobs, **kwargs):
+            assert kwargs["cancel"].is_set()
+            job = tuple(jobs)[0]
+            raise ConversionCancelled(active_job=job, attempts=1)
+
+    monkeypatch.setattr(casu_converter, "ConversionEngine", CancellingEngine)
+    app = CASUConverter()
+    try:
+        app._busy = True
+        app.cancel()
+        app._worker([source], tmp_path, 10.0, "strict", True, False, 0)
+        app.update()
+        payload = json.loads((tmp_path / "casu_batch_report.json").read_text())
+        assert payload["state"] == "CANCELLED"
+        assert payload["files"][0]["status"] == "cancelled"
+        assert payload["files"][0]["attempts"] == 1
+        assert not (tmp_path / "input.casu").exists()
+        assert "no incomplete" in app.status.get().lower()
     finally:
         app.destroy()

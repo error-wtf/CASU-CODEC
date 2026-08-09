@@ -2,7 +2,7 @@
 
 ## 2026-08-09 — current consolidated verification
 
-- Fast behavior suite: **115 passed, 38 media tests deselected**.
+- Fast behavior suite: **117 passed, 39 media tests deselected**.
 - Generated STRICT + CASUNAT2 + native-player + installed-libVLC suites,
   including bounded-probe/libass, authorized real-PGS and the added JPEG/WebP
   cover variants: **56 passed**.
@@ -20,8 +20,10 @@
   visible lists stay synchronized across duplicate add, move and remove.
 - Job-engine ETA tests prove monotonic overall progress, measured elapsed time,
   retry-regression clamping and zero ETA at completion; converter Tk construction passes.
-- Two real converter Tk/Xvfb tests prove that the GUI retry value reaches the
-  shared engine/report and that a bounded prior report opens as a detail view.
+- Three real converter Tk/Xvfb tests prove that the GUI retry value reaches the
+  shared engine/report, a bounded prior report opens as a detail view, and the
+  Cancel action reaches the engine and atomically publishes `CANCELLED` without
+  leaving the cancelled job's target output.
 - Measured sink latency drives the native scheduling clock when available;
   unsupported non-1.0 native-audio rate changes fail closed instead of silently
   desynchronizing PCM.
@@ -54,6 +56,9 @@
 - Shared converter-job tests cover atomic journal state, batch failure
   isolation, fail-closed cancellation, retry validation and resume only after
   output size/SHA-256 plus exact job/profile matching.
+- Mid-batch cancellation preserves verified completed-result evidence, records
+  the active job/attempt, leaves its target absent and exposes the remaining
+  files as cancelled in the atomic GUI report.
 - Independent batches in one output folder receive deterministic distinct
   journal names; a real native-v2 CLI rerun reported `resumed: true` without
   decoding the source again.

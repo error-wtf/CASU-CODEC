@@ -67,6 +67,12 @@ time, throughput ETA and explicit state; results retain actual conversion time,
 so CLI reports and GUI status no longer implement competing estimators.
 The GUI now passes a validated retry count to the same engine and opens bounded
 prior reports with per-file status, attempts, measured duration and errors.
+Completion and cancellation reports now pass the same bounded validator and are
+atomically replaced. A typed `ConversionCancelled` carries verified completed
+results plus active-job/attempt evidence; the GUI records the remaining queue as
+cancelled and never labels the interrupted batch complete. Engine and real Tk/
+Xvfb tests prove the Cancel event reaches this path and the active target remains
+absent.
 Immutable backend-neutral track/chapter/device/event models and a transactional
 SQLite library (scan, resume, favorites, playlists) is behavior-tested.
 The player queue and sidebar now render from one bounded, duplicate-free

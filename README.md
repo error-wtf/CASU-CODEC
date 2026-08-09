@@ -85,7 +85,9 @@ playlist model used by navigation, session persistence and playlist files.
 Converter CLI and GUI share monotonic batch progress, measured elapsed time,
 throughput ETA and per-result conversion duration from the same job engine.
 Both expose retry behavior; the GUI includes a bounded detailed view of the
-last batch report.
+last batch report. Completion and cancellation reports are validated and
+published atomically; a cancelled batch records verified completed jobs and
+the cancelled remainder instead of presenting a partial run as complete.
 Library search and watched-folder rescans are wired to the persistent SQLite
 core. Per-media audio/video/subtitle selections and audio/subtitle delays are
 persisted and restored. Source-stat-versioned thumbnails decode asynchronously
@@ -114,7 +116,7 @@ clickable, exact-position markers below the seek timeline.
 The same atomic, journaled job engine is also available through a small Tk
 interface. It supports recursive queues, pause/cancel, per-file failure
 isolation, hash-verified journal resume, verification and machine-readable
-batch reports:
+batch reports with explicit `COMPLETE`/`CANCELLED` state:
 
 ```bash
 casu-converter

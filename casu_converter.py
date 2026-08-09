@@ -15,9 +15,10 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from casu.core import ANALYSIS_MODES, CasuCancelled, CasuError, ffprobe, duration
-from casu.jobs import (ConversionEngine, ConversionJob, ConversionProfile,
-                       ConversionProgress,
-                       conversion_journal_path, load_conversion_report)
+from casu.jobs import (ConversionCancelled, ConversionEngine, ConversionJob,
+                       ConversionProfile, ConversionProgress,
+                       conversion_journal_path, load_conversion_report,
+                       write_conversion_report)
 from casu.native import NativeCasuError, read_native
 from casu.native_v2 import NativeV2Error, read_native_v2
 from casu.schema import validate_manifest
@@ -239,6 +240,8 @@ class CASUConverter(tk.Tk):
 
     def _worker(self, sources: list[Path], output_dir: Path, fps: float, mode: str,
                 native: bool, resume: bool, retries: int) -> None:
+        report_path = output_dir / "casu_batch_report.json"
+        jobs: list[ConversionJob] = []
         try:
             total = len(sources)
             profile = ConversionProfile(
@@ -274,17 +277,39 @@ class CASUConverter(tk.Tk):
                 retries=retries,
             )
             results = [item.__dict__ for item in converted_results]
-            report_path = output_dir / "casu_batch_report.json"
-            report_path.write_text(json.dumps({"version": 1, "mode": mode,
-                                               "container": "native-v2" if native else "sidecar",
-                                               "analysis_fps": fps, "retries": retries,
-                                               "files": results},
-                                              indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            write_conversion_report(report_path, {
+                "version": 1, "state": "COMPLETE", "mode": mode,
+                "container": "native-v2" if native else "sidecar",
+                "analysis_fps": fps, "retries": retries, "files": results,
+            })
             converted = sum(item["status"] == "converted" for item in results)
             failed = len(results) - converted
             self.after(0, lambda: self._done(
                 f"Converted {converted}/{total} file(s) to {output_dir}; {failed} failed."
             ))
+        except ConversionCancelled as exc:
+            completed = [item.__dict__ for item in exc.results]
+            completed_outputs = {
+                str(Path(item["output"]).expanduser().resolve()) for item in completed
+            }
+            cancelled = []
+            for job in jobs:
+                resolved_output = str(job.output.expanduser().resolve())
+                if resolved_output in completed_outputs:
+                    continue
+                cancelled.append({
+                    "source": str(job.source.expanduser().resolve()),
+                    "output": resolved_output,
+                    "status": "cancelled", "container": job.profile.container,
+                    "attempts": exc.attempts if job == exc.active_job else 0,
+                })
+            write_conversion_report(report_path, {
+                "version": 1, "state": "CANCELLED", "mode": mode,
+                "container": "native-v2" if native else "sidecar",
+                "analysis_fps": fps, "retries": retries,
+                "files": completed + cancelled,
+            })
+            self.after(0, lambda: self._done("Conversion cancelled; no incomplete CASU output was kept.", error=False, cancelled=True))
         except CasuCancelled:
             self.after(0, lambda: self._done("Conversion cancelled; no incomplete CASU output was kept.", error=False, cancelled=True))
         except (CasuError, NativeCasuError, NativeV2Error, OSError, ValueError) as exc:
@@ -340,6 +365,7 @@ class CASUConverter(tk.Tk):
         except CasuError as exc:
             messagebox.showerror("CASU Report", str(exc)); return
         lines = [
+            f"State: {payload.get('state', 'COMPLETE')}",
             f"Container: {payload.get('container', 'unknown')}",
             f"Mode: {payload.get('mode', 'unknown')}",
             f"Configured retries: {payload.get('retries', 0)}",

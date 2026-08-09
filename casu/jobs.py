@@ -52,6 +52,17 @@ class ConversionResult:
     conversion_seconds: float | None = None
 
 
+class ConversionCancelled(CasuCancelled):
+    """Cancellation carrying the verified results completed before the stop."""
+    def __init__(self, results: Iterable[ConversionResult] = (), *,
+                 active_job: ConversionJob | None = None,
+                 attempts: int = 0) -> None:
+        super().__init__("conversion cancelled")
+        self.results = tuple(results)
+        self.active_job = active_job
+        self.attempts = max(0, int(attempts))
+
+
 @dataclass(frozen=True)
 class ConversionProgress:
     job_index: int
@@ -93,6 +104,19 @@ MAX_REPORT_BYTES = 8 * 1024 * 1024
 MAX_REPORT_RESULTS = 10_000
 
 
+def _validate_report_payload(payload: object) -> dict:
+    if not isinstance(payload, dict):
+        raise CasuError("conversion report has an invalid structure")
+    files = payload.get("files")
+    if (payload.get("version") != 1 or not isinstance(files, list)
+            or len(files) > MAX_REPORT_RESULTS
+            or not all(isinstance(item, dict) for item in files)
+            or ("state" in payload
+                and payload["state"] not in {"COMPLETE", "CANCELLED", "FAILED"})):
+        raise CasuError("conversion report has an invalid structure")
+    return payload
+
+
 def load_conversion_report(path: str | Path) -> dict:
     """Load a bounded converter report for CLI/GUI inspection."""
     source = Path(path).expanduser().resolve()
@@ -102,19 +126,16 @@ def load_conversion_report(path: str | Path) -> dict:
         payload = json.loads(source.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise CasuError("conversion report is unavailable or invalid") from exc
-    files = payload.get("files") if isinstance(payload, dict) else None
-    if (payload.get("version") != 1 or not isinstance(files, list)
-            or len(files) > MAX_REPORT_RESULTS
-            or not all(isinstance(item, dict) for item in files)):
-        raise CasuError("conversion report has an invalid structure")
-    return payload
+    return _validate_report_payload(payload)
 
 
-def _file_identity(path: Path) -> tuple[int, str]:
+def _file_identity(path: Path, cancel: Any | None = None) -> tuple[int, str]:
     digest = hashlib.sha256()
     size = 0
     with path.open("rb") as handle:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
+            if cancel is not None and getattr(cancel, "is_set", lambda: False)():
+                raise CasuCancelled("conversion cancelled")
             size += len(block)
             digest.update(block)
     return size, digest.hexdigest()
@@ -146,6 +167,15 @@ def _atomic_json(path: Path, value: object) -> None:
             os.unlink(temporary)
         except FileNotFoundError:
             pass
+
+
+def write_conversion_report(path: str | Path, payload: dict) -> None:
+    """Validate and atomically publish a bounded GUI/CLI conversion report."""
+    validated = _validate_report_payload(payload)
+    encoded = (json.dumps(validated, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    if len(encoded) > MAX_REPORT_BYTES:
+        raise CasuError("conversion report exceeds safety limit")
+    _atomic_json(Path(path).expanduser().resolve(), validated)
 
 
 class ConversionEngine:
@@ -184,16 +214,18 @@ class ConversionEngine:
             if progress_detail:
                 progress_detail(tracker.update(index, job, value, state=state))
 
+        def abort(job: ConversionJob | None = None, attempts: int = 0) -> None:
+            self._journal(values, results, "CANCELLED")
+            raise ConversionCancelled(results, active_job=job, attempts=attempts)
+
         self._journal(values, results, "RUNNING")
         for job_index, job in enumerate(values):
             if cancel is not None and getattr(cancel, "is_set", lambda: False)():
-                self._journal(values, results, "CANCELLED")
-                raise CasuCancelled("conversion cancelled")
+                abort(job)
             if pause is not None:
                 while not pause.wait(0.1):
                     if cancel is not None and getattr(cancel, "is_set", lambda: False)():
-                        self._journal(values, results, "CANCELLED")
-                        raise CasuCancelled("conversion cancelled")
+                        abort(job)
             previous = resumed.get((str(job.source.expanduser().resolve()),
                                     str(job.output.expanduser().resolve())))
             if previous is not None:
@@ -215,12 +247,13 @@ class ConversionEngine:
                     })
                     break
                 except CasuCancelled:
-                    self._journal(values, results, "CANCELLED")
-                    raise
+                    abort(job, attempt)
                 except Exception as exc:
                     if cancel is not None and getattr(cancel, "is_set", lambda: False)():
-                        self._journal(values, results, "CANCELLED")
-                        raise CasuCancelled("conversion cancelled") from exc
+                        try:
+                            abort(job, attempt)
+                        except ConversionCancelled as cancelled:
+                            raise cancelled from exc
                     if attempt <= max(0, int(retries)):
                         continue
                     result = ConversionResult(str(job.source), str(job.output), "failed",
@@ -261,7 +294,7 @@ class ConversionEngine:
                 write_native(output, source, manifest)
             else:
                 _atomic_json(output, manifest)
-        output_size, output_sha256 = _file_identity(output)
+        output_size, output_sha256 = _file_identity(output, cancel)
         return ConversionResult(str(source), str(output), "converted",
                                 profile.container,
                                 float(duration) if duration is not None else None,

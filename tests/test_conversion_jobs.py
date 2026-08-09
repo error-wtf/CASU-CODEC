@@ -1,11 +1,14 @@
+import json
 import threading
+from pathlib import Path
 
 import pytest
 
 from casu.core import CasuCancelled, CasuError
-from casu.jobs import (ConversionEngine, ConversionJob, ConversionProfile,
-                       ConversionProgressTracker,
-                       conversion_journal_path, load_conversion_report)
+from casu.jobs import (ConversionCancelled, ConversionEngine, ConversionJob,
+                       ConversionProfile, ConversionProgressTracker,
+                       conversion_journal_path, load_conversion_report,
+                       write_conversion_report)
 
 
 def test_conversion_engine_sidecar_journal_and_failure_isolation(tmp_path, monkeypatch):
@@ -42,10 +45,39 @@ def test_conversion_engine_translates_native_cancellation(tmp_path, monkeypatch)
 
     monkeypatch.setattr("casu.jobs.convert_media_to_native_v2", cancelled_converter)
     engine = ConversionEngine(journal=tmp_path / "journal.json")
-    with pytest.raises(CasuCancelled):
+    with pytest.raises(ConversionCancelled) as raised:
         engine.run([ConversionJob(source, tmp_path / "output.casu")], cancel=cancel)
+    assert raised.value.active_job.source == source
+    assert raised.value.attempts == 1 and raised.value.results == ()
     assert '"state": "CANCELLED"' in (tmp_path / "journal.json").read_text(encoding="utf-8")
     assert not (tmp_path / "output.casu").exists()
+
+
+def test_conversion_cancellation_preserves_completed_batch_evidence(tmp_path, monkeypatch):
+    first = tmp_path / "first.bin"; first.write_bytes(b"first")
+    second = tmp_path / "second.bin"; second.write_bytes(b"second")
+    cancel = threading.Event()
+
+    def analyze_until_cancel(source, *_args, **_kwargs):
+        if Path(source).name == "second.bin":
+            cancel.set()
+            raise CasuCancelled("conversion cancelled")
+        return {"source": {"duration_s": 1.0}}
+
+    monkeypatch.setattr("casu.jobs.analyze", analyze_until_cancel)
+    profile = ConversionProfile(container="sidecar")
+    jobs = [ConversionJob(first, tmp_path / "first.casu", profile),
+            ConversionJob(second, tmp_path / "second.casu", profile)]
+    engine = ConversionEngine(journal=tmp_path / "journal.json")
+    with pytest.raises(ConversionCancelled) as raised:
+        engine.run(jobs, cancel=cancel)
+    assert [item.status for item in raised.value.results] == ["converted"]
+    assert raised.value.active_job == jobs[1] and raised.value.attempts == 1
+    assert (tmp_path / "first.casu").is_file()
+    assert not (tmp_path / "second.casu").exists()
+    journal = json.loads((tmp_path / "journal.json").read_text(encoding="utf-8"))
+    assert journal["state"] == "CANCELLED"
+    assert [item["status"] for item in journal["results"]] == ["converted"]
 
 
 def test_conversion_engine_rejects_negative_retries(tmp_path):
@@ -121,3 +153,16 @@ def test_conversion_report_loader_is_bounded_and_validated(tmp_path):
     report.write_text('{"version":2,"files":[]}', encoding="utf-8")
     with pytest.raises(CasuError, match="structure"):
         load_conversion_report(report)
+    report.write_text('[]', encoding="utf-8")
+    with pytest.raises(CasuError, match="structure"):
+        load_conversion_report(report)
+
+
+def test_conversion_report_writer_is_atomic_and_records_cancelled_state(tmp_path):
+    report = tmp_path / "casu_batch_report.json"
+    write_conversion_report(report, {
+        "version": 1, "state": "CANCELLED",
+        "files": [{"source": "input.mkv", "status": "cancelled"}],
+    })
+    assert load_conversion_report(report)["state"] == "CANCELLED"
+    assert not list(tmp_path.glob(".casu_batch_report.json.*"))
