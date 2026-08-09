@@ -2,7 +2,7 @@
 
 ## 2026-08-09 — current consolidated verification
 
-- Fast behavior suite: **134 passed, 62 media tests deselected**.
+- Fast behavior suite: **137 passed, 62 media tests deselected**.
 - Generated exact-runtime libVLC matrix: **15 passed, 9 xfailed**. Six audio
   combinations expose real tracks and advance playback; SRT, WebVTT and ASS
   load as external tracks; Rawvideo/AVI writes real RV32 callback frames. Nine
@@ -27,6 +27,8 @@
   zero volume getter is recorded rather than misrepresented as physical output.
 - Empty EOF classification waits through an explicit monotonic asynchronous
   startup grace period before declaring an opening failure.
+- Three release-guard AST regressions distinguish prohibited direct
+  string-in-source assertions from legitimate observed runtime status text.
 - Generated STRICT + CASUNAT2 + native-player + installed-libVLC suites,
   including bounded-probe/libass, authorized real-PGS and the added JPEG/WebP
   cover variants: **56 passed**.

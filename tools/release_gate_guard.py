@@ -60,6 +60,31 @@ def strict_findings() -> tuple[list[str], list[str]]:
     return errors, warnings
 
 
+def _is_source_string_assert(test: ast.expr) -> bool:
+    """Recognize source-text membership assertions without flagging runtime state.
+
+    The prohibited shape is a literal string searched directly in a variable
+    conventionally holding source text (``source`` or ``player``). Attribute
+    access such as ``player.status.value`` is observable runtime behavior.
+    """
+    candidates = [test]
+    if isinstance(test, ast.BoolOp):
+        candidates = list(test.values)
+    for candidate in candidates:
+        if not isinstance(candidate, ast.Compare):
+            continue
+        left = candidate.left
+        for operator, comparator in zip(candidate.ops, candidate.comparators):
+            if (isinstance(operator, (ast.In, ast.NotIn))
+                    and isinstance(left, ast.Constant)
+                    and isinstance(left.value, str)
+                    and isinstance(comparator, ast.Name)
+                    and comparator.id in {"source", "player"}):
+                return True
+            left = comparator
+    return False
+
+
 def global_findings() -> tuple[list[str], list[str]]:
     errors, warnings = strict_findings()
     status = _status()
@@ -80,10 +105,8 @@ def global_findings() -> tuple[list[str], list[str]]:
         except (OSError, SyntaxError):
             continue
         for node in ast.walk(tree):
-            if isinstance(node, ast.Assert) and isinstance(node.test, (ast.Compare, ast.BoolOp)):
-                text = ast.get_source_segment(path.read_text(encoding="utf-8"), node.test) or ""
-                if " in source" in text or " in player" in text:
-                    pseudo += 1
+            if isinstance(node, ast.Assert) and _is_source_string_assert(node.test):
+                pseudo += 1
     if pseudo:
         errors.append(f"source-string pseudo acceptance assertions remain: {pseudo}")
     backend = _read("mpcasu_backend.py")
