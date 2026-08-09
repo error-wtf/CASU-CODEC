@@ -514,10 +514,51 @@ def test_native_audio_clock_uses_measured_sink_latency():
     now[0] += 0.1
     assert backend._scheduler_position() == pytest.approx(0.01)
     backend._rate = 2.0
+    backend._reset_audio_clock()
     backend._observe_audio_clock(block, media_end_seconds=0.2)
     assert backend._scheduler_position() == pytest.approx(0.0)
     now[0] += 0.05
     assert backend._scheduler_position() == pytest.approx(0.1)
+
+
+def test_native_audio_clock_has_no_six_hour_accumulation_drift():
+    now = [0.0]
+
+    class VariableLatencySink(InstrumentedAudioSink):
+        latency = 0.02
+        def latency_seconds(self): return self.latency
+
+    sink = VariableLatencySink()
+    backend = NativeCasuBackend(InstrumentedVideoSink(), sink,
+                                clock=lambda: now[0])
+    backend._state = PlaybackState.PLAYING
+    backend._rate = 1.5
+    block = decode_audio_block(encode_audio_block(
+        pcm=b"\0\0", pts=0, time_base_num=1, time_base_den=48_000,
+        sample_rate=48_000, channels=1, sample_count=1,
+    ))
+    for index in range(21_600):
+        sink.latency = 0.015 + (index % 11) * 0.001
+        media_end = float(index + 1)
+        backend._observe_audio_clock(block, media_end_seconds=media_end)
+        observed = backend._scheduler_position()
+        assert observed <= media_end
+        now[0] += sink.latency
+        assert backend._scheduler_position() == pytest.approx(media_end, abs=1e-9)
+    assert backend._scheduler_position() == pytest.approx(21_600.0, abs=1e-9)
+
+
+def test_native_audio_clock_ignores_implausible_latency():
+    class BrokenLatencySink(InstrumentedAudioSink):
+        def latency_seconds(self): return 61.0
+
+    backend = NativeCasuBackend(InstrumentedVideoSink(), BrokenLatencySink())
+    block = decode_audio_block(encode_audio_block(
+        pcm=b"\0\0", pts=0, time_base_num=1, time_base_den=1000,
+        sample_rate=1000, channels=1, sample_count=1,
+    ))
+    backend._observe_audio_clock(block)
+    assert backend._audio_clock_media is None
 
 
 def test_native_audio_rate_resamples_pcm_and_restarts_transactionally(tmp_path):

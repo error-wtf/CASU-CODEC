@@ -2,7 +2,7 @@
 
 ## 2026-08-09 — current consolidated verification
 
-- Fast behavior suite: **123 passed, 39 media tests deselected**.
+- Fast behavior suite: **125 passed, 39 media tests deselected**.
 - Generated STRICT + CASUNAT2 + native-player + installed-libVLC suites,
   including bounded-probe/libass, authorized real-PGS and the added JPEG/WebP
   cover variants: **56 passed**.
@@ -14,7 +14,7 @@
 - Native-player behavior alone: **11 passed**, including no-tempfile playback,
   A/V/subtitle delivery, transactional seek, overlapping PCM-block trim and
   pause/stop/close flush behavior.
-- Current native-player backend suite: **18 passed**; a blocked old PCM write
+- Current native-player backend suite: **20 passed**; a blocked old PCM write
   cannot cross a seek/restart boundary, and four rapid forward/backward seeks
   deliver only the final generation. Bounded chapter-marker
   positioning and a real clickable Tk/Xvfb timeline behavior test also pass.
@@ -35,6 +35,9 @@
 - Measured sink latency drives the native scheduling clock when available.
   Native 0.25×–4× playback resamples channel-aligned s16le PCM, scales latency/
   elapsed time into media time and transactionally restarts a live worker.
+- A 21,600-block simulation covers six media hours at 1.5× with changing sink
+  latency and zero cumulative drift. Clock observations never regress, and
+  non-finite, negative or over-60-second latency reports are ignored.
 - A stored playback rate is applied to native audio and displayed truthfully;
   speed/pitch resampling is not described as pitch-preserving time-stretch.
 - Per-media audio/video/subtitle selections and bounded audio/subtitle delays

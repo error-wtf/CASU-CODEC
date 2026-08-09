@@ -64,6 +64,12 @@ worker, flush pending PCM, reset the audio clock and restart at the measured
 media position. Sink latency and elapsed wall time are scaled into media time.
 This changes pitch; pitch-preserving time-stretch, real-device long-duration
 drift evidence and the device matrix remain open.
+The audio master is re-anchored from every absolute block PTS and measured sink
+latency rather than accumulated deltas. New observations are monotonic against
+already reached media time, and invalid or implausible (>60 s) driver latency is
+ignored. A deterministic 21,600-block simulation covers six media hours at 1.5×
+with changing latency and zero cumulative drift; it does not replace hardware
+measurement.
 
 ### Gate 3 — Integrity, recovery and hostile-input safety: PASS
 

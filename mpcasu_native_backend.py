@@ -34,6 +34,8 @@ from casu.media import (AudioDeviceDescriptor, ChapterDescriptor,
 from casu.strict.canonical import CanonicalFrame
 from mpcasu_backend import BackendError, PlaybackState
 
+MAX_AUDIO_LATENCY_SECONDS = 60.0
+
 
 class VideoSink(Protocol):
     def present(self, frame: CanonicalFrame, pts_seconds: float) -> None: ...
@@ -571,14 +573,20 @@ class NativeCasuBackend:
             latency = latency_reader()
         except Exception:
             return
-        if latency is None or not np.isfinite(latency) or latency < 0:
+        if (latency is None or not np.isfinite(latency) or latency < 0
+                or latency > MAX_AUDIO_LATENCY_SECONDS):
             return
         block_start = (block.pts * block.time_base_num /
                        block.time_base_den)
         block_end = (block_start + block.sample_count / block.sample_rate
                      if media_end_seconds is None else float(media_end_seconds))
-        self._audio_clock_media = (block_end - float(latency) * self._rate +
-                                   self._audio_delay_seconds)
+        candidate = (block_end - float(latency) * self._rate
+                     + self._audio_delay_seconds)
+        if self._audio_clock_media is not None:
+            previous = (self._audio_clock_media
+                        + (self._clock() - self._audio_clock_observed) * self._rate)
+            candidate = max(candidate, previous)
+        self._audio_clock_media = candidate
         self._audio_clock_observed = self._clock()
 
     def _reset_audio_clock(self) -> None:

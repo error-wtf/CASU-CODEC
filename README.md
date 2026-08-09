@@ -125,6 +125,11 @@ deterministically resampling interleaved s16le PCM while keeping the sink at its
 hardware sample rate; the audio clock converts latency and wall time back into
 media time at the active rate. This is speed/pitch resampling, not a claim of
 pitch-preserving time-stretch.
+Clock observations are anchored to absolute PCM PTS, never accumulated block
+deltas. They cannot move media time backwards when reported latency changes,
+and non-finite, negative or over-60-second driver values are ignored. A
+21,600-block/six-hour simulation at 1.5× has zero cumulative timing drift;
+physical-device evidence remains a separate open gate.
 Backend-reported chapters appear both in the dynamic chapter menu and as
 clickable, exact-position markers below the seek timeline.
 
