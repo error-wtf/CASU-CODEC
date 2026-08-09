@@ -95,6 +95,9 @@ An isolated local HTTP acceptance test additionally proves libVLC URL access,
 redirect handling, WAV demux, PCM track creation, clock progression and a seek
 to one second. A 404 becomes a terminal backend error rather than false EOF. It
 does not stand in for HTTPS, authentication or live-stream testing.
+A generated MP4 with two AAC audio tracks and two embedded `mov_text`
+subtitle tracks additionally proves real runtime descriptions and live
+selection of each track through the backend API.
 Rapid seeks serialize worker transitions; a blocked old PCM write must stop
 before cache invalidation, sink flush and a new generation can start. A timeout
 fails closed instead of allowing stale audio to cross the seek boundary.

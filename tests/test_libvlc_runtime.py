@@ -328,3 +328,58 @@ def test_installed_libvlc_handles_local_http_redirect_seek_and_404(tmp_path):
         server.server_close()
         thread.join(timeout=2.0)
         assert not thread.is_alive()
+
+
+@pytest.mark.media
+@pytest.mark.skipif(
+    not ctypes.util.find_library("vlc") or not shutil.which("ffmpeg"),
+    reason="libVLC/FFmpeg unavailable")
+def test_installed_libvlc_switches_real_embedded_audio_and_subtitle_tracks(tmp_path):
+    """Exercise linked-list descriptions and live selection on real tracks."""
+    german = tmp_path / "de.srt"
+    english = tmp_path / "en.srt"
+    german.write_text(
+        "1\n00:00:00,000 --> 00:00:02,500\nDeutsche Spur\n", encoding="utf-8")
+    english.write_text(
+        "1\n00:00:00,000 --> 00:00:02,500\nEnglish track\n", encoding="utf-8")
+    fixture = tmp_path / "multitrack.mp4"
+    generated = subprocess.run([
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000",
+        "-f", "lavfi", "-i", "sine=frequency=880:sample_rate=48000",
+        "-i", str(german), "-i", str(english), "-t", "3.0",
+        "-map", "0:a:0", "-map", "1:a:0", "-map", "2:0", "-map", "3:0",
+        "-c:a", "aac", "-c:s", "mov_text",
+        "-metadata:s:a:0", "language=deu", "-metadata:s:a:1", "language=eng",
+        "-metadata:s:s:0", "language=deu", "-metadata:s:s:1", "language=eng",
+        str(fixture),
+    ], capture_output=True, text=True, check=False)
+    if generated.returncode != 0:
+        pytest.skip(f"FFmpeg multitrack mux unavailable: {generated.stderr.strip()}")
+
+    backend = LibVLCBackend(
+        _HeadlessSurface(), runtime_options=("--aout=dummy", "--vout=dummy"))
+    try:
+        backend.open(fixture)
+        backend.play()
+        deadline = time.monotonic() + 4.0
+        while time.monotonic() < deadline:
+            if backend.audio_track_count() >= 2 and backend.subtitle_track_count() >= 2:
+                break
+            if backend.state() is PlaybackState.ERROR:
+                break
+            time.sleep(0.02)
+        assert backend.state() is not PlaybackState.ERROR
+        audio_tracks = backend.audio_track_descriptions()
+        subtitle_tracks = backend.subtitle_track_descriptions()
+        assert len(audio_tracks) >= 2
+        assert len(subtitle_tracks) >= 2
+
+        for identifier, _label in audio_tracks[:2]:
+            backend.set_audio_track(identifier)
+            assert backend.audio_track() == identifier
+        for identifier, _label in subtitle_tracks[:2]:
+            backend.set_subtitle_track(identifier)
+            assert backend.subtitle_track() == identifier
+    finally:
+        backend.close()

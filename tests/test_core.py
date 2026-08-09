@@ -4,6 +4,7 @@ import ctypes
 import json
 import os
 import shutil
+import time
 from pathlib import Path
 
 import pytest
@@ -799,6 +800,7 @@ def test_backend_maps_zero_track_zero_time_eof_to_open_error():
     backend._player_state_api = True; backend.player = object()
     backend._media_state_api = True; backend.media = object()
     backend._state = PlaybackState.LOADING
+    backend._play_requested_at = time.monotonic() - 1.0
     backend.libvlc_media_player_get_state = lambda _player: 6
     backend.libvlc_media_get_state = lambda _media: 6
     backend.libvlc_media_player_get_time = lambda _player: 0
@@ -807,6 +809,22 @@ def test_backend_maps_zero_track_zero_time_eof_to_open_error():
     backend._video_track_api = True
     backend.libvlc_video_get_track_count = lambda _player: 0
     assert backend.state() is PlaybackState.ERROR
+
+
+def test_backend_allows_async_start_grace_before_empty_eof_error():
+    backend = LibVLCBackend.__new__(LibVLCBackend)
+    backend._player_state_api = True; backend.player = object()
+    backend._media_state_api = True; backend.media = object()
+    backend._state = PlaybackState.PLAYING
+    backend._play_requested_at = time.monotonic()
+    backend.libvlc_media_player_get_state = lambda _player: 6
+    backend.libvlc_media_get_state = lambda _media: 6
+    backend.libvlc_media_player_get_time = lambda _player: 0
+    backend.libvlc_media_player_get_length = lambda _player: 0
+    backend.libvlc_audio_get_track_count = lambda _player: 0
+    backend._video_track_api = True
+    backend.libvlc_video_get_track_count = lambda _player: 0
+    assert backend.state() is PlaybackState.ENDED
 
 
 def test_libvlc_library_candidates_are_platform_independent():

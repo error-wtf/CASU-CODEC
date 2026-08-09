@@ -35,8 +35,8 @@ broader malformed/platform subtitle matrix and responsive Qt target remain open.
 
 ## Acceptance evidence
 
-- fast suite: 133 passed, 59 media tests deselected;
-- exact-runtime generated libVLC matrix: 12 passed, 9 xfailed because the
+- fast suite: 134 passed, 60 media tests deselected;
+- exact-runtime generated libVLC matrix: 13 passed, 9 xfailed because the
   installed runtime delivered no video callback frame;
 - combined generated STRICT/native-v2/native-player/installed-libVLC suites:
   54 passed, plus a focused 4-format authorized PGS/DVD/DVB/XSub

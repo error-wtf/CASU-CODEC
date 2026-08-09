@@ -56,6 +56,10 @@ A missing URL enters `ERROR`; VLC 3's zero-track/zero-time false EOF is normaliz
 to an opening failure. This is HTTP access-module evidence; HTTPS,
 authentication, adaptive/live protocols and hostile-network cases remain open.
 
+A generated MP4 contains two AAC audio tracks and two embedded `mov_text`
+subtitle tracks with German/English metadata. libVLC exposes both linked-list
+description sets and accepts live selection of every concrete track identifier.
+
 The release matrix still must add representative MP4/MKV/MOV/WebM/TS,
 H.264/HEVC/VP8/VP9/AV1/MPEG-2, AAC/MP3/Opus/Vorbis/FLAC/PCM, subtitle formats,
 network protocols, hardware decode and platform/device combinations against the

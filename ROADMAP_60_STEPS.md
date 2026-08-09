@@ -41,8 +41,9 @@ Current execution dashboard (evidence, not optimism):
   external subtitle formats. Nine compressed-video combinations deliver no
   frame in the privileged harness and remain `XFAIL` there; the non-root H.264
   callback succeeds, and loopback HTTP redirect/PCM playback/seek/404 handling
-  passes. Responsive Qt, physical-output, broader network and complete
-  cross-platform build/shipping matrices remain.
+  plus real two-audio/two-subtitle MP4 selection pass. Responsive Qt,
+  physical-output, broader network and complete cross-platform build/shipping
+  matrices remain.
 
 ## Gate A — source-resolution STRICT
 

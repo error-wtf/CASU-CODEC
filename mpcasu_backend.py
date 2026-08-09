@@ -14,6 +14,7 @@ import ctypes.util
 import os
 import sys
 import tempfile
+import time
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -115,6 +116,7 @@ class LibVLCBackend:
         self.media = None; self.player = None; self.path: Path | None = None
         self._native_temp: Path | None = None
         self._state = PlaybackState.EMPTY
+        self._play_requested_at: float | None = None
         self._event_manager = None
         self._event_callback_type = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p)
         self._event_callbacks: list[tuple[int, Any]] = []
@@ -352,6 +354,7 @@ class LibVLCBackend:
 
     def play(self):
         if not self.player or self.libvlc_media_player_play(self.player) != 0: raise BackendError("libVLC playback could not start")
+        self._play_requested_at = time.monotonic()
         self._state = PlaybackState.PLAYING
 
     def pause(self):
@@ -428,7 +431,9 @@ class LibVLCBackend:
             if self.duration() and self.position() >= self.duration() - 0.2: self._state = PlaybackState.ENDED
         if (self.player and self._state is PlaybackState.ENDED
                 and self.position() == 0.0 and self.duration() == 0.0
-                and self.audio_track_count() == 0 and self.video_track_count() == 0):
+                and self.audio_track_count() == 0 and self.video_track_count() == 0
+                and getattr(self, "_play_requested_at", None) is not None
+                and time.monotonic() - self._play_requested_at >= 0.5):
             # VLC 3 can report Ended rather than EncounteredError when an
             # access module (for example HTTP 404) never opened any stream.
             # Zero-time EOF with no playable track is not successful EOF.
