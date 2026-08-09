@@ -11,7 +11,7 @@
       "evidence": [
         "casu.strict canonical model preserves active native RGB/YUV/alpha planes, plane layout, 8/10/12/16-bit samples, color metadata, and rational PTS",
         "casu.core.analyze(mode='strict') invokes analyze_strict_video and never the 160x90 activity preview",
-        "pytest -q -m 'not media': 130 passed, 59 deselected",
+        "pytest -q -m 'not media': 133 passed, 59 deselected",
         "pytest -q tests/test_strict_acceptance.py -m media: 10 passed",
         "clean wheel build and isolated wheel STRICT smoke: PASS",
         "clean temporary-tree Debian build, package inspection, and extracted-package STRICT smoke: PASS",
@@ -71,7 +71,7 @@
       "evidence": [
         "Functional navigation and dynamic backend-reported track/output/chapter menus replace placeholder views/cycle buttons",
         "Legacy locations have no MPCASU extension or URI-scheme allow-list; installed libVLC access modules decide protocol support, while empty/NUL inputs fail before the C API",
-        "Generated loopback HTTP/WAV acceptance opens through libVLC, exposes PCM, advances playback and seeks to one second; HTTPS/auth/redirect/live matrices remain open",
+        "Generated loopback HTTP/WAV acceptance follows a redirect, exposes PCM, advances playback and seeks to one second; HTTP 404 becomes ERROR instead of VLC 3 zero-track/zero-time false EOF; HTTPS/auth/live matrices remain open",
         "Atomic validated settings and SQLite scan/search/resume/favorites/playlists/per-media track and delay preferences are behavior-tested; watched-folder configuration survives save/reload",
         "MPCASU and converter construction smoke plus real playlist add/move/remove synchronization under isolated X display: PASS",
         "Generated exact-runtime libVLC matrix: 12 passed, 9 xfailed. PCM/WAV, FLAC, MP3, Vorbis/Ogg, Opus and AAC/M4A expose real audio tracks; SRT, WebVTT and ASS load with linked-list descriptions; Rawvideo/AVI delivers RV32 callback frames; loopback HTTP PCM playback and seek pass. Nine compressed codecs deliver no frame in the privileged harness; a separate non-root desktop-user H.264 callback probe delivers one frame, so environment coverage remains distinct",

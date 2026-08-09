@@ -50,11 +50,11 @@ player package depends explicitly on `vlc-plugin-base` and
 `vlc-plugin-video-output`; physical audio/video output remains a separate host
 matrix and stable release remains blocked until clean supported hosts pass it.
 
-A loopback HTTP server supplies a generated WAV fixture to the in-process
-backend. The runtime opens the URL, exposes the PCM track, advances its clock
-and seeks to one second. This is HTTP access-module evidence; HTTPS,
-authentication, redirects, adaptive/live protocols and hostile-network cases
-remain open.
+A loopback HTTP server redirects to a generated WAV fixture. The runtime follows
+the redirect, exposes the PCM track, advances its clock and seeks to one second.
+A missing URL enters `ERROR`; VLC 3's zero-track/zero-time false EOF is normalized
+to an opening failure. This is HTTP access-module evidence; HTTPS,
+authentication, adaptive/live protocols and hostile-network cases remain open.
 
 The release matrix still must add representative MP4/MKV/MOV/WebM/TS,
 H.264/HEVC/VP8/VP9/AV1/MPEG-2, AAC/MP3/Opus/Vorbis/FLAC/PCM, subtitle formats,

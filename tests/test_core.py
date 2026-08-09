@@ -775,6 +775,40 @@ def test_backend_maps_libvlc_media_error_state():
     assert backend.state() is PlaybackState.ERROR
 
 
+def test_backend_does_not_downgrade_libvlc_error_to_late_eof():
+    backend = LibVLCBackend.__new__(LibVLCBackend)
+    backend._media_state_api = True; backend.media = object(); backend.player = None
+    backend._state = PlaybackState.ERROR
+    backend.libvlc_media_get_state = lambda _media: 6
+    assert backend.state() is PlaybackState.ERROR
+
+
+def test_backend_prefers_libvlc_player_error_over_media_eof():
+    backend = LibVLCBackend.__new__(LibVLCBackend)
+    backend._player_state_api = True; backend.player = object()
+    backend._media_state_api = True; backend.media = object()
+    backend._state = PlaybackState.PLAYING
+    backend.libvlc_media_player_get_state = lambda _player: 7
+    backend.libvlc_media_get_state = lambda _media: 6
+    backend.libvlc_media_player_is_playing = lambda _player: 0
+    assert backend.state() is PlaybackState.ERROR
+
+
+def test_backend_maps_zero_track_zero_time_eof_to_open_error():
+    backend = LibVLCBackend.__new__(LibVLCBackend)
+    backend._player_state_api = True; backend.player = object()
+    backend._media_state_api = True; backend.media = object()
+    backend._state = PlaybackState.LOADING
+    backend.libvlc_media_player_get_state = lambda _player: 6
+    backend.libvlc_media_get_state = lambda _media: 6
+    backend.libvlc_media_player_get_time = lambda _player: 0
+    backend.libvlc_media_player_get_length = lambda _player: 0
+    backend.libvlc_audio_get_track_count = lambda _player: 0
+    backend._video_track_api = True
+    backend.libvlc_video_get_track_count = lambda _player: 0
+    assert backend.state() is PlaybackState.ERROR
+
+
 def test_libvlc_library_candidates_are_platform_independent():
     linux = LibVLCBackend.library_candidates("linux")
     assert "libvlc.so.5" in linux and "libvlc.so" in linux

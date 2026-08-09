@@ -2,7 +2,7 @@
 
 ## 2026-08-09 — current consolidated verification
 
-- Fast behavior suite: **130 passed, 59 media tests deselected**.
+- Fast behavior suite: **133 passed, 59 media tests deselected**.
 - Generated exact-runtime libVLC matrix: **12 passed, 9 xfailed**. Six audio
   combinations expose real tracks and advance playback; SRT, WebVTT and ASS
   load as external tracks; Rawvideo/AVI writes real RV32 callback frames. Nine
@@ -15,8 +15,9 @@
 - Legacy URLs are passed to installed libVLC access modules without a smaller
   MPCASU scheme list; empty/NUL sources fail safely and Windows drive paths are
   kept on the local-path API.
-- A generated WAV served by an isolated loopback HTTP server opens through
-  libVLC, exposes PCM, advances playback and seeks to one second.
+- A generated WAV behind a loopback HTTP redirect opens through libVLC,
+  exposes PCM, advances playback and seeks to one second. A 404 becomes
+  `ERROR`, not VLC 3's misleading zero-track/zero-time EOF.
 - Generated STRICT + CASUNAT2 + native-player + installed-libVLC suites,
   including bounded-probe/libass, authorized real-PGS and the added JPEG/WebP
   cover variants: **56 passed**.

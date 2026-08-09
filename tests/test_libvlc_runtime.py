@@ -172,10 +172,11 @@ def test_installed_libvlc_decodes_generated_video_matrix(tmp_path, suffix, encod
                     PlaybackState.ENDED, PlaybackState.ERROR}:
                 break
             time.sleep(0.02)
-        assert observed_state is not PlaybackState.ERROR
         if decoded.count == 0:
             pytest.xfail(
-                f"installed libVLC runtime delivered no decoded video frame for {encoder}{suffix}")
+                f"installed libVLC runtime delivered no decoded video frame for "
+                f"{encoder}{suffix} (state={observed_state.value})")
+        assert observed_state is not PlaybackState.ERROR
         assert observed_position >= 0.0
         assert observed_tracks > 0
     finally:
@@ -250,8 +251,8 @@ def test_installed_libvlc_loads_external_subtitle_matrix(tmp_path, suffix, docum
 @pytest.mark.skipif(
     not ctypes.util.find_library("vlc") or not shutil.which("ffmpeg"),
     reason="libVLC/FFmpeg unavailable")
-def test_installed_libvlc_plays_generated_audio_over_local_http(tmp_path):
-    """Exercise the real libVLC HTTP access, demux, decode and clock path."""
+def test_installed_libvlc_handles_local_http_redirect_seek_and_404(tmp_path):
+    """Exercise libVLC HTTP redirect, decode, seek and terminal error paths."""
     fixture = tmp_path / "network-tone.wav"
     generated = subprocess.run([
         "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
@@ -265,6 +266,14 @@ def test_installed_libvlc_plays_generated_audio_over_local_http(tmp_path):
         def log_message(self, _format, *_args):
             return None
 
+        def do_GET(self):
+            if self.path == "/redirect.wav":
+                self.send_response(302)
+                self.send_header("Location", f"/{fixture.name}")
+                self.end_headers()
+                return
+            super().do_GET()
+
     handler = functools.partial(QuietHandler, directory=str(tmp_path))
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -273,7 +282,8 @@ def test_installed_libvlc_plays_generated_audio_over_local_http(tmp_path):
         _HeadlessSurface(), runtime_options=("--aout=dummy", "--vout=dummy"))
     try:
         host, port = server.server_address
-        backend.open_source(f"http://{host}:{port}/{fixture.name}")
+        origin = f"http://{host}:{port}"
+        backend.open_source(f"{origin}/redirect.wav")
         backend.play()
         deadline = time.monotonic() + 5.0
         observed_position = 0.0
@@ -303,6 +313,15 @@ def test_installed_libvlc_plays_generated_audio_over_local_http(tmp_path):
             time.sleep(0.02)
         assert backend.state() is not PlaybackState.ERROR
         assert seek_position >= 0.8
+
+        backend.open_source(f"{origin}/missing.wav")
+        backend.play()
+        error_deadline = time.monotonic() + 3.0
+        while time.monotonic() < error_deadline:
+            if backend.state() is PlaybackState.ERROR:
+                break
+            time.sleep(0.02)
+        assert backend.state() is PlaybackState.ERROR
     finally:
         backend.close()
         server.shutdown()

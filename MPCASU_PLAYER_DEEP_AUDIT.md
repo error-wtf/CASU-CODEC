@@ -36,7 +36,7 @@ This file records implemented behavior, not widget presence.
    animated, HEIF and broader platform cases; current covers survive source
    deletion, are decode-budgeted and render in the native audio canvas/library.
 
-Current evidence: 130 fast behavior tests, a generated libVLC matrix with
+Current evidence: 133 fast behavior tests, a generated libVLC matrix with
 12 passes/9 runtime XFAILs, 56 earlier targeted generated/probe/PGS/cover cases,
 native A/V/subtitle/no-tempfile sinks, both Tk construction smokes, clean wheel
 and Debian package inspection. Stable 1.0 remains blocked by the live gate file.

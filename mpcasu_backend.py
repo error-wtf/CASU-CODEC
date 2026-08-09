@@ -127,6 +127,8 @@ class LibVLCBackend:
         self._install("libvlc_media_release", None, [ctypes.c_void_p])
         self._install("libvlc_release", None, [ctypes.c_void_p])
         self._media_state_api = self._optional_install("libvlc_media_get_state", ctypes.c_int, [ctypes.c_void_p])
+        self._player_state_api = self._optional_install(
+            "libvlc_media_player_get_state", ctypes.c_int, [ctypes.c_void_p])
         self._install("libvlc_media_player_play", ctypes.c_int, [ctypes.c_void_p])
         self._install("libvlc_media_player_set_pause", None, [ctypes.c_void_p, ctypes.c_int])
         self._install("libvlc_media_player_stop", None, [ctypes.c_void_p])
@@ -408,16 +410,29 @@ class LibVLCBackend:
         return max(0.0, float(self.libvlc_media_player_get_length(self.player) if self.player else 0) / 1000.0)
 
     def state(self) -> PlaybackState:
+        if getattr(self, "_player_state_api", False) and self.player:
+            player_state = int(self.libvlc_media_player_get_state(self.player))
+            if player_state == 7:
+                self._state = PlaybackState.ERROR
+            elif player_state == 6 and self._state is not PlaybackState.ERROR:
+                self._state = PlaybackState.ENDED
         if self._media_state_api and self.media:
             # libVLC media states: 6=Ended, 7=Error.  Opening/buffering are
             # deliberately left to the requested controller state.
             media_state = int(self.libvlc_media_get_state(self.media))
             if media_state == 7:
                 self._state = PlaybackState.ERROR
-            elif media_state == 6:
+            elif media_state == 6 and self._state is not PlaybackState.ERROR:
                 self._state = PlaybackState.ENDED
         if self.player and self._state == PlaybackState.PLAYING and not self.libvlc_media_player_is_playing(self.player):
             if self.duration() and self.position() >= self.duration() - 0.2: self._state = PlaybackState.ENDED
+        if (self.player and self._state is PlaybackState.ENDED
+                and self.position() == 0.0 and self.duration() == 0.0
+                and self.audio_track_count() == 0 and self.video_track_count() == 0):
+            # VLC 3 can report Ended rather than EncounteredError when an
+            # access module (for example HTTP 404) never opened any stream.
+            # Zero-time EOF with no playable track is not successful EOF.
+            self._state = PlaybackState.ERROR
         return self._state
 
     def media_state_code(self) -> int | None:
