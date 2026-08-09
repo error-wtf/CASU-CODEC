@@ -97,7 +97,10 @@ to one second. A 404 becomes a terminal backend error rather than false EOF. It
 does not stand in for HTTPS or authentication testing. A second loopback test
 serves a generated six-second HLS VOD playlist with AAC-in-TS segments; libVLC
 creates the audio track, advances playback and seeks to three seconds. Mutable
-live playlists, discontinuities and hostile-network behavior remain open.
+playlist reload is separately proven by publishing two AAC/TS segments first,
+then expanding the same HLS playlist: libVLC reloads it, requests the final
+newly published segment and plays beyond the initial window. Sliding media
+sequences, discontinuities and hostile-network behavior remain open.
 A Basic-auth loopback fixture additionally proves that credentialed HTTP URLs
 reach libVLC and produce a real PCM track. URL userinfo is removed from the
 Now Playing label, retained controller state and backend exception text; the

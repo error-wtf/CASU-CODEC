@@ -11,7 +11,7 @@
       "evidence": [
         "casu.strict canonical model preserves active native RGB/YUV/alpha planes, plane layout, 8/10/12/16-bit samples, color metadata, and rational PTS",
         "casu.core.analyze(mode='strict') invokes analyze_strict_video and never the 160x90 activity preview",
-        "pytest -q -m 'not media': 139 passed, 65 deselected",
+        "pytest -q -m 'not media': 139 passed, 66 deselected",
         "pytest -q tests/test_strict_acceptance.py -m media: 10 passed",
         "clean wheel build and isolated wheel STRICT smoke: PASS",
         "clean temporary-tree Debian build, package inspection, and extracted-package STRICT smoke: PASS",
@@ -71,11 +71,11 @@
       "evidence": [
         "Functional navigation and dynamic backend-reported track/output/chapter menus replace placeholder views; toolbar track cycling follows concrete noncontiguous backend IDs and excludes synthetic disable/duplicate entries",
         "Legacy locations have no MPCASU extension or URI-scheme allow-list; installed libVLC access modules decide protocol support, while empty/NUL inputs fail before the C API",
-        "Generated loopback HTTP/WAV acceptance follows a redirect, exposes PCM, advances playback and seeks to one second; HTTP 404 becomes ERROR instead of VLC 3 zero-track/zero-time false EOF. Generated HLS VOD serves AAC-in-TS segments, advances playback and seeks to three seconds. Basic-auth HTTP sends the expected Authorization header and plays PCM while MPCASU redacts URL userinfo from UI/controller/errors; HTTPS/interactive-401/mutable-live/discontinuity matrices remain open",
+        "Generated loopback HTTP/WAV acceptance follows a redirect, exposes PCM, advances playback and seeks to one second; HTTP 404 becomes ERROR instead of VLC 3 zero-track/zero-time false EOF. Generated HLS VOD serves AAC-in-TS segments, advances playback and seeks to three seconds; a growing HLS playlist is reloaded, its later final segment requested and playback passes the initial window. Basic-auth HTTP sends the expected Authorization header and plays PCM while MPCASU redacts URL userinfo from UI/controller/errors; HTTPS/interactive-401/sliding-sequence/discontinuity matrices remain open",
         "Atomic validated settings and SQLite scan/search/resume/favorites/playlists/per-media track and delay preferences are behavior-tested; watched-folder configuration survives save/reload",
         "MPCASU and converter construction smoke plus real playlist add/move/remove synchronization under isolated X display: PASS",
         "Release guard AST regression matrix: 3 passed; real runtime status membership is accepted while direct string-in-source/player pseudo assertions are rejected",
-        "Generated exact-runtime libVLC matrix: 18 passed, 9 xfailed. Six audio formats, three external subtitles, Rawvideo/AVI RV32 callbacks and pixel-distinct paused single-frame stepping, loopback HTTP redirect/WAV/HLS-AAC/Basic-auth playback/seek/404, real two-AAC/two-mov_text selection, two-chapter AAC/MP4 seek and FLAC rate/delay/pause/resume pass. The next-frame ABI is bound as documented void; dummy-aout volume remains explicitly distinct from physical-device volume. Nine compressed codecs deliver no frame in the privileged harness; a separate non-root desktop-user H.264 callback probe delivers one frame, so environment coverage remains distinct",
+        "Generated exact-runtime libVLC matrix: 19 passed, 9 xfailed. Six audio formats, three external subtitles, Rawvideo/AVI RV32 callbacks and pixel-distinct paused single-frame stepping, loopback HTTP redirect/WAV/HLS-AAC/growing-HLS/Basic-auth playback/seek/404, real two-AAC/two-mov_text selection, two-chapter AAC/MP4 seek and FLAC rate/delay/pause/resume pass. The next-frame ABI is bound as documented void; dummy-aout volume remains explicitly distinct from physical-device volume. Nine compressed codecs deliver no frame in the privileged harness; a separate non-root desktop-user H.264 callback probe delivers one frame, so environment coverage remains distinct",
         "Bounded source-stat-versioned FFmpeg thumbnails, including source-independent CASUNAT2 cover attachments, are rendered asynchronously in the library UI; audio-only native playback presents the cover on its canvas",
         "Qt migration, physical output/network coverage, cross-platform packages and complete runtime matrix remain open"
       ]

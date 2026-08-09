@@ -57,8 +57,10 @@ to an opening failure. A separate generated HLS VOD playlist serves six seconds
 of AAC-in-TS over loopback HTTP; libVLC exposes its track, advances playback and
 seeks to three seconds. A Basic-auth HTTP fixture receives the expected
 Authorization header and plays PCM; MPCASU strips URL userinfo from UI,
-controller and error strings. HTTPS, interactive 401 handling, mutable live
-playlists, discontinuities and hostile-network cases remain open.
+controller and error strings. A growing HLS playlist is requested at least
+twice; libVLC fetches its later-published final segment and plays beyond the
+initial two-segment window. HTTPS, interactive 401 handling, sliding media
+sequences, discontinuities and hostile-network cases remain open.
 
 A generated MP4 contains two AAC audio tracks and two embedded `mov_text`
 subtitle tracks with German/English metadata. libVLC exposes both linked-list

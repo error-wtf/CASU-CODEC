@@ -401,6 +401,97 @@ def test_installed_libvlc_plays_and_seeks_generated_http_hls_aac(tmp_path):
 @pytest.mark.skipif(
     not ctypes.util.find_library("vlc") or not shutil.which("ffmpeg"),
     reason="libVLC/FFmpeg unavailable")
+def test_installed_libvlc_reloads_growing_http_hls_playlist(tmp_path):
+    """Prove that later HLS segments are discovered by playlist reload."""
+    source_playlist = tmp_path / "generated.m3u8"
+    segments = tmp_path / "live-%03d.ts"
+    generated = subprocess.run([
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "sine=frequency=622:sample_rate=48000",
+        "-t", "6.0", "-c:a", "aac", "-b:a", "128k",
+        "-f", "hls", "-hls_time", "1", "-hls_list_size", "0",
+        "-hls_segment_filename", str(segments), str(source_playlist),
+    ], capture_output=True, text=True, check=False)
+    if generated.returncode != 0:
+        pytest.skip(f"FFmpeg HLS/AAC mux unavailable: {generated.stderr.strip()}")
+
+    lines = source_playlist.read_text(encoding="utf-8").splitlines()
+    first_media = next((index for index, line in enumerate(lines)
+                        if line.startswith("#EXTINF:")), -1)
+    entries = []
+    index = first_media
+    while index >= 0 and index + 1 < len(lines):
+        if not lines[index].startswith("#EXTINF:"):
+            break
+        entries.append((lines[index], lines[index + 1]))
+        index += 2
+    if len(entries) < 4:
+        pytest.skip("FFmpeg produced too few HLS segments for reload test")
+    header = [line for line in lines[:first_media]
+              if line != "#EXT-X-ENDLIST"]
+    playlist_requests = []
+    segment_requests = []
+
+    class GrowingHlsHandler(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, _format, *_args):
+            return None
+
+        def do_GET(self):
+            if self.path == "/live.m3u8":
+                playlist_requests.append(time.monotonic())
+                published = entries[:2] if len(playlist_requests) == 1 else entries
+                document = header + [item for pair in published for item in pair]
+                if len(playlist_requests) > 1:
+                    document.append("#EXT-X-ENDLIST")
+                payload = ("\n".join(document) + "\n").encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/vnd.apple.mpegurl")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+                return
+            if self.path.endswith(".ts"):
+                segment_requests.append(self.path.lstrip("/"))
+            super().do_GET()
+
+    handler = functools.partial(GrowingHlsHandler, directory=str(tmp_path))
+    try:
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    except PermissionError:
+        pytest.skip("loopback sockets are blocked by the test sandbox")
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    backend = LibVLCBackend(
+        _HeadlessSurface(), runtime_options=("--aout=dummy", "--vout=dummy"))
+    try:
+        host, port = server.server_address
+        backend.open_source(f"http://{host}:{port}/live.m3u8")
+        backend.play()
+        deadline = time.monotonic() + 12.0
+        observed_position = 0.0
+        while time.monotonic() < deadline:
+            observed_position = max(observed_position, backend.position())
+            if (len(playlist_requests) >= 2 and observed_position >= 3.0
+                    and entries[-1][1] in segment_requests):
+                break
+            assert backend.state() is not PlaybackState.ERROR
+            time.sleep(0.02)
+        assert len(playlist_requests) >= 2
+        assert entries[-1][1] in segment_requests
+        assert observed_position >= 3.0
+    finally:
+        backend.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2.0)
+        assert not thread.is_alive()
+
+
+@pytest.mark.media
+@pytest.mark.skipif(
+    not ctypes.util.find_library("vlc") or not shutil.which("ffmpeg"),
+    reason="libVLC/FFmpeg unavailable")
 def test_installed_libvlc_plays_http_basic_auth_source(tmp_path):
     fixture = tmp_path / "protected.wav"
     generated = subprocess.run([

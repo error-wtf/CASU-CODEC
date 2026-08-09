@@ -2,8 +2,8 @@
 
 ## 2026-08-09 — current consolidated verification
 
-- Fast behavior suite: **139 passed, 65 media tests deselected**.
-- Generated exact-runtime libVLC matrix: **18 passed, 9 xfailed**. Six audio
+- Fast behavior suite: **139 passed, 66 media tests deselected**.
+- Generated exact-runtime libVLC matrix: **19 passed, 9 xfailed**. Six audio
   combinations expose real tracks and advance playback; SRT, WebVTT and ASS
   load as external tracks; Rawvideo/AVI writes real RV32 callback frames. Nine
   compressed-video combinations deliver no callback frame in the privileged
@@ -24,6 +24,9 @@
 - A Basic-auth HTTP fixture observes libVLC's expected Authorization header and
   real PCM playback. A separate behavior test proves URL userinfo never reaches
   display/controller/error strings.
+- A growing HLS fixture initially publishes two AAC/TS segments, then the full
+  playlist. libVLC reloads the manifest, requests the final new segment and
+  plays beyond three seconds.
 - A real MP4 with two AAC and two embedded `mov_text` tracks exposes linked-list
   descriptions and accepts selection of both audio and both subtitle IDs.
 - A real AAC/MP4 fixture exposes two chapters and jumps to chapter 2 after
