@@ -28,7 +28,8 @@ from casu.tiles import (TileStateError, compare_tile_frames, state_map_from_fram
 from casu.cli import atomic_write_text
 from casu.cli import main as casu_cli_main
 from mpcasu_backend import (BackendError, CasuBackend, LibVLCBackend,
-                            LIBVLC_PLAYER_EVENT_STATES, PlaybackState)
+                            LIBVLC_PLAYER_EVENT_STATES, PlaybackState,
+                            display_media_source)
 from mpcasu_backend import _TrackDescription
 from mpcasu_native_backend import NativeCasuBackend
 from mpcasu_playback import ControllerState, PlaybackController
@@ -845,6 +846,16 @@ def test_libvlc_runtime_options_are_explicit_and_bounded():
         LibVLCBackend.validate_runtime_options(("--name=bad\x00value",))
     with pytest.raises(BackendError, match="too many"):
         LibVLCBackend.validate_runtime_options(tuple("--x" for _ in range(17)))
+
+
+def test_network_source_display_removes_all_url_userinfo():
+    assert display_media_source(
+        "https://alice:s3cr%40t@example.test:8443/live/index.m3u8?token=public"
+    ) == "https://example.test:8443/live/index.m3u8?token=public"
+    assert display_media_source("rtsp://camera@example.test/feed") == (
+        "rtsp://example.test/feed")
+    assert display_media_source("/media/alice@example.test/video.mp4") == (
+        "/media/alice@example.test/video.mp4")
 
 
 def test_libvlc_track_descriptions_follow_linked_list_past_disable_entry():

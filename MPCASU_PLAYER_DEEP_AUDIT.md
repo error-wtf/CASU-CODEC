@@ -37,8 +37,9 @@ This file records implemented behavior, not widget presence.
    deletion, are decode-budgeted and render in the native audio canvas/library.
 
 Current evidence: 138 fast behavior tests, a generated libVLC matrix with
-17 passes/9 runtime XFAILs (including real FLAC rate/delay/pause/resume,
-pixel-distinct paused Rawvideo single-frame stepping and HTTP HLS-AAC seek),
+18 passes/9 runtime XFAILs (including real FLAC rate/delay/pause/resume,
+pixel-distinct paused Rawvideo single-frame stepping, HTTP HLS-AAC seek and
+credential-redacted Basic-auth PCM),
 56 earlier targeted generated/probe/PGS/cover cases,
 native A/V/subtitle/no-tempfile sinks, both Tk construction smokes, clean wheel
 and Debian package inspection. Stable 1.0 remains blocked by the live gate file.

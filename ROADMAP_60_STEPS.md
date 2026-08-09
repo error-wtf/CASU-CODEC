@@ -44,7 +44,8 @@ Current execution dashboard (evidence, not optimism):
   plus real two-audio/two-subtitle selection, two-chapter MP4 seek and FLAC
   rate/delay/pause/resume plus paused pixel-distinct Rawvideo frame-step pass.
   HTTP HLS VOD with AAC-in-TS playback/seek also passes. Dummy-sink volume is
-  not physical-volume proof; HTTPS/auth/mutable-live matrices remain open.
+  not physical-volume proof. Basic-auth PCM passes with URL credentials removed
+  from UI/controller/errors; HTTPS/interactive-401/mutable-live remain open.
   Responsive Qt, physical-output, broader network and complete cross-platform
   build/shipping matrices remain.
 

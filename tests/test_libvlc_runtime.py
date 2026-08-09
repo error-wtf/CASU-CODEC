@@ -1,4 +1,5 @@
 import ctypes.util
+import base64
 import functools
 import hashlib
 import http.server
@@ -388,6 +389,68 @@ def test_installed_libvlc_plays_and_seeks_generated_http_hls_aac(tmp_path):
             assert backend.state() is not PlaybackState.ERROR
             time.sleep(0.02)
         assert backend.position() >= 2.5
+    finally:
+        backend.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2.0)
+        assert not thread.is_alive()
+
+
+@pytest.mark.media
+@pytest.mark.skipif(
+    not ctypes.util.find_library("vlc") or not shutil.which("ffmpeg"),
+    reason="libVLC/FFmpeg unavailable")
+def test_installed_libvlc_plays_http_basic_auth_source(tmp_path):
+    fixture = tmp_path / "protected.wav"
+    generated = subprocess.run([
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "sine=frequency=880:sample_rate=48000",
+        "-t", "3.0", "-c:a", "pcm_s16le", str(fixture),
+    ], capture_output=True, text=True, check=False)
+    if generated.returncode != 0:
+        pytest.skip(f"FFmpeg PCM encoder unavailable: {generated.stderr.strip()}")
+
+    expected = "Basic " + base64.b64encode(b"casu:codec").decode("ascii")
+    requests = []
+
+    class BasicAuthHandler(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, _format, *_args):
+            return None
+
+        def do_GET(self):
+            authorization = self.headers.get("Authorization")
+            requests.append((self.path, authorization))
+            if authorization != expected:
+                self.send_response(401)
+                self.send_header("WWW-Authenticate", 'Basic realm="MPCASU test"')
+                self.end_headers()
+                return
+            super().do_GET()
+
+    handler = functools.partial(BasicAuthHandler, directory=str(tmp_path))
+    try:
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    except PermissionError:
+        pytest.skip("loopback sockets are blocked by the test sandbox")
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    backend = LibVLCBackend(
+        _HeadlessSurface(), runtime_options=("--aout=dummy", "--vout=dummy"))
+    try:
+        host, port = server.server_address
+        backend.open_source(f"http://casu:codec@{host}:{port}/{fixture.name}")
+        backend.play()
+        accepted_deadline = time.monotonic() + 5.0
+        observed_position = 0.0
+        while time.monotonic() < accepted_deadline:
+            observed_position = max(observed_position, backend.position())
+            if observed_position >= 0.05 and backend.audio_track_count() > 0:
+                break
+            assert backend.state() is not PlaybackState.ERROR
+            time.sleep(0.02)
+        assert observed_position >= 0.05
+        assert any(auth == expected for _path, auth in requests)
     finally:
         backend.close()
         server.shutdown()

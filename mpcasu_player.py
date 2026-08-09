@@ -29,7 +29,8 @@ from casu.media import TrackKind
 from casu.playlist import PlaylistError, PlaylistModel
 from casu.settings import PlayerSettings, SettingsStore
 from casu.thumbnail import thumbnail_for
-from mpcasu_backend import BackendError, CasuBackend, LibVLCBackend, PlaybackState
+from mpcasu_backend import (BackendError, CasuBackend, LibVLCBackend,
+                            PlaybackState, display_media_source)
 from casu.native import NativeCasuError, read_native
 from casu.native_v2 import ChunkType, NativeV2Error, read_native_v2
 from mpcasu_native_backend import NativeCasuBackend, PulseAudioSink, TkCanvasVideoSink
@@ -686,12 +687,13 @@ class MPCASUPlayer(tk.Tk):
         self.stop()
         self._end_handled = False
         self.current = None
-        self.now_playing.configure(text=source)
+        display_source = display_media_source(source)
+        self.now_playing.configure(text=display_source)
         try:
             self.backend = LibVLCBackend(self.canvas)
             self.backend.on_event = self._backend_event
             self.backend.open_source(source)
-            self.controller.attach(self.backend, source)
+            self.controller.attach(self.backend, display_source)
             self.controller.play()
             self._apply_playback_rate()
             self._apply_backend_settings()

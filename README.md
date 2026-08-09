@@ -98,6 +98,10 @@ does not stand in for HTTPS or authentication testing. A second loopback test
 serves a generated six-second HLS VOD playlist with AAC-in-TS segments; libVLC
 creates the audio track, advances playback and seeks to three seconds. Mutable
 live playlists, discontinuities and hostile-network behavior remain open.
+A Basic-auth loopback fixture additionally proves that credentialed HTTP URLs
+reach libVLC and produce a real PCM track. URL userinfo is removed from the
+Now Playing label, retained controller state and backend exception text; the
+original credentialed URL exists only long enough to hand it to libVLC.
 A generated MP4 with two AAC audio tracks and two embedded `mov_text`
 subtitle tracks additionally proves real runtime descriptions and live
 selection of each track through the backend API.

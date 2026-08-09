@@ -28,6 +28,15 @@ import json
 from urllib.parse import urlparse
 
 
+def display_media_source(source: str | Path) -> str:
+    """Return a UI/error-safe source string with URL userinfo removed."""
+    value = str(source)
+    parsed = urlparse(value)
+    if parsed.netloc and "@" in parsed.netloc:
+        return parsed._replace(netloc=parsed.netloc.rsplit("@", 1)[-1]).geturl()
+    return value
+
+
 class PlaybackState(str, Enum):
     EMPTY = "EMPTY"; LOADING = "LOADING"; READY = "READY"
     PLAYING = "PLAYING"; PAUSED = "PAUSED"; STOPPED = "STOPPED"
@@ -287,7 +296,7 @@ class LibVLCBackend:
 
     def open_source(self, source: str | Path, subtitle: Path | None = None) -> None:
         if not self.supports(source):
-            raise BackendError(f"unsupported media source: {source}")
+            raise BackendError(f"unsupported media source: {display_media_source(source)}")
         self.close_media()
         self.path = Path(source).resolve() if isinstance(source, Path) else None
         self._state = PlaybackState.LOADING
@@ -299,7 +308,10 @@ class LibVLCBackend:
         else:
             local = self.path or Path(parsed.path)
             self.media = self.libvlc_media_new_path(self.instance, os_path(local))
-        if not self.media: self._state = PlaybackState.ERROR; raise BackendError(f"libVLC could not open {source}")
+        if not self.media:
+            self._state = PlaybackState.ERROR
+            raise BackendError(
+                f"libVLC could not open {display_media_source(source)}")
         if subtitle is not None:
             subtitle = subtitle.expanduser().resolve()
             if not subtitle.is_file():
