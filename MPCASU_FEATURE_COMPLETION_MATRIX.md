@@ -11,7 +11,7 @@
 | CASUNAT2 seek | serialized generation cancel, fail-closed worker join, cache invalidation + PCM trim | timeline/frame step | blocked-write and four-direction rapid-seek behavior tests | PASS reference path |
 | No CASUNAT2 tempfile | independent backend | n/a | tempfile forced to fail | PASS |
 | Play/pause/resume/stop | both backends | controls/hotkeys | controller/backend tests | PASS reference path |
-| Playback rate | libVLC; native video-only | rate control | fail-closed native-audio test | PARTIAL — native audio is 1.0x until a real resampler exists |
+| Playback rate | libVLC plus native 0.25×–4× channel-aligned s16le resampling/audio-clock scaling | rate control | PCM geometry and transactional live-rate tests | PASS speed/pitch reference path; pitch-preserving time-stretch open |
 | Audio/video track selection | both backends | dynamic menus | runtime state tests | PARTIAL matrix |
 | Subtitle/chapter selection | libVLC plus native text/libass/bitmap/chapter path | dynamic controls + clickable bounded timeline markers | runtime RGBA/text/chapter/seek behavior tests | PASS reference matrix |
 | Native text/rich/bitmap subtitle/chapter | decoded packets, ASS/SSA libass RGBA, typed alpha-bounded PGS/DVD/DVB/XSub RGBA and chapter seek | transparent/text/bitmap overlay + dynamic chapter menu/timeline | generated and authorized 4-format source-deletion + RGBA/sink/GUI tests | PASS reference matrix; broader platform/malformed coverage open |

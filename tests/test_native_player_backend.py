@@ -37,7 +37,8 @@ def libass_available():
 from casu.strict import canonical_frame
 from casu.media import MediaBackend, TrackKind
 from mpcasu_backend import BackendError, PlaybackState
-from mpcasu_native_backend import NativeCasuBackend, canonical_to_rgb
+from mpcasu_native_backend import (NativeCasuBackend, canonical_to_rgb,
+                                   resample_audio_block)
 
 
 class InstrumentedVideoSink:
@@ -404,16 +405,54 @@ def test_native_audio_clock_uses_measured_sink_latency():
     assert backend.position() == 0.0
     now[0] += 0.1
     assert backend._scheduler_position() == pytest.approx(0.01)
+    backend._rate = 2.0
+    backend._observe_audio_clock(block, media_end_seconds=0.2)
+    assert backend._scheduler_position() == pytest.approx(0.0)
+    now[0] += 0.05
+    assert backend._scheduler_position() == pytest.approx(0.1)
 
 
-def test_native_audio_rate_fails_closed_without_resampling(tmp_path):
-    source = tmp_path / "native.casu"; _native_fixture(source)
-    backend = NativeCasuBackend(InstrumentedVideoSink(), InstrumentedAudioSink())
-    backend.open_casu(source)
-    with pytest.raises(BackendError, match="resampler"):
-        backend.set_rate(2.0)
-    assert backend.set_rate(1.0) == 1.0
+def test_native_audio_rate_resamples_pcm_and_restarts_transactionally(tmp_path):
+    source = tmp_path / "native.casu"
+    audio_payload = encode_audio_block(
+        pcm=b"\0\0" * 10, pts=200, time_base_num=1, time_base_den=1000,
+        sample_rate=1000, channels=1, sample_count=10,
+    )
+    write_native_v2(source, {
+        "format": "CASUNAT2", "version": 2,
+        "streams": [{"stream_id": 1, "type": "audio", "time_base": [1, 1000],
+                     "sample_rate": 1000, "channels": 1}],
+    }, [NativeChunk(ChunkType.AUDIO_BLOCK, 1, 200, audio_payload)])
+    video, audio = InstrumentedVideoSink(), InstrumentedAudioSink()
+    backend = NativeCasuBackend(video, audio)
+    backend.open_casu(source); backend.play()
+    assert backend.is_actively_playing()
+    assert backend.set_rate(2.0) == 2.0
+    deadline = time.monotonic() + 1
+    while backend.state() not in {PlaybackState.ENDED, PlaybackState.ERROR} and time.monotonic() < deadline:
+        time.sleep(0.005)
+    assert backend.state() == PlaybackState.ENDED
+    assert audio.flushes == 1 and video.invalidations == 1
+    assert audio.blocks[-1].sample_count == 5
+    assert len(audio.blocks[-1].pcm) == 10
     backend.close()
+
+
+def test_native_audio_resampler_preserves_channel_alignment_and_bounds():
+    pcm = np.array([[0, 1000], [1000, 2000], [2000, 3000], [3000, 4000]],
+                   dtype="<i2").tobytes()
+    block = decode_audio_block(encode_audio_block(
+        pcm=pcm, pts=7, time_base_num=1, time_base_den=1000,
+        sample_rate=1000, channels=2, sample_count=4,
+    ))
+    fast = resample_audio_block(block, 2.0)
+    assert fast.pts == 7 and fast.sample_count == 2
+    assert np.frombuffer(fast.pcm, dtype="<i2").reshape(-1, 2).tolist() == [
+        [0, 1000], [2000, 3000]]
+    slow = resample_audio_block(block, 0.5)
+    assert slow.sample_count == 8 and len(slow.pcm) == 32
+    with pytest.raises(BackendError, match="finite"):
+        resample_audio_block(block, float("nan"))
 
 
 def test_native_media_delays_are_bounded_and_affect_audio_clock():

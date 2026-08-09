@@ -48,9 +48,12 @@ a blocking PCM write past the bounded join timeout, seek refuses the restart
 and retains the stop signal; it never clears cancellation and starts a competing
 generation. Rapid forward/backward seek tests prove that only the final video
 frame generation and correctly trimmed PCM samples reach the sinks.
-The backend rejects non-1.0 native audio rates because no resampler has been
-implemented. Real-device long-duration drift evidence and the device matrix
-remain open.
+Native audio rates from 0.25× through 4× use bounded deterministic linear PCM
+resampling with channel alignment and s16le clipping. Rate changes stop the old
+worker, flush pending PCM, reset the audio clock and restart at the measured
+media position. Sink latency and elapsed wall time are scaled into media time.
+This changes pitch; pitch-preserving time-stretch, real-device long-duration
+drift evidence and the device matrix remain open.
 
 ### Gate 3 — Integrity, recovery and hostile-input safety: PASS
 

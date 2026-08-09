@@ -96,6 +96,35 @@ class NullAudioSink:
         return None
 
 
+def resample_audio_block(block: AudioBlock, rate: float) -> AudioBlock:
+    """Resample interleaved s16le PCM for bounded native speed playback.
+
+    This is deterministic linear interpolation, not pitch-preserving time
+    stretching. The sink sample rate stays unchanged while frame count changes.
+    """
+    value = float(rate)
+    if not np.isfinite(value) or value < 0.25 or value > 4.0:
+        raise BackendError("native audio rate must be finite and between 0.25x and 4x")
+    if value == 1.0 or block.sample_count == 0:
+        return block
+    if block.sample_format != "s16le" or block.channels <= 0:
+        raise BackendError("native rate resampling requires interleaved s16le PCM")
+    samples = np.frombuffer(block.pcm, dtype="<i2")
+    expected = block.sample_count * block.channels
+    if samples.size != expected:
+        raise BackendError("native PCM block size does not match its sample geometry")
+    frames = samples.reshape(block.sample_count, block.channels).astype(np.float64)
+    output_count = max(1, int(round(block.sample_count / value)))
+    positions = np.minimum(np.arange(output_count, dtype=np.float64) * value,
+                           block.sample_count - 1)
+    lower = np.floor(positions).astype(np.int64)
+    upper = np.minimum(lower + 1, block.sample_count - 1)
+    weight = (positions - lower)[:, None]
+    output = frames[lower] * (1.0 - weight) + frames[upper] * weight
+    pcm = np.clip(np.rint(output), -32768, 32767).astype("<i2").tobytes()
+    return replace(block, sample_count=output_count, pcm=pcm)
+
+
 def canonical_to_rgb(frame: CanonicalFrame) -> np.ndarray:
     """Convert a canonical frame to display RGB while retaining source size."""
     fmt = frame.pixel_format
@@ -521,7 +550,8 @@ class NativeCasuBackend:
                 not isinstance(self.audio_sink, NullAudioSink)
                 else "monotonic fallback"}
 
-    def _observe_audio_clock(self, block: AudioBlock) -> None:
+    def _observe_audio_clock(self, block: AudioBlock, *,
+                             media_end_seconds: float | None = None) -> None:
         latency_reader = getattr(self.audio_sink, "latency_seconds", None)
         if not callable(latency_reader):
             return
@@ -533,8 +563,9 @@ class NativeCasuBackend:
             return
         block_start = (block.pts * block.time_base_num /
                        block.time_base_den)
-        block_end = block_start + block.sample_count / block.sample_rate
-        self._audio_clock_media = (block_end - float(latency) +
+        block_end = (block_start + block.sample_count / block.sample_rate
+                     if media_end_seconds is None else float(media_end_seconds))
+        self._audio_clock_media = (block_end - float(latency) * self._rate +
                                    self._audio_delay_seconds)
         self._audio_clock_observed = self._clock()
 
@@ -544,7 +575,8 @@ class NativeCasuBackend:
 
     def _scheduler_position(self) -> float:
         if self._state == PlaybackState.PLAYING and self._audio_clock_media is not None:
-            return self._audio_clock_media + (self._clock() - self._audio_clock_observed)
+            return (self._audio_clock_media
+                    + (self._clock() - self._audio_clock_observed) * self._rate)
         if self._state == PlaybackState.PLAYING:
             return (self._clock() - self._started) * self._rate
         return self._offset
@@ -624,8 +656,13 @@ class NativeCasuBackend:
                             pcm=block.pcm[byte_offset:],
                         )
                     if block.sample_count:
-                        self.audio_sink.write(block)
-                        self._observe_audio_clock(block)
+                        media_end = (block.pts * block.time_base_num /
+                                     block.time_base_den
+                                     + block.sample_count / block.sample_rate)
+                        output_block = resample_audio_block(block, self._rate)
+                        self.audio_sink.write(output_block)
+                        self._observe_audio_clock(
+                            output_block, media_end_seconds=media_end)
                 elif event.kind == "subtitle" and event.stream_id == self._selected_subtitle and event.chunk_offset is not None:
                     chunk, _ = self.container.read_chunk_at(event.chunk_offset)
                     packet = decode_subtitle_packet(chunk.payload)
@@ -750,17 +787,27 @@ class NativeCasuBackend:
         return self._state == PlaybackState.PLAYING and bool(self._thread and self._thread.is_alive())
 
     def set_rate(self, rate: float) -> float:
-        value = max(0.25, min(4.0, float(rate)))
-        if self._selected_audio >= 0 and value != 1.0:
-            raise BackendError(
-                "native audio rate changes require a resampler; only 1.0x is supported"
-            )
-        with self._lock:
-            position = self.position()
-            self._rate = value
-            self._offset = position
-            if self._state == PlaybackState.PLAYING:
-                self._started = self._clock() - position / value
+        requested = float(rate)
+        if not np.isfinite(requested):
+            raise BackendError("native playback rate must be finite")
+        value = max(0.25, min(4.0, requested))
+        with self._transition_lock:
+            with self._lock:
+                position = self.position()
+                playing = self._state == PlaybackState.PLAYING
+            if playing:
+                self._stop_thread()
+            with self._lock:
+                self._rate = value
+                self._offset = position
+                self._reset_audio_clock()
+                if playing:
+                    self.video_sink.invalidate()
+                    self._present_cover()
+                    self.audio_sink.flush()
+                    self._notify(PlaybackState.READY)
+            if playing:
+                self.play()
         return value
 
     def rate(self) -> float:

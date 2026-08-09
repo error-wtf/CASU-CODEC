@@ -112,8 +112,11 @@ Broader malformed, language and platform cases remain. Hardware A/V
 drift evidence and release
 playback matrices remain open gates.
 Native PCM timing uses measured PulseAudio sink latency when available and a
-monotonic fallback otherwise. Native audio deliberately remains 1.0× until a
-real resampler is implemented; rate changes are not faked by retiming video.
+monotonic fallback otherwise. Native audio supports real 0.25×–4× playback by
+deterministically resampling interleaved s16le PCM while keeping the sink at its
+hardware sample rate; the audio clock converts latency and wall time back into
+media time at the active rate. This is speed/pitch resampling, not a claim of
+pitch-preserving time-stretch.
 Backend-reported chapters appear both in the dynamic chapter menu and as
 clickable, exact-position markers below the seek timeline.
 

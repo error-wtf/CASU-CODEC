@@ -2,7 +2,7 @@
 
 ## 2026-08-09 — current consolidated verification
 
-- Fast behavior suite: **119 passed, 39 media tests deselected**.
+- Fast behavior suite: **120 passed, 39 media tests deselected**.
 - Generated STRICT + CASUNAT2 + native-player + installed-libVLC suites,
   including bounded-probe/libass, authorized real-PGS and the added JPEG/WebP
   cover variants: **56 passed**.
@@ -14,7 +14,7 @@
 - Native-player behavior alone: **11 passed**, including no-tempfile playback,
   A/V/subtitle delivery, transactional seek, overlapping PCM-block trim and
   pause/stop/close flush behavior.
-- Current native-player backend suite: **15 passed**; a blocked old PCM write
+- Current native-player backend suite: **16 passed**; a blocked old PCM write
   cannot cross a seek/restart boundary, and four rapid forward/backward seeks
   deliver only the final generation. Bounded chapter-marker
   positioning and a real clickable Tk/Xvfb timeline behavior test also pass.
@@ -26,11 +26,11 @@
   shared engine/report, a bounded prior report opens as a detail view, and the
   Cancel action reaches the engine and atomically publishes `CANCELLED` without
   leaving the cancelled job's target output.
-- Measured sink latency drives the native scheduling clock when available;
-  unsupported non-1.0 native-audio rate changes fail closed instead of silently
-  desynchronizing PCM.
-- A stored legacy playback rate automatically falls back to a visible 1× when
-  opening native audio instead of aborting media startup.
+- Measured sink latency drives the native scheduling clock when available.
+  Native 0.25×–4× playback resamples channel-aligned s16le PCM, scales latency/
+  elapsed time into media time and transactionally restarts a live worker.
+- A stored playback rate is applied to native audio and displayed truthfully;
+  speed/pitch resampling is not described as pitch-preserving time-stretch.
 - Per-media audio/video/subtitle selections and bounded audio/subtitle delays
   survive SQLite reopen; both native scheduling and libVLC microsecond APIs are
   behavior-tested.

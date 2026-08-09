@@ -709,7 +709,7 @@ def test_chapter_marker_positions_are_bounded_and_backend_neutral():
     assert chapter_marker_positions(chapters, duration=0, width=500) == ()
 
 
-def test_player_resets_stored_rate_for_native_audio():
+def test_player_applies_stored_rate_to_native_audio_resampler():
     class RateButton:
         def __init__(self): self.text = None
         def configure(self, **values): self.text = values.get("text")
@@ -720,8 +720,8 @@ def test_player_resets_stored_rate_for_native_audio():
     player._rate = 2.0
     player.rate_button = RateButton()
     player._apply_playback_rate()
-    assert player._rate == 1.0
-    assert player.rate_button.text == "1×"
+    assert player._rate == 2.0
+    assert player.rate_button.text == "2×"
 
 
 def test_libvlc_delay_controls_convert_milliseconds_to_microseconds():
