@@ -6,7 +6,7 @@ A visible control counts only when it invokes tested behavior.
 
 | Area | Status | Evidence / boundary |
 |---|---|---|
-| Ordinary VLC-compatible media | PASS contract / PARTIAL runtime matrix | `LibVLCBackend` embeds the installed shared library without extension allow-list or subprocess. Generated fixtures prove six audio, one callback-delivered video and three external-subtitle paths; nine compressed-video paths XFAIL in the privileged harness while non-root H.264 succeeds, so physical/network/platform coverage stays open. |
+| Ordinary VLC-compatible media | PASS contract / PARTIAL runtime matrix | `LibVLCBackend` embeds the installed shared library without extension/scheme allow-list or subprocess. Generated fixtures prove six audio, one callback-delivered video, three external-subtitle and loopback HTTP playback/seek paths; nine compressed-video paths XFAIL in the privileged harness while non-root H.264 succeeds, so physical/broader-network/platform coverage stays open. |
 | CASUNAT1/sidecar compatibility | PASS | Validated source or verified envelope extraction feeds libVLC and is labeled compatibility. |
 | Native CASUNAT2 video | PASS for reference path | Independent `NativeCasuBackend` reconstructs indexed key states/tile updates and presents source-sized RGB frames to the MPCASU canvas. |
 | Native CASUNAT2 audio | PASS for reference path | Timestamped s16le PCM is written directly through libpulse-simple; measured sink latency feeds the media clock and instrumented sinks prove exact delivered bytes. |
@@ -35,8 +35,8 @@ broader malformed/platform subtitle matrix and responsive Qt target remain open.
 
 ## Acceptance evidence
 
-- fast suite: 130 passed, 58 media tests deselected;
-- exact-runtime generated libVLC matrix: 11 passed, 9 xfailed because the
+- fast suite: 130 passed, 59 media tests deselected;
+- exact-runtime generated libVLC matrix: 12 passed, 9 xfailed because the
   installed runtime delivered no video callback frame;
 - combined generated STRICT/native-v2/native-player/installed-libVLC suites:
   54 passed, plus a focused 4-format authorized PGS/DVD/DVB/XSub

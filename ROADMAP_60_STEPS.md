@@ -40,8 +40,9 @@ Current execution dashboard (evidence, not optimism):
   six audio codec/container paths, one callback-delivered video path and three
   external subtitle formats. Nine compressed-video combinations deliver no
   frame in the privileged harness and remain `XFAIL` there; the non-root H.264
-  callback succeeds, so responsive Qt, physical-output, network and complete
-  cross-platform build/shipping matrices remain.
+  callback succeeds, and loopback HTTP PCM playback/seek passes. Responsive Qt,
+  physical-output, broader network and complete cross-platform build/shipping
+  matrices remain.
 
 ## Gate A — source-resolution STRICT
 

@@ -4,7 +4,7 @@ This file records implemented behavior, not widget presence.
 
 | Area | Status | Evidence / open boundary |
 |---|---|---|
-| Legacy media | PARTIAL release matrix | Generated in-process libVLC 3.0.23 fixtures prove six audio, one callback-delivered video and three external-subtitle paths; nine compressed video paths XFAIL in the privileged harness while a non-root H.264 callback succeeds. Physical output/network/cross-platform coverage remains. |
+| Legacy media | PARTIAL release matrix | Generated in-process libVLC 3.0.23 fixtures prove six audio, one callback-delivered video, three external-subtitle and loopback HTTP playback/seek paths; nine compressed video paths XFAIL in the privileged harness while a non-root H.264 callback succeeds. Physical output/broader-network/cross-platform coverage remains. |
 | Native CASUNAT2 video | PASS reference path | Lazy on-disk chunks, indexed key/tile reconstruction, source-sized CPU RGB conversion and Tk presentation. |
 | Native CASUNAT2 audio | PASS instrumented reference | Exact timestamped s16le blocks feed direct libpulse-simple; absolute-PTS clock is monotonic, latency-bounded and shows zero cumulative drift over a 21,600-block/six-hour 1.5× simulation. Hardware drift remains open. |
 | Native playback rate | PASS speed/pitch reference path | 0.25×–4× deterministic channel-aligned PCM resampling, bounded clipping, rate-scaled audio clock and transactional live restart pass; pitch-preserving time-stretch remains open. |
@@ -37,6 +37,6 @@ This file records implemented behavior, not widget presence.
    deletion, are decode-budgeted and render in the native audio canvas/library.
 
 Current evidence: 130 fast behavior tests, a generated libVLC matrix with
-11 passes/9 runtime XFAILs, 56 earlier targeted generated/probe/PGS/cover cases,
+12 passes/9 runtime XFAILs, 56 earlier targeted generated/probe/PGS/cover cases,
 native A/V/subtitle/no-tempfile sinks, both Tk construction smokes, clean wheel
 and Debian package inspection. Stable 1.0 remains blocked by the live gate file.

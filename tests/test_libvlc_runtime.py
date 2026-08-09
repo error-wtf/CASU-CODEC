@@ -1,6 +1,9 @@
 import ctypes.util
+import functools
+import http.server
 import shutil
 import subprocess
+import threading
 import time
 
 import pytest
@@ -241,3 +244,68 @@ def test_installed_libvlc_loads_external_subtitle_matrix(tmp_path, suffix, docum
         assert backend.subtitle_track_descriptions()
     finally:
         backend.close()
+
+
+@pytest.mark.media
+@pytest.mark.skipif(
+    not ctypes.util.find_library("vlc") or not shutil.which("ffmpeg"),
+    reason="libVLC/FFmpeg unavailable")
+def test_installed_libvlc_plays_generated_audio_over_local_http(tmp_path):
+    """Exercise the real libVLC HTTP access, demux, decode and clock path."""
+    fixture = tmp_path / "network-tone.wav"
+    generated = subprocess.run([
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "sine=frequency=733:sample_rate=48000",
+        "-t", "2.0", "-c:a", "pcm_s16le", str(fixture),
+    ], capture_output=True, text=True, check=False)
+    if generated.returncode != 0:
+        pytest.skip(f"FFmpeg PCM encoder unavailable: {generated.stderr.strip()}")
+
+    class QuietHandler(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, _format, *_args):
+            return None
+
+    handler = functools.partial(QuietHandler, directory=str(tmp_path))
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    backend = LibVLCBackend(
+        _HeadlessSurface(), runtime_options=("--aout=dummy", "--vout=dummy"))
+    try:
+        host, port = server.server_address
+        backend.open_source(f"http://{host}:{port}/{fixture.name}")
+        backend.play()
+        deadline = time.monotonic() + 5.0
+        observed_position = 0.0
+        observed_tracks = 0
+        observed_state = backend.state()
+        while time.monotonic() < deadline:
+            observed_position = max(observed_position, backend.position())
+            observed_tracks = max(observed_tracks, backend.audio_track_count())
+            observed_state = backend.state()
+            if observed_position >= 0.05 and observed_tracks > 0:
+                break
+            if observed_state is PlaybackState.ERROR:
+                break
+            time.sleep(0.02)
+        assert observed_state is not PlaybackState.ERROR
+        assert observed_position >= 0.05
+        assert observed_tracks > 0
+        backend.seek(1.0)
+        seek_deadline = time.monotonic() + 3.0
+        seek_position = 0.0
+        while time.monotonic() < seek_deadline:
+            seek_position = backend.position()
+            if seek_position >= 0.8:
+                break
+            if backend.state() is PlaybackState.ERROR:
+                break
+            time.sleep(0.02)
+        assert backend.state() is not PlaybackState.ERROR
+        assert seek_position >= 0.8
+    finally:
+        backend.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2.0)
+        assert not thread.is_alive()

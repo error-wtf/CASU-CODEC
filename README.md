@@ -91,6 +91,9 @@ explicit runtime `XFAIL`s in the privileged headless harness. A separate
 non-root desktop-user callback probe delivered an H.264 frame, proving that
 environment coverage must remain distinct. Real output-device and
 cross-platform coverage remains a separate open release matrix.
+An isolated local HTTP acceptance test additionally proves libVLC URL access,
+WAV demux, PCM track creation, clock progression and a seek to one second. It
+does not stand in for HTTPS, authentication, redirects or live-stream testing.
 Rapid seeks serialize worker transitions; a blocked old PCM write must stop
 before cache invalidation, sink flush and a new generation can start. A timeout
 fails closed instead of allowing stale audio to cross the seek boundary.
