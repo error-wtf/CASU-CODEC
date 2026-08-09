@@ -435,3 +435,54 @@ title=Second
         assert backend.chapter() == 1
     finally:
         backend.close()
+
+
+@pytest.mark.media
+@pytest.mark.skipif(
+    not ctypes.util.find_library("vlc") or not shutil.which("ffmpeg"),
+    reason="libVLC/FFmpeg unavailable")
+def test_installed_libvlc_real_transport_rate_volume_delay_pause_resume(tmp_path):
+    fixture = tmp_path / "transport.flac"
+    generated = subprocess.run([
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "sine=frequency=659:sample_rate=48000",
+        "-t", "4.0", "-c:a", "flac", str(fixture),
+    ], capture_output=True, text=True, check=False)
+    if generated.returncode != 0:
+        pytest.skip(f"FFmpeg FLAC encoder unavailable: {generated.stderr.strip()}")
+
+    backend = LibVLCBackend(
+        _HeadlessSurface(), runtime_options=("--aout=dummy", "--vout=dummy"))
+    try:
+        backend.open(fixture)
+        backend.play()
+        deadline = time.monotonic() + 4.0
+        while time.monotonic() < deadline and backend.position() < 0.1:
+            assert backend.state() is not PlaybackState.ERROR
+            time.sleep(0.02)
+        assert backend.position() >= 0.1
+
+        assert backend.set_rate(1.5) == pytest.approx(1.5, abs=0.05)
+        assert backend.rate() == pytest.approx(1.5, abs=0.05)
+        assert backend.set_volume(37) == 37
+        # The dummy aout accepts the setter but reports zero; physical-device
+        # volume remains a separate matrix rather than a fabricated equality.
+        assert 0 <= backend.volume() <= 200
+        backend.set_mute(True)
+        backend.set_mute(False)
+        assert backend.set_audio_delay(125.0) == 125.0
+
+        backend.pause()
+        paused_at = backend.position()
+        time.sleep(0.15)
+        assert backend.state() is PlaybackState.PAUSED
+        assert backend.position() == pytest.approx(paused_at, abs=0.04)
+
+        backend.resume()
+        resume_deadline = time.monotonic() + 3.0
+        while time.monotonic() < resume_deadline and backend.position() < paused_at + 0.08:
+            assert backend.state() is not PlaybackState.ERROR
+            time.sleep(0.02)
+        assert backend.position() >= paused_at + 0.08
+    finally:
+        backend.close()

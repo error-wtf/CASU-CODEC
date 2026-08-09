@@ -2,8 +2,8 @@
 
 ## 2026-08-09 — current consolidated verification
 
-- Fast behavior suite: **134 passed, 61 media tests deselected**.
-- Generated exact-runtime libVLC matrix: **14 passed, 9 xfailed**. Six audio
+- Fast behavior suite: **134 passed, 62 media tests deselected**.
+- Generated exact-runtime libVLC matrix: **15 passed, 9 xfailed**. Six audio
   combinations expose real tracks and advance playback; SRT, WebVTT and ASS
   load as external tracks; Rawvideo/AVI writes real RV32 callback frames. Nine
   compressed-video combinations deliver no callback frame in the privileged
@@ -22,6 +22,9 @@
   descriptions and accepts selection of both audio and both subtitle IDs.
 - A real AAC/MP4 fixture exposes two chapters and jumps to chapter 2 after
   correcting libVLC's `void` chapter/title setter ABI declarations.
+- A real four-second FLAC fixture proves 1.5x rate, 125-millisecond audio
+  delay, pause clock stability and resumed clock progress. The dummy sink's
+  zero volume getter is recorded rather than misrepresented as physical output.
 - Empty EOF classification waits through an explicit monotonic asynchronous
   startup grace period before declaring an opening failure.
 - Generated STRICT + CASUNAT2 + native-player + installed-libVLC suites,

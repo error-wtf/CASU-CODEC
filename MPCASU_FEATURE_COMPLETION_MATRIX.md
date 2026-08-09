@@ -2,7 +2,7 @@
 
 | Feature | Backend | UI | Evidence | Status |
 |---|---|---|---|---|
-| Installed-libVLC legacy playback | in-process shared library | embedded surface/controls | generated matrix: 6 audio + Rawvideo + 3 subtitle pass, 9 compressed-video runtime XFAIL | PARTIAL |
+| Installed-libVLC legacy playback | in-process shared library | embedded surface/controls | generated matrix: 6 audio + Rawvideo + 3 subtitle + FLAC transport-control pass, 9 compressed-video runtime XFAIL | PARTIAL |
 | URL playback | libVLC locations without scheme allow-list; false empty EOF normalized | real URL dialog | loopback HTTP redirect + PCM playback/seek + 404 error | PARTIAL broader network matrix |
 | CASUNAT1/sidecar compatibility | verified extraction/source | labeled compatibility | unit/media tests | PASS |
 | Native CASUNAT2 video | indexed key/tile reconstruction | Tk frame sink | digest + player tests | PASS reference path |
@@ -11,7 +11,7 @@
 | CASUNAT2 seek | serialized generation cancel, fail-closed worker join, cache invalidation + PCM trim | timeline/frame step | blocked-write and four-direction rapid-seek behavior tests | PASS reference path |
 | No CASUNAT2 tempfile | independent backend | n/a | tempfile forced to fail | PASS |
 | Play/pause/resume/stop/error replay | both backends; native fail-closed sink/decode cleanup | controls/hotkeys + concrete error | controller/backend and transient-underrun replay tests | PASS reference path |
-| Playback rate | libVLC plus native 0.25×–4× channel-aligned s16le resampling/audio-clock scaling | rate control | PCM geometry and transactional live-rate tests | PASS speed/pitch reference path; pitch-preserving time-stretch open |
+| Playback rate | libVLC plus native 0.25×–4× channel-aligned s16le resampling/audio-clock scaling | rate control | native PCM geometry/transactional live-rate plus real libVLC FLAC 1.5x/delay/pause/resume | PASS speed/pitch reference path; pitch-preserving time-stretch open |
 | Audio/video track selection | both backends; native transactional restart and Pulse format reopen | dynamic menus | native 2-video/2-audio/2-subtitle isolation + real libVLC MP4 two-audio selection | PASS reference; platform matrix partial |
 | Audio output selection | bounded PipeWire Audio/Sink inventory + selected node passed to Pulse simple | dynamic reported-device menu | JSON filter/offline fallback + live USB-DAC switch | PASS instrumented native reference; physical hotplug/platform matrix open |
 | Subtitle/chapter selection | libVLC plus native text/libass/bitmap/chapter path | dynamic controls + clickable bounded timeline markers | real libVLC external/embedded/two-chapter selection + native RGBA/text/chapter/seek tests | PASS reference matrix |
