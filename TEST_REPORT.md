@@ -2,8 +2,8 @@
 
 ## 2026-08-09 — current consolidated verification
 
-- Fast behavior suite: **137 passed, 62 media tests deselected**.
-- Generated exact-runtime libVLC matrix: **15 passed, 9 xfailed**. Six audio
+- Fast behavior suite: **137 passed, 63 media tests deselected**.
+- Generated exact-runtime libVLC matrix: **16 passed, 9 xfailed**. Six audio
   combinations expose real tracks and advance playback; SRT, WebVTT and ASS
   load as external tracks; Rawvideo/AVI writes real RV32 callback frames. Nine
   compressed-video combinations deliver no callback frame in the privileged
@@ -25,6 +25,9 @@
 - A real four-second FLAC fixture proves 1.5x rate, 125-millisecond audio
   delay, pause clock stability and resumed clock progress. The dummy sink's
   zero volume getter is recorded rather than misrepresented as physical output.
+- A generated Rawvideo/AVI fixture proves one-frame navigation with exactly
+  one new pixel-distinct RV32 callback while paused; the former erroneous
+  integer return binding was corrected to libVLC's documented `void` ABI.
 - Empty EOF classification waits through an explicit monotonic asynchronous
   startup grace period before declaring an opening failure.
 - Three release-guard AST regressions distinguish prohibited direct

@@ -1,5 +1,6 @@
 import ctypes.util
 import functools
+import hashlib
 import http.server
 import shutil
 import subprocess
@@ -484,5 +485,49 @@ def test_installed_libvlc_real_transport_rate_volume_delay_pause_resume(tmp_path
             assert backend.state() is not PlaybackState.ERROR
             time.sleep(0.02)
         assert backend.position() >= paused_at + 0.08
+    finally:
+        backend.close()
+
+
+@pytest.mark.media
+@pytest.mark.skipif(
+    not ctypes.util.find_library("vlc") or not shutil.which("ffmpeg"),
+    reason="libVLC/FFmpeg unavailable")
+def test_installed_libvlc_real_single_frame_step(tmp_path):
+    """A frame-step pass requires exactly one newly decoded video picture."""
+    fixture = tmp_path / "frame-step.avi"
+    generated = subprocess.run([
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "testsrc2=size=160x90:rate=5",
+        "-t", "3.0", "-pix_fmt", "yuv420p", "-threads", "1",
+        "-c:v", "rawvideo", str(fixture),
+    ], capture_output=True, text=True, check=False)
+    if generated.returncode != 0:
+        pytest.skip(f"FFmpeg rawvideo encoder unavailable: {generated.stderr.strip()}")
+
+    backend = LibVLCBackend(
+        _HeadlessSurface(), runtime_options=("--aout=dummy", "--vout=dummy"))
+    try:
+        backend.open(fixture)
+        decoded = _DecodedVideoCounter(backend)
+        backend.play()
+        deadline = time.monotonic() + 4.0
+        while time.monotonic() < deadline and decoded.count < 2:
+            assert backend.state() is not PlaybackState.ERROR
+            time.sleep(0.02)
+        assert decoded.count >= 2
+
+        backend.pause()
+        time.sleep(0.1)
+        before_count = decoded.count
+        before_digest = hashlib.sha256(decoded.buffer.raw).digest()
+        backend.next_frame()
+        step_deadline = time.monotonic() + 2.0
+        while time.monotonic() < step_deadline and decoded.count <= before_count:
+            assert backend.state() is not PlaybackState.ERROR
+            time.sleep(0.02)
+        assert decoded.count == before_count + 1
+        assert hashlib.sha256(decoded.buffer.raw).digest() != before_digest
+        assert backend.state() is PlaybackState.PAUSED
     finally:
         backend.close()

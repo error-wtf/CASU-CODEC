@@ -146,7 +146,11 @@ class LibVLCBackend:
             ("libvlc_media_player_get_chapter", ctypes.c_int, [ctypes.c_void_p]),
             ("libvlc_media_player_set_chapter", None, [ctypes.c_void_p, ctypes.c_int]),
         ))
-        self._frame_step_api = self._optional_install("libvlc_media_player_next_frame", ctypes.c_int, [ctypes.c_void_p])
+        # libVLC 3.x and 4.x declare this API as ``void``. Treating the
+        # register contents as an integer return value creates random frame-
+        # step failures even though libVLC accepted the command.
+        self._frame_step_api = self._optional_install(
+            "libvlc_media_player_next_frame", None, [ctypes.c_void_p])
         self._install("libvlc_media_player_set_rate", ctypes.c_int, [ctypes.c_void_p, ctypes.c_float])
         self._install("libvlc_media_player_get_rate", ctypes.c_float, [ctypes.c_void_p])
         self._install("libvlc_audio_set_volume", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int])
@@ -373,8 +377,8 @@ class LibVLCBackend:
     def next_frame(self) -> None:
         if not self._frame_step_api or not self.player:
             raise BackendError("frame stepping is unavailable in this libVLC build")
-        if self.libvlc_media_player_next_frame(self.player) != 0:
-            raise BackendError("libVLC rejected frame step")
+        self.libvlc_media_player_next_frame(self.player)
+        self._state = PlaybackState.PAUSED
 
     def chapter_count(self) -> int:
         if not self._chapter_api or not self.player:

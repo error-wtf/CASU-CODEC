@@ -42,7 +42,8 @@ Current execution dashboard (evidence, not optimism):
   frame in the privileged harness and remain `XFAIL` there; the non-root H.264
   callback succeeds, and loopback HTTP redirect/PCM playback/seek/404 handling
   plus real two-audio/two-subtitle selection, two-chapter MP4 seek and FLAC
-  rate/delay/pause/resume pass. Dummy-sink volume is not physical-volume proof.
+  rate/delay/pause/resume plus paused pixel-distinct Rawvideo frame-step pass.
+  Dummy-sink volume is not physical-volume proof.
   Responsive Qt, physical-output, broader network and complete cross-platform
   build/shipping matrices remain.
 

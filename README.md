@@ -105,6 +105,10 @@ A real FLAC transport fixture additionally proves 1.5x rate selection,
 125-millisecond audio delay, pause clock stability and resumed clock progress.
 The bounded dummy audio output accepts the volume/mute setters but reports
 volume zero, so physical-device volume remains an explicitly open host test.
+Legacy single-frame navigation is also exercised on a generated five-fps
+Rawvideo/AVI stream: after pause, libVLC produces exactly one new RV32 callback
+with different pixels and remains paused. Its `next_frame` ABI is correctly
+bound as `void`, matching the VideoLAN 3.x/4.x public header.
 Rapid seeks serialize worker transitions; a blocked old PCM write must stop
 before cache invalidation, sink flush and a new generation can start. A timeout
 fails closed instead of allowing stale audio to cross the seek boundary.

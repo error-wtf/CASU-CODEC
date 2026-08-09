@@ -65,6 +65,10 @@ A real four-second FLAC fixture accepts 1.5x playback, 125-millisecond audio
 delay and pause/resume with the expected clock behavior. The dummy audio sink
 accepts volume/mute writes but reports volume zero; this is transport-control
 evidence, not a physical-output volume claim.
+A generated five-fps Rawvideo/AVI fixture also proves paused single-frame
+navigation by observing exactly one new, pixel-distinct RV32 callback. The
+libVLC `next_frame` ABI is bound as `void`; no undefined return register is
+interpreted as a success code.
 
 The release matrix still must add representative MP4/MKV/MOV/WebM/TS,
 H.264/HEVC/VP8/VP9/AV1/MPEG-2, AAC/MP3/Opus/Vorbis/FLAC/PCM, subtitle formats,
