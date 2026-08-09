@@ -27,7 +27,7 @@ ffprobe stream/frame inventory
 | Atomic output/cancel cleanup | PASS core | Engine cancellation is fail-closed and journaled; interactive GUI cancellation matrix remains. |
 | Subtitle/chapter/attachments | PASS reference matrix | Text, ASS/SSA libass+font and typed PGS/DVD/DVB/XSub bitmap paths pass source deletion; chapters, attachments, covers and bounded metadata pass. |
 | Batch queue/retry/journal | PASS core | Recursive GUI queue, CLI retry, per-file isolation and collision-resistant hash-verified journal resume are behavior-tested. |
-| Progress/ETA/reports | PARTIAL | Shared progress callbacks and JSON batch results exist; calibrated ETA remains open. |
+| Progress/ETA/reports | PASS reference path | Shared monotonic batch progress exposes per-job/overall fraction, measured elapsed time, throughput ETA and state; JSON results retain conversion duration. Broader accuracy calibration remains. |
 | Hostile-input budgets | PARTIAL | Reader/decompression limits plus monitored probe time/output and decoded-frame dimension/byte ceilings exist; broader decoder/corpus stress remains. |
 | Stable release | OPEN | Package remains `1.0.0rc8`. |
 
@@ -38,8 +38,8 @@ ffprobe stream/frame inventory
 2. Expand the working typed PGS/DVD/DVB/XSub path across platforms and malformed
    libass ASS/SSA, text fallback, chapters/attachments, artwork, bounded tags
    and complete dispositions already pass.
-3. Add calibrated ETA; recursive batch jobs, retry/isolation and
-   machine-readable reports are implemented.
+3. Calibrate the working measured-throughput ETA across long heterogeneous
+   batches; recursive jobs, retry/isolation and machine-readable durations are implemented.
 4. Expand the existing probe/frame resource budgets with a corrupt decoder
    corpus and long-media tests.
 5. Run clean installed wheel/Debian converter and player matrices before 1.0.

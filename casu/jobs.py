@@ -49,6 +49,43 @@ class ConversionResult:
     output_size: int | None = None
     output_sha256: str | None = None
     resumed: bool = False
+    conversion_seconds: float | None = None
+
+
+@dataclass(frozen=True)
+class ConversionProgress:
+    job_index: int
+    job_count: int
+    source: str
+    fraction: float
+    overall_fraction: float
+    elapsed_seconds: float
+    eta_seconds: float | None
+    state: str = "RUNNING"
+
+
+class ConversionProgressTracker:
+    """Monotonic batch-throughput estimator shared by every front end."""
+    def __init__(self, job_count: int, *, clock: Callable[[], float] = time.monotonic):
+        self.job_count = max(0, int(job_count))
+        self.clock = clock
+        self.started = float(clock())
+        self._overall = 0.0
+
+    def update(self, job_index: int, job: ConversionJob, fraction: float, *,
+               state: str = "RUNNING") -> ConversionProgress:
+        index = max(0, min(max(0, self.job_count - 1), int(job_index)))
+        value = max(0.0, min(1.0, float(fraction)))
+        raw = ((index + value) / self.job_count) if self.job_count else 1.0
+        self._overall = max(self._overall, min(1.0, raw))
+        elapsed = max(0.0, float(self.clock()) - self.started)
+        eta = None
+        if self._overall >= 1.0:
+            eta = 0.0
+        elif self._overall > 0.0 and elapsed > 0.0:
+            eta = elapsed * (1.0 - self._overall) / self._overall
+        return ConversionProgress(index, self.job_count, str(job.source), value,
+                                  self._overall, elapsed, eta, state)
 
 
 MAX_JOURNAL_BYTES = 8 * 1024 * 1024
@@ -93,12 +130,15 @@ def _atomic_json(path: Path, value: object) -> None:
 
 
 class ConversionEngine:
-    def __init__(self, *, journal: str | Path | None = None):
+    def __init__(self, *, journal: str | Path | None = None,
+                 clock: Callable[[], float] = time.monotonic):
         self.journal = Path(journal).expanduser().resolve() if journal else None
+        self.clock = clock
 
     def run(self, jobs: Iterable[ConversionJob], *, force: bool = False,
             retries: int = 0, cancel: Any | None = None, pause: Any | None = None,
             progress: Callable[[ConversionJob, float], None] | None = None,
+            progress_detail: Callable[[ConversionProgress], None] | None = None,
             resume: bool = False,
             ) -> tuple[ConversionResult, ...]:
         if retries < 0:
@@ -116,8 +156,17 @@ class ConversionEngine:
             outputs.add(output)
         resumed = self._load_resume(values) if resume else {}
         results: list[ConversionResult] = []
+        tracker = ConversionProgressTracker(len(values), clock=self.clock)
+
+        def notify(index: int, job: ConversionJob, value: float,
+                   state: str = "RUNNING") -> None:
+            if progress:
+                progress(job, max(0.0, min(1.0, float(value))))
+            if progress_detail:
+                progress_detail(tracker.update(index, job, value, state=state))
+
         self._journal(values, results, "RUNNING")
-        for job in values:
+        for job_index, job in enumerate(values):
             if cancel is not None and getattr(cancel, "is_set", lambda: False)():
                 self._journal(values, results, "CANCELLED")
                 raise CasuCancelled("conversion cancelled")
@@ -130,18 +179,21 @@ class ConversionEngine:
                                     str(job.output.expanduser().resolve())))
             if previous is not None:
                 results.append(previous)
-                if progress:
-                    progress(job, 1.0)
+                notify(job_index, job, 1.0, "RESUMED")
                 self._journal(values, results, "RUNNING")
                 continue
             attempt = 0
             while True:
                 attempt += 1
+                job_started = float(self.clock())
                 try:
                     result = self._convert(job, force=force, cancel=cancel,
-                                           progress=(lambda value, job=job: progress(job, value))
-                                           if progress else None)
-                    result = ConversionResult(**{**asdict(result), "attempts": attempt})
+                                           progress=(lambda value, index=job_index, job=job:
+                                                     notify(index, job, value)))
+                    result = ConversionResult(**{
+                        **asdict(result), "attempts": attempt,
+                        "conversion_seconds": max(0.0, float(self.clock()) - job_started),
+                    })
                     break
                 except CasuCancelled:
                     self._journal(values, results, "CANCELLED")
@@ -154,9 +206,12 @@ class ConversionEngine:
                         continue
                     result = ConversionResult(str(job.source), str(job.output), "failed",
                                               job.profile.container, error=str(exc),
-                                              attempts=attempt)
+                                              attempts=attempt,
+                                              conversion_seconds=max(
+                                                  0.0, float(self.clock()) - job_started))
                     break
             results.append(result)
+            notify(job_index, job, 1.0, result.status.upper())
             self._journal(values, results, "RUNNING")
         self._journal(values, results, "COMPLETE")
         return tuple(results)

@@ -16,6 +16,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from casu.core import ANALYSIS_MODES, CasuCancelled, CasuError, ffprobe, duration
 from casu.jobs import (ConversionEngine, ConversionJob, ConversionProfile,
+                       ConversionProgress,
                        conversion_journal_path)
 from casu.native import NativeCasuError, read_native
 from casu.native_v2 import NativeV2Error, read_native_v2
@@ -235,16 +236,16 @@ class CASUConverter(tk.Tk):
             )
             jobs = [ConversionJob(source, self._target_for(source, output_dir), profile)
                     for source in sources]
-            positions = {job.source.expanduser().resolve(): index
-                         for index, job in enumerate(jobs)}
-
-            def report(job: ConversionJob, value: float) -> None:
-                index = positions[job.source.expanduser().resolve()]
-                overall = (index + max(0.0, min(1.0, value))) / total
-                self.after(0, lambda overall=overall, job=job, index=index: (
-                    self.progress.configure(value=overall * 100.0),
+            def report(event: ConversionProgress) -> None:
+                eta = ("ETA --" if event.eta_seconds is None else
+                       f"ETA {int(round(event.eta_seconds))} s")
+                name = Path(event.source).name
+                self.after(0, lambda event=event, name=name, eta=eta: (
+                    self.progress.configure(value=event.overall_fraction * 100.0),
                     self.status.set(
-                        f"Converting {job.source.name} ({index + 1}/{total})"
+                        f"{event.state.title()} {name} "
+                        f"({event.job_index + 1}/{event.job_count}) · "
+                        f"{event.elapsed_seconds:.1f} s · {eta}"
                     ),
                 ))
 
@@ -256,7 +257,7 @@ class CASUConverter(tk.Tk):
                 force=True,
                 cancel=self._cancel_event,
                 pause=self._pause_event,
-                progress=report,
+                progress_detail=report,
                 resume=resume,
             )
             results = [item.__dict__ for item in converted_results]

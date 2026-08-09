@@ -22,9 +22,12 @@ The CLI and GUI `casu-converter` use the same `ConversionEngine`, job and
 profile model. The engine provides atomic output, an atomic JSON journal,
 per-file failure isolation, progress, cancellation, retry (CLI) and resume
 only after the output size/SHA-256 and exact prior job/profile list match. The
-GUI adds recursive queues, pause/cancel and batch verification. Video is decoded
-in presentation order at source
-resolution. Complete key states and exact plane-aware tile updates retain the
+GUI adds recursive queues, pause/cancel and batch verification.
+The engine emits monotonic `ConversionProgress` events with job/batch fraction,
+measured elapsed time, throughput ETA and state. GUI and machine-readable
+results consume this shared timing; completed results retain conversion seconds.
+Video is decoded in presentation order at source resolution. Complete key
+states and exact plane-aware tile updates retain the
 source pixel format, active samples, color metadata and rational PTS. Audio is
 decoded to timestamped interleaved s16le PCM blocks with sample rate, channel
 count/layout and sample count. Text subtitles become timestamped UTF-8 packets

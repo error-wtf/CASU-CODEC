@@ -4,6 +4,7 @@ import pytest
 
 from casu.core import CasuCancelled, CasuError
 from casu.jobs import (ConversionEngine, ConversionJob, ConversionProfile,
+                       ConversionProgressTracker,
                        conversion_journal_path)
 
 
@@ -93,3 +94,20 @@ def test_conversion_batches_get_stable_distinct_journals(tmp_path):
     second = [ConversionJob(tmp_path / "b.mkv", tmp_path / "b.casu", profile)]
     assert conversion_journal_path(tmp_path, first) == conversion_journal_path(tmp_path, first)
     assert conversion_journal_path(tmp_path, first) != conversion_journal_path(tmp_path, second)
+
+
+def test_conversion_progress_eta_is_batch_level_and_monotonic(tmp_path):
+    now = [0.0]
+    tracker = ConversionProgressTracker(2, clock=lambda: now[0])
+    job = ConversionJob(tmp_path / "input.mkv", tmp_path / "output.casu")
+    now[0] = 10.0
+    first = tracker.update(0, job, 0.25)
+    assert first.overall_fraction == 0.125
+    assert first.elapsed_seconds == 10.0
+    assert first.eta_seconds == 70.0
+    now[0] = 12.0
+    regressed = tracker.update(0, job, 0.1)
+    assert regressed.overall_fraction == first.overall_fraction
+    finished = tracker.update(1, job, 1.0, state="CONVERTED")
+    assert finished.overall_fraction == 1.0
+    assert finished.eta_seconds == 0.0 and finished.state == "CONVERTED"

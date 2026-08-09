@@ -21,7 +21,7 @@ Current execution dashboard (evidence, not optimism):
   clock, hotplug and long drift remain.
 - Steps 51–56: PASS/PARTIAL — CLI and GUI share an atomic journaled job engine;
   queue isolation/retry, one bounded synchronized playlist model, SQLite
-  library, settings and dynamic controls exist.
+  library, measured batch ETA, settings and dynamic controls exist.
   Hash-verified restart/resume, attached cover art and bounded metadata are wired
   into CLI/GUI/native playback; ASS/SSA source styling is retained beside a text
   fallback and rendered through native libass. Typed alpha-bounded PGS/DVD/DVB/

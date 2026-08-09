@@ -62,6 +62,9 @@ fail-closed cancellation, per-file failure isolation, CLI retry and an atomic
 machine-readable journal/report. CLI and GUI can resume only outputs whose
 size and SHA-256 still match the exact prior job/profile list. Independent
 batches in one directory receive deterministic distinct journal identifiers.
+The shared engine now emits monotonic batch-level progress with measured elapsed
+time, throughput ETA and explicit state; results retain actual conversion time,
+so CLI reports and GUI status no longer implement competing estimators.
 Immutable backend-neutral track/chapter/device/event models and a transactional
 SQLite library (scan, resume, favorites, playlists) is behavior-tested.
 The player queue and sidebar now render from one bounded, duplicate-free

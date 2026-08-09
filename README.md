@@ -82,6 +82,8 @@ SQLite scan/resume/favorites/playlists now exist as a tested shared core;
 atomic playback settings and dynamic track/output/chapter menus are also implemented.
 The sidebar and queue are synchronized views of one bounded, duplicate-free
 playlist model used by navigation, session persistence and playlist files.
+Converter CLI and GUI share monotonic batch progress, measured elapsed time,
+throughput ETA and per-result conversion duration from the same job engine.
 Library search and watched-folder rescans are wired to the persistent SQLite
 core. Per-media audio/video/subtitle selections and audio/subtitle delays are
 persisted and restored. Source-stat-versioned thumbnails decode asynchronously
