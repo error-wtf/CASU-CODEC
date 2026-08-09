@@ -85,6 +85,12 @@ Live audio/video/subtitle track changes use the same transactional boundary.
 They restart at the measured media position, discard queued output, clear the
 old subtitle and reopen PulseAudio when the new track changes sample rate or
 channel geometry.
+Native output selection inventories bounded PipeWire `Audio/Sink` nodes through
+a time/output-limited `pw-dump` call, always retains a safe system-default
+fallback, and passes the selected stable node name directly to `pa_simple_new`.
+A live device change uses the same generation stop/flush/format-reset boundary.
+This environment has no reachable session PipeWire server, so physical hotplug
+evidence remains open rather than being inferred from the instrumented path.
 Transient native decode/output failures also invalidate queued presentation,
 flush PCM, reset the master clock and retain a bounded concrete error message.
 The same open CASUNAT2 container can then replay from the recorded failure

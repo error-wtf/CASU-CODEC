@@ -2,7 +2,7 @@
 
 ## 2026-08-09 — current consolidated verification
 
-- Fast behavior suite: **125 passed, 39 media tests deselected**.
+- Fast behavior suite: **127 passed, 39 media tests deselected**.
 - Generated STRICT + CASUNAT2 + native-player + installed-libVLC suites,
   including bounded-probe/libass, authorized real-PGS and the added JPEG/WebP
   cover variants: **56 passed**.
@@ -14,13 +14,16 @@
 - Native-player behavior alone: **11 passed**, including no-tempfile playback,
   A/V/subtitle delivery, transactional seek, overlapping PCM-block trim and
   pause/stop/close flush behavior.
-- Current native-player backend suite: **20 passed**; a blocked old PCM write
+- Current native-player backend suite: **22 passed**; a blocked old PCM write
   cannot cross a seek/restart boundary, and four rapid forward/backward seeks
   deliver only the final generation. Bounded chapter-marker
   positioning and a real clickable Tk/Xvfb timeline behavior test also pass.
 - A live six-stream fixture switches between two video, two audio and two
   subtitle streams while playing. Only the final video, English subtitle and
   2-kHz stereo PCM reach the sinks; Pulse format reset is observed exactly once.
+- Bounded PipeWire inventory accepts only `Audio/Sink` nodes, deduplicates names
+  and falls back to `default` while offline. A live USB-DAC switch flushes and
+  resets Pulse format before exactly one selected-sink audio block is delivered.
 - A one-shot instrumented audio underrun enters `ERROR` only after PCM flush,
   generation/canvas invalidation, subtitle clear and clock reset. MPCASU exposes
   the concrete bounded cause; replay succeeds on the same open container.

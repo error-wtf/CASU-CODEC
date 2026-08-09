@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 import ctypes
 import threading
+import json
 
 import numpy as np
 import pytest
@@ -35,10 +36,11 @@ def libass_available():
     except OSError:
         return False
 from casu.strict import canonical_frame
-from casu.media import MediaBackend, TrackKind
+from casu.media import AudioDeviceDescriptor, MediaBackend, TrackKind
 from mpcasu_backend import BackendError, PlaybackState
+import mpcasu_native_backend
 from mpcasu_native_backend import (NativeCasuBackend, canonical_to_rgb,
-                                   resample_audio_block)
+                                   pipewire_audio_devices, resample_audio_block)
 
 
 class InstrumentedVideoSink:
@@ -459,6 +461,54 @@ def test_native_backend_track_controls_are_behavioral(tmp_path):
     backend.set_audio_device("default")
     assert backend.set_volume(125) == 125
     backend.set_mute(True)
+    backend.close()
+
+
+def test_pipewire_device_inventory_is_bounded_and_filters_non_sinks(monkeypatch):
+    payload = [
+        {"type": "PipeWire:Interface:Node", "info": {"props": {
+            "media.class": "Audio/Sink", "node.name": "alsa_output.usb",
+            "node.description": "USB DAC"}}},
+        {"type": "PipeWire:Interface:Node", "info": {"props": {
+            "media.class": "Audio/Source", "node.name": "alsa_input.mic"}}},
+        {"type": "PipeWire:Interface:Node", "info": {"props": {
+            "media.class": "Audio/Sink", "node.name": "alsa_output.usb"}}},
+    ]
+    monkeypatch.setattr(mpcasu_native_backend, "run_bounded",
+                        lambda *_args, **_kwargs: json.dumps(payload).encode())
+    devices = pipewire_audio_devices()
+    assert [(item.identifier, item.label) for item in devices] == [
+        ("default", "System Default"), ("alsa_output.usb", "USB DAC")]
+    monkeypatch.setattr(mpcasu_native_backend, "run_bounded",
+                        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                            mpcasu_native_backend.ProbeError("offline")))
+    assert [item.identifier for item in pipewire_audio_devices()] == ["default"]
+
+
+def test_native_live_audio_device_switch_restarts_selected_sink(tmp_path):
+    source = tmp_path / "tracks.casu"; _multi_track_fixture(source)
+
+    class DeviceSink(InstrumentedAudioSink):
+        def __init__(self):
+            super().__init__(); self.device = "default"
+        def audio_devices(self):
+            return (AudioDeviceDescriptor("default", "Default", "Pulse", True),
+                    AudioDeviceDescriptor("alsa_output.usb", "USB DAC", "PipeWire"))
+        def set_device(self, identifier): self.device = identifier
+
+    video, audio = InstrumentedVideoSink(), DeviceSink()
+    backend = NativeCasuBackend(video, audio)
+    backend.open_casu(source); backend.play()
+    backend.set_audio_device("alsa_output.usb")
+    deadline = time.monotonic() + 1
+    while backend.state() not in {PlaybackState.ENDED, PlaybackState.ERROR} and time.monotonic() < deadline:
+        time.sleep(0.005)
+    assert backend.state() == PlaybackState.ENDED
+    assert audio.device == "alsa_output.usb"
+    assert audio.flushes == 1 and audio.format_resets == 1
+    assert video.invalidations == 1 and len(audio.blocks) == 1
+    with pytest.raises(BackendError, match="unknown"):
+        backend.set_audio_device("not-a-device")
     backend.close()
 
 

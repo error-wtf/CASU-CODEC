@@ -11,7 +11,7 @@
       "evidence": [
         "casu.strict canonical model preserves active native RGB/YUV/alpha planes, plane layout, 8/10/12/16-bit samples, color metadata, and rational PTS",
         "casu.core.analyze(mode='strict') invokes analyze_strict_video and never the 160x90 activity preview",
-        "pytest -q -m 'not media': 125 passed, 39 deselected",
+        "pytest -q -m 'not media': 127 passed, 39 deselected",
         "pytest -q tests/test_strict_acceptance.py -m media: 10 passed",
         "clean wheel build and isolated wheel STRICT smoke: PASS",
         "clean temporary-tree Debian build, package inspection, and extracted-package STRICT smoke: PASS",
@@ -48,9 +48,9 @@
       "evidence": [
         "NativeCasuBackend is independent of LibVLCBackend and performs no legacy extraction",
         "Byte-indexed reconstruction, bounded measured and rate-scaled PulseAudio-latency clock with monotonic absolute-PTS observations/fallback, 0.25x-4x channel-aligned s16le PCM resampling, seek generation invalidation, Tk RGB presentation and direct libpulse-simple PCM sink are implemented",
-        "Text, native libass RGBA and typed PGS/DVD/DVB/XSub bitmap subtitle presentation/clearing/seek with bounded embedded-font registration, chapter seek, clickable bounded chapter timeline, transactional live track selection, runtime track menus and audio-device selection are implemented",
-        "Instrumented behavior tests prove native A/V/subtitle delivery, serialized fail-closed seek invalidation, blocked-write restart refusal, four-direction final-generation delivery, six-stream live track isolation with Pulse PCM-format reopen, transient sink-error cleanup/replay with concrete UI error, tracks/devices, and zero tempfile calls",
-        "pytest -q tests/test_native_player_backend.py: 20 passed; a 21,600-block/six-hour 1.5x changing-latency simulation has zero cumulative drift; transactional live-rate/channel-alignment/track-switch/error-replay, chapter-marker unit and clickable real-Tk/Xvfb behavior tests pass; pitch-preserving time-stretch and real-device long-run drift remain open"
+        "Text, native libass RGBA and typed PGS/DVD/DVB/XSub bitmap subtitle presentation/clearing/seek with bounded embedded-font registration, chapter seek, clickable bounded chapter timeline, transactional live track/device selection, runtime track menus and bounded PipeWire Audio/Sink inventory are implemented",
+        "Instrumented behavior tests prove native A/V/subtitle delivery, serialized fail-closed seek invalidation, blocked-write restart refusal, four-direction final-generation delivery, six-stream live track isolation with Pulse PCM-format reopen, PipeWire filtering/offline fallback and USB-DAC node selection, transient sink-error cleanup/replay with concrete UI error, and zero tempfile calls",
+        "pytest -q tests/test_native_player_backend.py: 22 passed; a 21,600-block/six-hour 1.5x changing-latency simulation has zero cumulative drift; transactional live-rate/channel-alignment/track/device-switch/error-replay, chapter-marker unit and clickable real-Tk/Xvfb behavior tests pass; pitch-preserving time-stretch, physical hotplug and real-device long-run drift remain open"
       ]
     },
     {

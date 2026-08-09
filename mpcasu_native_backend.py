@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import binascii
 import ctypes
+import json
 import struct
 import sys
 import threading
@@ -31,10 +32,43 @@ from casu.native_v2.format import ChunkType
 from casu.native_v2.text import decode_chapter_table, decode_subtitle_packet
 from casu.media import (AudioDeviceDescriptor, ChapterDescriptor,
                         TrackDescriptor, TrackKind)
+from casu.probe import ProbeError, run_bounded
 from casu.strict.canonical import CanonicalFrame
 from mpcasu_backend import BackendError, PlaybackState
 
 MAX_AUDIO_LATENCY_SECONDS = 60.0
+MAX_AUDIO_DEVICES = 128
+
+
+def pipewire_audio_devices() -> tuple[AudioDeviceDescriptor, ...]:
+    """Return bounded PipeWire sink nodes with a universal default fallback."""
+    fallback = AudioDeviceDescriptor("default", "System Default", "PulseAudio", True)
+    try:
+        payload = json.loads(run_bounded(
+            ["pw-dump"], max_output_bytes=4 * 1024 * 1024,
+            max_error_bytes=256 * 1024, timeout_seconds=2.0))
+    except (ProbeError, OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return (fallback,)
+    if not isinstance(payload, list) or len(payload) > 10_000:
+        return (fallback,)
+    devices = [fallback]
+    seen = {"default"}
+    for item in payload:
+        if not isinstance(item, dict) or item.get("type") != "PipeWire:Interface:Node":
+            continue
+        props = item.get("info", {}).get("props", {})
+        if not isinstance(props, dict) or props.get("media.class") != "Audio/Sink":
+            continue
+        identifier = str(props.get("node.name") or "")[:512]
+        if not identifier or "\0" in identifier or identifier in seen:
+            continue
+        label = str(props.get("node.description") or props.get("node.nick")
+                    or identifier)[:256]
+        devices.append(AudioDeviceDescriptor(identifier, label, "PipeWire", False))
+        seen.add(identifier)
+        if len(devices) >= MAX_AUDIO_DEVICES:
+            break
+    return tuple(devices)
 
 
 class VideoSink(Protocol):
@@ -304,7 +338,7 @@ class PulseAudioSink:
         _fields_ = [("format", ctypes.c_int), ("rate", ctypes.c_uint32),
                     ("channels", ctypes.c_uint8)]
 
-    def __init__(self):
+    def __init__(self, device_name: str = "default"):
         try:
             self.lib = ctypes.CDLL("libpulse-simple.so.0")
         except OSError as exc:
@@ -330,6 +364,8 @@ class PulseAudioSink:
         self._format: tuple[int, int] | None = None
         self._volume = 100
         self._muted = False
+        self._device_name = "default"
+        self.set_device(device_name)
 
     def _open(self, block: AudioBlock) -> None:
         if block.sample_format != "s16le":
@@ -338,7 +374,9 @@ class PulseAudioSink:
                                 block.sample_rate, block.channels)
         error = ctypes.c_int()
         self._handle = self.lib.pa_simple_new(
-            None, b"MPCASU", 1, None, b"CASUNAT2 playback", ctypes.byref(spec),
+            None, b"MPCASU", 1,
+            None if self._device_name == "default" else self._device_name.encode("utf-8"),
+            b"CASUNAT2 playback", ctypes.byref(spec),
             None, None, ctypes.byref(error))
         if not self._handle:
             raise BackendError(f"PulseAudio output could not be opened (error {error.value})")
@@ -370,6 +408,15 @@ class PulseAudioSink:
             self.lib.pa_simple_free(self._handle)
         self._handle = None
         self._format = None
+
+    def audio_devices(self) -> tuple[AudioDeviceDescriptor, ...]:
+        return pipewire_audio_devices()
+
+    def set_device(self, identifier: str) -> None:
+        value = str(identifier)
+        if not value or len(value) > 512 or "\0" in value:
+            raise BackendError(f"unknown native audio device {value!r}")
+        self._device_name = value
 
     def set_volume(self, value: int) -> None:
         self._volume = max(0, min(200, int(value)))
@@ -433,6 +480,7 @@ class NativeCasuBackend:
         self._selected_audio = -1
         self._selected_video = -1
         self._selected_subtitle = -1
+        self._audio_device = "default"
         self._chapters: tuple[dict, ...] = ()
         self._audio_clock_media: float | None = None
         self._audio_clock_observed = 0.0
@@ -924,11 +972,42 @@ class NativeCasuBackend:
         )
 
     def audio_devices(self) -> tuple[AudioDeviceDescriptor, ...]:
+        reader = getattr(self.audio_sink, "audio_devices", None)
+        if callable(reader):
+            devices = tuple(reader())[:MAX_AUDIO_DEVICES]
+            if devices:
+                return devices
         return (AudioDeviceDescriptor("default", "System Default", "PulseAudio", True),)
 
     def set_audio_device(self, identifier: str) -> None:
-        if identifier != "default":
-            raise BackendError("native PulseAudio reference sink currently supports the default device only")
+        value = str(identifier)
+        if value not in {item.identifier for item in self.audio_devices()}:
+            raise BackendError(f"unknown native audio device {value!r}")
+        if value == self._audio_device:
+            return
+        selector = getattr(self.audio_sink, "set_device", None)
+        if not callable(selector):
+            raise BackendError("native audio sink does not support device selection")
+        with self._transition_lock:
+            with self._lock:
+                position = self.position()
+                playing = self._state == PlaybackState.PLAYING
+            if playing:
+                self._stop_thread()
+            with self._lock:
+                self.audio_sink.flush()
+                resetter = getattr(self.audio_sink, "reset_format", None)
+                if callable(resetter):
+                    resetter()
+                selector(value)
+                self._audio_device = value
+                self._offset = position
+                self._reset_audio_clock()
+                self.video_sink.invalidate()
+                if playing:
+                    self._notify(PlaybackState.READY)
+            if playing:
+                self.play()
 
     def _select_track(self, attribute: str, track: int,
                       descriptions: list[tuple[int, str]], kind: str) -> None:
@@ -1035,6 +1114,7 @@ class NativeCasuBackend:
                 self._duration = 0.0
                 self._offset = 0.0
                 self._selected_audio = self._selected_video = self._selected_subtitle = -1
+                self._audio_device = "default"
                 self._cover = None
                 self._last_error = None
                 for renderer in self._rich_subtitles.values():

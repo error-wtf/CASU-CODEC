@@ -53,6 +53,12 @@ at the measured position. It flushes old PCM, invalidates queued canvas work,
 clears the prior subtitle and reopens the PulseAudio stream for a new audio
 sample-rate/channel geometry. A two-video/two-audio/two-subtitle fixture proves
 that only the selected English stereo/2-kHz PCM, video and subtitle arrive.
+Native device discovery now parses only bounded PipeWire `Audio/Sink` nodes via
+the shared monitored subprocess runner and retains `default` when PipeWire is
+absent. The selected node name is supplied to `pa_simple_new`; live selection
+stops the old generation, flushes, drops the prior sample spec and restarts at
+the measured position. Inventory filtering/offline fallback and an instrumented
+USB-DAC live switch pass. Physical hotplug remains unclaimed.
 Worker exceptions now perform the same fail-closed cleanup before publishing
 `ERROR`: the media position is captured, generation cancelled, PCM flushed,
 video/subtitles invalidated and audio clock reset. The bounded backend error is
