@@ -2,7 +2,7 @@
 
 ## 2026-08-09 — current consolidated verification
 
-- Fast behavior suite: **137 passed, 63 media tests deselected**.
+- Fast behavior suite: **138 passed, 63 media tests deselected**.
 - Generated exact-runtime libVLC matrix: **16 passed, 9 xfailed**. Six audio
   combinations expose real tracks and advance playback; SRT, WebVTT and ASS
   load as external tracks; Rawvideo/AVI writes real RV32 callback frames. Nine
@@ -50,6 +50,9 @@
 - A live six-stream fixture switches between two video, two audio and two
   subtitle streams while playing. Only the final video, English subtitle and
   2-kHz stereo PCM reach the sinks; Pulse format reset is observed exactly once.
+- Player track-cycle behavior selects backend-reported noncontiguous audio,
+  video and subtitle IDs and excludes synthetic `-1`/duplicate entries instead
+  of inventing zero-based libVLC track numbers.
 - Bounded PipeWire inventory accepts only `Audio/Sink` nodes, deduplicates names
   and falls back to `default` while offline. A live USB-DAC switch flushes and
   resets Pulse format before exactly one selected-sink audio block is delivered.

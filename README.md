@@ -116,6 +116,9 @@ Live audio/video/subtitle track changes use the same transactional boundary.
 They restart at the measured media position, discard queued output, clear the
 old subtitle and reopen PulseAudio when the new track changes sample rate or
 channel geometry.
+Track-cycle controls use the concrete identifiers reported by each backend,
+not assumed zero-based indices; synthetic disable entries and duplicate IDs are
+excluded while noncontiguous IDs remain selectable.
 Native output selection inventories bounded PipeWire `Audio/Sink` nodes through
 a time/output-limited `pw-dump` call, always retains a safe system-default
 fallback, and passes the selected stable node name directly to `pa_simple_new`.

@@ -1350,56 +1350,42 @@ class MPCASUPlayer(tk.Tk):
             self.status.set(f"Playback rate unavailable: {exc}")
 
     def cycle_audio_track(self):
-        if not self.backend:
-            self.status.set("No active media backend")
-            return
-        try:
-            count = self.backend.audio_track_count()
-            if count <= 0:
-                self.status.set("No selectable audio tracks reported by libVLC")
-                return
-            current = self.backend.audio_track()
-            next_track = (current + 1) % count
-            self.backend.set_audio_track(next_track)
-            labels = self.backend.audio_track_descriptions()
-            label = next((name for identifier, name in labels if identifier == next_track), f"Track {next_track + 1}")
-            self.status.set(f"Audio: {label} ({next_track + 1}/{count})")
-        except BackendError as exc:
-            self.status.set(str(exc))
+        self._cycle_reported_track(
+            "Audio", "audio_track_descriptions", "audio_track", "set_audio_track")
 
     def cycle_video_track(self):
-        if not self.backend:
-            self.status.set("No active media backend")
-            return
-        try:
-            count = self.backend.video_track_count()
-            if count <= 0:
-                self.status.set("No selectable video tracks reported by libVLC")
-                return
-            current = self.backend.video_track()
-            next_track = (current + 1) % count
-            self.backend.set_video_track(next_track)
-            labels = self.backend.video_track_descriptions()
-            label = next((name for identifier, name in labels if identifier == next_track), f"Track {next_track + 1}")
-            self.status.set(f"Video: {label} ({next_track + 1}/{count})")
-        except BackendError as exc:
-            self.status.set(str(exc))
+        self._cycle_reported_track(
+            "Video", "video_track_descriptions", "video_track", "set_video_track")
 
     def cycle_subtitle_track(self):
+        self._cycle_reported_track(
+            "Subtitle", "subtitle_track_descriptions", "subtitle_track",
+            "set_subtitle_track")
+
+    def _cycle_reported_track(self, kind, descriptions_name, current_name, setter_name):
+        """Cycle concrete backend identifiers instead of inventing indices."""
         if not self.backend:
             self.status.set("No active media backend")
             return
         try:
-            count = self.backend.subtitle_track_count()
-            if count <= 0:
-                self.status.set("No selectable subtitle tracks reported by libVLC")
+            descriptions = getattr(self.backend, descriptions_name)()
+            tracks = []
+            seen = set()
+            for identifier, label in descriptions:
+                identifier = int(identifier)
+                if identifier < 0 or identifier in seen:
+                    continue
+                tracks.append((identifier, str(label) or f"Track {identifier}"))
+                seen.add(identifier)
+            if not tracks:
+                self.status.set(f"No selectable {kind.lower()} tracks reported by backend")
                 return
-            current = self.backend.subtitle_track()
-            next_track = (current + 1) % count
-            self.backend.set_subtitle_track(next_track)
-            labels = self.backend.subtitle_track_descriptions()
-            label = next((name for identifier, name in labels if identifier == next_track), f"Track {next_track + 1}")
-            self.status.set(f"Subtitle: {label} ({next_track + 1}/{count})")
+            identifiers = [identifier for identifier, _label in tracks]
+            current = int(getattr(self.backend, current_name)())
+            index = (identifiers.index(current) + 1) % len(tracks) if current in identifiers else 0
+            identifier, label = tracks[index]
+            getattr(self.backend, setter_name)(identifier)
+            self.status.set(f"{kind}: {label} ({index + 1}/{len(tracks)})")
         except BackendError as exc:
             self.status.set(str(exc))
 

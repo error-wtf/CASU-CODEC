@@ -860,6 +860,40 @@ def test_libvlc_track_descriptions_follow_linked_list_past_disable_entry():
     assert len(released) == 1
 
 
+def test_player_cycles_concrete_noncontiguous_backend_track_ids():
+    class Status:
+        def __init__(self): self.value = ""
+        def set(self, value): self.value = value
+
+    class Backend:
+        def __init__(self):
+            self.selected = {"audio": 3, "video": 11, "subtitle": -1}
+
+        def audio_track_descriptions(self): return [(-1, "Disable"), (3, "Deutsch"), (7, "English")]
+        def video_track_descriptions(self): return [(11, "Main"), (29, "Angle 2")]
+        def subtitle_track_descriptions(self): return [(-1, "Disable"), (5, "Deutsch"), (42, "English")]
+        def audio_track(self): return self.selected["audio"]
+        def video_track(self): return self.selected["video"]
+        def subtitle_track(self): return self.selected["subtitle"]
+        def set_audio_track(self, value): self.selected["audio"] = value
+        def set_video_track(self, value): self.selected["video"] = value
+        def set_subtitle_track(self, value): self.selected["subtitle"] = value
+
+    player = MPCASUPlayer.__new__(MPCASUPlayer)
+    player.backend = Backend()
+    player.status = Status()
+
+    player.cycle_audio_track()
+    assert player.backend.selected["audio"] == 7
+    assert player.status.value == "Audio: English (2/2)"
+    player.cycle_video_track()
+    assert player.backend.selected["video"] == 29
+    assert player.status.value == "Video: Angle 2 (2/2)"
+    player.cycle_subtitle_track()
+    assert player.backend.selected["subtitle"] == 5
+    assert player.status.value == "Subtitle: Deutsch (1/2)"
+
+
 def test_native_casu_backend_is_independent_from_libvlc_compatibility():
     assert issubclass(CasuBackend, LibVLCBackend)
     assert not issubclass(NativeCasuBackend, LibVLCBackend)

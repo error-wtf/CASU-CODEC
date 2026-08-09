@@ -117,6 +117,8 @@ Current execution dashboard (evidence, not optimism):
 54. Add SQLite library, incremental scanner, history, resume, favorites, and playlists.
 55. Add effective persistent settings for playback, tracks, delay, library, and interface.
 56. Build real track/subtitle/chapter/device menus; remove visible placeholders.
+    Toolbar cycling now follows concrete backend IDs (including noncontiguous
+    libVLC IDs) and filters synthetic disable/duplicate descriptions.
 57. Migrate the UI incrementally to responsive Qt views while preserving backend behavior.
 58. Use only the supplied CASU/MPCASU assets, uncropped and HiDPI-safe.
 59. Run exact-runtime VLC parity plus native playback matrices, GUI smoke, clean wheel/Debian installs and generate bundled license/provenance artifacts.

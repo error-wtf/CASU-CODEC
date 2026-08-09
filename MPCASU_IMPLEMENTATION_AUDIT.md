@@ -35,7 +35,7 @@ broader malformed/platform subtitle matrix and responsive Qt target remain open.
 
 ## Acceptance evidence
 
-- fast suite: 137 passed, 63 media tests deselected;
+- fast suite: 138 passed, 63 media tests deselected;
 - exact-runtime generated libVLC matrix: 16 passed, 9 xfailed; real FLAC
   rate/delay/pause/resume and pixel-distinct Rawvideo frame-step pass, while
   nine video cases xfail because the
