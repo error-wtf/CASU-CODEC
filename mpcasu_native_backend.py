@@ -386,6 +386,8 @@ class NativeCasuBackend:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._lock = threading.RLock()
+        self._transition_lock = threading.RLock()
+        self._worker_stop_timeout = 2.0
         self._selected_audio = -1
         self._selected_video = -1
         self._selected_subtitle = -1
@@ -558,16 +560,19 @@ class NativeCasuBackend:
     def play(self) -> None:
         if self.container is None:
             raise BackendError("no CASUNAT2 container is open")
-        with self._lock:
-            if self._state == PlaybackState.PLAYING:
-                return
-            self._started = self._clock() - self._offset / self._rate
-            self._stop.clear()
-            generation = self._generation
-            self._thread = threading.Thread(target=self._run, args=(generation,),
-                                            name="mpcasu-native", daemon=True)
-            self._notify(PlaybackState.PLAYING)
-            self._thread.start()
+        with self._transition_lock:
+            with self._lock:
+                if self._state == PlaybackState.PLAYING:
+                    return
+                if self._thread is not None and self._thread.is_alive():
+                    raise BackendError("previous native playback worker is still active")
+                self._started = self._clock() - self._offset / self._rate
+                self._stop.clear()
+                generation = self._generation
+                self._thread = threading.Thread(target=self._run, args=(generation,),
+                                                name="mpcasu-native", daemon=True)
+                self._notify(PlaybackState.PLAYING)
+                self._thread.start()
 
     def _run(self, generation: int) -> None:
         try:
@@ -670,10 +675,13 @@ class NativeCasuBackend:
         return True
 
     def pause(self) -> None:
-        with self._lock:
-            if self._state == PlaybackState.PLAYING:
+        with self._transition_lock:
+            with self._lock:
+                if self._state != PlaybackState.PLAYING:
+                    return
                 self._offset = self.position()
-                self._stop_thread()
+            self._stop_thread()
+            with self._lock:
                 self.audio_sink.flush()
                 self._reset_audio_clock()
                 self._notify(PlaybackState.PAUSED)
@@ -682,37 +690,50 @@ class NativeCasuBackend:
         self.play()
 
     def stop(self) -> None:
-        with self._lock:
+        with self._transition_lock:
             self._stop_thread()
-            self.audio_sink.flush()
-            self._reset_audio_clock()
-            self._offset = 0.0
-            if self.container is not None:
-                self._notify(PlaybackState.STOPPED)
+            with self._lock:
+                self.audio_sink.flush()
+                self._reset_audio_clock()
+                self._offset = 0.0
+                if self.container is not None:
+                    self._notify(PlaybackState.STOPPED)
 
     def seek(self, seconds: float) -> None:
         target = max(0.0, min(self._duration, float(seconds)))
-        with self._lock:
-            playing = self._state == PlaybackState.PLAYING
+        with self._transition_lock:
+            with self._lock:
+                playing = self._state == PlaybackState.PLAYING
             self._stop_thread()
-            self._offset = target
-            self._generation += 1
-            self.video_sink.invalidate()
-            self._present_cover()
-            self.audio_sink.flush()
-            self._reset_audio_clock()
-            self._notify(PlaybackState.PAUSED if not playing else PlaybackState.READY)
+            with self._lock:
+                self._offset = target
+                self._generation += 1
+                self.video_sink.invalidate()
+                self._present_cover()
+                self.audio_sink.flush()
+                self._reset_audio_clock()
+                self._notify(PlaybackState.PAUSED if not playing else PlaybackState.READY)
             if playing:
                 self.play()
 
     def _stop_thread(self) -> None:
-        self._generation += 1
-        self._stop.set()
-        thread = self._thread
-        self._thread = None
+        with self._lock:
+            self._generation += 1
+            self._stop.set()
+            thread = self._thread
         if thread and thread is not threading.current_thread():
-            thread.join(timeout=2)
-        self._stop.clear()
+            thread.join(timeout=self._worker_stop_timeout)
+            if thread.is_alive():
+                with self._lock:
+                    if self._thread is thread:
+                        self._notify(PlaybackState.ERROR)
+                raise BackendError(
+                    "native playback worker did not stop; output restart refused"
+                )
+        with self._lock:
+            if self._thread is thread:
+                self._thread = None
+            self._stop.clear()
 
     def position(self) -> float:
         if self._state == PlaybackState.PLAYING:
@@ -889,24 +910,26 @@ class NativeCasuBackend:
         raise BackendError("external subtitles are supported by the libVLC compatibility path only")
 
     def close_media(self) -> None:
-        with self._lock:
-            had_media = self.container is not None
+        with self._transition_lock:
+            with self._lock:
+                had_media = self.container is not None
             self._stop_thread()
-            if had_media:
-                self.audio_sink.flush()
-            self._reset_audio_clock()
-            self.container = None
-            self.path = None
-            self._events = ()
-            self._duration = 0.0
-            self._offset = 0.0
-            self._selected_audio = self._selected_video = self._selected_subtitle = -1
-            self._cover = None
-            for renderer in self._rich_subtitles.values():
-                renderer.close()
-            self._rich_subtitles.clear()
-            self._chapters = ()
-            self._state = PlaybackState.EMPTY
+            with self._lock:
+                if had_media:
+                    self.audio_sink.flush()
+                self._reset_audio_clock()
+                self.container = None
+                self.path = None
+                self._events = ()
+                self._duration = 0.0
+                self._offset = 0.0
+                self._selected_audio = self._selected_video = self._selected_subtitle = -1
+                self._cover = None
+                for renderer in self._rich_subtitles.values():
+                    renderer.close()
+                self._rich_subtitles.clear()
+                self._chapters = ()
+                self._state = PlaybackState.EMPTY
 
     def close(self) -> None:
         self.close_media()

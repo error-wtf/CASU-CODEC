@@ -11,7 +11,7 @@
       "evidence": [
         "casu.strict canonical model preserves active native RGB/YUV/alpha planes, plane layout, 8/10/12/16-bit samples, color metadata, and rational PTS",
         "casu.core.analyze(mode='strict') invokes analyze_strict_video and never the 160x90 activity preview",
-        "pytest -q -m 'not media': 117 passed, 39 deselected",
+        "pytest -q -m 'not media': 119 passed, 39 deselected",
         "pytest -q tests/test_strict_acceptance.py -m media: 10 passed",
         "clean wheel build and isolated wheel STRICT smoke: PASS",
         "clean temporary-tree Debian build, package inspection, and extracted-package STRICT smoke: PASS",
@@ -49,8 +49,8 @@
         "NativeCasuBackend is independent of LibVLCBackend and performs no legacy extraction",
         "Byte-indexed reconstruction, measured PulseAudio-latency clock with monotonic fallback, seek generation invalidation, Tk RGB presentation and direct libpulse-simple PCM sink are implemented",
         "Text, native libass RGBA and typed PGS/DVD/DVB/XSub bitmap subtitle presentation/clearing/seek with bounded embedded-font registration, chapter seek, clickable bounded chapter timeline, runtime track menus and audio-device selection are implemented",
-        "Instrumented behavior tests prove native A/V/subtitle delivery, seek invalidation, tracks/devices, and zero tempfile calls",
-        "pytest -q tests/test_native_player_backend.py: 13 passed; chapter-marker unit and clickable real-Tk/Xvfb behavior tests pass; real-device long-run drift remains open"
+        "Instrumented behavior tests prove native A/V/subtitle delivery, serialized fail-closed seek invalidation, blocked-write restart refusal, four-direction final-generation delivery, tracks/devices, and zero tempfile calls",
+        "pytest -q tests/test_native_player_backend.py: 15 passed; chapter-marker unit and clickable real-Tk/Xvfb behavior tests pass; real-device long-run drift remains open"
       ]
     },
     {

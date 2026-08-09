@@ -43,6 +43,11 @@ invalidates pending output transactionally on seek, trims an overlapping PCM
 block to the seek sample, flushes audio on pause/stop/close, presents RGB frames
 in the MPCASU canvas and writes s16le through libpulse-simple. Instrumented
 tests prove frame/audio/subtitle delivery and make any tempfile creation fail.
+Playback lifecycle transitions are serialized. If an old worker remains inside
+a blocking PCM write past the bounded join timeout, seek refuses the restart
+and retains the stop signal; it never clears cancellation and starts a competing
+generation. Rapid forward/backward seek tests prove that only the final video
+frame generation and correctly trimmed PCM samples reach the sinks.
 The backend rejects non-1.0 native audio rates because no resampler has been
 implemented. Real-device long-duration drift evidence and the device matrix
 remain open.

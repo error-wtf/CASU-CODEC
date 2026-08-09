@@ -7,7 +7,7 @@ This file records implemented behavior, not widget presence.
 | Legacy media | PARTIAL release matrix | In-process libVLC 3.0.23 initializes, accepts paths independent of extension and exposes runtime version/plugins; broad codec/platform matrix remains. |
 | Native CASUNAT2 video | PASS reference path | Lazy on-disk chunks, indexed key/tile reconstruction, source-sized CPU RGB conversion and Tk presentation. |
 | Native CASUNAT2 audio | PASS reference path | Exact timestamped s16le blocks feed an instrumented sink and direct libpulse-simple output. Hardware latency/master-clock drift remains open. |
-| Native seek | PASS reference path | Cancels generation, flushes audio, invalidates video/subtitle output and reconstructs from indexed state. |
+| Native seek | PASS reference path | Serializes lifecycle transitions, refuses restart while an old PCM write remains blocked, then flushes/invalidate/reconstructs; four rapid directional seeks deliver only the final generation. |
 | Native subtitles/chapters | PASS reference matrix | UTF-8 packets, ASS/SSA libass RGBA with bounded embedded fonts, and typed alpha-bounded PGS/DVD/DVB/XSub RGBA render/clear/seek; delays and chapter seek work. |
 | CASUNAT2 tempfile | REMOVED | Test forces tempfile creation to fail while native A/V playback completes. |
 | Track/output selection | PARTIAL matrix | Backend-neutral descriptors and dynamic menus use only reported tracks/devices; native default Pulse and libVLC enumeration exist. |
@@ -20,7 +20,8 @@ This file records implemented behavior, not widget presence.
 ## Remaining P0/P1 work
 
 1. Make native audio device time the measured A/V master and run long drift,
-   pause/resume, rapid-seek and underrun tests on real hardware.
+   pause/resume and underrun tests on real hardware; instrumented blocked-write
+   and rapid-seek generation tests now pass.
 2. Expand bitmap fixtures across platforms and malformed inputs and complete
    the hotplug device matrix; the shared PGS/DVD/DVB/XSub renderer, clickable
    chapter timeline, text-delay controls and chapter names work.
@@ -32,6 +33,6 @@ This file records implemented behavior, not widget presence.
    animated, HEIF and broader platform cases; current covers survive source
    deletion, are decode-budgeted and render in the native audio canvas/library.
 
-Current evidence: 117 fast behavior tests, 56 targeted generated/probe/libVLC/PGS/cover cases,
+Current evidence: 119 fast behavior tests, 56 targeted generated/probe/libVLC/PGS/cover cases,
 native A/V/subtitle/no-tempfile sinks, both Tk construction smokes, clean wheel
 and Debian package inspection. Stable 1.0 remains blocked by the live gate file.

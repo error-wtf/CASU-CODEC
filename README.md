@@ -77,8 +77,12 @@ therefore a runtime fact, not a hard-coded marketing list. CASUNAT2 uses the
 independent `NativeCasuBackend`: it seeks to byte-indexed key states, applies
 tile dependencies, presents reconstructed frames to the Tk video sink and
 writes s16le blocks directly through libpulse-simple. It neither inherits the
-libVLC backend nor creates a temporary MP4. Full subtitle/chapter/device models,
-SQLite scan/resume/favorites/playlists now exist as a tested shared core;
+libVLC backend nor creates a temporary MP4.
+Rapid seeks serialize worker transitions; a blocked old PCM write must stop
+before cache invalidation, sink flush and a new generation can start. A timeout
+fails closed instead of allowing stale audio to cross the seek boundary.
+Full subtitle/chapter/device models and SQLite scan/resume/favorites/playlists
+now exist as a tested shared core;
 atomic playback settings and dynamic track/output/chapter menus are also implemented.
 The sidebar and queue are synchronized views of one bounded, duplicate-free
 playlist model used by navigation, session persistence and playlist files.

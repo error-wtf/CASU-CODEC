@@ -8,7 +8,7 @@
 | Native CASUNAT2 video | indexed key/tile reconstruction | Tk frame sink | digest + player tests | PASS reference path |
 | Native CASUNAT2 audio | timestamped PCM + measured libpulse-simple latency | volume/mute | byte-exact/clock tests | PASS reference path |
 | CASUNAT2 cover art/tags | PNG/JPEG/WebP normalize to bounded hashed PNG + bounded manifest metadata; pre-decode geometry/RGBA limits | native audio canvas + library thumbnail + media info | real three-format attached-picture source deletion and limit tests | PASS reference matrix |
-| CASUNAT2 seek | generation cancel/cache invalidation + PCM trim | timeline/frame step | behavior test | PASS reference path |
+| CASUNAT2 seek | serialized generation cancel, fail-closed worker join, cache invalidation + PCM trim | timeline/frame step | blocked-write and four-direction rapid-seek behavior tests | PASS reference path |
 | No CASUNAT2 tempfile | independent backend | n/a | tempfile forced to fail | PASS |
 | Play/pause/resume/stop | both backends | controls/hotkeys | controller/backend tests | PASS reference path |
 | Playback rate | libVLC; native video-only | rate control | fail-closed native-audio test | PARTIAL — native audio is 1.0x until a real resampler exists |

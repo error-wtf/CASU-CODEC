@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 import ctypes
+import threading
 
 import numpy as np
 import pytest
@@ -279,6 +280,61 @@ def test_native_seek_trims_overlapping_pcm_block(tmp_path):
     assert len(audio.blocks) == 1
     assert audio.blocks[0].sample_count == 5
     assert len(audio.blocks[0].pcm) == 10
+    backend.close()
+
+
+def test_native_seek_refuses_restart_while_old_audio_write_is_blocked(tmp_path):
+    source = tmp_path / "native.casu"; _native_fixture(source)
+    entered, release = threading.Event(), threading.Event()
+    operations = []
+
+    class BlockingAudioSink(InstrumentedAudioSink):
+        def write(self, block):
+            operations.append("write-enter")
+            entered.set()
+            release.wait(1.0)
+            super().write(block)
+            operations.append("write-exit")
+
+        def flush(self):
+            operations.append("flush")
+            super().flush()
+
+    video, audio = InstrumentedVideoSink(), BlockingAudioSink()
+    backend = NativeCasuBackend(video, audio)
+    backend._worker_stop_timeout = 0.05
+    backend.open_casu(source); backend.play()
+    assert entered.wait(0.5)
+    with pytest.raises(BackendError, match="restart refused"):
+        backend.seek(0.005)
+    assert backend.state() == PlaybackState.ERROR
+    assert video.invalidations == 0 and audio.flushes == 0
+
+    release.set()
+    deadline = time.monotonic() + 1
+    while backend._thread is not None and backend._thread.is_alive() and time.monotonic() < deadline:
+        time.sleep(0.005)
+    backend.seek(0.005)
+    assert video.invalidations == 1 and audio.flushes == 1
+    assert operations[:3] == ["write-enter", "write-exit", "flush"]
+    backend.close()
+
+
+def test_native_rapid_seek_delivers_only_final_generation(tmp_path):
+    source = tmp_path / "native.casu"; _native_fixture(source)
+    video, audio = InstrumentedVideoSink(), InstrumentedAudioSink()
+    backend = NativeCasuBackend(video, audio)
+    backend.open_casu(source); backend.play()
+    for target in (0.015, 0.0, 0.015, 0.005):
+        backend.seek(target)
+    frame_start, audio_start = len(video.frames), len(audio.blocks)
+    deadline = time.monotonic() + 1
+    while backend.state() not in {PlaybackState.ENDED, PlaybackState.ERROR} and time.monotonic() < deadline:
+        time.sleep(0.005)
+    assert backend.state() == PlaybackState.ENDED
+    assert [pts for pts, _digest in video.frames[frame_start:]] == [0.01]
+    assert [(block.pts, block.sample_count) for block in audio.blocks[audio_start:]] == [(5, 5)]
+    assert video.invalidations == 4 and audio.flushes == 4
     backend.close()
 
 
