@@ -29,7 +29,7 @@ from mpcasu_backend import (CasuBackend, LibVLCBackend,
                             LIBVLC_PLAYER_EVENT_STATES, PlaybackState)
 from mpcasu_native_backend import NativeCasuBackend
 from mpcasu_playback import ControllerState, PlaybackController
-from mpcasu_player import MPCASUPlayer, presentation_mode
+from mpcasu_player import MPCASUPlayer, chapter_marker_positions, presentation_mode
 from casu.strict import StrictFrame, build_state_map, canonical_frame, iter_source_frames
 
 
@@ -688,6 +688,19 @@ def test_libvlc_chapter_descriptors_reflect_runtime_count():
     chapters = backend.chapter_descriptors()
     assert [item.identifier for item in chapters] == [0, 1]
     assert [item.title for item in chapters] == ["Chapter 1", "Chapter 2"]
+
+
+def test_chapter_marker_positions_are_bounded_and_backend_neutral():
+    from casu.media import ChapterDescriptor
+    chapters = (
+        ChapterDescriptor(0, -2.0, "Intro", 10.0),
+        ChapterDescriptor(1, 50.0, "Middle", 70.0),
+        ChapterDescriptor(2, 120.0, "Credits", 130.0),
+    )
+    markers = chapter_marker_positions(chapters, duration=100.0, width=500)
+    assert [(item[0], item[1]) for item in markers] == [(0, 0.0), (1, 250.0),
+                                                        (2, 500.0)]
+    assert chapter_marker_positions(chapters, duration=0, width=500) == ()
 
 
 def test_player_resets_stored_rate_for_native_audio():

@@ -35,7 +35,7 @@ broader malformed/platform subtitle matrix and responsive Qt target remain open.
 
 ## Acceptance evidence
 
-- fast suite: 109 passed, 32 media tests deselected;
+- fast suite: 110 passed, 33 media tests deselected;
 - combined generated STRICT/native-v2/native-player/installed-libVLC suites:
   54 passed, plus a focused 4-format authorized PGS/DVD/DVB/XSub
   source-deletion matrix;

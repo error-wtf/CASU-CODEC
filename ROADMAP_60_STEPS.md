@@ -16,9 +16,9 @@ Current execution dashboard (evidence, not optimism):
 - Steps 21–32: PASS — CASUNAT2 key/tile/PCM, source deletion and byte seek.
 - Steps 33–40: PARTIAL — streaming limits, recovery and 10k corruption run
   pass; broader property/network/parser campaigns remain.
-- Steps 41–50: PARTIAL — independent native video/PCM path and instrumented
-  sinks pass; audio-device master clock, subtitles/chapters and long drift
-  remain.
+- Steps 41–50: PARTIAL — independent native video/PCM/subtitle/chapter paths,
+  clickable chapter timeline and instrumented sinks pass; real-device master
+  clock, hotplug and long drift remain.
 - Steps 51–56: PASS/PARTIAL — CLI and GUI share an atomic journaled job engine;
   queue isolation/retry, SQLite library, settings and dynamic controls exist.
   Hash-verified restart/resume, attached cover art and bounded metadata are wired

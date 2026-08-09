@@ -21,9 +21,9 @@ This file records implemented behavior, not widget presence.
 
 1. Make native audio device time the measured A/V master and run long drift,
    pause/resume, rapid-seek and underrun tests on real hardware.
-2. Expand bitmap fixtures across platforms and malformed inputs, add chapter
-   timeline markers and complete the hotplug device matrix; the shared
-   PGS/DVD/DVB/XSub renderer, text-delay controls and chapter names work.
+2. Expand bitmap fixtures across platforms and malformed inputs and complete
+   the hotplug device matrix; the shared PGS/DVD/DVB/XSub renderer, clickable
+   chapter timeline, text-delay controls and chapter names work.
 3. Add exact-runtime VLC parity fixtures for common containers/codecs/subtitles/
    network protocols on Linux, Windows and macOS.
 4. Consolidate the duplicated Tk list presentation behind one playlist model,
@@ -31,6 +31,6 @@ This file records implemented behavior, not widget presence.
 5. Add broader artwork formats/matrices; attached covers already survive source
    deletion and render in the native audio canvas and library.
 
-Current evidence: 109 fast behavior tests, 54 targeted generated/probe/libVLC/PGS cases,
+Current evidence: 110 fast behavior tests, 54 targeted generated/probe/libVLC/PGS cases,
 native A/V/subtitle/no-tempfile sinks, both Tk construction smokes, clean wheel
 and Debian package inspection. Stable 1.0 remains blocked by the live gate file.

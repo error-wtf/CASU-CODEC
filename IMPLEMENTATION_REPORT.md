@@ -77,6 +77,9 @@ matrices remain open.
 Bounded source-stat-versioned thumbnails, watched-folder
 rescans, SQLite library search and per-media track/audio-delay/subtitle-delay
 preferences are wired into the UI.
+Backend-neutral chapter descriptors now also draw bounded, clickable timeline
+markers; selecting one performs a real backend chapter seek and highlights the
+active chapter.
 
 ## 2026-08-08 (previous state)
 

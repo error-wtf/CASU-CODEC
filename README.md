@@ -99,6 +99,8 @@ playback matrices remain open gates.
 Native PCM timing uses measured PulseAudio sink latency when available and a
 monotonic fallback otherwise. Native audio deliberately remains 1.0× until a
 real resampler is implemented; rate changes are not faked by retiming video.
+Backend-reported chapters appear both in the dynamic chapter menu and as
+clickable, exact-position markers below the seek timeline.
 
 The same atomic, journaled job engine is also available through a small Tk
 interface. It supports recursive queues, pause/cancel, per-file failure

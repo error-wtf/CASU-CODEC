@@ -76,6 +76,22 @@ def presentation_mode(probe: dict) -> str:
     return "ERROR"
 
 
+def chapter_marker_positions(chapters, duration: float, width: int):
+    """Return bounded pixel positions for backend-neutral chapter descriptors."""
+    duration, width = float(duration), int(width)
+    if not math.isfinite(duration) or duration <= 0 or width <= 0:
+        return ()
+    markers = []
+    for chapter in chapters:
+        start = float(chapter.start_seconds)
+        if not math.isfinite(start):
+            continue
+        start = max(0.0, min(duration, start))
+        markers.append((int(chapter.identifier), start / duration * width,
+                        str(chapter.title), start))
+    return tuple(markers)
+
+
 class MPCASUPlayer(tk.Tk):
     def __init__(self, initial: Path | list[Path] | None = None):
         super().__init__()
@@ -226,6 +242,10 @@ class MPCASUPlayer(tk.Tk):
         self.timeline.pack(fill="x", padx=14, pady=(10, 0))
         self.timeline.bind("<ButtonPress-1>", lambda _event: setattr(self, "_dragging", True))
         self.timeline.bind("<ButtonRelease-1>", lambda _event: (setattr(self, "_dragging", False), self.seek_restart()))
+        self.chapter_timeline = tk.Canvas(center, height=15, background=PANEL,
+                                          highlightthickness=0)
+        self.chapter_timeline.pack(fill="x", padx=14)
+        self.chapter_timeline.bind("<Configure>", lambda _event: self._draw_chapter_markers())
         bar = tk.Frame(center, bg=PANEL)
         bar.pack(fill="x", pady=8)
         for label, command in (("Previous", self.play_previous), ("−10 s", lambda: self.seek_by(-10)), ("Play / Pause", self.toggle_playback), ("Stop", self.stop), ("+10 s", lambda: self.seek_by(10)), ("Next", self.play_next)):
@@ -420,6 +440,36 @@ class MPCASUPlayer(tk.Tk):
                 command=lambda identifier=chapter.identifier:
                 self._select_chapter(identifier),
             )
+        self._draw_chapter_markers(chapters)
+
+    def _draw_chapter_markers(self, chapters=None) -> None:
+        canvas = getattr(self, "chapter_timeline", None)
+        if canvas is None:
+            return
+        canvas.delete("all")
+        width = max(1, canvas.winfo_width())
+        canvas.create_line(0, 2, width, 2, fill=MUTED)
+        if chapters is None:
+            if not self.backend:
+                return
+            try:
+                chapters = self.backend.chapter_descriptors()
+            except BackendError:
+                return
+        try:
+            active = self.backend.chapter() if self.backend else -1
+        except BackendError:
+            active = -1
+        for identifier, x, title, start in chapter_marker_positions(
+                chapters, self.duration, width):
+            color = RED if identifier == active else SECONDARY
+            item = canvas.create_polygon(x - 4, 3, x + 4, 3, x, 13,
+                                         fill=color, outline="", tags="chapter-marker")
+            canvas.tag_bind(item, "<Button-1>",
+                            lambda _event, value=identifier: self._select_chapter(value))
+            canvas.tag_bind(item, "<Enter>",
+                            lambda _event, value=title, seconds=start:
+                            self.status.set(f"Chapter · {seconds:.1f} s · {value}"))
 
     def _select_chapter(self, identifier: int) -> None:
         if not self.backend:
@@ -427,6 +477,8 @@ class MPCASUPlayer(tk.Tk):
         try:
             self.backend.set_chapter(identifier)
             self.status.set(f"Chapter selected: {identifier + 1}")
+            self.position.set(self.backend.position())
+            self._draw_chapter_markers()
         except BackendError as exc:
             self.status.set(str(exc))
 
@@ -638,6 +690,7 @@ class MPCASUPlayer(tk.Tk):
             self._set_diagnostics(support="Legacy network backend", integrity="unavailable", segmented="unavailable", energy="unavailable — not measured")
             self.duration = self.backend.duration()
             self.timeline.configure(to=max(self.duration, 1.0))
+            self._draw_chapter_markers()
             capabilities = self.backend.capabilities()
             self.status.set(f"Playing network source · {capabilities.get('version', 'libVLC')} · timing owned by libVLC")
         except (BackendError, OSError) as exc:
@@ -1072,6 +1125,7 @@ class MPCASUPlayer(tk.Tk):
             self._apply_backend_settings()
             self.duration = self.backend.duration()
             self.timeline.configure(to=max(self.duration, 1.0))
+            self._draw_chapter_markers()
             if (self._resume_source and str(path) == self._resume_source
                     and 5.0 < self._resume_position < max(5.0, self.duration - 5.0)):
                 self.controller.seek(self._resume_position)
@@ -1342,6 +1396,7 @@ class MPCASUPlayer(tk.Tk):
             self.backend.add_external_subtitle(Path(subtitle))
             self.duration = self.backend.duration()
             self.timeline.configure(to=max(self.duration, 1.0))
+            self._draw_chapter_markers()
             self.backend.seek(position)
             if not paused:
                 self.backend.play()
@@ -1420,6 +1475,7 @@ class MPCASUPlayer(tk.Tk):
             self.controller.stop()
             self.controller.close()
         self.backend = None
+        self._draw_chapter_markers(())
         self._paused = False
         self._set_diagnostics(support="Legacy backend", integrity="unavailable", segmented="unavailable", energy="unavailable — not measured")
 
