@@ -25,7 +25,7 @@ ffprobe stream/frame inventory
 | Multi-video/audio streams | IMPLEMENTED, matrix open | Stream descriptors and per-stream payload mapping exist; broad corpus pending. |
 | Seek/verify/info | PASS | Real byte-offset validation and SHA-256 verification; CLI smoke passes. |
 | Atomic output/cancel cleanup | PASS core | Engine cancellation is fail-closed and journaled; interactive GUI cancellation matrix remains. |
-| Subtitle/chapter/attachments | PASS reference matrix | Text, ASS/SSA libass+font and typed PGS/DVD/DVB/XSub bitmap paths pass source deletion; chapters, attachments, covers and bounded metadata pass. |
+| Subtitle/chapter/attachments | PASS reference matrix | Text, ASS/SSA libass+font and typed PGS/DVD/DVB/XSub bitmap paths pass source deletion; chapters, attachments, bounded metadata and PNG/JPEG/WebP covers pass. Cover decode has explicit geometry/memory ceilings. |
 | Batch queue/retry/journal | PASS core | Recursive GUI queue, CLI/GUI retry, per-file isolation and collision-resistant hash-verified journal resume are behavior-tested. |
 | Progress/ETA/reports | PASS reference path | Shared monotonic batch progress exposes per-job/overall fraction, measured elapsed time, throughput ETA and state; JSON results retain conversion duration. Broader accuracy calibration remains. |
 | Hostile-input budgets | PARTIAL | Reader/decompression limits plus monitored probe time/output and decoded-frame dimension/byte ceilings exist; broader decoder/corpus stress remains. |
@@ -36,7 +36,7 @@ ffprobe stream/frame inventory
 1. Expand the implemented GUI retry and bounded prior-run detail view with
    filtering/export for very large heterogeneous production batches.
 2. Expand the working typed PGS/DVD/DVB/XSub path across platforms and malformed
-   libass ASS/SSA, text fallback, chapters/attachments, artwork, bounded tags
+   libass ASS/SSA, text fallback, chapters/attachments, PNG/JPEG/WebP artwork, bounded tags
    and complete dispositions already pass.
 3. Calibrate the working measured-throughput ETA across long heterogeneous
    batches; recursive jobs, retry/isolation and machine-readable durations are implemented.

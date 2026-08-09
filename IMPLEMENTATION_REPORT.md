@@ -72,9 +72,11 @@ SQLite library (scan, resume, favorites, playlists) is behavior-tested.
 The player queue and sidebar now render from one bounded, duplicate-free
 `PlaylistModel`; session/playlist persistence, selection, reordering and removal
 no longer treat Tk widgets as independent data stores.
-Attached cover pictures now convert to bounded hashed PNG attachments, remain
-audio-only in stream selection, survive source deletion and display in both the
-native audio canvas and library thumbnail path. ASS/SSA styling renders through
+Attached PNG, JPEG and WebP cover pictures now convert to bounded hashed PNG
+attachments, remain audio-only in stream selection, survive source deletion and
+display in both the native audio canvas and library thumbnail path. Decode is
+rejected before invoking FFmpeg when probed geometry is missing, non-positive,
+exceeds 8192 pixels per axis or exceeds a 256 MiB decoded RGBA budget. ASS/SSA styling renders through
 bounded libass RGBA with a text fallback. An authorized real PGS fixture converts
 through FFmpeg's bitmap subtitle-video boundary to typed, hashed, alpha-bounded
 RGBA regions, survives source deletion, and renders correctly after seeking into

@@ -91,7 +91,10 @@ core. Per-media audio/video/subtitle selections and audio/subtitle delays are
 persisted and restored. Source-stat-versioned thumbnails decode asynchronously
 through FFmpeg. Attached pictures are normalized into bounded, hashed CASUNAT2
 `cover-art` attachments, displayed by the native audio player and reused by the
-library after the source is deleted. Bounded container/stream tags and complete
+library after the source is deleted. Real PNG, JPEG and WebP attached-picture
+inputs pass this source-deletion path. Cover decoding fails closed for missing,
+non-positive or oversized geometry (8192 pixels per axis and 256 MiB decoded
+RGBA budget). Bounded container/stream tags and complete
 demuxer dispositions are retained in the standalone manifest. ASS/SSA sources
 retain their bounded, hashed stylesheet/dialogue payload and the native player
 renders it through system libass into a transparent RGBA overlay; a plain-text

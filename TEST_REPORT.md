@@ -2,9 +2,12 @@
 
 ## 2026-08-09 — current consolidated verification
 
-- Fast behavior suite: **114 passed, 36 media tests deselected**.
-- Generated STRICT + CASUNAT2 + native-player + installed-libVLC suites:
-  plus bounded-probe/libass and authorized real-PGS tests: **54 passed**.
+- Fast behavior suite: **115 passed, 38 media tests deselected**.
+- Generated STRICT + CASUNAT2 + native-player + installed-libVLC suites,
+  including bounded-probe/libass, authorized real-PGS and the added JPEG/WebP
+  cover variants: **56 passed**.
+- Native-v2 media acceptance alone: **11 passed, 4 authorized-corpus cases
+  skipped** when their opt-in fixture variables are absent.
 - Focused authorized bitmap matrix: **4 passed** for real PGS, DVD, DVB and
   XSub inputs after deleting each source; DVB also proves malformed secondary
   audio-stream isolation.
@@ -30,9 +33,11 @@
 - A real reference video and a source-deleted CASUNAT2 album cover produce
   bounded PPM thumbnails; repeat lookup reuses the source-stat-versioned cache
   and the library preview remains asynchronous.
-- A real MP3 attached-picture stream converts to a bounded, hashed PNG
-  `cover-art` attachment, is not misclassified as video and is presented by the
-  native audio player after source deletion.
+- Real MP3 attached-picture streams carrying PNG, JPEG and WebP convert to a
+  bounded, hashed PNG `cover-art` attachment, are not misclassified as video
+  and remain available after source deletion. Missing, invalid or oversized
+  cover geometry is rejected before decode (8192 pixels per axis and 256 MiB
+  decoded RGBA budget).
 - Container/stream tag canonicalization is count-, value- and total-size-bounded;
   the real attached-picture fixture retains title/artist and dispositions.
 - FFprobe JSON is spooled under monitored output/time limits; excessive output

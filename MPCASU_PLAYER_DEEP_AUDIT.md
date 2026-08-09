@@ -28,9 +28,10 @@ This file records implemented behavior, not widget presence.
    network protocols on Linux, Windows and macOS.
 4. Migrate views incrementally to Qt without replacing the tested shared
    playlist model or playback backends.
-5. Add broader artwork formats/matrices; attached covers already survive source
-   deletion and render in the native audio canvas and library.
+5. Expand artwork beyond the passing PNG/JPEG/WebP attached-picture matrix to
+   animated, HEIF and broader platform cases; current covers survive source
+   deletion, are decode-budgeted and render in the native audio canvas/library.
 
-Current evidence: 112 fast behavior tests, 54 targeted generated/probe/libVLC/PGS cases,
+Current evidence: 115 fast behavior tests, 56 targeted generated/probe/libVLC/PGS/cover cases,
 native A/V/subtitle/no-tempfile sinks, both Tk construction smokes, clean wheel
 and Debian package inspection. Stable 1.0 remains blocked by the live gate file.

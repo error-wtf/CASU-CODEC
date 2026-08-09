@@ -20,7 +20,7 @@ from casu.native_v2 import (ChunkType, NativeChunk, NativeV2Error, TileStateCach
                             SubtitlePacket, decode_chapter_table, decode_subtitle_packet,
                             encode_chapter_table, encode_subtitle_packet)
 from casu.native_v2.converter import (NativeConversionError, _bitmap_canvas_size,
-                                       _bounded_tags)
+                                       _bounded_tags, _cover_art_chunk)
 from casu.tiles import (TileStateError, compare_tile_frames, state_map_from_frames,
                         tile_regions)
 from casu.cli import atomic_write_text
@@ -436,6 +436,12 @@ def test_bitmap_subtitle_canvas_uses_stream_geometry_and_dvd_d1_standard():
     assert _bitmap_canvas_size({"codec_name": "dvd_subtitle"}, overview) == (720, 480)
     assert _bitmap_canvas_size({"codec_name": "xsub", "width": 640, "height": 360},
                                overview) == (640, 360)
+
+
+def test_cover_art_geometry_fails_before_decode(tmp_path):
+    with pytest.raises(NativeConversionError, match="geometry"):
+        _cover_art_chunk(tmp_path / "missing.mp3", 1, 0,
+                         {"width": 100_000, "height": 100_000}, None)
 
 
 def test_cli_verify_accepts_native_container(tmp_path, monkeypatch, capsys):

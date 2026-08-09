@@ -416,6 +416,10 @@ def _cover_art_chunk(source: Path, stream_id: int, source_index: int,
     """Normalize an attached-picture stream to a bounded standalone PNG."""
     if cancel is not None and getattr(cancel, "is_set", lambda: False)():
         raise NativeConversionError("native conversion cancelled")
+    width, height = int(stream.get("width") or 0), int(stream.get("height") or 0)
+    if (width <= 0 or height <= 0 or width > 8192 or height > 8192
+            or width * height * 4 > 256 * 1024 * 1024):
+        raise NativeConversionError("cover art geometry exceeds decode limits")
     with tempfile.TemporaryDirectory(prefix="casu-cover-") as directory:
         extracted = Path(directory) / "cover.png"
         command = [

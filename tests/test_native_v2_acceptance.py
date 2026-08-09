@@ -234,17 +234,21 @@ def test_casunat2_labels_embedded_subtitle_fonts(tmp_path):
     assert attachment.filename == "CASU.ttf"
 
 
-def test_casunat2_preserves_attached_cover_as_attachment_not_video(tmp_path):
-    cover = tmp_path / "cover.png"
+@pytest.mark.parametrize("suffix,encoder", [
+    (".png", "png"), (".jpg", "mjpeg"), (".webp", "libwebp"),
+])
+def test_casunat2_preserves_attached_cover_as_attachment_not_video(
+        tmp_path, suffix, encoder):
+    cover = tmp_path / f"cover{suffix}"
     subprocess.run([
         "ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
-        "color=c=blue:size=24x16", "-frames:v", "1", str(cover),
+        "color=c=blue:size=24x16", "-frames:v", "1", "-c:v", encoder, str(cover),
     ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     source = tmp_path / "album.mp3"
     subprocess.run([
         "ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
         "sine=frequency=440:sample_rate=8000:duration=0.25", "-i", str(cover),
-        "-map", "0:a:0", "-map", "1:v:0", "-c:a", "libmp3lame", "-c:v", "png",
+        "-map", "0:a:0", "-map", "1:v:0", "-c:a", "libmp3lame", "-c:v", "copy",
         "-disposition:v:0", "attached_pic", "-metadata:s:v:0", "title=Front Cover",
         "-metadata", "title=CASU Album", "-metadata", "artist=Lino",
         str(source),
