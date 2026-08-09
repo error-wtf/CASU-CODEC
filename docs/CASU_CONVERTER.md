@@ -23,6 +23,8 @@ profile model. The engine provides atomic output, an atomic JSON journal,
 per-file failure isolation, progress, cancellation, retry (CLI) and resume
 only after the output size/SHA-256 and exact prior job/profile list match. The
 GUI adds recursive queues, pause/cancel and batch verification.
+It also exposes a validated 0–10 retry count and a bounded last-report view with
+per-file state, attempt count, conversion time and error detail.
 The engine emits monotonic `ConversionProgress` events with job/batch fraction,
 measured elapsed time, throughput ETA and state. GUI and machine-readable
 results consume this shared timing; completed results retain conversion seconds.

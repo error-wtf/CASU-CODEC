@@ -84,6 +84,8 @@ The sidebar and queue are synchronized views of one bounded, duplicate-free
 playlist model used by navigation, session persistence and playlist files.
 Converter CLI and GUI share monotonic batch progress, measured elapsed time,
 throughput ETA and per-result conversion duration from the same job engine.
+Both expose retry behavior; the GUI includes a bounded detailed view of the
+last batch report.
 Library search and watched-folder rescans are wired to the persistent SQLite
 core. Per-media audio/video/subtitle selections and audio/subtitle delays are
 persisted and restored. Source-stat-versioned thumbnails decode asynchronously

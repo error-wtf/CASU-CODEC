@@ -65,6 +65,8 @@ batches in one directory receive deterministic distinct journal identifiers.
 The shared engine now emits monotonic batch-level progress with measured elapsed
 time, throughput ETA and explicit state; results retain actual conversion time,
 so CLI reports and GUI status no longer implement competing estimators.
+The GUI now passes a validated retry count to the same engine and opens bounded
+prior reports with per-file status, attempts, measured duration and errors.
 Immutable backend-neutral track/chapter/device/event models and a transactional
 SQLite library (scan, resume, favorites, playlists) is behavior-tested.
 The player queue and sidebar now render from one bounded, duplicate-free

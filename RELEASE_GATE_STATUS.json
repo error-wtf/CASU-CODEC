@@ -11,7 +11,7 @@
       "evidence": [
         "casu.strict canonical model preserves active native RGB/YUV/alpha planes, plane layout, 8/10/12/16-bit samples, color metadata, and rational PTS",
         "casu.core.analyze(mode='strict') invokes analyze_strict_video and never the 160x90 activity preview",
-        "pytest -q -m 'not media': 113 passed, 34 deselected",
+        "pytest -q -m 'not media': 114 passed, 36 deselected",
         "pytest -q tests/test_strict_acceptance.py -m media: 10 passed",
         "clean wheel build and isolated wheel STRICT smoke: PASS",
         "clean temporary-tree Debian build, package inspection, and extracted-package STRICT smoke: PASS",
@@ -58,7 +58,7 @@
       "name": "Media management and converter completion",
       "status": "PARTIAL",
       "evidence": [
-        "CLI and GUI share ConversionEngine jobs/profiles, monotonic batch progress with measured elapsed/throughput ETA/state, cancellation, atomic output and collision-resistant hash-verified resumable batch journals",
+        "CLI and GUI share ConversionEngine jobs/profiles, validated retries, monotonic batch progress with measured elapsed/throughput ETA/state, cancellation, atomic output and collision-resistant hash-verified resumable batch journals; GUI safely displays bounded prior reports",
         "Backend-neutral immutable track/chapter/device/event contracts exist",
         "SQLite library behavior tests cover scan, resume, favorites and playlists; one bounded duplicate-free PlaylistModel drives both synchronized Tk list presentations, persistence and navigation",
         "Recursive batch isolation, CLI retry and CLI/GUI hash-verified journal resume are behavior-tested; text, native libass ASS/SSA and typed source-independent PGS/DVD/DVB/XSub RGBA subtitles, chapters, bounded attachments/covers/tags/dispositions convert/play; malformed secondary streams are isolated and recorded; broader product/platform matrices remain open"

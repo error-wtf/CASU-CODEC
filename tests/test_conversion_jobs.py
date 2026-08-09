@@ -5,7 +5,7 @@ import pytest
 from casu.core import CasuCancelled, CasuError
 from casu.jobs import (ConversionEngine, ConversionJob, ConversionProfile,
                        ConversionProgressTracker,
-                       conversion_journal_path)
+                       conversion_journal_path, load_conversion_report)
 
 
 def test_conversion_engine_sidecar_journal_and_failure_isolation(tmp_path, monkeypatch):
@@ -111,3 +111,13 @@ def test_conversion_progress_eta_is_batch_level_and_monotonic(tmp_path):
     finished = tracker.update(1, job, 1.0, state="CONVERTED")
     assert finished.overall_fraction == 1.0
     assert finished.eta_seconds == 0.0 and finished.state == "CONVERTED"
+
+
+def test_conversion_report_loader_is_bounded_and_validated(tmp_path):
+    report = tmp_path / "casu_batch_report.json"
+    report.write_text('{"version":1,"files":[{"status":"converted"}]}',
+                      encoding="utf-8")
+    assert load_conversion_report(report)["files"][0]["status"] == "converted"
+    report.write_text('{"version":2,"files":[]}', encoding="utf-8")
+    with pytest.raises(CasuError, match="structure"):
+        load_conversion_report(report)

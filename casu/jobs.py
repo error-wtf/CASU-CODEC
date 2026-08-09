@@ -89,6 +89,25 @@ class ConversionProgressTracker:
 
 
 MAX_JOURNAL_BYTES = 8 * 1024 * 1024
+MAX_REPORT_BYTES = 8 * 1024 * 1024
+MAX_REPORT_RESULTS = 10_000
+
+
+def load_conversion_report(path: str | Path) -> dict:
+    """Load a bounded converter report for CLI/GUI inspection."""
+    source = Path(path).expanduser().resolve()
+    try:
+        if source.stat().st_size > MAX_REPORT_BYTES:
+            raise CasuError("conversion report exceeds safety limit")
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise CasuError("conversion report is unavailable or invalid") from exc
+    files = payload.get("files") if isinstance(payload, dict) else None
+    if (payload.get("version") != 1 or not isinstance(files, list)
+            or len(files) > MAX_REPORT_RESULTS
+            or not all(isinstance(item, dict) for item in files)):
+        raise CasuError("conversion report has an invalid structure")
+    return payload
 
 
 def _file_identity(path: Path) -> tuple[int, str]:

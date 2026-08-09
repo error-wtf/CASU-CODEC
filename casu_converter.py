@@ -17,7 +17,7 @@ from tkinter import filedialog, messagebox, ttk
 from casu.core import ANALYSIS_MODES, CasuCancelled, CasuError, ffprobe, duration
 from casu.jobs import (ConversionEngine, ConversionJob, ConversionProfile,
                        ConversionProgress,
-                       conversion_journal_path)
+                       conversion_journal_path, load_conversion_report)
 from casu.native import NativeCasuError, read_native
 from casu.native_v2 import NativeV2Error, read_native_v2
 from casu.schema import validate_manifest
@@ -46,7 +46,7 @@ class CASUConverter(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("CASU Converter")
-        self.geometry("720x430")
+        self.geometry("760x470")
         self.minsize(600, 360)
         self.source = tk.StringVar()
         self.output = tk.StringVar()
@@ -58,6 +58,7 @@ class CASUConverter(tk.Tk):
         self.native_output = tk.BooleanVar(value=False)
         self.resume_jobs = tk.BooleanVar(value=True)
         self.fps = tk.DoubleVar(value=10.0)
+        self.retries = tk.IntVar(value=0)
         self.status = tk.StringVar(value="Choose an MP4 or MP3 source.")
         self.source_info = tk.StringVar(value="No source inspected")
         self.output_info = tk.StringVar(value="The original source is never modified.")
@@ -109,6 +110,9 @@ class CASUConverter(tk.Tk):
         ttk.Combobox(options, textvariable=self.mode, values=sorted(ANALYSIS_MODES), state="readonly", width=18).pack(side="left", padx=8)
         ttk.Label(options, text="FPS").pack(side="left")
         ttk.Spinbox(options, from_=0.1, to=120.0, increment=0.5, textvariable=self.fps, width=8).pack(side="left", padx=8)
+        ttk.Label(options, text="Retries").pack(side="left")
+        ttk.Spinbox(options, from_=0, to=10, increment=1,
+                    textvariable=self.retries, width=4).pack(side="left", padx=6)
         ttk.Checkbutton(options, text="Standalone segmented CASUNAT2", variable=self.native_output).pack(side="left", padx=12)
         ttk.Checkbutton(options, text="Resume verified jobs", variable=self.resume_jobs).pack(side="left", padx=4)
         self.progress = ttk.Progressbar(root, mode="determinate", maximum=100.0)
@@ -117,6 +121,8 @@ class CASUConverter(tk.Tk):
         actions = tk.Frame(root, bg=BG); actions.pack(anchor="e", pady=(12, 0))
         ttk.Button(actions, text="Convert", style="CASU.TButton", command=self.convert).pack(side="left")
         ttk.Button(actions, text="Verify output", style="CASU.TButton", command=self.verify_output).pack(side="left", padx=8)
+        ttk.Button(actions, text="Last report", style="CASU.TButton",
+                   command=self.show_last_report).pack(side="left", padx=(0, 8))
         self.pause_button = ttk.Button(actions, text="Pause queue", style="CASU.TButton", command=self.pause_queue, state="disabled")
         self.pause_button.pack(side="left", padx=(0, 8))
         self.cancel_button = ttk.Button(actions, text="Cancel", style="CASU.TButton", command=self.cancel, state="disabled")
@@ -201,6 +207,12 @@ class CASUConverter(tk.Tk):
             messagebox.showerror("CASU", "FPS must be a finite positive number."); return
         if not math.isfinite(fps) or fps <= 0:
             messagebox.showerror("CASU", "FPS must be positive."); return
+        try:
+            retries = int(self.retries.get())
+        except (TypeError, ValueError, tk.TclError):
+            messagebox.showerror("CASU", "Retries must be an integer from 0 to 10."); return
+        if retries < 0 or retries > 10:
+            messagebox.showerror("CASU", "Retries must be between 0 and 10."); return
         mode = self.mode.get()
         self._cancel_event.clear()
         self._pause_event.set()
@@ -212,7 +224,7 @@ class CASUConverter(tk.Tk):
         self.status.set("Analyzing decoded source activity…")
         threading.Thread(target=self._worker, args=(sources, output_dir, fps, mode,
                                                     self.native_output.get(),
-                                                    self.resume_jobs.get()), daemon=True).start()
+                                                    self.resume_jobs.get(), retries), daemon=True).start()
 
     def _target_for(self, source: Path, output_dir: Path) -> Path:
         """Map a source to a deterministic output without flattening folders."""
@@ -226,7 +238,7 @@ class CASUConverter(tk.Tk):
         return output_dir / f"{source.stem}.casu"
 
     def _worker(self, sources: list[Path], output_dir: Path, fps: float, mode: str,
-                native: bool, resume: bool) -> None:
+                native: bool, resume: bool, retries: int) -> None:
         try:
             total = len(sources)
             profile = ConversionProfile(
@@ -259,12 +271,14 @@ class CASUConverter(tk.Tk):
                 pause=self._pause_event,
                 progress_detail=report,
                 resume=resume,
+                retries=retries,
             )
             results = [item.__dict__ for item in converted_results]
             report_path = output_dir / "casu_batch_report.json"
             report_path.write_text(json.dumps({"version": 1, "mode": mode,
                                                "container": "native-v2" if native else "sidecar",
-                                               "analysis_fps": fps, "files": results},
+                                               "analysis_fps": fps, "retries": retries,
+                                               "files": results},
                                               indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
             converted = sum(item["status"] == "converted" for item in results)
             failed = len(results) - converted
@@ -314,6 +328,38 @@ class CASUConverter(tk.Tk):
             messagebox.showerror("CASU Verify", f"{passed}/{len(files)} files passed. Details: {report}")
         else:
             messagebox.showinfo("CASU Verify", f"{passed}/{len(files)} files verified successfully.\nReport: {report}")
+
+    def show_last_report(self) -> None:
+        directory = Path(self.output.get()).expanduser() if self.output.get() else None
+        if directory is None or not directory.is_dir():
+            messagebox.showerror("CASU Report", "Choose an existing output folder first.")
+            return
+        report = directory / "casu_batch_report.json"
+        try:
+            payload = load_conversion_report(report)
+        except CasuError as exc:
+            messagebox.showerror("CASU Report", str(exc)); return
+        lines = [
+            f"Container: {payload.get('container', 'unknown')}",
+            f"Mode: {payload.get('mode', 'unknown')}",
+            f"Configured retries: {payload.get('retries', 0)}",
+            "",
+        ]
+        for index, item in enumerate(payload["files"], start=1):
+            source = Path(str(item.get("source", "unknown"))).name
+            status = str(item.get("status", "unknown")).upper()
+            attempts = int(item.get("attempts") or 0)
+            elapsed = item.get("conversion_seconds")
+            timing = "--" if elapsed is None else f"{float(elapsed):.2f} s"
+            lines.append(f"{index}. {status} · {source} · attempts={attempts} · {timing}")
+            if item.get("error"):
+                lines.append(f"   {str(item['error'])[:1000]}")
+        dialog = tk.Toplevel(self); dialog.title("CASU · Last conversion report")
+        dialog.configure(bg=BG); dialog.transient(self)
+        text = tk.Text(dialog, width=92, height=min(30, max(10, len(lines) + 2)),
+                       bg=PANEL_ALT, fg=TEXT, relief="flat", wrap="word")
+        text.insert("1.0", "\n".join(lines)); text.configure(state="disabled")
+        text.pack(fill="both", expand=True, padx=16, pady=16)
 
     def cancel(self) -> None:
         if self._busy:

@@ -2,7 +2,7 @@
 
 ## 2026-08-09 — current consolidated verification
 
-- Fast behavior suite: **113 passed, 34 media tests deselected**.
+- Fast behavior suite: **114 passed, 36 media tests deselected**.
 - Generated STRICT + CASUNAT2 + native-player + installed-libVLC suites:
   plus bounded-probe/libass and authorized real-PGS tests: **54 passed**.
 - Focused authorized bitmap matrix: **4 passed** for real PGS, DVD, DVB and
@@ -17,6 +17,8 @@
   visible lists stay synchronized across duplicate add, move and remove.
 - Job-engine ETA tests prove monotonic overall progress, measured elapsed time,
   retry-regression clamping and zero ETA at completion; converter Tk construction passes.
+- Two real converter Tk/Xvfb tests prove that the GUI retry value reaches the
+  shared engine/report and that a bounded prior report opens as a detail view.
 - Measured sink latency drives the native scheduling clock when available;
   unsupported non-1.0 native-audio rate changes fail closed instead of silently
   desynchronizing PCM.

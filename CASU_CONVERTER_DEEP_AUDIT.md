@@ -26,15 +26,15 @@ ffprobe stream/frame inventory
 | Seek/verify/info | PASS | Real byte-offset validation and SHA-256 verification; CLI smoke passes. |
 | Atomic output/cancel cleanup | PASS core | Engine cancellation is fail-closed and journaled; interactive GUI cancellation matrix remains. |
 | Subtitle/chapter/attachments | PASS reference matrix | Text, ASS/SSA libass+font and typed PGS/DVD/DVB/XSub bitmap paths pass source deletion; chapters, attachments, covers and bounded metadata pass. |
-| Batch queue/retry/journal | PASS core | Recursive GUI queue, CLI retry, per-file isolation and collision-resistant hash-verified journal resume are behavior-tested. |
+| Batch queue/retry/journal | PASS core | Recursive GUI queue, CLI/GUI retry, per-file isolation and collision-resistant hash-verified journal resume are behavior-tested. |
 | Progress/ETA/reports | PASS reference path | Shared monotonic batch progress exposes per-job/overall fraction, measured elapsed time, throughput ETA and state; JSON results retain conversion duration. Broader accuracy calibration remains. |
 | Hostile-input budgets | PARTIAL | Reader/decompression limits plus monitored probe time/output and decoded-frame dimension/byte ceilings exist; broader decoder/corpus stress remains. |
 | Stable release | OPEN | Package remains `1.0.0rc8`. |
 
 ## Remaining converter work
 
-1. Add GUI controls for per-job retry counts and a detailed prior-run result
-   view; hash-verified restart/resume is implemented.
+1. Expand the implemented GUI retry and bounded prior-run detail view with
+   filtering/export for very large heterogeneous production batches.
 2. Expand the working typed PGS/DVD/DVB/XSub path across platforms and malformed
    libass ASS/SSA, text fallback, chapters/attachments, artwork, bounded tags
    and complete dispositions already pass.
