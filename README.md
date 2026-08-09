@@ -94,7 +94,10 @@ cross-platform coverage remains a separate open release matrix.
 An isolated local HTTP acceptance test additionally proves libVLC URL access,
 redirect handling, WAV demux, PCM track creation, clock progression and a seek
 to one second. A 404 becomes a terminal backend error rather than false EOF. It
-does not stand in for HTTPS, authentication or live-stream testing.
+does not stand in for HTTPS or authentication testing. A second loopback test
+serves a generated six-second HLS VOD playlist with AAC-in-TS segments; libVLC
+creates the audio track, advances playback and seeks to three seconds. Mutable
+live playlists, discontinuities and hostile-network behavior remain open.
 A generated MP4 with two AAC audio tracks and two embedded `mov_text`
 subtitle tracks additionally proves real runtime descriptions and live
 selection of each track through the backend API.

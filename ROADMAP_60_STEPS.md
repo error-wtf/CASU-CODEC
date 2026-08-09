@@ -43,7 +43,8 @@ Current execution dashboard (evidence, not optimism):
   callback succeeds, and loopback HTTP redirect/PCM playback/seek/404 handling
   plus real two-audio/two-subtitle selection, two-chapter MP4 seek and FLAC
   rate/delay/pause/resume plus paused pixel-distinct Rawvideo frame-step pass.
-  Dummy-sink volume is not physical-volume proof.
+  HTTP HLS VOD with AAC-in-TS playback/seek also passes. Dummy-sink volume is
+  not physical-volume proof; HTTPS/auth/mutable-live matrices remain open.
   Responsive Qt, physical-output, broader network and complete cross-platform
   build/shipping matrices remain.
 

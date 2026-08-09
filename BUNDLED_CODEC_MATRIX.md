@@ -53,8 +53,10 @@ matrix and stable release remains blocked until clean supported hosts pass it.
 A loopback HTTP server redirects to a generated WAV fixture. The runtime follows
 the redirect, exposes the PCM track, advances its clock and seeks to one second.
 A missing URL enters `ERROR`; VLC 3's zero-track/zero-time false EOF is normalized
-to an opening failure. This is HTTP access-module evidence; HTTPS,
-authentication, adaptive/live protocols and hostile-network cases remain open.
+to an opening failure. A separate generated HLS VOD playlist serves six seconds
+of AAC-in-TS over loopback HTTP; libVLC exposes its track, advances playback and
+seeks to three seconds. HTTPS, authentication, mutable live playlists,
+discontinuities and hostile-network cases remain open.
 
 A generated MP4 contains two AAC audio tracks and two embedded `mov_text`
 subtitle tracks with German/English metadata. libVLC exposes both linked-list

@@ -2,8 +2,8 @@
 
 ## 2026-08-09 — current consolidated verification
 
-- Fast behavior suite: **138 passed, 63 media tests deselected**.
-- Generated exact-runtime libVLC matrix: **16 passed, 9 xfailed**. Six audio
+- Fast behavior suite: **138 passed, 64 media tests deselected**.
+- Generated exact-runtime libVLC matrix: **17 passed, 9 xfailed**. Six audio
   combinations expose real tracks and advance playback; SRT, WebVTT and ASS
   load as external tracks; Rawvideo/AVI writes real RV32 callback frames. Nine
   compressed-video combinations deliver no callback frame in the privileged
@@ -18,6 +18,9 @@
 - A generated WAV behind a loopback HTTP redirect opens through libVLC,
   exposes PCM, advances playback and seeks to one second. A 404 becomes
   `ERROR`, not VLC 3's misleading zero-track/zero-time EOF.
+- A generated six-second HLS VOD playlist serves AAC-in-TS segments over
+  loopback HTTP; installed libVLC creates the audio track, advances its clock
+  and seeks to three seconds.
 - A real MP4 with two AAC and two embedded `mov_text` tracks exposes linked-list
   descriptions and accepts selection of both audio and both subtitle IDs.
 - A real AAC/MP4 fixture exposes two chapters and jumps to chapter 2 after

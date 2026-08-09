@@ -338,6 +338,68 @@ def test_installed_libvlc_handles_local_http_redirect_seek_and_404(tmp_path):
 @pytest.mark.skipif(
     not ctypes.util.find_library("vlc") or not shutil.which("ffmpeg"),
     reason="libVLC/FFmpeg unavailable")
+def test_installed_libvlc_plays_and_seeks_generated_http_hls_aac(tmp_path):
+    """Exercise the installed HLS demux/access path, not a local-file alias."""
+    playlist = tmp_path / "stream.m3u8"
+    segments = tmp_path / "segment-%03d.ts"
+    generated = subprocess.run([
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "sine=frequency=523:sample_rate=48000",
+        "-t", "6.0", "-c:a", "aac", "-b:a", "128k",
+        "-f", "hls", "-hls_time", "1", "-hls_list_size", "0",
+        "-hls_segment_filename", str(segments), str(playlist),
+    ], capture_output=True, text=True, check=False)
+    if generated.returncode != 0:
+        pytest.skip(f"FFmpeg HLS/AAC mux unavailable: {generated.stderr.strip()}")
+
+    class QuietHandler(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, _format, *_args):
+            return None
+
+    handler = functools.partial(QuietHandler, directory=str(tmp_path))
+    try:
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    except PermissionError:
+        pytest.skip("loopback sockets are blocked by the test sandbox")
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    backend = LibVLCBackend(
+        _HeadlessSurface(), runtime_options=("--aout=dummy", "--vout=dummy"))
+    try:
+        host, port = server.server_address
+        backend.open_source(f"http://{host}:{port}/{playlist.name}")
+        backend.play()
+        deadline = time.monotonic() + 8.0
+        observed_position = 0.0
+        observed_tracks = 0
+        while time.monotonic() < deadline:
+            observed_position = max(observed_position, backend.position())
+            observed_tracks = max(observed_tracks, backend.audio_track_count())
+            if observed_position >= 0.1 and observed_tracks > 0:
+                break
+            assert backend.state() is not PlaybackState.ERROR
+            time.sleep(0.02)
+        assert observed_position >= 0.1
+        assert observed_tracks > 0
+
+        backend.seek(3.0)
+        seek_deadline = time.monotonic() + 5.0
+        while time.monotonic() < seek_deadline and backend.position() < 2.5:
+            assert backend.state() is not PlaybackState.ERROR
+            time.sleep(0.02)
+        assert backend.position() >= 2.5
+    finally:
+        backend.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2.0)
+        assert not thread.is_alive()
+
+
+@pytest.mark.media
+@pytest.mark.skipif(
+    not ctypes.util.find_library("vlc") or not shutil.which("ffmpeg"),
+    reason="libVLC/FFmpeg unavailable")
 def test_installed_libvlc_switches_real_embedded_audio_and_subtitle_tracks(tmp_path):
     """Exercise linked-list descriptions and live selection on real tracks."""
     german = tmp_path / "de.srt"
