@@ -10,7 +10,7 @@
 | CASUNAT2 cover art/tags | PNG/JPEG/WebP normalize to bounded hashed PNG + bounded manifest metadata; pre-decode geometry/RGBA limits | native audio canvas + library thumbnail + media info | real three-format attached-picture source deletion and limit tests | PASS reference matrix |
 | CASUNAT2 seek | serialized generation cancel, fail-closed worker join, cache invalidation + PCM trim | timeline/frame step | blocked-write and four-direction rapid-seek behavior tests | PASS reference path |
 | No CASUNAT2 tempfile | independent backend | n/a | tempfile forced to fail | PASS |
-| Play/pause/resume/stop | both backends | controls/hotkeys | controller/backend tests | PASS reference path |
+| Play/pause/resume/stop/error replay | both backends; native fail-closed sink/decode cleanup | controls/hotkeys + concrete error | controller/backend and transient-underrun replay tests | PASS reference path |
 | Playback rate | libVLC plus native 0.25×–4× channel-aligned s16le resampling/audio-clock scaling | rate control | PCM geometry and transactional live-rate tests | PASS speed/pitch reference path; pitch-preserving time-stretch open |
 | Audio/video track selection | both backends; native transactional restart and Pulse format reopen | dynamic menus | live 2-video/2-audio/2-subtitle isolation test | PASS native reference; PARTIAL VLC/platform matrix |
 | Subtitle/chapter selection | libVLC plus native text/libass/bitmap/chapter path | dynamic controls + clickable bounded timeline markers | runtime RGBA/text/chapter/seek behavior tests | PASS reference matrix |

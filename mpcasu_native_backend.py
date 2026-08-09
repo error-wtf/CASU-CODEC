@@ -438,6 +438,7 @@ class NativeCasuBackend:
         self._subtitle_delay_seconds = 0.0
         self._cover: tuple[bytes, str] | None = None
         self._rich_subtitles: dict[int, LibassRenderer] = {}
+        self._last_error: str | None = None
 
     @staticmethod
     def supports(path: str | Path) -> bool:
@@ -614,6 +615,7 @@ class NativeCasuBackend:
                 generation = self._generation
                 self._thread = threading.Thread(target=self._run, args=(generation,),
                                                 name="mpcasu-native", daemon=True)
+                self._last_error = None
                 self._notify(PlaybackState.PLAYING)
                 self._thread.start()
 
@@ -703,9 +705,30 @@ class NativeCasuBackend:
                 if generation == self._generation and not self._stop.is_set():
                     self._offset = self._duration
                     self._notify(PlaybackState.ENDED)
-        except Exception:
+        except Exception as exc:
+            failure_generation = generation + 1
             with self._lock:
-                if generation == self._generation:
+                if generation != self._generation:
+                    return
+                self._offset = max(
+                    0.0, min(self._duration, self._scheduler_position()))
+                self._generation = failure_generation
+                self._stop.set()
+                self._reset_audio_clock()
+                self._last_error = f"{type(exc).__name__}: {exc}"[:1000]
+            try:
+                self.audio_sink.flush()
+            except Exception:
+                pass
+            try:
+                self.video_sink.invalidate()
+                clearer = getattr(self.video_sink, "clear_subtitle", None)
+                if callable(clearer):
+                    clearer()
+            except Exception:
+                pass
+            with self._lock:
+                if failure_generation == self._generation:
                     self._notify(PlaybackState.ERROR)
 
     def _present_rich_subtitle(self, seconds: float) -> bool:
@@ -793,6 +816,9 @@ class NativeCasuBackend:
 
     def state(self) -> PlaybackState:
         return self._state
+
+    def last_error(self) -> str | None:
+        return self._last_error
 
     def is_actively_playing(self) -> bool:
         return self._state == PlaybackState.PLAYING and bool(self._thread and self._thread.is_alive())
@@ -1002,6 +1028,7 @@ class NativeCasuBackend:
                 self._offset = 0.0
                 self._selected_audio = self._selected_video = self._selected_subtitle = -1
                 self._cover = None
+                self._last_error = None
                 for renderer in self._rich_subtitles.values():
                     renderer.close()
                 self._rich_subtitles.clear()

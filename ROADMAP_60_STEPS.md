@@ -20,8 +20,9 @@ Current execution dashboard (evidence, not optimism):
   clickable chapter timeline, serialized fail-closed worker shutdown and rapid
   final-generation seek tests pass. Native 0.25×–4× PCM resampling and
   rate-scaled audio timing pass. Live A/V/subtitle switching discards old
-  generations and reopens Pulse for changed PCM geometry; pitch-preserving
-  time-stretch, real-device master clock, hotplug and long drift remain.
+  generations and reopens Pulse for changed PCM geometry. Transient sink-error
+  cleanup and same-container replay pass; pitch-preserving time-stretch,
+  real-device master clock, hotplug and long drift remain.
 - Steps 51–56: PASS/PARTIAL — CLI and GUI share an atomic journaled job engine;
   queue isolation/retry, one bounded synchronized playlist model, SQLite
   library, measured batch ETA, settings and dynamic controls exist.

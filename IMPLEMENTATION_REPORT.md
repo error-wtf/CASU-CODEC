@@ -53,6 +53,11 @@ at the measured position. It flushes old PCM, invalidates queued canvas work,
 clears the prior subtitle and reopens the PulseAudio stream for a new audio
 sample-rate/channel geometry. A two-video/two-audio/two-subtitle fixture proves
 that only the selected English stereo/2-kHz PCM, video and subtitle arrive.
+Worker exceptions now perform the same fail-closed cleanup before publishing
+`ERROR`: the media position is captured, generation cancelled, PCM flushed,
+video/subtitles invalidated and audio clock reset. The bounded backend error is
+shown by MPCASU. An instrumented one-shot sink underrun then replays successfully
+from the same open CASUNAT2 container.
 Native audio rates from 0.25× through 4× use bounded deterministic linear PCM
 resampling with channel alignment and s16le clipping. Rate changes stop the old
 worker, flush pending PCM, reset the audio clock and restart at the measured

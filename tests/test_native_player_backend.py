@@ -401,6 +401,43 @@ def test_native_pause_stop_and_close_flush_audio(tmp_path):
     assert audio.flushes > after_stop
 
 
+def test_native_transient_audio_error_cleans_and_replays_without_reopen(tmp_path):
+    source = tmp_path / "native.casu"; _native_fixture(source)
+
+    class RecoveringAudioSink(InstrumentedAudioSink):
+        def __init__(self):
+            super().__init__(); self.failures_remaining = 1
+
+        def write(self, block):
+            if self.failures_remaining:
+                self.failures_remaining -= 1
+                raise BackendError("instrumented underrun")
+            super().write(block)
+
+    video, audio = InstrumentedVideoSink(), RecoveringAudioSink()
+    states = []
+    backend = NativeCasuBackend(video, audio)
+    backend.on_event = states.append
+    backend.open_casu(source); backend.play()
+    deadline = time.monotonic() + 1
+    while backend.state() != PlaybackState.ERROR and time.monotonic() < deadline:
+        time.sleep(0.005)
+    assert backend.state() == PlaybackState.ERROR
+    assert "instrumented underrun" in backend.last_error()
+    assert audio.flushes == 1 and video.invalidations == 1
+    assert video.subtitle_clears >= 1
+
+    backend.play()
+    deadline = time.monotonic() + 1
+    while backend.state() not in {PlaybackState.ENDED, PlaybackState.ERROR} and time.monotonic() < deadline:
+        time.sleep(0.005)
+    assert backend.state() == PlaybackState.ENDED
+    assert backend.last_error() is None
+    assert len(audio.blocks) == 1 and audio.blocks[0].sample_count == 10
+    assert states.count(PlaybackState.ERROR) == 1
+    backend.close()
+
+
 def test_native_backend_track_controls_are_behavioral(tmp_path):
     source = tmp_path / "native.casu"; _native_fixture(source)
     backend = NativeCasuBackend(InstrumentedVideoSink(), InstrumentedAudioSink())

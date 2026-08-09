@@ -724,6 +724,21 @@ def test_player_applies_stored_rate_to_native_audio_resampler():
     assert player.rate_button.text == "2×"
 
 
+def test_player_surfaces_native_backend_error_detail():
+    class Status:
+        def __init__(self): self.value = ""
+        def set(self, value): self.value = value
+
+    player = MPCASUPlayer.__new__(MPCASUPlayer)
+    player.backend = type("Backend", (), {
+        "last_error": lambda self: "BackendError: sink underrun",
+    })()
+    player.status = Status()
+    player._set_diagnostics = lambda **_values: None
+    player._apply_backend_event(PlaybackState.ERROR)
+    assert "sink underrun" in player.status.value
+
+
 def test_libvlc_delay_controls_convert_milliseconds_to_microseconds():
     calls = []
     backend = LibVLCBackend.__new__(LibVLCBackend)

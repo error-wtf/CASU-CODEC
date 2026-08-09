@@ -13,6 +13,7 @@ This file records implemented behavior, not widget presence.
 | CASUNAT2 tempfile | REMOVED | Test forces tempfile creation to fail while native A/V playback completes. |
 | Track/output selection | PASS native reference / PARTIAL platform matrix | Live native A/V/subtitle switches transactionally restart at the measured position, discard old output and reopen Pulse for changed PCM geometry; dynamic menus use reported descriptors. Broad VLC/device/platform matrix remains. |
 | Events/clock | PARTIAL | Lifecycle events and monotonic native scheduler work; position poll remains for timeline and audio hardware clock/drift evidence is open. |
+| Native error recovery | PASS instrumented reference | A one-shot PCM sink underrun captures position/error, cancels generation, flushes/invalidate/clears, then replays successfully without reopening/extraction. Real hardware underrun corpus remains. |
 | Navigation | PASS current actions | Every visible entry performs a file/URL/playlist/focus action; catalog/hub/fake pages were removed. |
 | Library/resume/settings | PASS reference core | Transactional SQLite scan/search/favorites/resume/playlists, watched-folder UI, per-media track/delay preferences, bounded cached thumbnails and atomic settings exist. |
 | GUI construction | PASS | MPCASU and Converter instantiate/update/destroy under isolated X display. |
@@ -34,6 +35,6 @@ This file records implemented behavior, not widget presence.
    animated, HEIF and broader platform cases; current covers survive source
    deletion, are decode-budgeted and render in the native audio canvas/library.
 
-Current evidence: 121 fast behavior tests, 56 targeted generated/probe/libVLC/PGS/cover cases,
+Current evidence: 123 fast behavior tests, 56 targeted generated/probe/libVLC/PGS/cover cases,
 native A/V/subtitle/no-tempfile sinks, both Tk construction smokes, clean wheel
 and Debian package inspection. Stable 1.0 remains blocked by the live gate file.

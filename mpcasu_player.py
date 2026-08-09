@@ -1253,7 +1253,9 @@ class MPCASUPlayer(tk.Tk):
         elif state == PlaybackState.PAUSED:
             self._paused = True
         elif state == PlaybackState.ERROR:
-            self.status.set("Playback error — decoder or output failed")
+            detail_reader = getattr(self.backend, "last_error", None)
+            detail = detail_reader() if callable(detail_reader) else None
+            self.status.set("Playback error — " + (detail or "decoder or output failed"))
             self._set_diagnostics(support="backend error; inspect media information/logs")
         elif state == PlaybackState.ENDED and not self._advancing and not self._end_handled:
             self._end_handled = True

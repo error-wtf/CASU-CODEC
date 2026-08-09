@@ -85,6 +85,10 @@ Live audio/video/subtitle track changes use the same transactional boundary.
 They restart at the measured media position, discard queued output, clear the
 old subtitle and reopen PulseAudio when the new track changes sample rate or
 channel geometry.
+Transient native decode/output failures also invalidate queued presentation,
+flush PCM, reset the master clock and retain a bounded concrete error message.
+The same open CASUNAT2 container can then replay from the recorded failure
+position without extraction or backend reconstruction.
 Full subtitle/chapter/device models and SQLite scan/resume/favorites/playlists
 now exist as a tested shared core;
 atomic playback settings and dynamic track/output/chapter menus are also implemented.
