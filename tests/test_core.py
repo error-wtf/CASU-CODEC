@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from casu.core import CasuCancelled, CasuError, analyze, play, resolve_casu_source, rle
+from casu.core import CasuCancelled, CasuError, analyze, play, resolve_casu_source, rle, stream
 from casu.schema import validate_manifest
 from casu.scheduler import CasuScheduler
 from casu.native import NativeCasuError, read_native, write_native
@@ -25,7 +25,7 @@ from casu.tiles import (TileStateError, compare_tile_frames, state_map_from_fram
                         tile_regions)
 from casu.cli import atomic_write_text
 from casu.cli import main as casu_cli_main
-from mpcasu_backend import (CasuBackend, LibVLCBackend,
+from mpcasu_backend import (BackendError, CasuBackend, LibVLCBackend,
                             LIBVLC_PLAYER_EVENT_STATES, PlaybackState)
 from mpcasu_native_backend import NativeCasuBackend
 from mpcasu_playback import ControllerState, PlaybackController
@@ -660,6 +660,14 @@ def test_libvlc_backend_source_capability_detection():
     assert not LibVLCBackend.supports("gopher://example.invalid/media")
 
 
+def test_primary_video_stream_excludes_attached_cover_art():
+    cover = {"index": 0, "codec_type": "video", "disposition": {"attached_pic": 1}}
+    video = {"index": 2, "codec_type": "video", "disposition": {"attached_pic": 0}}
+    probe = {"streams": [cover, {"index": 1, "codec_type": "audio"}, video]}
+    assert stream(probe, "video") is video
+    assert stream({"streams": [cover]}, "video") is None
+
+
 def test_libvlc_event_codes_distinguish_eof_from_decoder_error():
     assert LIBVLC_PLAYER_EVENT_STATES[0x109] is PlaybackState.ENDED
     assert LIBVLC_PLAYER_EVENT_STATES[0x10A] is PlaybackState.ERROR
@@ -764,6 +772,19 @@ def test_libvlc_library_candidates_are_platform_independent():
     assert "libvlc.so.5" in linux and "libvlc.so" in linux
     assert LibVLCBackend.library_candidates("darwin") == ["libvlc.dylib"]
     assert LibVLCBackend.library_candidates("win32") == ["libvlc.dll", "libvlc-5.dll"]
+
+
+def test_libvlc_runtime_options_are_explicit_and_bounded():
+    assert LibVLCBackend.validate_runtime_options(("--aout=dummy", "--vout=dummy")) == (
+        "--aout=dummy", "--vout=dummy")
+    with pytest.raises(BackendError, match="must be a tuple"):
+        LibVLCBackend.validate_runtime_options(["--aout=dummy"])
+    with pytest.raises(BackendError, match="invalid"):
+        LibVLCBackend.validate_runtime_options(("aout=dummy",))
+    with pytest.raises(BackendError, match="invalid"):
+        LibVLCBackend.validate_runtime_options(("--name=bad\x00value",))
+    with pytest.raises(BackendError, match="too many"):
+        LibVLCBackend.validate_runtime_options(tuple("--x" for _ in range(17)))
 
 
 def test_native_casu_backend_is_independent_from_libvlc_compatibility():

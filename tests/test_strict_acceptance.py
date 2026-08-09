@@ -131,7 +131,7 @@ def test_production_strict_path_uses_source_decoder_not_preview(tmp_path, monkey
                      "nb_frames": "2"}],
         "format": {"duration": "0.080", "format_name": "fixture"},
     })
-    monkeypatch.setattr("casu.core.iter_source_frames", lambda _path: iter([
+    monkeypatch.setattr("casu.core.iter_source_frames", lambda _path, **_kwargs: iter([
         StrictFrame(0, 1, 1000, frame, 40), StrictFrame(40, 1, 1000, frame, 40)]))
     monkeypatch.setattr("casu.core.preview_activity_analysis",
                         lambda *_args, **_kwargs: pytest.fail("preview path used for STRICT"))

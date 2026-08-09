@@ -36,8 +36,11 @@ Current execution dashboard (evidence, not optimism):
   fallback and rendered through native libass. Typed alpha-bounded PGS/DVD/DVB/
   XSub conversion/source-deletion/playback/seek passes; broader product and
   platform matrices remain.
-- Steps 57–60: OPEN — responsive Qt migration and complete cross-platform
-  playback/build/shipping matrices remain.
+- Steps 57–60: PARTIAL — the generated exact-runtime libVLC matrix now proves
+  six audio codec/container and three video codec/container paths and reports
+  five missing decoded-video-track combinations as `XFAIL`; responsive Qt,
+  physical-output, network and complete cross-platform build/shipping matrices
+  remain.
 
 ## Gate A — source-resolution STRICT
 

@@ -6,7 +6,7 @@ A visible control counts only when it invokes tested behavior.
 
 | Area | Status | Evidence / boundary |
 |---|---|---|
-| Ordinary VLC-compatible media | PASS for backend contract | `LibVLCBackend` embeds the installed shared library and delegates format support to its installed modules, without an extension allow-list or player subprocess. A full installed-codec matrix remains a release test. |
+| Ordinary VLC-compatible media | PASS contract / PARTIAL runtime matrix | `LibVLCBackend` embeds the installed shared library without extension allow-list or subprocess. Generated fixtures prove six audio and three video paths; five video paths remain exact-runtime XFAIL and physical/network/platform coverage stays open. |
 | CASUNAT1/sidecar compatibility | PASS | Validated source or verified envelope extraction feeds libVLC and is labeled compatibility. |
 | Native CASUNAT2 video | PASS for reference path | Independent `NativeCasuBackend` reconstructs indexed key states/tile updates and presents source-sized RGB frames to the MPCASU canvas. |
 | Native CASUNAT2 audio | PASS for reference path | Timestamped s16le PCM is written directly through libpulse-simple; measured sink latency feeds the media clock and instrumented sinks prove exact delivered bytes. |
@@ -35,7 +35,9 @@ broader malformed/platform subtitle matrix and responsive Qt target remain open.
 
 ## Acceptance evidence
 
-- fast suite: 114 passed, 36 media tests deselected;
+- fast suite: 129 passed, 53 media tests deselected;
+- exact-runtime generated libVLC matrix: 10 passed, 5 xfailed because the
+  installed runtime exposed no decoded video track;
 - combined generated STRICT/native-v2/native-player/installed-libVLC suites:
   54 passed, plus a focused 4-format authorized PGS/DVD/DVB/XSub
   source-deletion matrix;

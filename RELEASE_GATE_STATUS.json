@@ -11,7 +11,7 @@
       "evidence": [
         "casu.strict canonical model preserves active native RGB/YUV/alpha planes, plane layout, 8/10/12/16-bit samples, color metadata, and rational PTS",
         "casu.core.analyze(mode='strict') invokes analyze_strict_video and never the 160x90 activity preview",
-        "pytest -q -m 'not media': 127 passed, 39 deselected",
+        "pytest -q -m 'not media': 129 passed, 53 deselected",
         "pytest -q tests/test_strict_acceptance.py -m media: 10 passed",
         "clean wheel build and isolated wheel STRICT smoke: PASS",
         "clean temporary-tree Debian build, package inspection, and extracted-package STRICT smoke: PASS",
@@ -72,9 +72,9 @@
         "Functional navigation and dynamic backend-reported track/output/chapter menus replace placeholder views/cycle buttons",
         "Atomic validated settings and SQLite scan/search/resume/favorites/playlists/per-media track and delay preferences are behavior-tested; watched-folder configuration survives save/reload",
         "MPCASU and converter construction smoke plus real playlist add/move/remove synchronization under isolated X display: PASS",
-        "Headless installed-libVLC playback advanced time but reported unavailable H.264 decode and no audio device; full runtime matrix remains correctly open",
+        "Generated exact-runtime libVLC matrix: 10 passed, 5 xfailed. PCM/WAV, FLAC, MP3, Vorbis/Ogg, Opus, AAC/M4A, H.264/MP4, MPEG-4/MOV and MPEG-2/TS expose real tracks and advance playback; HEVC, VP8, VP9, AV1 and FFV1 expose no decoded video track on this VLC 3.0.23 host",
         "Bounded source-stat-versioned FFmpeg thumbnails, including source-independent CASUNAT2 cover attachments, are rendered asynchronously in the library UI; audio-only native playback presents the cover on its canvas",
-        "Qt migration, cross-platform packages and complete runtime matrix remain open"
+        "Qt migration, physical output/network coverage, cross-platform packages and complete runtime matrix remain open"
       ]
     }
   ]

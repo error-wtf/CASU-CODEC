@@ -2,7 +2,7 @@
 
 | Feature | Backend | UI | Evidence | Status |
 |---|---|---|---|---|
-| Installed-libVLC legacy playback | in-process shared library | embedded surface/controls | runtime API tests; full codec matrix open | PARTIAL |
+| Installed-libVLC legacy playback | in-process shared library | embedded surface/controls | generated matrix: 6 audio + 3 video pass, 5 video runtime XFAIL | PARTIAL |
 | URL playback | libVLC locations | real URL dialog | capability test | PARTIAL |
 | CASUNAT1/sidecar compatibility | verified extraction/source | labeled compatibility | unit/media tests | PASS |
 | Native CASUNAT2 video | indexed key/tile reconstruction | Tk frame sink | digest + player tests | PASS reference path |

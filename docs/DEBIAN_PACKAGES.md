@@ -5,7 +5,7 @@ Build the three coordinated `1.0.0-rc8` packages on Debian/Ubuntu:
 
 ```bash
 ./packaging/build_debs.sh
-sha256sum -c dist/SHA256SUMS
+(cd dist && sha256sum -c SHA256SUMS)
 ```
 
 The result is:

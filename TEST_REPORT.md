@@ -2,7 +2,12 @@
 
 ## 2026-08-09 — current consolidated verification
 
-- Fast behavior suite: **127 passed, 39 media tests deselected**.
+- Fast behavior suite: **129 passed, 53 media tests deselected**.
+- Generated exact-runtime libVLC matrix: **10 passed, 5 xfailed**. Six audio
+  combinations expose real tracks and advance playback; H.264/MP4,
+  MPEG-4/MOV and MPEG-2/TS do the same for video. HEVC, VP8, VP9, AV1 and FFV1
+  expose no decoded video track on this exact VLC 3.0.23 host and remain
+  explicitly failed runtime coverage rather than advertised support.
 - Generated STRICT + CASUNAT2 + native-player + installed-libVLC suites,
   including bounded-probe/libass, authorized real-PGS and the added JPEG/WebP
   cover variants: **56 passed**.
@@ -54,6 +59,8 @@
   and remain available after source deletion. Missing, invalid or oversized
   cover geometry is rejected before decode (8192 pixels per axis and 256 MiB
   decoded RGBA budget).
+- Audio manifests ignore `attached_pic` cover streams when selecting a timed
+  primary video stream; covers remain preserved by the attachment pipeline.
 - Container/stream tag canonicalization is count-, value- and total-size-bounded;
   the real attached-picture fixture retains title/artist and dispositions.
 - FFprobe JSON is spooled under monitored output/time limits; excessive output
@@ -83,9 +90,9 @@
   construction smoke passes.
 - Deterministic CASUNAT2 corruption campaign: **10,000 cases, 0 unexpected**.
 - Converter GUI construction under an isolated X display: **PASS**.
-- Installed libVLC entered active playback and advanced time, but its headless
-  development runtime logged unavailable H.264 decode and no Pulse/ALSA output;
-  this is recorded as an open runtime-matrix failure, not a pass.
+- The libVLC decoder matrix uses bounded dummy sinks only to isolate decoder
+  behavior from absent Pulse/ALSA/display hardware. Real-device playback stays
+  open and is not inferred from the passing headless decoder cases.
 
 The sections below retain earlier gate checkpoints for provenance.
 

@@ -78,6 +78,14 @@ independent `NativeCasuBackend`: it seeks to byte-indexed key states, applies
 tile dependencies, presents reconstructed frames to the Tk video sink and
 writes s16le blocks directly through libpulse-simple. It neither inherits the
 libVLC backend nor creates a temporary MP4.
+The reproducible headless runtime matrix generates fixtures before every run
+and uses libVLC dummy sinks only to remove physical-device availability from
+the decoder test. On the inspected VLC 3.0.23 host, PCM/WAV, FLAC, MP3,
+Vorbis/Ogg, Opus and AAC/M4A audio pass with a real audio track and advancing
+clock. H.264/MP4, MPEG-4/MOV and MPEG-2/TS video pass with a real video track;
+HEVC, VP8, VP9, AV1 and FFV1 currently remain explicit runtime `XFAIL`s because
+that host exposes no decoded video track. Real output-device and cross-platform
+coverage remains a separate open release matrix.
 Rapid seeks serialize worker transitions; a blocked old PCM write must stop
 before cache invalidation, sink flush and a new generation can start. A timeout
 fails closed instead of allowing stale audio to cross the seek boundary.

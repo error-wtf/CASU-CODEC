@@ -115,7 +115,28 @@ def ffprobe(path: Path) -> dict[str, Any]:
 
 
 def stream(probe: dict[str, Any], kind: str) -> dict[str, Any] | None:
-    return next((item for item in probe.get("streams", []) if item.get("codec_type") == kind), None)
+    """Return the first playable stream of ``kind``.
+
+    FFprobe exposes album art as a video stream with ``attached_pic``. It is
+    preserved in the manifest/attachment pipeline, but it has no media
+    timeline and must never be selected as the primary video stream.
+    """
+    return next((item for item in probe.get("streams", [])
+                 if item.get("codec_type") == kind
+                 and not (kind == "video"
+                          and item.get("disposition", {}).get("attached_pic"))), None)
+
+
+def _stream_ordinal(probe: dict[str, Any], selected: dict[str, Any], kind: str) -> int:
+    """Translate an FFprobe stream object to FFmpeg's per-type ordinal."""
+    ordinal = 0
+    for item in probe.get("streams", []):
+        if item.get("codec_type") != kind:
+            continue
+        if item is selected:
+            return ordinal
+        ordinal += 1
+    raise CasuError(f"selected {kind} stream is absent from probe")
 
 
 def duration(probe: dict[str, Any]) -> float:
@@ -177,8 +198,9 @@ def preview_activity_analysis(path: Path, probe: dict[str, Any], analysis_fps: f
     video = stream(probe, "video")
     if not video:
         return {}
+    video_ordinal = _stream_ordinal(probe, video, "video")
     command = [
-        "ffmpeg", "-v", "error", "-i", str(path), "-map", "0:v:0", "-an",
+        "ffmpeg", "-v", "error", "-i", str(path), "-map", f"0:v:{video_ordinal}", "-an",
         "-vf", f"fps={analysis_fps},scale={width}:{height}:flags=area,format=gray",
         "-f", "rawvideo", "-pix_fmt", "gray", "pipe:1",
     ]
@@ -324,6 +346,7 @@ def analyze_strict_video(path: Path, probe: dict[str, Any], *,
     video = stream(probe, "video")
     if not video:
         return {}
+    video_ordinal = _stream_ordinal(probe, video, "video")
     expected = int(video.get("nb_frames") or 0)
     if expected <= 0:
         try:
@@ -336,7 +359,7 @@ def analyze_strict_video(path: Path, probe: dict[str, Any], *,
 
     def checked_frames():
         nonlocal decoded
-        for frame in iter_source_frames(path):
+        for frame in iter_source_frames(path, stream_index=video_ordinal):
             if _cancelled(cancel):
                 raise CasuCancelled("STRICT source decoding cancelled")
             decoded += 1

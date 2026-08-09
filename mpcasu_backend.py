@@ -69,7 +69,7 @@ _AudioOutputDevice._fields_ = [
 class LibVLCBackend:
     """Minimal, real in-process libVLC backend for the MPCASU window."""
 
-    def __init__(self, video_widget):
+    def __init__(self, video_widget, *, runtime_options: tuple[str, ...] = ()):
         # Python/ctypes does not inherit the plugin-path setup that the VLC
         # launcher normally performs. Point libVLC at its installed modules so
         # H.264/AAC and other codecs are discovered by the in-process player.
@@ -95,10 +95,12 @@ class LibVLCBackend:
         else:
             raise BackendError("libVLC shared library is unavailable") from load_error
         self.widget = video_widget
+        self.runtime_options = self.validate_runtime_options(runtime_options)
         # VLC 3.x discovers modules through VLC_PLUGIN_PATH. The historical
         # --plugin-path command-line option is no longer accepted and can
         # prevent codec modules from loading in embedded libVLC builds.
-        options = [b"--no-video-title-show"]
+        options = [b"--no-video-title-show", *(
+            value.encode("utf-8") for value in self.runtime_options)]
         argv = (ctypes.c_char_p * len(options))(*options)
         self.instance = self._call("libvlc_new", ctypes.c_void_p, [ctypes.c_int, ctypes.POINTER(ctypes.c_char_p)])(len(options), argv)
         if not self.instance:
@@ -188,6 +190,27 @@ class LibVLCBackend:
         return list(dict.fromkeys(value for value in
                                   (discovered, "libvlc.so.5", "libvlc.so") if value))
 
+    @staticmethod
+    def validate_runtime_options(options: tuple[str, ...]) -> tuple[str, ...]:
+        """Bound explicit libVLC options used by controlled runtime probes.
+
+        Production callers normally pass no options. The hook lets the codec
+        matrix select dummy audio/video sinks and exercise demuxing, decoding
+        and clock progression independently of physical host devices.
+        """
+        if not isinstance(options, tuple):
+            raise BackendError("libVLC runtime options must be a tuple")
+        if len(options) > 16:
+            raise BackendError("too many libVLC runtime options")
+        validated: list[str] = []
+        for value in options:
+            if not isinstance(value, str) or not value.startswith("--"):
+                raise BackendError("invalid libVLC runtime option")
+            if "\x00" in value or len(value.encode("utf-8")) > 256:
+                raise BackendError("invalid libVLC runtime option")
+            validated.append(value)
+        return tuple(validated)
+
     def _install(self, name, restype, args):
         setattr(self, name, self._call(name, restype, args))
 
@@ -234,6 +257,7 @@ class LibVLCBackend:
             "network": "available",
             "hardware_decode": "delegated to installed libVLC modules",
             "player_process": "none",
+            "runtime_options": " ".join(self.runtime_options) or "default",
         }
 
     def open(self, path: Path, subtitle: Path | None = None) -> None:
