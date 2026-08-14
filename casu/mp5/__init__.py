@@ -8,12 +8,14 @@ MP5 extends CASUNAT2 with:
 - Enhanced metadata chunk type
 """
 from .format import (ChunkType, CasuLimits, DEFAULT_LIMITS, SeekEntry)
-from .reader import Mp5Error, Mp5Container, read_mp5
+from .reader import (Mp5Error, Mp5Container, read_mp5, extract_attachment,
+                     extract_source, verify_mp5)
 from .writer import write_mp5
 from .converter import convert_to_mp5
 
 __all__ = [
     "ChunkType", "CasuLimits", "DEFAULT_LIMITS", "SeekEntry",
-    "Mp5Error", "Mp5Container", "read_mp5",
+    "Mp5Error", "Mp5Container", "read_mp5", "extract_attachment",
+    "extract_source", "verify_mp5",
     "write_mp5", "convert_to_mp5",
 ]

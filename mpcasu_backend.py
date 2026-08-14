@@ -22,6 +22,7 @@ from typing import Any
 from casu.core import CasuError, resolve_casu_source
 from casu.schema import validate_manifest
 from casu.native import NativeCasuError, read_native
+from casu.mp5 import Mp5Error, extract_source as mp5_extract_source
 from casu.media import (AudioDeviceDescriptor, ChapterDescriptor,
                         TrackDescriptor, TrackKind)
 import json
@@ -846,9 +847,20 @@ class LegacyCasuBackend(LibVLCBackend):
         manifest_path = manifest_path.expanduser().resolve()
         try:
             with manifest_path.open("rb") as handle:
-                is_native = handle.read(8) == b"CASUNAT1"
+                magic = handle.read(8)
         except OSError as exc:
             raise BackendError(f"could not read CASU file: {manifest_path}") from exc
+        if magic == b"CASUMP5\x00":
+            try:
+                extracted = mp5_extract_source(
+                    manifest_path, Path(tempfile.gettempdir()) / "mpcasu-mp5")
+            except (Mp5Error, OSError) as exc:
+                raise BackendError(f"invalid MP5 container: {exc}") from exc
+            self.open_source(extracted)
+            self._native_temp = extracted
+            self.path = manifest_path
+            return
+        is_native = magic == b"CASUNAT1"
         if is_native:
             try:
                 container = read_native(manifest_path, verify_payload=True)

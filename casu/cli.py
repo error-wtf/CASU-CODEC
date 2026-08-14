@@ -13,6 +13,7 @@ from pathlib import Path
 from .core import ANALYSIS_MODES, CasuError, analyze, play, resolve_casu_source
 from .schema import validate_manifest
 from .native import NativeCasuError, read_native, write_native
+from .mp5 import Mp5Error, convert_to_mp5, read_mp5, verify_mp5
 from .native_v2 import (NativeConversionError, NativeV2Error,
                         convert_media_to_native_v2, read_native_v2,
                         repair_native_v2)
@@ -189,6 +190,12 @@ def parser() -> argparse.ArgumentParser:
     n2.add_argument("-o", "--output", type=Path, required=True)
     n2.add_argument("--tile-size", type=int, default=64)
     n2.add_argument("--key-interval", type=float, default=3.0)
+    n5 = sub.add_parser("pack-mp5", help="convert media to a playable CASU MP5 enhanced container")
+    n5.add_argument("input", type=Path)
+    n5.add_argument("-o", "--output", type=Path, required=True)
+    n5.add_argument("--mode", choices=sorted(ANALYSIS_MODES), default="strict")
+    n5i = sub.add_parser("mp5-info", help="verify and inspect a CASU MP5 container")
+    n5i.add_argument("input", type=Path)
     ni = sub.add_parser("native-info", help="verify and inspect a native CASU container")
     ni.add_argument("input", type=Path)
     repair = sub.add_parser("repair-v2", help="finalize the last declared complete CASUNAT2 prefix")
@@ -291,6 +298,26 @@ def main() -> int:
                               "seek_entries": len(container_v2.seek_entries),
                               "integrity_verified": container_v2.integrity_verified}, indent=2))
             return 0
+        if args.command == "pack-mp5":
+            source = args.input.expanduser().resolve()
+            output = convert_to_mp5(source, args.output, mode=args.mode)
+            container = read_mp5(output)
+            print(json.dumps({"container": str(output), "mp5_version": 1,
+                              "chunks": len(container.chunks),
+                              "payload_bytes": source.stat().st_size,
+                              "mode": args.mode}, indent=2))
+            return 0
+        if args.command == "mp5-info":
+            container = read_mp5(args.input)
+            issues = verify_mp5(args.input)
+            source_info = container.manifest.get("source", {})
+            print(json.dumps({"container": str(container.path), "mp5_version": 1,
+                              "chunks": len(container.chunks),
+                              "source_filename": source_info.get("filename"),
+                              "payload_bytes": source_info.get("bytes"),
+                              "issues": issues,
+                              "manifest": container.manifest}, indent=2, ensure_ascii=False))
+            return 0 if not issues else 1
         if args.command == "native-info":
             container = read_native(args.input)
             print(json.dumps({"container": str(container.path), "native_version": 1,
@@ -545,7 +572,8 @@ def main() -> int:
             print(f"VALID CASU manifest: {args.manifest}")
             return 0
         raise CasuError("unknown command")
-    except (CasuError, CasuExportError, NativeCasuError, NativeConversionError, NativeV2Error) as exc:
+    except (CasuError, CasuExportError, Mp5Error, NativeCasuError,
+            NativeConversionError, NativeV2Error) as exc:
         print(f"casu: error: {exc}")
         return 2
 
