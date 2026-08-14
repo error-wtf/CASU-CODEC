@@ -338,6 +338,36 @@ class PulseAudioSink:
         _fields_ = [("format", ctypes.c_int), ("rate", ctypes.c_uint32),
                     ("channels", ctypes.c_uint8)]
 
+    @staticmethod
+    def probe(device_name: str = "default") -> bool:
+        """Return True only if a PulseAudio stream can actually be opened now.
+
+        Lets players choose video-only fallback up front on headless systems
+        instead of failing mid-playback when the lazy stream open runs.
+        """
+        try:
+            lib = ctypes.CDLL("libpulse-simple.so.0")
+        except OSError:
+            return False
+        spec = PulseAudioSink._SampleSpec(3 if sys.byteorder == "little" else 4,
+                                          44100, 2)
+        error = ctypes.c_int()
+        lib.pa_simple_new.restype = ctypes.c_void_p
+        lib.pa_simple_new.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int,
+                                      ctypes.c_char_p, ctypes.c_char_p,
+                                      ctypes.POINTER(PulseAudioSink._SampleSpec),
+                                      ctypes.c_void_p, ctypes.c_void_p,
+                                      ctypes.POINTER(ctypes.c_int)]
+        handle = lib.pa_simple_new(
+            None, b"MPCASU", 1,
+            None if device_name == "default" else device_name.encode("utf-8"),
+            b"CASU probe", ctypes.byref(spec), None, None, ctypes.byref(error))
+        if not handle:
+            return False
+        lib.pa_simple_free.argtypes = [ctypes.c_void_p]
+        lib.pa_simple_free(handle)
+        return True
+
     def __init__(self, device_name: str = "default"):
         try:
             self.lib = ctypes.CDLL("libpulse-simple.so.0")

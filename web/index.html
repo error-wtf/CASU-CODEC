@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#090b0d">
   <title>WEB CASU Player</title>
+  <link rel="icon" type="image/png" href="../assets/web_casu_icon.png">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -16,7 +17,11 @@
       <button class="nav" id="open-files" data-view="files">▣ <span>Local Files</span></button>
       <button class="nav" id="open-url" data-view="streams">◎ <span>Web & Streams</span></button>
       <button class="nav" id="open-playlist" data-view="playlists">☷ <span>Playlists</span></button>
+      <button class="nav" id="open-iptv" data-view="iptv">📡 <span>IPTV</span></button>
       <button class="nav" id="open-epg">◫ <span>Live TV & EPG</span></button>
+      <p class="eyebrow">SEARCH</p>
+      <button class="nav" id="open-search-youtube" data-view="youtube">▶ <span>YouTube</span></button>
+      <button class="nav" id="open-search-spotify" data-view="spotify">♫ <span>Spotify</span></button>
       <p class="eyebrow">CASU</p>
       <button class="nav" id="open-casu" data-view="casu">◆ <span>CASU Files</span></button>
       <div class="sidebar-spacer"></div>
@@ -38,7 +43,7 @@
         <div id="native-subtitle" class="native-subtitle" hidden></div>
         <iframe id="youtube" title="YouTube player" allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen hidden></iframe>
         <div class="empty-state" id="empty-state">
-          <img src="../assets/mpcasu_player_icon.png" alt="" aria-hidden="true">
+          <img src="../assets/web_casu_icon.png" alt="" aria-hidden="true">
           <h1>Drop media here</h1>
           <p>Audio, video, CASU sidecars, CASUNAT1, playlists and direct streams</p>
           <button class="primary" id="empty-open">Choose files</button>
@@ -81,7 +86,7 @@
     <aside class="queue-panel">
       <header><div><strong>PLAYLIST</strong><small id="queue-summary">0 items</small></div><button id="add-more">＋</button></header>
       <ol id="queue" aria-label="Playlist"></ol>
-      <footer><button id="move-up">↑</button><button id="move-down">↓</button><button id="remove">⌫</button></footer>
+      <footer><button id="move-up" title="Move up">↑</button><button id="move-down" title="Move down">↓</button><button id="remove" title="Remove selected">⌫</button><button id="save-pl" title="Save playlist as M3U">⤓</button></footer>
     </aside>
   </main>
 
@@ -99,6 +104,14 @@
       <header class="dialog-title"><div><h2>Live TV programme guide</h2><p>Current and upcoming XMLTV programmes</p></div><div><button id="epg-load" type="button">Load file</button><button value="cancel" aria-label="Close">×</button></div></header>
       <div class="epg-source"><input id="epg-url" type="url" placeholder="https://provider.example/guide.xml or channels.m3u"><button id="epg-fetch" type="button">Load URL</button></div>
       <div id="epg-guide" class="epg-guide"></div>
+    </form>
+  </dialog>
+  <dialog id="search-dialog">
+    <form method="dialog">
+      <header class="dialog-title"><div><h2>YouTube &amp; Spotify search</h2><p>Metadata search via yt-dlp (GNU GPL) · personal use only</p></div><div><button value="cancel" aria-label="Close">×</button></div></header>
+      <div class="epg-source"><input id="search-query" type="text" placeholder="Search term…" autocomplete="off"><button id="search-run" type="button">Search</button></div>
+      <label class="search-source">Source <select id="search-source"><option value="youtube">YouTube</option><option value="spotify">Spotify (music)</option></select></label>
+      <div id="search-results" class="epg-guide"></div>
     </form>
   </dialog>
   <div id="toast" role="status" aria-live="polite"></div>

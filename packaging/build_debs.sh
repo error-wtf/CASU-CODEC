@@ -4,7 +4,7 @@
 set -euo pipefail
 export SOURCE_DATE_EPOCH=0
 root=$(cd "$(dirname "$0")/.." && pwd)
-version=1.0.0-rc9
+version=1.0.0
 out="$root/dist"
 rm -rf "$out"; mkdir -p "$out"
 
@@ -37,6 +37,8 @@ EOF
   # which would make an otherwise clean installation fail dpkg --verify.
   find "$stage" -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
   find "$stage" -depth -type d -name '__pycache__' -empty -delete
+  # Editor/session backups must never ship.
+  find "$stage" -type f \( -name '*.bak' -o -name '*.bak2' -o -name '*.bak-*' -o -name '*~' \) -delete
   # Normalize archive metadata so identical inputs produce identical packages.
   find "$stage" -exec touch -h -d '@0' {} +
   dpkg-deb --build --root-owner-group "$stage" "$out/${name}_${version}_all.deb" >/dev/null
@@ -75,14 +77,15 @@ EOF
 }
 install_player() {
   local stage="$1"; mkdir -p "$stage/usr/share/casu-codec" "$stage/usr/bin" "$stage/usr/share/applications" "$stage/usr/share/icons/hicolor/256x256/apps"
-  cp "$root/mpcasu_player.py" "$root/mpcasu_backend.py" "$root/mpcasu_native_backend.py" "$root/mpcasu_playback.py" "$root/MPCASU_IMPLEMENTATION_AUDIT.md" "$root/MPCASU_FEATURE_COMPLETION_MATRIX.md" "$stage/usr/share/casu-codec/"
+  cp -a "$root/mpcasu_qt" "$stage/usr/share/casu-codec/"
+  cp "$root/mpcasu_backend.py" "$root/mpcasu_native_backend.py" "$root/mpcasu_playback.py" "$root/MPCASU_IMPLEMENTATION_AUDIT.md" "$root/MPCASU_FEATURE_COMPLETION_MATRIX.md" "$stage/usr/share/casu-codec/"
   cp "$root/packaging/mpcasu.desktop" "$stage/usr/share/applications/mpcasu.desktop"
   cp "$root/assets/mpcasu_player_icon.png" "$stage/usr/share/icons/hicolor/256x256/apps/mpcasu-player.png"
   cat > "$stage/usr/bin/mpcasu" <<'EOF'
 #!/bin/sh
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPATH=/usr/share/casu-codec${PYTHONPATH:+:$PYTHONPATH}
-exec /usr/bin/python3 /usr/share/casu-codec/mpcasu_player.py "$@"
+exec /usr/bin/python3 -m mpcasu_qt.app "$@"
 EOF
   chmod 0755 "$stage/usr/bin/mpcasu"
 }
@@ -90,7 +93,7 @@ install_webplayer() {
   local stage="$1"; mkdir -p "$stage/usr/share/casu-codec" "$stage/usr/bin" "$stage/usr/share/applications" "$stage/usr/share/icons/hicolor/256x256/apps"
   cp "$root/web_casu.py" "$stage/usr/share/casu-codec/"
   cp "$root/packaging/web-casu.desktop" "$stage/usr/share/applications/web-casu.desktop"
-  cp "$root/assets/mpcasu_player_icon.png" "$stage/usr/share/icons/hicolor/256x256/apps/web-casu.png"
+  cp "$root/assets/web_casu_icon.png" "$stage/usr/share/icons/hicolor/256x256/apps/web-casu.png"
   cat > "$stage/usr/bin/web-casu" <<'EOF'
 #!/bin/sh
 export PYTHONDONTWRITEBYTECODE=1
@@ -100,24 +103,16 @@ EOF
 }
 
 install_qtplayer() {
-  local stage="$1"; mkdir -p "$stage/usr/share/casu-codec" "$stage/usr/bin" "$stage/usr/share/applications" "$stage/usr/share/icons/hicolor/256x256/apps"
-  cp -a "$root/mpcasu_qt" "$stage/usr/share/casu-codec/"
-  cp "$root/packaging/mpcasu.desktop" "$stage/usr/share/applications/mpcasu-qt.desktop"
-  sed -i 's|^Exec=.*|Exec=mpcasu-qt %U|; s|^Name=.*|Name=MPCASU Qt|' "$stage/usr/share/applications/mpcasu-qt.desktop"
-  cp "$root/assets/mpcasu_player_icon.png" "$stage/usr/share/icons/hicolor/256x256/apps/mpcasu-qt.png"
-  cat > "$stage/usr/bin/mpcasu-qt" <<'EOF'
-#!/bin/sh
-export PYTHONDONTWRITEBYTECODE=1
-export PYTHONPATH=/usr/share/casu-codec${PYTHONPATH:+:$PYTHONPATH}
-exec /usr/bin/python3 -m mpcasu_qt.app "$@"
-EOF
-  chmod 0755 "$stage/usr/bin/mpcasu-qt"
+  # Retired: the Qt player is now the official `mpcasu` package (see
+  # install_player). Kept as a no-op reference so older call sites fail loudly
+  # instead of silently building a fifth package.
+  echo "install_qtplayer is retired; mpcasu now ships the Qt player" >&2
+  return 1
 }
 
 make_pkg casu-codec "CASU Codec for All Segmented Units" "python3 (>= 3.10), python3-numpy, python3-av (>= 14), ffmpeg" install_codec
 make_pkg casu-converter "CASU full graphical audio video and CASU converter" "casu-codec (= $version), python3-tk" install_converter
-make_pkg mpcasu "MPCASU CASU and legacy media player" "casu-codec (= $version), python3-tk, libvlc5, vlc-plugin-base, vlc-plugin-video-output, libpulse0, libass9, yt-dlp" install_player
-make_pkg mpcasu-qt "MPCASU Qt desktop player (official red/black design system)" "casu-codec (= $version), mpcasu (= $version), python3-pyside6.qtcore, python3-pyside6.qtgui, python3-pyside6.qtwidgets, libvlc5" install_qtplayer
+make_pkg mpcasu "MPCASU CASU and legacy media player (Qt, official red/black design)" "casu-codec (= $version), python3-pyside6.qtcore, python3-pyside6.qtgui, python3-pyside6.qtwidgets, libvlc5, vlc-plugin-base, vlc-plugin-video-output, libpulse0, libass9, yt-dlp" install_player
 make_pkg web-casu "MPCASU local web media player" "casu-codec (= $version), python3 (>= 3.10)" install_webplayer
 cd "$out"
 sha256sum ./*.deb | sed 's# \./# #' > SHA256SUMS

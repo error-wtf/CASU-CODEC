@@ -545,7 +545,7 @@ class MPCASUPlayer(tk.Tk):
             tk.Label(card, textvariable=variable, bg=PANEL_ALT, fg=SECONDARY, font=("TkDefaultFont", 9)).pack(anchor="w", pady=(3, 0))
         statusbar = tk.Frame(root, bg=BG); statusbar.pack(fill="x", padx=18, pady=(4, 10))
         self.statusbar = statusbar
-        tk.Label(statusbar, text="MPCASU 1.0.0rc9  ● Pre-release", bg=BG, fg=SECONDARY).pack(side="left")
+        tk.Label(statusbar, text="MPCASU 1.0.0", bg=BG, fg=SECONDARY).pack(side="left")
         tk.Label(statusbar, text="Optimized for performance and integrity", bg=BG, fg=MUTED).pack(side="left", padx=28)
         tk.Label(statusbar, textvariable=self.resource_status, bg=BG, fg=MUTED).pack(side="right")
         self.bind("<space>", lambda _event: self.pause())
@@ -1251,43 +1251,132 @@ class MPCASUPlayer(tk.Tk):
         ttk.Button(btn_frame, text="Cancel", style="MPC.TButton",
                    command=dialog.destroy).pack(side="right", padx=8)
 
+    def _ytdlp_consent_ok(self) -> bool:
+        """Shared yt-dlp consent gate (GPL notice, personal use only)."""
+        settings = self.settings_store.load()
+        if settings.ytdlp_consent:
+            return True
+        if not messagebox.askyesno(
+                "MPCASU · Legal Notice",
+                "YouTube and Spotify playback and search require yt-dlp to "
+                "resolve stream URLs.\n\n"
+                "yt-dlp is open-source software (GNU GPL). Stream URLs are "
+                "resolved\n temporarily and are never stored or redistributed.\n\n"
+                "This feature is intended for personal use only.\n\n"
+                "Do you accept these terms?",
+                icon="question", parent=self):
+            return False
+        self.settings_store.save(replace(settings, ytdlp_consent=True))
+        return True
+
     def open_youtube_dialog(self):
-        dialog = tk.Toplevel(self); dialog.bind("<Escape>", lambda _event, _dialog=dialog: _dialog.destroy())
-        dialog.title("YouTube Video")
-        dialog.configure(bg=BG)
-        dialog.transient(self)
-        dialog.geometry("520x200")
-        tk.Label(dialog, text="YouTube URL eingeben:", bg=BG, fg=TEXT, font=("TkDefaultFont", 11, "bold")).pack(anchor="w", padx=16, pady=(16, 4))
-        tk.Label(dialog, text="Z.B. https://www.youtube.com/watch?v=...", bg=BG, fg=SECONDARY).pack(anchor="w", padx=16, pady=(0, 8))
-        value = tk.StringVar()
-        entry = ttk.Entry(dialog, textvariable=value, width=64)
-        entry.pack(fill="x", padx=16); entry.focus_set()
-        def open_source():
-            url = value.get().strip()
-            if url:
-                dialog.destroy()
-                self._resolve_and_open_external_source(url)
-        ttk.Button(dialog, text="YouTube abspielen", style="MPC.TButton", command=open_source).pack(anchor="e", padx=16, pady=14)
-        entry.bind("<Return>", lambda _event: open_source())
+        self._open_search_dialog("MPCASU · YouTube", "youtube",
+                                 "URL or search term — e.g. "
+                                 "https://www.youtube.com/watch?v=…")
 
     def open_spotify_dialog(self):
+        self._open_search_dialog("MPCASU · Spotify", "spotify",
+                                 "URL or search term — e.g. "
+                                 "https://open.spotify.com/track/…")
+
+    def _open_search_dialog(self, title: str, source: str, placeholder: str) -> None:
+        """YouTube/Spotify dialog: direct URL playback plus yt-dlp search."""
+        from casu.search import SearchError, search_music, search_youtube
         dialog = tk.Toplevel(self); dialog.bind("<Escape>", lambda _event, _dialog=dialog: _dialog.destroy())
-        dialog.title("Spotify Stream")
+        dialog.title(title)
         dialog.configure(bg=BG)
         dialog.transient(self)
-        dialog.geometry("520x200")
-        tk.Label(dialog, text="Spotify URL eingeben:", bg=BG, fg=TEXT, font=("TkDefaultFont", 11, "bold")).pack(anchor="w", padx=16, pady=(16, 4))
-        tk.Label(dialog, text="Z.B. https://open.spotify.com/track/...", bg=BG, fg=SECONDARY).pack(anchor="w", padx=16, pady=(0, 8))
+        dialog.geometry("680x560")
+        kind_label = "YouTube" if source == "youtube" else "Spotify"
+        tk.Label(dialog, text=f"{kind_label} URL or search term:", bg=BG, fg=TEXT,
+                 font=("TkDefaultFont", 11, "bold")).pack(anchor="w", padx=16, pady=(16, 4))
+        tk.Label(dialog, text=placeholder, bg=BG, fg=SECONDARY).pack(anchor="w", padx=16, pady=(0, 8))
         value = tk.StringVar()
-        entry = ttk.Entry(dialog, textvariable=value, width=64)
+        entry = ttk.Entry(dialog, textvariable=value, width=72)
         entry.pack(fill="x", padx=16); entry.focus_set()
-        def open_source():
-            url = value.get().strip()
-            if url:
+        dialog_status = tk.StringVar(value="Search uses yt-dlp (GNU GPL) · personal use only")
+        results: list = []
+        listbox = tk.Listbox(dialog, bg=PANEL_ALT, fg=SECONDARY, height=12,
+                             selectbackground=RED_DARK, selectforeground=TEXT,
+                             relief="flat", highlightthickness=0, activestyle="none",
+                             exportselection=False)
+        listbox.pack(fill="both", expand=True, padx=16, pady=(10, 4))
+
+        def open_typed():
+            text = value.get().strip()
+            if not text:
+                return
+            if text.startswith(("http://", "https://")):
                 dialog.destroy()
-                self._resolve_and_open_external_source(url)
-        ttk.Button(dialog, text="Spotify abspielen", style="MPC.TButton", command=open_source).pack(anchor="e", padx=16, pady=14)
-        entry.bind("<Return>", lambda _event: open_source())
+                self._resolve_and_open_external_source(text)
+                return
+            run_search()
+
+        def play_selected_result(_event=None):
+            selection = listbox.curselection()
+            if not selection or selection[0] >= len(results):
+                return
+            result = results[selection[0]]
+            dialog.destroy()
+            self._resolve_and_open_external_source(result.url,
+                                                   display_label=result.title)
+
+        def run_search():
+            query = value.get().strip()
+            if not query:
+                dialog_status.set("Type a search term first")
+                return
+            if not self._ytdlp_consent_ok():
+                dialog_status.set("Search requires yt-dlp consent")
+                return
+            dialog_status.set(f"Searching {kind_label} via yt-dlp…")
+            listbox.delete(0, "end")
+
+            def present(payload):
+                if dialog.winfo_exists() == 0:
+                    return
+                kind, data = payload
+                if kind == "error":
+                    dialog_status.set(f"Search failed: {data}")
+                    return
+                results.clear()
+                results.extend(data)
+                for item in data:
+                    duration = (f"{int(item.duration // 60)}:{int(item.duration % 60):02d}"
+                                if item.duration else "live")
+                    listbox.insert("end", f"{item.title}  ·  {item.uploader or 'unknown'}  ·  {duration}")
+                dialog_status.set(f"{len(data)} results — double-click to play")
+
+            holder: dict = {}
+
+            def worker():
+                try:
+                    engine = search_youtube if source == "youtube" else search_music
+                    found = engine(query, limit=12)
+                except Exception as exc:  # noqa: BLE001 - surface any engine failure
+                    holder["payload"] = ("error", str(exc))
+                else:
+                    holder["payload"] = ("ok", found)
+
+            threading.Thread(target=worker, daemon=True).start()
+
+            def poll():
+                if dialog.winfo_exists() == 0:
+                    return
+                if "payload" in holder:
+                    present(holder["payload"])
+                else:
+                    dialog.after(150, poll)
+
+            dialog.after(150, poll)
+
+        ttk.Button(dialog, text=f"Play / search", style="MPC.TButton",
+                   command=open_typed).pack(anchor="e", padx=16, pady=(0, 6))
+        listbox.bind("<Double-Button-1>", play_selected_result)
+        listbox.bind("<Return>", play_selected_result)
+        entry.bind("<Return>", lambda _event: open_typed())
+        tk.Label(dialog, textvariable=dialog_status, bg=BG, fg=MUTED,
+                 font=("TkDefaultFont", 8)).pack(anchor="w", padx=16, pady=(2, 10))
 
     def open_url_dialog(self):
         dialog = tk.Toplevel(self); dialog.bind("<Escape>", lambda _event, _dialog=dialog: _dialog.destroy())
@@ -1311,21 +1400,9 @@ class MPCASUPlayer(tk.Tk):
                                           channel: StreamChannel | None = None) -> None:
         """Resolve web pages off the Tk thread, then hand a direct URL to libVLC."""
         if is_youtube_url(source) or is_spotify_url(source):
-            settings = self.settings_store.load()
-            if not settings.ytdlp_consent:
-                if not messagebox.askyesno(
-                        "MPCASU · Legal Notice",
-                        "YouTube and Spotify playback requires yt-dlp to resolve "
-                        "stream URLs.\n\n"
-                        "yt-dlp is open-source software (GNU GPL). Stream URLs are "
-                        "resolved\n temporarily and are never stored or redistributed.\n\n"
-                        "This feature is intended for personal use only.\n\n"
-                        "Do you accept these terms?",
-                        icon="question", parent=self):
-                    self.status.set("YouTube/Spotify playback requires consent")
-                    return
-                settings = replace(settings, ytdlp_consent=True)
-                self.settings_store.save(settings)
+            if not self._ytdlp_consent_ok():
+                self.status.set("YouTube/Spotify playback requires consent")
+                return
         self._location_generation += 1
         generation = self._location_generation
         self._stream_channel = channel
@@ -2375,7 +2452,7 @@ class MPCASUPlayer(tk.Tk):
         try:
             if route == LOCAL_CASUNAT2 and NativeCasuBackend.supports(path):
                 try:
-                    audio_sink = PulseAudioSink()
+                    audio_sink = PulseAudioSink() if PulseAudioSink.probe() else None
                 except BackendError:
                     # Video-only/headless systems still get native CASU video.
                     audio_sink = None

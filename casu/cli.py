@@ -196,6 +196,8 @@ def parser() -> argparse.ArgumentParser:
     n5.add_argument("--mode", choices=sorted(ANALYSIS_MODES), default="strict")
     n5i = sub.add_parser("mp5-info", help="verify and inspect a CASU MP5 container")
     n5i.add_argument("input", type=Path)
+    n5i.add_argument("--full", action="store_true",
+                     help="include the complete analysis manifest")
     ni = sub.add_parser("native-info", help="verify and inspect a native CASU container")
     ni.add_argument("input", type=Path)
     repair = sub.add_parser("repair-v2", help="finalize the last declared complete CASUNAT2 prefix")
@@ -311,14 +313,31 @@ def main() -> int:
             container = read_mp5(args.input)
             issues = verify_mp5(args.input)
             source_info = container.manifest.get("source", {})
-            print(json.dumps({"container": str(container.path), "mp5_version": 1,
-                              "chunks": len(container.chunks),
-                              "source_filename": source_info.get("filename"),
-                              "payload_bytes": source_info.get("bytes"),
-                              "issues": issues,
-                              "manifest": container.manifest}, indent=2, ensure_ascii=False))
+            summary = {"container": str(container.path), "mp5_version": 1,
+                       "chunks": len(container.chunks),
+                       "source_filename": source_info.get("filename"),
+                       "payload_bytes": source_info.get("bytes"),
+                       "source_sha256": source_info.get("sha256"),
+                       "issues": issues}
+            if getattr(args, "full", False):
+                summary["manifest"] = container.manifest
+            else:
+                summary["manifest_sections"] = sorted(container.manifest.keys())
+            print(json.dumps(summary, indent=2, ensure_ascii=False))
             return 0 if not issues else 1
         if args.command == "native-info":
+            with args.input.open("rb") as handle:
+                magic = handle.read(8)
+            if magic == b"CASUNAT2":
+                container = read_native_v2(args.input)
+                print(json.dumps({"container": str(container.path), "native_version": 2,
+                                  "streams": len(container.manifest.get("streams", [])),
+                                  "chunks": len(container.chunks),
+                                  "seek_entries": len(container.manifest.get("seek", [])),
+                                  "recovery": container.manifest.get("recovery"),
+                                  "integrity_verified": container.integrity_verified},
+                                 indent=2, ensure_ascii=False))
+                return 0
             container = read_native(args.input)
             print(json.dumps({"container": str(container.path), "native_version": 1,
                               "payload_bytes": container.payload_length,
