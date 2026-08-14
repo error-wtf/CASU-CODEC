@@ -16,7 +16,9 @@ os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="mpcasu-qt-play-")
 from PySide6.QtWidgets import QApplication  # noqa: E402
 from mpcasu_qt.main_window import MainWindow  # noqa: E402
 
-media = root / "test_media" / "giancarlo.mp4"
+media = root / "test_media" / "demo_clip.mp4"
+if not media.is_file():
+    media = root / "test_media" / "lino_lol_test_pattern.mp4"
 if not media.is_file():
     print(f"smoke_qt_playback: SKIP (missing {media})")
     raise SystemExit(0)

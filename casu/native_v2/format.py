@@ -57,6 +57,7 @@ class CasuLimits:
     max_dependency_depth: int = 1_000_000
     max_json_depth: int = 32
     max_json_nodes: int = 1_000_000
+    max_audio_meta_bytes: int = 64 * 1024
 
     def validate(self) -> None:
         values = tuple(self.__dict__.values())

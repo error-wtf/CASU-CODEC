@@ -333,7 +333,7 @@ def main() -> int:
                 print(json.dumps({"container": str(container.path), "native_version": 2,
                                   "streams": len(container.manifest.get("streams", [])),
                                   "chunks": len(container.chunks),
-                                  "seek_entries": len(container.manifest.get("seek", [])),
+                                  "seek_entries": len(container.seek_entries),
                                   "recovery": container.manifest.get("recovery"),
                                   "integrity_verified": container.integrity_verified},
                                  indent=2, ensure_ascii=False))

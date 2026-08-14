@@ -23,6 +23,9 @@ class NativeV2Error(ValueError):
     pass
 
 
+_U32 = struct.Struct(">I")
+
+
 def _decode_recovery_point(payload: bytes, *, offset: int,
                            prefix_sha256: str,
                            prior_chunks: dict[int, NativeChunk],
@@ -140,6 +143,43 @@ class NativeV2Container:
             raise NativeV2Error("indexed chunk has unknown type") from exc
         return (NativeChunk(chunk_type, stream_id, pts, payload, flags, uncompressed),
                 offset + CHUNK_HEADER.size + payload_length)
+
+    def read_audio_block_meta_at(self, offset: int) -> dict:
+        """Read only the JSON metadata prefix of an audio block chunk.
+
+        Fast path for event-timeline construction: the PCM payload stays on
+        disk uncompressed and unhashed. Full payload integrity remains
+        covered by verify_payloads/read_chunk_at.
+        """
+        size = self.path.stat().st_size
+        if (size > self.limits.max_file_bytes or offset < HEADER.size
+                or offset + CHUNK_HEADER.size > size):
+            raise NativeV2Error("chunk offset is outside CASUNAT2 file")
+        with self.path.open("rb") as handle:
+            handle.seek(offset)
+            header = handle.read(CHUNK_HEADER.size)
+            if len(header) != CHUNK_HEADER.size:
+                raise NativeV2Error("truncated chunk at indexed offset")
+            kind, _stream_id, flags, _pts, payload_length, _uncompressed = CHUNK_HEADER.unpack(header)
+            if kind != int(ChunkType.AUDIO_BLOCK) or flags != 0:
+                raise NativeV2Error("indexed chunk is not an audio block")
+            if (payload_length > self.limits.max_chunk_bytes
+                    or payload_length > size - handle.tell()):
+                raise NativeV2Error("indexed chunk payload exceeds file")
+            prefix = handle.read(min(payload_length, _U32.size + self.limits.max_audio_meta_bytes))
+        if len(prefix) < _U32.size:
+            raise NativeV2Error("audio block metadata prefix is truncated")
+        (meta_length,) = _U32.unpack_from(prefix)
+        if (meta_length > self.limits.max_audio_meta_bytes
+                or _U32.size + meta_length > len(prefix)):
+            raise NativeV2Error("audio block metadata exceeds limit")
+        try:
+            meta = strict_json_loads(prefix[_U32.size:_U32.size + meta_length])
+        except StrictJsonError as exc:
+            raise NativeV2Error("invalid audio block metadata") from exc
+        if not isinstance(meta, dict):
+            raise NativeV2Error("audio block metadata must be an object")
+        return meta
 
     def seek_video(self, stream_id: int, target_pts: int) -> ReconstructionPlan:
         candidates = [entry for entry in self.seek_entries

@@ -198,7 +198,7 @@ class Sidebar(QFrame):
 
         layout.addStretch()
 
-        version = QLabel("MPCASU 1.0.0")
+        version = QLabel("MPCASU 1.0.1")
         version.setObjectName("NowPlayingMeta")
         version.setContentsMargins(16, 8, 16, 8)
         version.setAlignment(Qt.AlignLeft | Qt.AlignBottom)
@@ -863,7 +863,7 @@ class AboutDialog(QDialog):
 
         layout.addSpacing(12)
 
-        info = QLabel("Version 1.0.0\nMedia Player for CASU & Legacy Media\nIn-process playback · No external player")
+        info = QLabel("Version 1.0.1\nMedia Player for CASU & Legacy Media\nIn-process playback · No external player")
         info.setObjectName("NowPlayingMeta")
         info.setAlignment(Qt.AlignCenter)
         layout.addWidget(info)
@@ -1392,7 +1392,7 @@ class MainWindow(QMainWindow):
 
         status_bar = QStatusBar()
         status_bar.setObjectName("StatusBar")
-        self._status_left = QLabel("MPCASU 1.0.0")
+        self._status_left = QLabel("MPCASU 1.0.1")
         self._status_left.setObjectName("StatusText")
         self._status_left.setStyleSheet(f"color: {PALETTE.text_muted};")
         status_bar.addWidget(self._status_left)

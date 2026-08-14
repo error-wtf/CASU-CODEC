@@ -36,8 +36,17 @@ Override it with `CASU_TEST_AUDIO=/path/to/file.mp3`.
 
 ## Additional owner-provided fixtures
 
-- `giancarlo.mp4` with the generated `giancarlo.mp4.casu` sidecar
-- `lino_casu_error_original.mp3`, the original audio supplied for playback tests
+- `lino_casu_error_original.mp3`, the original audio supplied for playback
+  tests (identical content to `lino_casu_error.mp3`)
+
+Owner-local conversions of the reference fixtures (kept on disk, not
+distributed, reproducible with the commands above/in `.gitignore`):
+
+- `lino_lol_test_pattern.nat2.casu` — CASUNAT2 of the test pattern
+  (`casu pack-v2`)
+- `lino_lol_test_pattern.mp5` — CASU MP5 of the test pattern (`casu pack-mp5`)
+- `lino_casu_error.nat2.casu` — CASUNAT2 of the owner's audio track
+- `lino_casu_error.mp3.casu` — CASUNAT1 compatibility envelope of the audio
 
 The sidecar is optional metadata. The original MP4/MP3 remains the canonical
 source and remains usable by ordinary media players.

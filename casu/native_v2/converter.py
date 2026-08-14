@@ -121,6 +121,7 @@ def _video_chunks(source: Path, stream_id: int, relative_index: int,
                   tile_height: int, cancel: Any | None) -> Iterator[NativeChunk]:
     previous: StrictFrame | None = None
     last_key_time: Fraction | None = None
+    previous_hashes: dict[tuple[int, int, int, int], str] | None = None
     for current in iter_source_frames(source, stream_index=relative_index):
         if cancel is not None and getattr(cancel, "is_set", lambda: False)():
             raise NativeConversionError("native conversion cancelled")
@@ -135,10 +136,17 @@ def _video_chunks(source: Path, stream_id: int, relative_index: int,
             yield NativeChunk(ChunkType.VIDEO_KEY_STATE, stream_id, current.pts,
                               encode_key_state(current.frame))
             last_key_time = now
+            previous_hashes = None
         else:
             states = compare_frames(previous.frame, current.frame,
                                     valid_from=current.time,
-                                    tile_width=tile_width, tile_height=tile_height)
+                                    tile_width=tile_width, tile_height=tile_height,
+                                    previous_hashes=previous_hashes)
+            previous_hashes = {
+                (state.region["x"], state.region["y"],
+                 state.region["w"], state.region["h"]): state.state_hash
+                for state in states
+            }
             for state in states:
                 if state.state != "UPDATE":
                     continue

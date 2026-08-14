@@ -4,12 +4,12 @@ from __future__ import annotations
 import json
 import struct
 import zlib
-from dataclasses import dataclass
 
 import numpy as np
 
 from casu.strict.canonical import CanonicalFrame, PlaneLayout, canonical_frame
-from casu.strict.tiles import canonical_tile_hash
+from casu.strict.tiles import (canonical_tile_hash, frame_identity_prefix,
+                               tile_digest_with_prefix)
 from .jsonutil import StrictJsonError, strict_json_loads
 
 _U32 = struct.Struct(">I")
@@ -192,7 +192,15 @@ def encode_tile_update(frame: CanonicalFrame, *, x: int, y: int, width: int, hei
             "planes": [{"shape": list(part.shape), "dtype": str(part.dtype)} for part in parts]}
     blobs = []
     for index, part in enumerate(parts):
-        compressed = zlib.compress(part.tobytes(order="C"), level=9)
+        compressor = zlib.compressobj(level=9)
+        pieces: list[bytes] = []
+        if part.flags.c_contiguous:
+            pieces.append(compressor.compress(part))
+        else:
+            for row in part:
+                pieces.append(compressor.compress(row))
+        pieces.append(compressor.flush())
+        compressed = b"".join(pieces)
         meta["planes"][index]["raw_length"] = int(part.nbytes)
         meta["planes"][index]["compressed_length"] = len(compressed)
         meta["planes"][index]["compression"] = "zlib"
@@ -200,10 +208,28 @@ def encode_tile_update(frame: CanonicalFrame, *, x: int, y: int, width: int, hei
     return _pack(meta, blobs)
 
 
-@dataclass
 class TileStateCache:
     """Reconstruct a source-resolution frame without legacy payload extraction."""
-    frame: CanonicalFrame | None = None
+
+    def __init__(self) -> None:
+        self._frame: CanonicalFrame | None = None
+        self._prefix: bytes | None = None
+
+    @property
+    def frame(self) -> CanonicalFrame | None:
+        return self._frame
+
+    @frame.setter
+    def frame(self, value: CanonicalFrame | None) -> None:
+        self._frame = value
+        self._prefix = None
+
+    def _identity_prefix(self) -> bytes:
+        if self._prefix is None:
+            if self._frame is None:
+                raise VideoPayloadError("tile update requires a key state")
+            self._prefix = frame_identity_prefix(self._frame)
+        return self._prefix
 
     def apply_key_state(self, payload: bytes) -> CanonicalFrame:
         self.frame = decode_key_state(payload)
@@ -219,10 +245,11 @@ class TileStateCache:
             raise VideoPayloadError("tile update format differs from cached key state")
         x, y, width, height = (int(value) for value in meta["region"])
         region = (x, y, width, height)
+        prefix = self._identity_prefix()
         expected_base = meta.get("base_state_hash")
-        if expected_base is not None and canonical_tile_hash(self.frame, region) != expected_base:
+        if expected_base is not None and tile_digest_with_prefix(self.frame, region, prefix) != expected_base:
             raise VideoPayloadError("tile update base state hash mismatch")
-        planes = [plane.copy() for plane in self.frame.planes]
+        planes = list(self.frame.planes)
         total_decoded = 0
         for index, (descriptor, compressed) in enumerate(zip(meta["planes"], blobs)):
             if descriptor.get("compression", "zlib") != "zlib":
@@ -242,15 +269,21 @@ class TileStateCache:
             tile = np.frombuffer(raw, dtype=dtype).reshape(shape)
             target = planes[index]
             layout = self.frame.plane_layouts[index]
+            if target.dtype != dtype:
+                raise VideoPayloadError("tile plane dtype differs from key state")
+            if (layout.bit_depth < layout.bytes_per_sample * 8 and tile.size
+                    and int(tile.max()) >= (1 << layout.bit_depth)):
+                raise VideoPayloadError("tile plane samples outside bit depth range")
             x0, y0, x1, y1 = _bounds(layout, x, y, width, height)
-            view = target[y0:min(y1, target.shape[0]), x0:min(x1, target.shape[1])]
-            if tile.shape != view.shape:
-                raise VideoPayloadError("tile plane shape mismatch")
-            view[:] = tile
-        self.frame = canonical_frame(tuple(planes), pixel_format=self.frame.pixel_format,
-                                     source_shape=self.frame.shape,
-                                     color_metadata=dict(self.frame.color_metadata))
+            target.setflags(write=True)
+            try:
+                view = target[y0:min(y1, target.shape[0]), x0:min(x1, target.shape[1])]
+                if tile.shape != view.shape:
+                    raise VideoPayloadError("tile plane shape mismatch")
+                view[:] = tile
+            finally:
+                target.setflags(write=False)
         expected_new = meta.get("new_state_hash")
-        if not isinstance(expected_new, str) or canonical_tile_hash(self.frame, region) != expected_new:
+        if not isinstance(expected_new, str) or tile_digest_with_prefix(self.frame, region, prefix) != expected_new:
             raise VideoPayloadError("tile update new state hash mismatch")
         return self.frame
