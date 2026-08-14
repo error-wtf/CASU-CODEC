@@ -279,3 +279,13 @@ Binary: `/usr/bin/mpcasu`, `/usr/bin/mpcasu-qt`, `/usr/bin/casu`, `/usr/bin/casu
 3. Live-Internet-Streams nur mit Netz verifizierbar.
 4. `tkinterdnd2` optional installieren für echtes OS-Drag&Drop (`pip install tkinterdnd2`); CTA-Button und Ctrl+O sind der Fallback.
 5. MP5-Nativpfad (segmentierte Video/Audio-Chunks statt Envelope) ist der nächste große Schritt gemäß `02_GATE_NATIVE_PAYLOAD_KEYSTATES_SEEK.md`.
+
+### 10.7 Nachtrag: Bytecode-Cache-Falle (gefunden und dauerhaft behoben)
+
+Installiertes `/usr/share/casu-codec` trug ein `__pycache__` vom 13.08. mit
+rc8-Bytecode. Wegen `touch -d @0` (reproduzierbare DEBs) bleibt die Quellen-
+mtime 0, dadurch wirken alte `.pyc` beim Upgrade weiter „gültig" — Python lud
+rc8 trotz rc9-Quellen. Behoben: altes Cache entfernt (einzige Löschaktion der
+Session, nur Bytecode-Müll) und `DEBIAN/postinst` in allen Paketen ergänzt,
+das bei jedem Install/Upgrade `__pycache__` unter `/usr/share/casu-codec`
+leert. Verifiziert: installiert läuft rc9, `dpkg -V` alle 5 Pakete sauber.
