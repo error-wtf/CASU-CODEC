@@ -233,6 +233,21 @@ Media ─ FFmpeg/PyAV ─ CASUNAT1/CASUNAT2/MP5 ─ CASU reader/player/exporter
 
 ---
 
+## Acknowledgments
+
+MPCASU is an **independent, original implementation**. Its design, feature set
+and workflow were studied from and inspired by the open-source
+[VLC media player](https://www.videolan.org/vlc/) and by
+[Webamp](https://webamp.org/) (the Winamp-style web player) — but no code
+from VLC, Webamp, Winamp or any other third-party project is copied or
+derived in this repository. Runtime dependencies (libVLC, FFmpeg, PyAV,
+PySide6, yt-dlp) remain separately licensed, unmodified external components;
+see [THIRD_PARTY_COMPONENTS.md](THIRD_PARTY_COMPONENTS.md). VLC and
+Winamp/Webamp are trademarks of their respective owners; no affiliation or
+endorsement is implied.
+
+---
+
 ## Further reading
 
 - [CASU Format Specification](CASU_FORMAT_SPECIFICATION.md)

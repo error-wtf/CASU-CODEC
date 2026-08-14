@@ -37,6 +37,19 @@ This license applies only to material authored for this repository. Existing
 third-party libraries, codecs, trademarks, media and notices retain their own
 licenses. Users must comply with those licenses independently.
 
+5a. Design inspiration, independent code
+----------------------------------------
+MPCASU was developed as an independent implementation. Its look, feature set
+and workflow were studied from and inspired by the open-source VLC media
+player and from Webamp (the Winamp-style web player); parts of the public
+documentation and behavior of these projects were consulted as references.
+No code from VLC, Webamp, Winamp or any other third-party project is copied,
+vendored or derived in this repository — all CASU and MPCASU source files are
+original works of the author. VLC and Winamp/Webamp are trademarks of their
+respective owners; no affiliation or endorsement is implied. Runtime
+dependencies (libVLC, FFmpeg, PyAV, PySide6, yt-dlp and others) remain
+separately licensed, unmodified system/external components.
+
 6. No warranty
 --------------
 The work is provided “as is”, without warranty of any kind. The author is not
