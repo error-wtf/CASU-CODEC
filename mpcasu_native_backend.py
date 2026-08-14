@@ -571,20 +571,29 @@ class NativeCasuBackend:
             elif kind == "subtitle" and self._selected_subtitle < 0:
                 self._selected_subtitle = stream_id
         for offset, summary in zip(container.offsets, container.chunks):
-            if summary.chunk_type not in {ChunkType.AUDIO_BLOCK, ChunkType.SUBTITLE_PACKET,
+            if summary.chunk_type == ChunkType.AUDIO_BLOCK:
+                try:
+                    meta = container.read_audio_block_meta_at(offset)
+                    pts = int(meta["pts"])
+                    time_base_num, time_base_den = (int(value) for value in meta["time_base"])
+                    sample_rate = int(meta["sample_rate"])
+                    sample_count = int(meta["sample_count"])
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise BackendError("invalid CASUNAT2 audio block metadata") from exc
+                if time_base_num <= 0 or time_base_den <= 0 or sample_rate <= 0 or sample_count < 0:
+                    raise BackendError("invalid CASUNAT2 audio block timing")
+                start = Fraction(pts * time_base_num, time_base_den)
+                events.append(_Event(start, "audio", summary.stream_id, pts,
+                                     chunk_offset=offset,
+                                     duration=Fraction(sample_count, sample_rate)))
+                duration = max(duration, start + Fraction(sample_count, sample_rate))
+                continue
+            if summary.chunk_type not in {ChunkType.SUBTITLE_PACKET,
                                           ChunkType.SUBTITLE_BITMAP,
                                           ChunkType.CHAPTER_TABLE, ChunkType.ATTACHMENT}:
                 continue
             chunk, _following = container.read_chunk_at(offset)
-            if chunk.chunk_type == ChunkType.AUDIO_BLOCK:
-                block = decode_audio_block(chunk.payload)
-                start = Fraction(block.pts * block.time_base_num, block.time_base_den)
-                events.append(_Event(start, "audio", chunk.stream_id, chunk.pts,
-                                     chunk_offset=offset,
-                                     duration=Fraction(block.sample_count,
-                                                       block.sample_rate)))
-                duration = max(duration, start + Fraction(block.sample_count, block.sample_rate))
-            elif chunk.chunk_type == ChunkType.SUBTITLE_PACKET:
+            if chunk.chunk_type == ChunkType.SUBTITLE_PACKET:
                 packet = decode_subtitle_packet(chunk.payload)
                 start = Fraction(packet.start_pts, 1000); end = Fraction(packet.end_pts, 1000)
                 events.append(_Event(start, "subtitle", chunk.stream_id,

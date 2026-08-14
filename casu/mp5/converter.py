@@ -18,7 +18,7 @@ from pathlib import Path
 
 from .format import ChunkType, MAX_CHUNK_PAYLOAD
 from .writer import write_mp5, Mp5Error
-from casu.core import analyze, ffprobe, sha256_file
+from casu.core import ffprobe, sha256_file
 
 ATTACHMENT_PART_BYTES = min(48 * 1024 * 1024, MAX_CHUNK_PAYLOAD)
 
@@ -31,6 +31,33 @@ def _attachment_payload(name: str, part_index: int, part_count: int,
     return struct.pack("<H", len(meta)) + meta + data
 
 
+def _bounded_manifest(probe: dict, mode: str) -> dict:
+    """MP5 envelopes carry the verified original source, so the manifest stays
+    bounded to container/stream metadata instead of a full temporal analysis."""
+    probe_format = probe.get("format") if isinstance(probe.get("format"), dict) else {}
+    probe_streams = probe.get("streams") if isinstance(probe.get("streams"), list) else []
+    streams: list[dict] = []
+    for index, stream in enumerate(probe_streams):
+        if not isinstance(stream, dict):
+            continue
+        streams.append({"index": index,
+                        "type": stream.get("codec_type"),
+                        "codec": stream.get("codec_name"),
+                        "width": stream.get("width"),
+                        "height": stream.get("height"),
+                        "sample_rate": stream.get("sample_rate"),
+                        "channels": stream.get("channels")})
+    return {"format": {"kind": "CASU MP5 enhanced container",
+                       "mp5_version": 1,
+                       "format_name": probe_format.get("format_name"),
+                       "duration": probe_format.get("duration")},
+            "source": {},
+            "streams": streams,
+            "analysis": {"mode": mode,
+                         "note": "MP5 carries the SHA-256 verified original source; "
+                                 "temporal state analysis is not embedded"}}
+
+
 def convert_to_mp5(source: str | Path, output: str | Path, *,
                    mode: str = "strict",
                    tile_width: int = 64, tile_height: int = 64,
@@ -40,9 +67,7 @@ def convert_to_mp5(source: str | Path, output: str | Path, *,
     if not source.is_file():
         raise Mp5Error(f"source not found: {source}")
     probe = ffprobe(source)
-    manifest = analyze(source, mode=mode)
-    manifest["format"]["kind"] = "CASU MP5 enhanced container"
-    manifest["format"]["mp5_version"] = 1
+    manifest = _bounded_manifest(probe, mode)
     source_digest = sha256_file(source)
     manifest["source"]["sha256"] = source_digest
     manifest["source"]["filename"] = source.name
@@ -63,14 +88,15 @@ def convert_to_mp5(source: str | Path, output: str | Path, *,
                        json.dumps(config, sort_keys=True,
                                   separators=(",", ":")).encode("utf-8")))
 
-    data = source.read_bytes()
-    part_count = max(1, (len(data) + ATTACHMENT_PART_BYTES - 1) // ATTACHMENT_PART_BYTES)
+    size = source.stat().st_size
+    part_count = max(1, (size + ATTACHMENT_PART_BYTES - 1) // ATTACHMENT_PART_BYTES)
     attachment_digest = hashlib.sha256()
-    for part in range(part_count):
-        chunk_data = data[part * ATTACHMENT_PART_BYTES:(part + 1) * ATTACHMENT_PART_BYTES]
-        attachment_digest.update(chunk_data)
-        chunks.append((ChunkType.ATTACHMENT, 0, part,
-                       _attachment_payload(source.name, part, part_count, chunk_data)))
+    with source.open("rb") as handle:
+        for part in range(part_count):
+            chunk_data = handle.read(ATTACHMENT_PART_BYTES)
+            attachment_digest.update(chunk_data)
+            chunks.append((ChunkType.ATTACHMENT, 0, part,
+                           _attachment_payload(source.name, part, part_count, chunk_data)))
 
     integrity = {"source_sha256": source_digest,
                  "attachment_sha256": attachment_digest.hexdigest(),
