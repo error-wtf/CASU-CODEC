@@ -24,6 +24,15 @@ Description: $description
  CASU/MPCASU legacy-compatible segmented media tools.
 EOF
   "$@" "$stage"
+  # Runtime bytecode caches survive dpkg upgrades (installed sources carry
+  # mtime 0 for reproducibility, which makes stale .pyc files look valid).
+  # Purge them on every install/upgrade so the shipped sources always win.
+  cat > "$stage/DEBIAN/postinst" <<'EOF'
+#!/bin/sh
+set -e
+find /usr/share/casu-codec -depth -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+EOF
+  chmod 0755 "$stage/DEBIAN/postinst"
   # Bytecode is host/interpreter-specific and mutates on first execution,
   # which would make an otherwise clean installation fail dpkg --verify.
   find "$stage" -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
