@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
-Name=CASU Converter
-Comment=Analyze, convert, verify and benchmark media with CASU
+Name=CASU Full Media Converter
+Comment=Convert audio, video and CASU files individually or in batches
 Exec=casu-converter %F
 Icon=casu-converter
 Terminal=false

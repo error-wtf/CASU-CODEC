@@ -77,6 +77,14 @@ class PlaybackController:
         self.source = None
         self.state = ControllerState.EMPTY
 
+    def detach(self) -> Any | None:
+        """Give ownership back without invoking a potentially blocking decoder."""
+        backend = self.backend
+        self.backend = None
+        self.source = None
+        self.state = ControllerState.EMPTY
+        return backend
+
     def _require_backend(self) -> None:
         if self.backend is None:
             raise RuntimeError("no media backend is attached")

@@ -1,5 +1,145 @@
 # Implementation report
 
+## 2026-08-13
+
+### Converter evidence, bounded inspection and remote web guides
+
+The graphical converter now exposes validated CASUNAT2 tile size and periodic
+key-state interval controls. It captures every Tk profile value and target on
+the UI thread, then performs probing and conversion in workers whose results
+return through a lifecycle-safe queue. Quitting cancels its periodic callback;
+a blocking probe cannot freeze the window. All shared FFprobe inspection is
+bounded to 30 seconds and 64 MiB of JSON.
+
+Conversion results now preserve source/output/profile SHA-256, tool versions,
+frame, key-state, tile-update, HOLD, audio-block and subtitle-packet counts,
+elapsed time, verification and warnings. The evidence is atomically exportable
+as JSON, spreadsheet-safe CSV or Markdown. An exact 20-file/3-corrupt batch
+proves per-file isolation. The parser gate additionally completed three million
+deterministic hostile mutations with no crash, hang or unexpected acceptance.
+
+The web player can load remote HTTP(S) Extended-M3U and XMLTV through the local
+same-origin server, retaining request/response limits and rejecting local or
+pseudo protocols. Playback-source changes now clear an old A–B loop. The final
+repository verification is intentionally split into sub-60-second groups; a
+single media aggregate was stopped at exactly 60 seconds while still making
+normal progress.
+
+### Automatic playback-route switching
+
+Desktop playback no longer equates the `.casu` suffix with the CASU format.
+Bounded content classification selects native CASUNAT2, verified CASUNAT1,
+validated sidecar resolution or universal libVLC media playback. Consequently,
+renamed native containers and sidecars work, extensionless media works, and a
+misnamed `.casu` media file is accepted only after a real audio/video probe.
+
+The web player applies the same magic-first classification. Browser-native
+CASUNAT2 remains the preferred path, but decoder preparation/play failures now
+upload the original verified container to the loopback server, reconstruct it
+through the CASU exporter and continue automatically as browser-compatible
+MP4/WebM. The existing HTML5-format fallback uses the same transition and the
+UI continues to identify the original CASU source. The resulting complete
+system-interpreter suite passes 319 tests under isolated X/loopback execution.
+
+### Production interpreter, replay and report hardening
+
+All Debian launchers use `/usr/bin/python3`, and the codec package depends on
+distribution PyAV. The real PyAV/libav STRICT adapter is parity-tested against
+the monitored FFmpeg adapter for decoded timing, format, plane geometry and
+content. This prevents a user's Conda/default-shell interpreter from silently
+changing the installed application's decoder environment.
+
+Native playback now keeps explicit playback intent across rapid seek, rate,
+track and output-device worker restarts. Natural EOF can be replayed from zero;
+explicit pause, stop, close and error still clear the intent. This fixes the
+short-file race that could leave playback paused after a seek or restart.
+
+Large conversion batches can be inspected through live path/error text and
+status filters in a scrollable table. The visible subset can be exported
+atomically to CSV, with formula-like text escaped for safe spreadsheet opening.
+Network labels and errors redact userinfo, tokens and signed-URL parameters
+without mutating the URL passed to libVLC. The complete system-interpreter suite
+passes 319 tests in under the required 60-second ceiling.
+
+### Installed package refresh
+
+The root README is now a concise German operator guide instead of a long mixed
+audit narrative. All four RC8 Debian packages were rebuilt from the current
+tree, checksum-verified and installed system-wide. Installed-path acceptance
+covers the CLI, a real native encode/verify/export A/V roundtrip, desktop files,
+web scripts and real Tk construction of MPCASU and the converter. That GUI smoke
+found a mini-player restore callback race; the sibling pack order was corrected,
+the 10-test Xvfb group passed, and all packages were rebuilt and reinstalled.
+
+### Bidirectional conversion and web player
+
+The converter now has a verified reverse path. `casu export` and the graphical
+From-CASU mode accept sidecars, CASUNAT1 and CASUNAT2. Sidecars resolve and
+SHA-256-check their recorded source; CASUNAT1 verifies and extracts the original
+payload; compatibility sources map all A/V/text/chapter tracks, while CASUNAT2 reconstructs all native video/audio streams, text/rich ASS
+subtitles and chapter tables from key states, tile updates and timestamped PCM before
+FFmpeg writes the requested extension. Single files, multiple selections and
+recursive folder queues are covered. Source-deletion acceptance tests confirm
+A/V output, two audio tracks, text and styled ASS subtitles, and two chapters
+after export. The default native bitmap subtitle track is alpha-composited only
+during its active interval, providing a portable MP4/MKV burn-in without
+claiming an editable PGS/DVD/DVB/XSub remux. A compatibility-sidecar matrix likewise retains video, two audio
+tracks, text subtitles and chapters.
+
+MPCASU now recognizes YouTube watch/share URLs, resolves them outside the Tk
+thread through `yt-dlp` to one combined direct stream and then uses the existing
+libVLC network path. Direct stream URLs are unchanged. The responsive-layout
+handler now ignores descendant Configure events, preventing simultaneous full
+and compact navigation, and advanced media controls occupy a separate row so
+they remain reachable at desktop widths.
+
+Audio-only presentation now asynchronously extracts a bounded measured PCM
+waveform (FFmpeg for legacy sources, native PCM blocks for CASUNAT2) and draws a
+position cursor. It no longer presents the formerly open placeholder; generated
+legacy and source-independent native waveform tests confirm nonzero sample data.
+
+The desktop player now has a real mini-player transition rather than a second
+playback implementation. It retains the active backend, hides library/queue and
+diagnostics, uses a compact transport window with an always-on-top hint, and
+restores the prior geometry and responsive panels via the Mini button or `N`.
+A real Tk/Xvfb transition/restore test passes.
+
+The new dependency-free `web/` player was rendered in Chromium against the
+supplied red MPCASU reference. It implements local multi-file and drag/drop
+playback, direct streams, transport-controlled YouTube embedding, M3U/M3U8/PLS
+import, local SRT/WebVTT sidecars, search/reorder, seek, volume/mute,
+shuffle/repeat, fullscreen and picture-in-picture. JSON
+sidecars verify a co-selected source and CASUNAT1 verifies/exposes its payload
+entirely in-browser. CASUNAT2 now verifies header/chunk flags and bounds, typed
+stream topology and configs, complete per-chunk hashes and seek-key coverage in
+addition to its integrity prefix, then reconstructs
+selectable native video/audio streams from deflated key states, tile updates
+and s16le PCM. Native text and verified lossless RGBA bitmap cues render
+against the playback clock and chapter entries seek to their stored nanosecond
+PTS. It also applies explicitly keyed video format changes. Reproducible
+Chromium smokes switch the second of two video, audio and subtitle tracks,
+decode a bitmap cue and chapter, exercise the automatic legacy fallback, and
+load a real local SRT cue. Browser libass styling remains a text fallback; a
+cumulative 512 MiB decoded-media ceiling prevents unbounded
+browser preloading. Desktop native CASUNAT2 playback is unchanged.
+
+The installed loopback launcher now closes the browser-codec gap rather than
+merely displaying a decode error. The UI automatically retries an explicitly
+selected local file through bounded temporary FFmpeg transcoding, choosing
+VP9/Opus WebM or H.264/AAC MP4 from the browser's advertised support. Local
+fallback output has byte-range seeking. Explicit network URLs can be probed and
+served as a cancellable fragmented stream; local/pseudo-protocol URLs are
+refused and credentials are redacted in returned errors. A real Chromium UI
+test proves automatic fallback for unsupported rawvideo/PCM NUT, and a
+16-format generated input matrix plus finite HTTP-source test covers the shared
+server path. Temporary uploads and products are removed on launcher shutdown.
+The loopback handler rejects DNS-rebinding hosts and cross-origin mutations and
+ships a restrictive CSP plus frame, referrer and permissions headers.
+
+Clean temporary Debian builds include both new Python modules and the web app;
+the MPCASU package declares `yt-dlp`. A clean no-isolation wheel build/install
+contains the same files and passes its installed CLI smoke.
+
 ## 2026-08-09
 
 ### Gate 2 — Source-resolution STRICT: PASS
@@ -33,6 +173,16 @@ PCM blocks. The seek index contains validated file byte offsets. Generated-media
 acceptance tests remove the source, reconstruct every target video state and
 compare the concatenated PCM digest. CASUNAT1 remains a labeled compatibility
 envelope.
+
+The revision-2 format contract is now enforced at both write and read time.
+One `CasuLimits` model bounds file/manifest/stream/chunk/decoded-resource and
+JSON complexity; strict JSON rejects duplicate keys and non-finite values.
+Unique typed stream descriptors are repeated as canonical matching
+`STREAM_CONFIG` chunks. Chunk type/stream identity, PTS order, singleton
+structures, complete seek-key coverage, exact per-chunk hashes and decoded
+payload semantics must all agree before full verification succeeds. Dynamic
+video format changes are explicit and immediately followed by a complete key
+state, retaining bounded random access across geometry changes.
 
 ### Gate 4 — Native player path: PARTIAL
 
@@ -84,8 +234,27 @@ Key/tile/audio decompression is constrained to exact metadata-derived output
 lengths. Integrity/footer/order/offset checks and declared-prefix recovery fail
 closed. A deterministic 10,000-mutation campaign completed with zero unexpected
 accepts, crashes or hangs; exact evidence is in `FUZZ_REPORT.md`.
+Recovery points now authenticate the complete preceding byte prefix and their
+own declaration before recovery exposes the boundary. The writer also bounds
+total output size, fsyncs the completed file and containing directory, and only
+then atomically replaces the destination. The strengthened seed-20260813
+10,000-case run rejected 9,986 inputs, accepted 14 still-valid inputs and had
+zero unexpected outcomes in 3.0 seconds.
 
 ### Gate 5 — Media/converter product core: PARTIAL
+
+The converter is now also a general full media converter. `casu transcode` and
+the GUI's default `media-to-media` direction accept a single file, multiple
+files or recursive folder trees and use the same `ConversionEngine` as CASU
+creation. Explicit output support covers common modern and legacy audio/video
+containers; automatic container-compatible codecs, remux/balanced/high/small/
+lossless profiles, first/all-track selection, subtitle handling and metadata/
+chapter preservation are shared by CLI and GUI. FFmpeg writes an adjacent
+temporary target, progress is parsed monotonically, cancellation terminates the
+child and removes the partial, and a successful file is probed for a playable
+stream before atomic replacement. A generated reference matrix passes every
+advertised target extension (14 audio and 18 video), including multiple audio tracks, subtitle,
+title and chapter preservation and a normalized legacy FLV sample-rate edge.
 
 CLI and GUI share `ConversionEngine`, profiles and jobs with real progress,
 fail-closed cancellation, per-file failure isolation, CLI retry and an atomic
@@ -120,6 +289,18 @@ an active cue. Authorized DVD, DVB and XSub fixtures now pass the same public
 source-deletion path; a malformed DVB secondary audio PID is isolated and
 reported without discarding valid streams. Broader platform and runtime
 matrices remain open.
+
+## 2026-08-13 — File operation hardening
+
+All user-facing file selection is now content-routed where CASU identity
+matters. Desktop and CLI folder batches reject symlink escapes, cap eligible
+inputs, preserve relative layout and prevent source/output collisions.
+Playlist, settings, session, report and journal JSON uses bounded reads and
+atomic durable replacement. Web playlists are bounded by bytes, lines and
+entries, while interrupted uploads and unpublished transcode outputs are
+removed immediately. Recursive CLI discovery walks before sorting its bounded
+accepted set. The complete isolated-X regression suite passes 328 tests with 6
+opt-in corpus skips in 57.05 seconds.
 Bounded source-stat-versioned thumbnails, watched-folder
 rescans, SQLite library search and per-media track/audio-delay/subtitle-delay
 preferences are wired into the UI.

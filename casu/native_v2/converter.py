@@ -22,7 +22,7 @@ from .bitmap import encode_bitmap_subtitle
 from .format import ChunkType, NativeChunk
 from .text import SubtitlePacket, encode_chapter_table, encode_subtitle_packet
 from .attachment import encode_attachment
-from .video import encode_key_state, encode_tile_update
+from .video import encode_format_change, encode_key_state, encode_tile_update
 from .writer import write_native_v2
 
 
@@ -112,7 +112,8 @@ def _sha256(path: Path) -> str:
 
 
 def _stream_config_payload(descriptor: dict) -> bytes:
-    return json.dumps(descriptor, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return json.dumps(descriptor, sort_keys=True, separators=(",", ":"),
+                      allow_nan=False).encode("utf-8")
 
 
 def _video_chunks(source: Path, stream_id: int, relative_index: int,
@@ -126,6 +127,10 @@ def _video_chunks(source: Path, stream_id: int, relative_index: int,
         now = current.time.fraction
         format_change = previous is None or previous.frame.format_identity != current.frame.format_identity
         key_due = last_key_time is None or now - last_key_time >= max_key_interval
+        if previous is not None and format_change:
+            yield NativeChunk(ChunkType.VIDEO_FORMAT_CHANGE, stream_id,
+                              current.pts,
+                              encode_format_change(current.frame))
         if format_change or key_due:
             yield NativeChunk(ChunkType.VIDEO_KEY_STATE, stream_id, current.pts,
                               encode_key_state(current.frame))
@@ -560,9 +565,6 @@ def convert_media_to_native_v2(source: str | Path, target: str | Path, *,
     interval = Fraction(str(max_key_interval_seconds))
 
     def chunks() -> Iterator[NativeChunk]:
-        for descriptor in descriptors:
-            yield NativeChunk(ChunkType.STREAM_CONFIG, int(descriptor["stream_id"]), 0,
-                              _stream_config_payload(descriptor))
         chapter = _chapter_chunk(list(overview.get("chapters") or []))
         if chapter is not None:
             yield chapter

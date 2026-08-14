@@ -14,8 +14,10 @@ Current execution dashboard (evidence, not optimism):
 
 - Steps 1–20: PASS — repository truth and source-resolution STRICT.
 - Steps 21–32: PASS — CASUNAT2 key/tile/PCM, source deletion and byte seek.
-- Steps 33–40: PARTIAL — streaming limits, recovery and 10k corruption run
-  pass; broader property/network/parser campaigns remain.
+- Steps 33–40: PASS for the specified bounded parser gate — streaming limits,
+  recovery, corrupt/property fixtures and a reproducible 3,000,000-execution
+  campaign pass with 0 unexpected accepts/crashes/hangs. Third-party decoder
+  fuzzing remains defense-in-depth rather than an unreported release claim.
 - Steps 41–50: PARTIAL — independent native video/PCM/subtitle/chapter paths,
   clickable chapter timeline, serialized fail-closed worker shutdown and rapid
   final-generation seek tests pass. Native 0.25×–4× PCM resampling and

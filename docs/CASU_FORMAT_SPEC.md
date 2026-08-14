@@ -31,6 +31,14 @@ decoded output beyond configured limits and a failed integrity digest. The
 exact binary contract and current release boundary are summarized in the
 repository-root `CASU_FORMAT_SPECIFICATION.md`.
 
+Revision 2 uses strict JSON and a central `CasuLimits` resource contract. The
+stream table is duplicated by canonical `STREAM_CONFIG` chunks and both copies
+must match exactly. Chunks are legal only for their declared stream type;
+every key state must appear in the byte-offset seek index and every verified
+prefix chunk must appear exactly once in the integrity table. Dynamic video
+geometry/pixel-format changes use `VIDEO_FORMAT_CHANGE` followed by a complete
+key state. Recovery checkpoints cryptographically bind their declared prefix.
+
 ## Core unit
 
 CASU does not treat every complete frame as the only meaningful unit. Its

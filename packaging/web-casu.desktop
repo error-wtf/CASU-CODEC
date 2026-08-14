@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=WEB CASU Player
+Comment=Launch the local CASU web media player
+Exec=web-casu
+Icon=web-casu
+Terminal=false
+Categories=AudioVideo;Player;
+StartupNotify=true

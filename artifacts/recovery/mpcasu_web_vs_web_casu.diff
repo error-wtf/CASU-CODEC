@@ -1,0 +1,110 @@
+8a9
+> import os
+9a11
+> import signal
+236a239,316
+> 
+> def _listening_inodes(port: int) -> set[str]:
+>     """Return socket inodes of local processes LISTENing on *port*."""
+>     inodes: set[str] = set()
+>     target = f":{port:04X}"
+>     for name in ("/proc/net/tcp", "/proc/net/tcp6"):
+>         try:
+>             with open(name, "r", encoding="ascii", errors="replace") as handle:
+>                 next(handle, None)
+>                 for line in handle:
+>                     fields = line.split()
+>                     if len(fields) < 10 or fields[3] != "0A":
+>                         continue
+>                     if fields[1].upper().endswith(target):
+>                         inodes.add(fields[9])
+>         except OSError:
+>             continue
+>     return inodes
+> 
+> 
+> def _pids_for_inodes(inodes: set[str]) -> set[int]:
+>     """Map socket inodes to owning PIDs without external tools."""
+>     if not inodes:
+>         return set()
+>     wanted = {f"socket:[{inode}]" for inode in inodes}
+>     pids: set[int] = set()
+>     try:
+>         entries = os.listdir("/proc")
+>     except OSError:
+>         return pids
+>     for entry in entries:
+>         if not entry.isdigit():
+>             continue
+>         directory = f"/proc/{entry}/fd"
+>         try:
+>             descriptors = os.listdir(directory)
+>         except OSError:
+>             continue
+>         for descriptor in descriptors:
+>             try:
+>                 if os.readlink(f"{directory}/{descriptor}") in wanted:
+>                     pids.add(int(entry))
+>                     break
+>             except OSError:
+>                 continue
+>     return pids
+> 
+> 
+> def free_port(port: int, *, timeout: float = 5.0) -> list[int]:
+>     """Stop a previous local instance holding *port* so only one runs."""
+>     if not 1 <= int(port) <= 65535:
+>         return []
+>     victims = sorted(_pids_for_inodes(_listening_inodes(port)) - {os.getpid()})
+>     if not victims:
+>         return []
+>     for pid in victims:
+>         try:
+>             os.kill(pid, signal.SIGTERM)
+>         except OSError:
+>             pass
+>     deadline = time.monotonic() + max(0.5, float(timeout))
+>     while time.monotonic() < deadline:
+>         if not _listening_inodes(port):
+>             return victims
+>         time.sleep(0.1)
+>     for pid in victims:
+>         try:
+>             os.kill(pid, signal.SIGKILL)
+>         except OSError:
+>             pass
+>     deadline = time.monotonic() + 2.0
+>     while time.monotonic() < deadline:
+>         if not _listening_inodes(port):
+>             break
+>         time.sleep(0.1)
+>     return victims
+> 
+> 
+238a319
+>     allow_reuse_address = True
+471a553,554
+>     result.add_argument("--no-takeover", action="store_true",
+>                         help="fail instead of replacing a running instance")
+485c568
+<         print(f"mpcasu-web: error: {exc}", file=sys.stderr)
+---
+>         print(f"web-casu: error: {exc}", file=sys.stderr)
+488c571
+<         print(f"MPCASU Web assets verified: {root}")
+---
+>         print(f"WEB CASU assets verified: {root}")
+494a578,582
+>     if args.port and not args.no_takeover:
+>         stopped = free_port(args.port)
+>         if stopped:
+>             print(f"web-casu: replaced running instance (PID {', '.join(str(p) for p in stopped)})",
+>                   flush=True)
+498c586
+<         print(f"mpcasu-web: error: cannot bind local server: {exc}", file=sys.stderr)
+---
+>         print(f"web-casu: error: cannot bind local server: {exc}", file=sys.stderr)
+502c590
+<     print(f"MPCASU Web running at {url}", flush=True)
+---
+>     print(f"WEB CASU running at {url}", flush=True)

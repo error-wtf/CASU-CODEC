@@ -1,4 +1,4 @@
-# CASU codec deep audit — updated 2026-08-09
+# CASU codec deep audit — updated 2026-08-13
 
 The authoritative live result is [`RELEASE_GATE_STATUS.json`](RELEASE_GATE_STATUS.json).
 This audit distinguishes proved behavior from the remaining product gates.
@@ -21,7 +21,8 @@ CASUNAT1 remains a compatibility envelope and JSON `.casu` remains a sidecar.
 | Random access | PASS | Reader seeks to the nearest indexed on-disk key-state offset and reconstructs through target PTS. |
 | Subtitle/chapter primitives | PASS reference matrix | Text and ASS/SSA+fonts render natively; typed alpha-bounded PGS/DVD/DVB/XSub RGBA conversion, source deletion and playback/seek pass. |
 | Attachments/full metadata | PASS reference path | Bounded hashed files and attached covers survive source deletion; bounded tags and complete dispositions are retained. |
-| Recovery/integrity | PASS bounded campaign | SHA-256, declared-prefix recovery, hostile limits and the deterministic 10,000-case campaign pass; larger fuzzing remains ongoing work. |
+| Recovery/integrity | PASS release campaign | SHA-256, declared-prefix recovery, hostile limits/property fixtures and 3,000,000 deterministic mutations pass with 0 unexpected accepts/crashes/hangs. |
+| Structural conformance | PASS generated adversarial matrix | Central limits, strict JSON, unique typed streams, canonical in-band configs, singleton chunks, ordered PTS, complete seek/hash coverage, semantic payload validation and explicit keyed format changes fail closed. |
 | Native playback | PARTIAL | Direct video/PCM sinks and no-tempfile behavior pass; drift/device/subtitle matrices remain open. |
 | Stable release | OPEN | Version remains `1.0.0rc8` until every product gate passes. |
 
@@ -44,7 +45,8 @@ CASUNAT2 header + bounded manifest
 
 1. Expand the passing PGS/DVD/DVB/XSub reference matrix across platforms,
    malformed streams and languages; complete the device/platform matrix.
-2. Expand the bounded probe/parser campaign with larger decoder/network corpora.
+2. Expand the strengthened bounded probe/parser campaign (10,000 cases,
+   9,986 rejected, 14 verified, 0 unexpected) with larger decoder/network corpora.
 3. Long-running A/V drift, rapid-seek and real audio-device matrix.
 4. Complete the responsive UI and clean cross-platform package/runtime
    regression before stable 1.0.

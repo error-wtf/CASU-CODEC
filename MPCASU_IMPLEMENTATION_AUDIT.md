@@ -1,4 +1,4 @@
-# MPCASU implementation audit — updated 2026-08-09
+# MPCASU implementation audit — updated 2026-08-13
 
 A visible control counts only when it invokes tested behavior.
 
@@ -23,8 +23,9 @@ fullscreen, session resume and media information are wired. Visible sidebar entr
 route to concrete file, URL, playlist, focus or selection actions. Removed
 catalog/favorites/hub entries are not advertised as if implemented.
 
-MPCASU deliberately reports unavailable telemetry and PCM visualization instead
-of inventing waveforms or energy savings. The UI is still a Tk development UI;
+MPCASU deliberately reports unavailable energy telemetry instead of inventing
+savings. Audio-only media now uses bounded decoded PCM peaks for a measured
+asynchronous waveform with a real playback cursor. The UI is still a Tk development UI;
 SQLite library/resume/favorites/playlists, atomic playback settings and native
 text-subtitle overlay, watched-folder rescans and bounded persistent search now
 exist. Video and source-independent cover thumbnails decode into a bounded
@@ -35,7 +36,7 @@ broader malformed/platform subtitle matrix and responsive Qt target remain open.
 
 ## Acceptance evidence
 
-- fast suite: 139 passed, 67 media tests deselected;
+- fast suite: 149 passed, 77 media tests deselected;
 - exact-runtime generated libVLC matrix: 20 passed, 9 xfailed; real FLAC
   rate/delay/pause/resume and pixel-distinct Rawvideo frame-step pass, while
   HTTP HLS-AAC playback/seek, growing-playlist reload, 44.1/48-kHz AAC

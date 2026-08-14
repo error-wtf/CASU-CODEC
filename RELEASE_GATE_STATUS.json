@@ -2,7 +2,7 @@
   "schema_version": 1,
   "product_version": "1.0.0rc8",
   "release_status": "DEVELOPMENT_RC",
-  "updated": "2026-08-09",
+  "updated": "2026-08-13",
   "gates": [
     {
       "id": 1,
@@ -23,6 +23,7 @@
       "name": "CASUNAT2 native payload",
       "status": "PASS",
       "evidence": [
+        "CASUNAT2 enforces central limits, strict JSON, unique typed streams, canonical matching STREAM_CONFIG, chunk-to-stream compatibility, PTS ordering, singleton structures, exact chunk-hash and complete seek-key coverage, decoded payload semantics and immediately keyed VIDEO_FORMAT_CHANGE states",
         "Production pack-v2/native-v2 converter emits video key states, exact hash-linked tile updates and canonical timestamped PCM blocks",
         "Seek entries point to validated on-disk chunk byte offsets and reconstruct from the nearest key state",
         "Source-deletion acceptance reproduces every canonical video-frame digest and the full PCM SHA-256 digest",
@@ -35,6 +36,8 @@
       "name": "Integrity, recovery, and fuzzing",
       "status": "PASS",
       "evidence": [
+        "Hash-bound recovery checkpoints verify the complete preceding prefix and their own declaration; writer output size is bounded and file plus containing directory are fsynced before atomic replacement",
+        "Specified bounded parser campaign: 3,000,000 deterministic executions across seeds 2026081301-2026081330; 2,994,529 rejected, 5,471 still-valid fully verified, 0 unexpected results/crashes/hangs",
         "Streaming reader bounds file/manifest/chunk count/chunk bytes without loading the full container",
         "Video/audio zlib output is limited to exact metadata-derived sizes before allocation",
         "SHA-256 integrity, typed/ordered footer validation, byte-offset validation and writer-declared prefix recovery are behavior-tested; source probes enforce monitored output/time limits and STRICT frames enforce dimension/byte ceilings",
@@ -49,8 +52,8 @@
         "NativeCasuBackend is independent of LibVLCBackend and performs no legacy extraction",
         "Byte-indexed reconstruction, bounded measured and rate-scaled PulseAudio-latency clock with monotonic absolute-PTS observations/fallback, 0.25x-4x channel-aligned s16le PCM resampling, seek generation invalidation, Tk RGB presentation and direct libpulse-simple PCM sink are implemented",
         "Text, native libass RGBA and typed PGS/DVD/DVB/XSub bitmap subtitle presentation/clearing/seek with bounded embedded-font registration, chapter seek, clickable bounded chapter timeline, transactional live track/device selection, runtime track menus and bounded PipeWire Audio/Sink inventory are implemented",
-        "Instrumented behavior tests prove native A/V/subtitle delivery, serialized fail-closed seek invalidation, blocked-write restart refusal, four-direction final-generation delivery, six-stream live track isolation with Pulse PCM-format reopen, PipeWire filtering/offline fallback and USB-DAC node selection, transient sink-error cleanup/replay with concrete UI error, and zero tempfile calls",
-        "pytest -q tests/test_native_player_backend.py: 22 passed; a 21,600-block/six-hour 1.5x changing-latency simulation has zero cumulative drift; transactional live-rate/channel-alignment/track/device-switch/error-replay, chapter-marker unit and clickable real-Tk/Xvfb behavior tests pass; pitch-preserving time-stretch, physical hotplug and real-device long-run drift remain open"
+        "Instrumented behavior tests prove native A/V/subtitle delivery, serialized fail-closed seek invalidation, blocked-write restart refusal, four-direction final-generation delivery, EOF replay, explicit playback-intent preservation, six-stream live track isolation with Pulse PCM-format reopen, PipeWire filtering/offline fallback and USB-DAC node selection, transient sink-error cleanup/replay with concrete UI error, and zero tempfile calls",
+        "pytest -q tests/test_native_player_backend.py: 23 passed; the previously timing-sensitive rapid-seek case plus EOF replay passed 20 consecutive repetitions; a 21,600-block/six-hour 1.5x changing-latency simulation has zero cumulative drift; transactional live-rate/channel-alignment/track/device-switch/error-replay, chapter-marker unit and clickable real-Tk/Xvfb behavior tests pass; pitch-preserving time-stretch, physical hotplug and real-device long-run drift remain open"
       ]
     },
     {
@@ -58,7 +61,11 @@
       "name": "Media management and converter completion",
       "status": "PARTIAL",
       "evidence": [
-        "CLI and GUI share ConversionEngine jobs/profiles, validated retries, monotonic batch progress with measured elapsed/throughput ETA/state, cancellation, atomic output and collision-resistant hash-verified resumable batch journals; validated COMPLETE/CANCELLED reports are atomically published and the GUI safely displays bounded prior reports",
+        "CLI casu transcode and the GUI default media-to-media direction share the ConversionEngine for single, multiple and recursive FFmpeg-decodable inputs; common audio/video outputs, automatic or explicit codecs, remux/balanced/high/small/lossless profiles, compatible all-track/subtitle mapping and metadata/chapter preservation are implemented with atomic verified publication",
+        "Generated full-converter advertised-output matrix: 38 passed across all 14 audio and 18 video extensions, including multi-track/metadata/chapter preservation, remux/lossless, cancellation cleanup, hash-journal resume and recursive CLI reports; converter/core block: 147 passed; real Tk converter/player block: 12 passed",
+        "CLI and GUI share ConversionEngine jobs/profiles, validated retries, monotonic batch progress with measured elapsed/throughput ETA/state, cancellation, atomic output and collision-resistant hash-verified resumable batch journals; validated COMPLETE/CANCELLED reports are atomically published and the GUI safely filters bounded prior reports and atomically exports JSON/CSV/Markdown evidence with source/output/profile hashes, tool versions, frame/key/tile/hold/audio/subtitle counters, verification and warnings",
+        "Exact 20-file acceptance isolates 17 valid and 3 corrupt inputs; bounded asynchronous source inspection and validated tile/key-state GUI profile controls do not access Tk from production workers",
+        "CLI export and GUI From-CASU batches reverse sidecar, CASUNAT1 and CASUNAT2 into FFmpeg-selected target formats; compatibility all-track mapping plus source-deleted native A/V, multi-audio, text/styled-ASS subtitle, chapter and timed default-bitmap burn-in exports are behavior-tested",
         "Backend-neutral immutable track/chapter/device/event contracts exist",
         "SQLite library behavior tests cover scan, resume, favorites and playlists; one bounded duplicate-free PlaylistModel drives both synchronized Tk list presentations, persistence and navigation",
         "Recursive batch isolation, CLI retry, interactive GUI cancellation and CLI/GUI hash-verified journal resume are behavior-tested; mid-batch cancellation retains completed evidence and leaves the active output absent; text, native libass ASS/SSA and typed source-independent PGS/DVD/DVB/XSub RGBA subtitles, chapters, bounded PNG/JPEG/WebP covers/tags/dispositions convert/play after source deletion; cover geometry/RGBA budgets fail closed before decode; malformed secondary streams are isolated and recorded; broader product/platform matrices remain open"
@@ -69,15 +76,21 @@
       "name": "Product UI, library, settings, and release regression",
       "status": "PARTIAL",
       "evidence": [
-        "Functional navigation and dynamic backend-reported track/output/chapter menus replace placeholder views; toolbar track cycling follows concrete noncontiguous backend IDs and excludes synthetic disable/duplicate entries",
+        "Functional navigation and dynamic backend-reported track/output/chapter menus replace placeholder views; toolbar track cycling follows concrete noncontiguous backend IDs and excludes synthetic disable/duplicate entries. Local playback uses bounded content classification rather than filename suffix: CASUNAT2, CASUNAT1, validated sidecar and probed universal-media routes switch automatically",
+        "Desktop Extended-M3U/XMLTV live guide, network now/next display, bounded HTTP(S) catalog fetch, verified FFmpeg stream recording, disc/camera/screen/audio capture entry, folder import, bookmarks, A-B loop, snapshot, title/aspect/crop/zoom/deinterlace, stereo-channel and runtime-reported equalizer controls are implemented and focused parser/API/SQLite/Tk tests pass",
+        "Responsive layout ignores descendant Configure events and separates transport from advanced controls; real Tk/Xvfb rendering no longer maps full and compact navigation simultaneously",
+        "Player backend shutdown detaches from Tk immediately and performs potentially blocking libVLC stop/release outside the event thread; a missing-Pulse/ALSA H.264/AAC failure scenario that previously exceeded 60 seconds now exits in 2.36 seconds",
+        "Audio-only presentation asynchronously renders bounded measured PCM peaks with a media-clock cursor; generated legacy WAV and source-independent CASUNAT2 waveform paths are behavior-tested",
+        "YouTube watch/share URLs resolve asynchronously through yt-dlp to one combined direct stream while direct media locations remain unchanged",
         "Legacy locations have no MPCASU extension or URI-scheme allow-list; installed libVLC access modules decide protocol support, while empty/NUL inputs fail before the C API",
-        "Generated loopback HTTP/WAV acceptance follows a redirect, exposes PCM, advances playback and seeks to one second; HTTP 404 becomes ERROR instead of VLC 3 zero-track/zero-time false EOF. Generated HLS VOD serves AAC-in-TS segments, advances playback and seeks to three seconds; a growing HLS playlist is reloaded, its later final segment requested and playback passes the initial window. An HLS discontinuity crosses ordered independent 44.1/48-kHz AAC/TS segments and reaches clean ENDED, with VLC 3 public-clock rebase recorded. Basic-auth HTTP sends the expected Authorization header and plays PCM while MPCASU redacts URL userinfo from UI/controller/errors; HTTPS/interactive-401/sliding-sequence/hostile-network matrices remain open",
+        "Generated loopback HTTP/WAV acceptance follows a redirect, exposes PCM, advances playback and seeks to one second; HTTP 404 becomes ERROR instead of VLC 3 zero-track/zero-time false EOF. Generated HLS VOD serves AAC-in-TS segments, advances playback and seeks to three seconds; a growing HLS playlist is reloaded, its later final segment requested and playback passes the initial window. An HLS discontinuity crosses ordered independent 44.1/48-kHz AAC/TS segments and reaches clean ENDED, with VLC 3 public-clock rebase recorded. Basic-auth HTTP sends the expected Authorization header and plays PCM while MPCASU redacts URL userinfo plus common token/signature query values from UI/controller/errors; HTTPS/interactive-401/sliding-sequence/hostile-network matrices remain open",
         "Atomic validated settings and SQLite scan/search/resume/favorites/playlists/per-media track and delay preferences are behavior-tested; watched-folder configuration survives save/reload",
         "MPCASU and converter construction smoke plus real playlist add/move/remove synchronization under isolated X display: PASS",
         "Release guard AST regression matrix: 3 passed; real runtime status membership is accepted while direct string-in-source/player pseudo assertions are rejected",
         "Generated exact-runtime libVLC matrix: 20 passed, 9 xfailed. Six audio formats, three external subtitles, Rawvideo/AVI RV32 callbacks and pixel-distinct paused single-frame stepping, loopback HTTP redirect/WAV/HLS-AAC/growing-HLS/HLS-discontinuity/Basic-auth playback/seek/404, real two-AAC/two-mov_text selection, two-chapter AAC/MP4 seek and FLAC rate/delay/pause/resume pass. The next-frame ABI is bound as documented void; dummy-aout volume remains explicitly distinct from physical-device volume. Nine compressed codecs deliver no frame in the privileged harness; a separate non-root desktop-user H.264 callback probe delivers one frame, so environment coverage remains distinct",
         "Bounded source-stat-versioned FFmpeg thumbnails, including source-independent CASUNAT2 cover attachments, are rendered asynchronously in the library UI; audio-only native playback presents the cover on its canvas",
-        "Qt migration, physical output/network coverage, cross-platform packages and complete runtime matrix remain open"
+        "Responsive web player provides local/stream/transport-controlled YouTube/M3U/XMLTV playback and guide, including bounded same-origin proxy loading of remote HTTP(S) M3U/XMLTV catalogs, A-B/snapshot/speed, local SRT/WebVTT, verified sidecar/CASUNAT1 support, bounded native CASUNAT2 key/tile/format-change/PCM/text/bitmap/chapter Canvas/Web Audio playback and an adaptive loopback FFmpeg compatibility fallback to VP9/Opus WebM or H.264/AAC MP4. Browser CASUNAT1/2 is magic-detected after rename; native CASUNAT2 preparation/play failure automatically uses the verified CASU exporter and continues through that compatibility path. Browser CASUNAT2 verification enforces typed topology/configs, full chunk-hash and seek-key coverage. Real Chromium automatically plays an unsupported rawvideo/PCM NUT, loads real SRT and XMLTV data, validates URL/queue behavior and switches the second of two video/audio/subtitle tracks after an explicit format change; the loopback server rejects untrusted hosts/cross-origin writes and emits restrictive security headers; browser libass styling remains a text fallback",
+        "The production `/usr/bin/python3` PyAV path has exact generated-frame parity with the monitored FFmpeg STRICT adapter; bounded atomic playlist/session/settings/report/journal paths, content-routed streaming recursive batches, symlink containment, interrupted-upload cleanup and browser playlist limits are regression-tested; the current 354-test collection passes through bounded split groups (202 non-media plus all media files), with 4 opt-in corpus skips and 9 environment-specific libVLC XFAIL. The monolithic media aggregate is intentionally stopped at the 60-second policy ceiling while still progressing. Qt migration, physical output/network coverage, cross-platform packages and complete runtime matrix remain open"
       ]
     }
   ]

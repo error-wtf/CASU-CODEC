@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#090b0d">
+  <title>WEB CASU Player</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app-shell" aria-label="MPCASU Web Player">
+    <aside class="sidebar">
+      <img class="brand" src="../assets/mpcasu_player_logo_header.png" alt="MPCASU Player">
+      <p class="eyebrow">LIBRARY</p>
+      <button class="nav active" data-view="now">▶ <span>Now Playing</span></button>
+      <button class="nav" id="open-files">▣ <span>Local Files</span></button>
+      <button class="nav" id="open-url">◎ <span>Web & Streams</span></button>
+      <button class="nav" id="open-playlist">☷ <span>Playlists</span></button>
+      <button class="nav" id="open-epg">◫ <span>Live TV & EPG</span></button>
+      <p class="eyebrow">CASU</p>
+      <button class="nav" id="open-casu">◆ <span>CASU Files</span></button>
+      <div class="sidebar-spacer"></div>
+      <button class="nav" id="clear-all">⌫ <span>Clear Library</span></button>
+      <p class="build">MPCASU WEB · RC</p>
+    </aside>
+
+    <section class="workspace">
+      <header class="topbar">
+        <div><span class="back">‹</span><strong>NOW PLAYING</strong></div>
+        <label class="search"><span>⌕</span><input id="search" type="search" placeholder="Search playlist" aria-label="Search playlist"></label>
+      </header>
+
+      <section class="stage" id="drop-zone">
+        <video id="media" playsinline preload="metadata"></video>
+        <canvas id="native-canvas" width="1280" height="720" hidden></canvas>
+        <canvas id="viz-canvas" width="1280" height="720" hidden></canvas>
+        <div id="native-subtitle" class="native-subtitle" hidden></div>
+        <iframe id="youtube" title="YouTube player" allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen hidden></iframe>
+        <div class="empty-state" id="empty-state">
+          <img src="../assets/mpcasu_player_icon.png" alt="" aria-hidden="true">
+          <h1>Drop media here</h1>
+          <p>Audio, video, CASU sidecars, CASUNAT1, playlists and direct streams</p>
+          <button class="primary" id="empty-open">Choose files</button>
+        </div>
+        <div class="media-badges"><span id="format-badge">MPCASU</span><span id="integrity-badge">READY</span></div>
+        <div class="media-caption">
+          <div><h2 id="title">No media selected</h2><p id="meta">CASU · LEGACY · WEB</p></div>
+          <time id="clock">00:00 / 00:00</time>
+        </div>
+      </section>
+
+      <input id="seek" class="seek" type="range" min="0" max="1" step="0.01" value="0" aria-label="Seek">
+      <section class="transport" aria-label="Playback controls">
+        <button id="shuffle" title="Shuffle">⤨</button>
+        <button id="previous" title="Previous">◀◀</button>
+        <button id="play" class="play" title="Play or pause">▶</button>
+        <button id="next" title="Next">▶▶</button>
+        <button id="repeat" title="Repeat">↻</button>
+        <button id="ab-loop" title="Set A/B loop points">A–B</button>
+        <button id="snapshot" title="Save current video frame">▧</button>
+        <button id="speed" title="Playback speed">1×</button>
+        <button id="mute" title="Mute">🔊</button>
+        <input id="volume" type="range" min="0" max="1" step="0.01" value="1" aria-label="Volume">
+        <button id="viz-toggle" title="Visualizer" class="on">〰</button>
+        <button id="pip" title="Picture in picture">▣</button>
+        <button id="fullscreen" title="Fullscreen">⛶</button>
+        <select id="video-track" title="Video track" hidden><option value="">Video</option></select>
+        <select id="audio-track" title="Audio track" hidden><option value="">Audio</option></select>
+        <select id="subtitle-track" title="Subtitle track" hidden><option value="">Subtitles off</option></select>
+        <select id="chapter-select" title="Chapters" hidden><option value="">Chapters</option></select>
+      </section>
+
+      <section class="cards">
+        <article><span>SEGMENTED PLAYBACK</span><strong id="segment-state">STANDARD MEDIA</strong><small>Source timing remains authoritative</small></article>
+        <article><span>INTEGRITY</span><strong id="verify-state">NOT APPLICABLE</strong><small id="verify-detail">CASU files are checked before playback</small></article>
+        <article><span>LIVE GUIDE</span><strong id="epg-now">NO EPG LOADED</strong><small id="epg-next">Extended M3U and XMLTV</small></article>
+      </section>
+    </section>
+
+    <aside class="queue-panel">
+      <header><div><strong>PLAYLIST</strong><small id="queue-summary">0 items</small></div><button id="add-more">＋</button></header>
+      <ol id="queue" aria-label="Playlist"></ol>
+      <footer><button id="move-up">↑</button><button id="move-down">↓</button><button id="remove">⌫</button></footer>
+    </aside>
+  </main>
+
+  <input id="file-input" type="file" accept="audio/*,video/*,.casu,.m3u,.m3u8,.pls,.xml,.xmltv,.tv,.srt,.vtt" multiple hidden>
+  <dialog id="url-dialog">
+    <form method="dialog">
+      <h2>Open web media</h2>
+      <p>Direct network audio/video, HLS, or a YouTube URL.</p>
+      <input id="url-value" type="url" required placeholder="https://…">
+      <div><button value="cancel">Cancel</button><button id="url-confirm" class="primary" value="default">Open</button></div>
+    </form>
+  </dialog>
+  <dialog id="epg-dialog">
+    <form method="dialog">
+      <header class="dialog-title"><div><h2>Live TV programme guide</h2><p>Current and upcoming XMLTV programmes</p></div><div><button id="epg-load" type="button">Load file</button><button value="cancel" aria-label="Close">×</button></div></header>
+      <div class="epg-source"><input id="epg-url" type="url" placeholder="https://provider.example/guide.xml or channels.m3u"><button id="epg-fetch" type="button">Load URL</button></div>
+      <div id="epg-guide" class="epg-guide"></div>
+    </form>
+  </dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="casu-native.js" defer></script>
+  <script src="app.js" defer></script>
+</body>
+</html>

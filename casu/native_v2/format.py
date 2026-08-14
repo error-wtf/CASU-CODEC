@@ -37,3 +37,33 @@ class SeekEntry:
     key_state_pts: int
     key_state_offset: int
     first_update_offset: int
+
+
+@dataclass(frozen=True)
+class CasuLimits:
+    """Central fail-closed limits for untrusted CASUNAT2 input."""
+
+    max_file_bytes: int = 4 * 1024 * 1024 * 1024
+    max_manifest_bytes: int = 64 * 1024 * 1024
+    max_streams: int = 255
+    max_chunks: int = 10_000_000
+    max_chunk_bytes: int = 512 * 1024 * 1024
+    max_attachment_bytes: int = 64 * 1024 * 1024
+    max_total_uncompressed_frame_bytes: int = 512 * 1024 * 1024
+    max_width: int = 32_768
+    max_height: int = 32_768
+    max_channels: int = 64
+    max_sample_rate: int = 768_000
+    max_dependency_depth: int = 1_000_000
+    max_json_depth: int = 32
+    max_json_nodes: int = 1_000_000
+
+    def validate(self) -> None:
+        values = tuple(self.__dict__.values())
+        if any(not isinstance(value, int) or value <= 0 for value in values):
+            raise ValueError("CASUNAT2 limits must be positive integers")
+        if self.max_streams > 255:
+            raise ValueError("CASUNAT2 stream limit cannot exceed uint8 capacity")
+
+
+DEFAULT_LIMITS = CasuLimits()

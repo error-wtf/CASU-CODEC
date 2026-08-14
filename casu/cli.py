@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import tempfile
@@ -17,7 +18,125 @@ from .native_v2 import (NativeConversionError, NativeV2Error,
                         repair_native_v2)
 from . import __version__
 from .jobs import (ConversionEngine, ConversionJob, ConversionProfile,
-                   conversion_journal_path)
+                   MAX_REPORT_RESULTS, conversion_journal_path)
+from .export import CasuExportError, export_casu
+from .filetypes import detect_casu_kind
+from .transcode import MEDIA_OUTPUT_EXTENSIONS, MEDIA_PRESETS, SUBTITLE_MODES
+
+
+def plan_conversion_inputs(items: list[Path]) -> list[tuple[Path, Path]]:
+    """Expand files/folders while retaining safe relative batch layout."""
+    planned: list[tuple[Path, Path]] = []
+    seen: set[Path] = set()
+    for item in items:
+        candidate = item.expanduser().resolve()
+        if candidate.is_dir():
+            segment_start = len(planned)
+            for path in candidate.rglob("*"):
+                if not path.is_file():
+                    continue
+                source = path.resolve()
+                if source in seen:
+                    continue
+                try:
+                    relative = source.relative_to(candidate)
+                except ValueError:
+                    # Do not let a file symlink escape the selected tree.
+                    continue
+                if detect_casu_kind(source) is not None:
+                    continue
+                seen.add(source)
+                planned.append((source, relative))
+                if len(planned) > MAX_REPORT_RESULTS:
+                    raise CasuError(f"batch exceeds {MAX_REPORT_RESULTS} input files")
+            planned[segment_start:] = sorted(
+                planned[segment_start:], key=lambda entry: str(entry[1]))
+        elif candidate.is_file():
+            if detect_casu_kind(candidate) is not None:
+                raise CasuError(f"conversion input is already CASU content: {candidate}")
+            if candidate not in seen:
+                seen.add(candidate)
+                planned.append((candidate, Path(candidate.name)))
+                if len(planned) > MAX_REPORT_RESULTS:
+                    raise CasuError(f"batch exceeds {MAX_REPORT_RESULTS} input files")
+        else:
+            raise CasuError(f"input media does not exist: {candidate}")
+    return planned
+
+
+def plan_conversion_targets(planned: list[tuple[Path, Path]],
+                            output_dir: Path) -> list[Path]:
+    """Preserve subfolders and deterministically disambiguate collisions."""
+    targets = [(output_dir / relative).with_suffix(".casu").resolve()
+               for _source, relative in planned]
+    groups: dict[Path, list[int]] = {}
+    for index, target in enumerate(targets):
+        groups.setdefault(target, []).append(index)
+    for indexes in groups.values():
+        if len(indexes) < 2:
+            continue
+        for index in indexes:
+            source = planned[index][0]
+            identity = hashlib.sha256(str(source).encode("utf-8")).hexdigest()[:8]
+            targets[index] = targets[index].with_name(
+                f"{targets[index].stem}-{identity}.casu")
+    return targets
+
+
+def plan_export_inputs(items: list[Path]) -> list[tuple[Path, Path]]:
+    """Expand verified-CASU export inputs while preserving folder layout."""
+    planned: list[tuple[Path, Path]] = []
+    seen: set[Path] = set()
+    for item in items:
+        candidate = item.expanduser().resolve()
+        if candidate.is_dir():
+            segment_start = len(planned)
+            for path in candidate.rglob("*"):
+                if not path.is_file():
+                    continue
+                source = path.resolve()
+                if source in seen:
+                    continue
+                try:
+                    relative = source.relative_to(candidate)
+                except ValueError:
+                    continue
+                if detect_casu_kind(source) is None:
+                    continue
+                seen.add(source); planned.append((source, relative))
+                if len(planned) > MAX_REPORT_RESULTS:
+                    raise CasuError(f"batch exceeds {MAX_REPORT_RESULTS} input files")
+            planned[segment_start:] = sorted(
+                planned[segment_start:], key=lambda entry: str(entry[1]))
+        elif candidate.is_file():
+            if detect_casu_kind(candidate) is None:
+                raise CasuError(f"export input is not a valid CASU file: {candidate}")
+            if candidate not in seen:
+                seen.add(candidate); planned.append((candidate, Path(candidate.name)))
+                if len(planned) > MAX_REPORT_RESULTS:
+                    raise CasuError(f"batch exceeds {MAX_REPORT_RESULTS} input files")
+        else:
+            raise CasuError(f"export input does not exist: {candidate}")
+    return planned
+
+
+def plan_export_targets(planned: list[tuple[Path, Path]], output_dir: Path,
+                        extension: str) -> list[Path]:
+    normalized = extension.lower().lstrip(".")
+    if not normalized.isalnum() or len(normalized) > 12:
+        raise CasuError("export format must be a 1–12 character filename extension")
+    targets = [(output_dir / relative).with_suffix(f".{normalized}").resolve()
+               for _source, relative in planned]
+    groups: dict[Path, list[int]] = {}
+    for index, target in enumerate(targets):
+        groups.setdefault(target, []).append(index)
+    for indexes in groups.values():
+        if len(indexes) > 1:
+            for index in indexes:
+                digest = hashlib.sha256(str(planned[index][0]).encode()).hexdigest()[:8]
+                targets[index] = targets[index].with_name(
+                    f"{targets[index].stem}-{digest}.{normalized}")
+    return targets
 
 
 def atomic_write_text(path: Path, payload: str) -> None:
@@ -75,6 +194,32 @@ def parser() -> argparse.ArgumentParser:
     repair = sub.add_parser("repair-v2", help="finalize the last declared complete CASUNAT2 prefix")
     repair.add_argument("input", type=Path)
     repair.add_argument("-o", "--output", type=Path, required=True)
+    export = sub.add_parser("export", help="convert verified CASU back to an FFmpeg-supported media format")
+    export.add_argument("input", type=Path, nargs="+")
+    export.add_argument("-o", "--output", type=Path, required=True,
+                        help="target filename; its extension selects the output format")
+    export.add_argument("--format", dest="export_format",
+                        help="target extension for multiple files or folders")
+    export.add_argument("--report", type=Path,
+                        help="write a machine-readable batch export report")
+    media = sub.add_parser(
+        "transcode", help="convert any FFmpeg-decodable media to another media format")
+    media.add_argument("input", type=Path, nargs="+")
+    media.add_argument("-o", "--output", type=Path, required=True,
+                       help="target file for one input, or output directory for a batch")
+    media.add_argument("--format", dest="media_format",
+                       help="target extension required for multiple files/folders")
+    media.add_argument("--preset", choices=sorted(MEDIA_PRESETS), default="balanced")
+    media.add_argument("--video-codec", default="auto")
+    media.add_argument("--audio-codec", default="auto")
+    media.add_argument("--subtitles", choices=sorted(SUBTITLE_MODES), default="auto")
+    media.add_argument("--first-tracks", action="store_true",
+                       help="convert only the first video/audio/subtitle stream")
+    media.add_argument("--strip-metadata", action="store_true")
+    media.add_argument("--force", action="store_true")
+    media.add_argument("--retry", type=int, default=0)
+    media.add_argument("--resume", action="store_true")
+    media.add_argument("--report", type=Path)
     v = sub.add_parser("play", help="validate a media path for MPCASU in-process playback")
     v.add_argument("input", type=Path)
     x = sub.add_parser("validate", help="validate a .casu manifest")
@@ -161,6 +306,96 @@ def main() -> int:
                               "chunks": len(repaired.chunks),
                               "integrity_verified": repaired.integrity_verified}, indent=2))
             return 0
+        if args.command == "export":
+            planned = plan_export_inputs(args.input)
+            if not planned:
+                raise CasuError("no .casu files found in the requested export inputs")
+            destination = args.output.expanduser().resolve()
+            single_file = (len(planned) == 1 and len(args.input) == 1
+                           and args.input[0].expanduser().resolve().is_file()
+                           and destination.suffix and not args.export_format)
+            if single_file:
+                targets = [destination]
+            else:
+                if destination.suffix:
+                    raise CasuError("multiple export inputs require an output directory")
+                if not args.export_format:
+                    raise CasuError("multiple export inputs require --format")
+                destination.mkdir(parents=True, exist_ok=True)
+                targets = plan_export_targets(planned, destination,
+                                              args.export_format)
+            results = []
+            for (source, _relative), target in zip(planned, targets):
+                started = time.monotonic()
+                try:
+                    output = export_casu(source, target)
+                    results.append({"source": str(source), "output": str(output),
+                                    "status": "exported",
+                                    "conversion_seconds": round(
+                                        time.monotonic() - started, 6)})
+                except (CasuError, CasuExportError, OSError, ValueError) as exc:
+                    results.append({"source": str(source), "output": str(target),
+                                    "status": "failed", "error": str(exc),
+                                    "conversion_seconds": round(
+                                        time.monotonic() - started, 6)})
+            payload = {"version": 1, "state": "COMPLETE", "mode": "export",
+                       "container": (targets[0].suffix.lstrip(".")
+                                     if targets else args.export_format),
+                       "files": results}
+            if args.report:
+                atomic_write_text(args.report,
+                                  json.dumps(payload, indent=2,
+                                             ensure_ascii=False) + "\n")
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return 0 if all(item["status"] == "exported" for item in results) else 1
+        if args.command == "transcode":
+            if args.retry < 0:
+                raise CasuError("retry count must not be negative")
+            planned = plan_conversion_inputs(args.input)
+            if not planned:
+                raise CasuError("no media files found in the requested inputs")
+            destination = args.output.expanduser().resolve()
+            single_file = (len(planned) == 1 and len(args.input) == 1
+                           and args.input[0].expanduser().resolve().is_file()
+                           and destination.suffix and not args.media_format)
+            if single_file:
+                if destination.suffix.lower() not in MEDIA_OUTPUT_EXTENSIONS:
+                    raise CasuError("unsupported media output extension")
+                targets = [destination]
+                output_dir = destination.parent
+                selected_format = destination.suffix.lstrip(".")
+            else:
+                if destination.suffix:
+                    raise CasuError("multiple media inputs require an output directory")
+                if not args.media_format:
+                    raise CasuError("multiple media inputs require --format")
+                extension = "." + args.media_format.lower().lstrip(".")
+                if extension not in MEDIA_OUTPUT_EXTENSIONS:
+                    raise CasuError("unsupported media output extension")
+                destination.mkdir(parents=True, exist_ok=True)
+                targets = plan_export_targets(planned, destination, extension)
+                output_dir = destination
+                selected_format = extension.lstrip(".")
+            profile = ConversionProfile(
+                container="media", media_preset=args.preset,
+                video_codec=args.video_codec, audio_codec=args.audio_codec,
+                subtitle_mode=args.subtitles, all_tracks=not args.first_tracks,
+                preserve_metadata=not args.strip_metadata)
+            jobs = [ConversionJob(source, target, profile)
+                    for (source, _relative), target in zip(planned, targets)]
+            results = ConversionEngine(
+                journal=conversion_journal_path(output_dir, jobs)).run(
+                    jobs, force=args.force, retries=args.retry, resume=args.resume)
+            payload = {
+                "version": 1, "state": "COMPLETE", "mode": "media-transcode",
+                "container": selected_format, "preset": args.preset,
+                "files": [item.__dict__ for item in results],
+            }
+            if args.report:
+                atomic_write_text(args.report, json.dumps(
+                    payload, indent=2, ensure_ascii=False) + "\n")
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return 0 if all(item.status == "converted" for item in results) else 1
         if args.command == "analyze":
             if args.analysis_fps <= 0:
                 raise CasuError("analysis FPS must be positive")
@@ -185,18 +420,9 @@ def main() -> int:
                 raise CasuError("analysis FPS must be positive")
             if args.retry < 0:
                 raise CasuError("retry count must not be negative")
-            inputs: list[Path] = []
-            for item in args.input:
-                candidate = item.expanduser().resolve()
-                if candidate.is_dir():
-                    inputs.extend(sorted(path for path in candidate.rglob("*")
-                                         if path.is_file() and path.suffix.lower() != ".casu"))
-                elif candidate.is_file():
-                    inputs.append(candidate)
-                else:
-                    raise CasuError(f"input media does not exist: {candidate}")
-            inputs = list(dict.fromkeys(inputs))
-            if not inputs:
+            planned = plan_conversion_inputs(args.input)
+            inputs = [source for source, _relative in planned]
+            if not planned:
                 raise CasuError("no source files found in the requested inputs")
             if args.output:
                 output = args.output.expanduser().resolve()
@@ -206,15 +432,14 @@ def main() -> int:
             else:
                 output_dir = inputs[0].parent
             output_dir.mkdir(parents=True, exist_ok=True)
+            if len(inputs) == 1 and args.output and args.output.suffix.lower() == ".casu":
+                targets = [args.output.expanduser().resolve()]
+            elif len(inputs) == 1 and not args.output:
+                targets = [inputs[0].with_suffix(inputs[0].suffix + ".casu")]
+            else:
+                targets = plan_conversion_targets(planned, output_dir)
             jobs: list[ConversionJob] = []
-            for source in inputs:
-                if len(inputs) == 1 and args.output and args.output.suffix.lower() == ".casu":
-                    target = args.output.expanduser().resolve()
-                elif len(inputs) == 1 and not args.output:
-                    target = source.with_suffix(source.suffix + ".casu")
-                else:
-                    target = output_dir / f"{source.stem}.casu"
-                target = target.resolve()
+            for source, target in zip(inputs, targets):
                 jobs.append(ConversionJob(
                     source, target,
                     ConversionProfile(args.container, args.mode, args.analysis_fps)))
@@ -320,7 +545,7 @@ def main() -> int:
             print(f"VALID CASU manifest: {args.manifest}")
             return 0
         raise CasuError("unknown command")
-    except (CasuError, NativeCasuError, NativeConversionError, NativeV2Error) as exc:
+    except (CasuError, CasuExportError, NativeCasuError, NativeConversionError, NativeV2Error) as exc:
         print(f"casu: error: {exc}")
         return 2
 

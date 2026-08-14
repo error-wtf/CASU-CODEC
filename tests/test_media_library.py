@@ -1,3 +1,5 @@
+import pytest
+
 from casu.library import MediaLibrary, PlaybackPreferences
 
 
@@ -48,3 +50,27 @@ def test_media_library_playback_preferences_roundtrip_and_clamp(tmp_path):
     # Reopening exercises migrations/columns on an existing database.
     with MediaLibrary(database) as library:
         assert library.playback_preferences(media).audio_track == 4
+
+
+def test_media_library_rejects_unbounded_or_nonfinite_file_state(tmp_path):
+    media = tmp_path / "movie.bin"; media.write_bytes(b"x")
+    with MediaLibrary(tmp_path / "library.sqlite3") as library:
+        with pytest.raises(ValueError, match="255 UTF-8 bytes"):
+            library.save_playlist("ä" * 128, [media])
+        with pytest.raises(ValueError, match="finite"):
+            library.record_progress(media, float("nan"))
+        with pytest.raises(ValueError, match="finite JSON"):
+            library.upsert(media, metadata={"bad": float("nan")})
+
+
+def test_media_library_bookmarks_are_ordered_updatable_and_removable(tmp_path):
+    media = tmp_path / "movie.mkv"; media.write_bytes(b"x")
+    with MediaLibrary(tmp_path / "library.sqlite3") as library:
+        later = library.add_bookmark(media, 20.0, "Scene two")
+        first = library.add_bookmark(media, 5.0, "Intro")
+        updated = library.add_bookmark(media, 5.0, "Opening")
+        assert updated.identifier == first.identifier
+        assert [(item.position_seconds, item.label) for item in library.bookmarks(media)] == [
+            (5.0, "Opening"), (20.0, "Scene two")]
+        library.remove_bookmark(later.identifier)
+        assert [item.label for item in library.bookmarks(media)] == ["Opening"]

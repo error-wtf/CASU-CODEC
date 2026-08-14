@@ -36,6 +36,12 @@ Attachments contain a safe basename, media type, bounded compressed bytes and
 the SHA-256 of the decoded bytes. An attached-picture source stream becomes a
 PNG attachment with role `cover-art`, not a synthetic video timeline. HOLD is
 represented by state persistence: no redundant pixel payload is needed.
+Every losslessly compressed payload declares its compression algorithm
+(`zlib` in revision 2); unknown algorithms fail closed. A source format change
+is represented explicitly by `VIDEO_FORMAT_CHANGE` and must be followed
+immediately, for that stream, by a complete key state in the declared new
+geometry/pixel format. The writer emits exactly one canonical `STREAM_CONFIG`
+copy of every manifest stream descriptor.
 ASS/SSA styling/dialogue documents may be retained as hashed attachments with
 role `subtitle-source`; the native player renders the document at media time
 through libass to a bounded transparent RGBA layer. The paired
@@ -71,10 +77,18 @@ envelope and must never be advertised as CASUNAT2.
 ## Safety and current release boundary
 
 Readers bound file, manifest, chunk count/size and decoded zlib output before
-allocation; source probes have monitored byte/time budgets and decoded frames
-have dimension/byte ceilings. Readers validate types, offsets, ordering, state hashes and the integrity
-digest. Unknown versions fail closed. The bounded 10,000-case parser campaign
-passes. Cover-art conversion and native/library presentation are behavior-tested.
+allocation; one public `CasuLimits` contract covers file/manifest/stream/chunk,
+attachment, decoded-frame, dimension, channel/rate, dependency and JSON
+depth/node budgets. Strict JSON rejects duplicate keys, non-finite numbers,
+out-of-int64 integers and invalid Unicode. Readers validate manifest/stream
+identity, chunk-to-stream type, singleton structures, PTS order, config
+equality, every seek-key mapping, every per-chunk SHA-256, decoded payload
+semantics, state hashes and the whole-prefix integrity digest. Unknown
+versions/flags/compressors fail closed. Recovery points contain a hash-bound
+checkpoint and prefix digest. The writer bounds total file size, fsyncs file
+and containing directory, then atomically replaces the target. Source probes
+have monitored byte/time budgets and decoded frames have dimension/byte
+ceilings. The strengthened bounded 10,000-case parser campaign passes.
 Signatures, broader malformed/language/platform subtitle fixtures and broader
 platform/network stress remain open, so the product version stays
 `1.0.0rc8`.

@@ -1,11 +1,17 @@
 """Validated, atomic MPCASU settings."""
 from __future__ import annotations
 
-import json
-import os
-import tempfile
+import math
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+from .core import CasuError
+from .fileio import atomic_write_json, read_bounded_json
+
+
+MAX_SETTINGS_BYTES = 1024 * 1024
+MAX_WATCHED_FOLDERS = 100
+MAX_SETTING_TEXT_BYTES = 4096
 
 
 @dataclass(frozen=True)
@@ -15,12 +21,35 @@ class PlayerSettings:
     rate: float = 1.0
     audio_device: str | None = None
     watched_folders: tuple[str, ...] = ()
+    ytdlp_consent: bool = False
+    visualizer: str = "spectrum"
+    resume_playback: bool = True
+    cache_limit_mib: int = 512
 
     def validated(self) -> "PlayerSettings":
+        rate = float(self.rate)
+        if not math.isfinite(rate):
+            rate = 1.0
+        folders = tuple(str(Path(value).expanduser()) for value in self.watched_folders)
+        if len(folders) > MAX_WATCHED_FOLDERS or any(
+                "\0" in value or len(value.encode("utf-8")) > MAX_SETTING_TEXT_BYTES
+                for value in folders):
+            folders = ()
+        device = str(self.audio_device) if self.audio_device else None
+        if device and ("\0" in device or len(device.encode("utf-8")) > MAX_SETTING_TEXT_BYTES):
+            device = None
+        visualizer = str(self.visualizer)
+        if visualizer not in {"spectrum", "waveform", "both", "off"}:
+            visualizer = "spectrum"
+        try:
+            cache_limit = int(self.cache_limit_mib)
+        except (TypeError, ValueError):
+            cache_limit = 512
         return PlayerSettings(max(0, min(200, int(self.volume))), bool(self.muted),
-                              max(0.25, min(4.0, float(self.rate))),
-                              str(self.audio_device) if self.audio_device else None,
-                              tuple(str(Path(value).expanduser()) for value in self.watched_folders))
+                              max(0.25, min(4.0, rate)), device, folders,
+                              bool(self.ytdlp_consent), visualizer,
+                              bool(self.resume_playback),
+                              max(0, min(65536, cache_limit)))
 
 
 class SettingsStore:
@@ -29,29 +58,31 @@ class SettingsStore:
 
     def load(self) -> PlayerSettings:
         try:
-            value = json.loads(self.path.read_text(encoding="utf-8"))
+            value = read_bounded_json(self.path, max_bytes=MAX_SETTINGS_BYTES,
+                                      label="player settings")
+            if not isinstance(value, dict):
+                return PlayerSettings()
             if value.get("version") != 1:
                 return PlayerSettings()
             settings = value.get("player", {})
+            if not isinstance(settings, dict):
+                return PlayerSettings()
+            watched = settings.get("watched_folders", ())
+            if not isinstance(watched, (list, tuple)):
+                watched = ()
             return PlayerSettings(
                 settings.get("volume", 100), settings.get("muted", False),
                 settings.get("rate", 1.0), settings.get("audio_device"),
-                tuple(settings.get("watched_folders", ())),
+                tuple(watched),
+                settings.get("ytdlp_consent", False),
+                settings.get("visualizer", "spectrum"),
+                settings.get("resume_playback", True),
+                settings.get("cache_limit_mib", 512),
             ).validated()
-        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        except (OSError, TypeError, ValueError, CasuError):
             return PlayerSettings()
 
     def save(self, settings: PlayerSettings) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = json.dumps({"version": 1, "player": asdict(settings.validated())},
-                             indent=2, ensure_ascii=False) + "\n"
-        fd, temporary = tempfile.mkstemp(prefix=f".{self.path.name}.", dir=self.path.parent)
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                handle.write(payload); handle.flush(); os.fsync(handle.fileno())
-            os.replace(temporary, self.path)
-        finally:
-            try:
-                os.unlink(temporary)
-            except FileNotFoundError:
-                pass
+        atomic_write_json(self.path,
+                          {"version": 1, "player": asdict(settings.validated())},
+                          max_bytes=MAX_SETTINGS_BYTES)

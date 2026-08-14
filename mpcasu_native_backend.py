@@ -489,6 +489,11 @@ class NativeCasuBackend:
         self._cover: tuple[bytes, str] | None = None
         self._rich_subtitles: dict[int, LibassRenderer] = {}
         self._last_error: str | None = None
+        # Transport intent is separate from the instantaneous worker state.
+        # A very short item may reach ENDED between two rapid seek/track/device
+        # transactions; those transactions must still resume until the user
+        # explicitly pauses or stops.
+        self._play_requested = False
 
     @staticmethod
     def supports(path: str | Path) -> bool:
@@ -666,6 +671,13 @@ class NativeCasuBackend:
                     return
                 if self._thread is not None and self._thread.is_alive():
                     raise BackendError("previous native playback worker is still active")
+                if self._state == PlaybackState.ENDED or self._offset >= self._duration:
+                    self._offset = 0.0
+                    self.video_sink.invalidate()
+                    self.audio_sink.flush()
+                    self._reset_audio_clock()
+                    self._present_cover()
+                self._play_requested = True
                 self._started = self._clock() - self._offset / self._rate
                 self._stop.clear()
                 generation = self._generation
@@ -769,6 +781,7 @@ class NativeCasuBackend:
                 self._offset = max(
                     0.0, min(self._duration, self._scheduler_position()))
                 self._generation = failure_generation
+                self._play_requested = False
                 self._stop.set()
                 self._reset_audio_clock()
                 self._last_error = f"{type(exc).__name__}: {exc}"[:1000]
@@ -804,6 +817,7 @@ class NativeCasuBackend:
     def pause(self) -> None:
         with self._transition_lock:
             with self._lock:
+                self._play_requested = False
                 if self._state != PlaybackState.PLAYING:
                     return
                 self._offset = self.position()
@@ -818,6 +832,8 @@ class NativeCasuBackend:
 
     def stop(self) -> None:
         with self._transition_lock:
+            with self._lock:
+                self._play_requested = False
             self._stop_thread()
             with self._lock:
                 self.audio_sink.flush()
@@ -830,7 +846,7 @@ class NativeCasuBackend:
         target = max(0.0, min(self._duration, float(seconds)))
         with self._transition_lock:
             with self._lock:
-                playing = self._state == PlaybackState.PLAYING
+                playing = self._play_requested
             self._stop_thread()
             with self._lock:
                 self._offset = target
@@ -887,7 +903,7 @@ class NativeCasuBackend:
         with self._transition_lock:
             with self._lock:
                 position = self.position()
-                playing = self._state == PlaybackState.PLAYING
+                playing = self._play_requested
             if playing:
                 self._stop_thread()
             with self._lock:
@@ -991,7 +1007,7 @@ class NativeCasuBackend:
         with self._transition_lock:
             with self._lock:
                 position = self.position()
-                playing = self._state == PlaybackState.PLAYING
+                playing = self._play_requested
             if playing:
                 self._stop_thread()
             with self._lock:
@@ -1019,7 +1035,7 @@ class NativeCasuBackend:
                 if int(getattr(self, attribute)) == selected:
                     return
                 position = self.position()
-                playing = self._state == PlaybackState.PLAYING
+                playing = self._play_requested
             if playing:
                 self._stop_thread()
             with self._lock:
@@ -1117,6 +1133,7 @@ class NativeCasuBackend:
                 self._audio_device = "default"
                 self._cover = None
                 self._last_error = None
+                self._play_requested = False
                 for renderer in self._rich_subtitles.values():
                     renderer.close()
                 self._rich_subtitles.clear()
