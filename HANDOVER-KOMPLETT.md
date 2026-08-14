@@ -463,3 +463,71 @@ Visualisierung, YouTube/Spotify-Consent+Suche, IPTV/EPG.
 **Verifikation:** 216 passed + 18 GUI-Smokes + alle Qt/Web/Backend/Owner-
 Smokes PASS; DEBs 1.0.2 gebaut/installiert, dpkg -V sauber; Screenshots
 docs/screenshots/{mpcasu,web-casu}.png neu; GitHub main = 9fab49a.
+
+---
+
+## 12. SESSION 7 (2026-08-15, opencode) — RELEASE 1.0.3 STABILIZATION PASS
+
+**Vorheriger HEAD:** 053baa3 (1.0.2) · **Neuer HEAD:** siehe `git log -1` nach
+diesem Commit (Release-Commit 6584088 + dieser Handover-Commit).
+**Version:** 1.0.3 · Branch `main` · normaler Push (kein Force).
+
+### Root causes (reproduziert, nicht geraten)
+
+1. **Spotify fake:** `resolve_spotify_url` suchte YouTube mit der opaque
+   Spotify-ID (`ytsearch:spotify <id>`); `search_music` labelte YouTube-
+   Ergebnisse als „spotify". → Ersetzt: spotDL als echter Provider
+   (`spotdl url`, Spotify-Web-API + YouTube-Match, keine Downloads), Fallback
+   oEmbed-Metadaten + expliziter „Find on YouTube"-Handoff. Regressionstests
+   in tests/test_providers.py.
+2. **Sidecar-Framing:** Qt-Statuszeilen „CASU sidecar found/+ libVLC/Legacy +
+   CASU sidecar"; MP5 wurde roh an libVLC geroutet (Playback-Fail);
+   MP5-Extraktion nach root-owned /tmp/mpcasu-mp5 (Permission denied für
+   Nutzer). → Magic-byte-first-Routing (CASUNAT2 native / CASUNAT1
+   compatibility / MP5 enhanced / Legacy-JSON explizit gekennzeichnet),
+   ehrliche Fehlermeldungen mit Re-Pack-Hinweis, mkdtemp pro Nutzer.
+3. **Web-Fullscreen** nur requestFullscreen → echter Toggle +
+   fullscreenchange-Sync. **Cancel-Buttons** explizit verdrahtet (alle
+   Dialoge). **Cache-Falle:** alte app.js aus Browser-Cache → versionierte
+   Asset-URLs + /api/version Auto-Reload-Guard.
+4. **Qt-Playlists:** nur vorher expandierte blieben offen; Doppelklick spielte
+   die .m3u. → Default expanded (Collapsed-Set), Doppelklick/Single-Click
+   toggeln, Kind-Enter spielt. **Fullscreen** nutzte stale Boolean → echter
+   Window-State. **Escape-Statemaschine** (Page → Fullscreen → nichts).
+   **Visualizer** tot (singleShot aus Thread ohne Eventloop + attached_pic
+   zählte als Video) → Bridge-Fix + Pic-Filter.
+5. **Release-Metadaten inkonsistent** (product 1.0.2 vs status RELEASE_1_0_1,
+   kein GitHub Release) → 1.0.3 überall + test_release_consistency.py.
+
+### Verifikation (installierte 1.0.3-Pakete)
+
+- `tools/acceptance_qt.py` (Xvfb :95): 16/16 OK (MP4/MP3/CASUNAT2/CASUNAT1/MP5
+  >1 s, Pause/Seek, Fullscreen enter/exit, Visualizer mit echten Bands,
+  Playlist default expanded + Kinder, Choose-files open/reopen nach Cancel,
+  Internet-Stream >1 s, Escape, Resize). Offscreen-Lauf 11/12 (CASUNAT1-Start
+  headless-offscreen langsam; auf Xvfb OK).
+- `tools/acceptance_web.py` (Chromium, /usr/bin/web-casu): 16/16 (Chooser-
+  Flows inkl. Cancel/Reopen, URL-Dialog Cancel/Reopen/Malformed-Recovery,
+  Playlist-Gruppe expanded + Kinder + Child-Click, Fullscreen-Zyklus, Video
+  zentriert (Geometrie-Assert), Visualizer, Spotify-Resolve ehrlich abgelehnt
+  (spotDL/Spotify-API hier netzseitig 410/blockiert), 0 uncaught JS errors).
+- `pytest -m 'not media'`: 225 passed. `dpkg -V` alle 4 Pakete sauber.
+  `sha256sum -c dist/SHA256SUMS` OK.
+- DEBs in dist/: casu-codec/casu-converter/mpcasu/web-casu_1.0.3_all.deb +
+  SHA256SUMS (alte 1.0.2-DEBs nur lokal in backups/, online nur 1.0.3).
+
+### Spotify-Architektur-Entscheidung
+
+spotDL (venv /opt/casu-spotdl, optional) = Spotify-Provider; ohne spotDL oder
+bei blockiertem api.spotify.com ehrlicher Fehler + Handoff. Keine Credentials
+im Repo (spotdl-eigene Env-Konfiguration). YouTube bleibt yt-dlp.
+
+### Offene Punkte / Limitationen
+
+- Gates 4–6 PARTIAL (historische Matrizen nicht vollständig auf Qt
+  wiederholt; neue Acceptance-Evidenz eingetragen).
+- Diese Maschine: open.spotify.com/api.spotify.com blockiert (404/410) →
+  Spotify-Resolve hier ehrlich fehlgeschlagen; auf normalen Netzen funktioniert
+  spotDL.
+- CASUNAT1/Legacy-Start birkaç Sekunden (Extraktion + libVLC).
+- 3M-Fuzz-Kampagne vor nächstem Minor-Release erneut laufen lassen.
