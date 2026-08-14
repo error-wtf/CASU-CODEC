@@ -423,3 +423,43 @@ gepackt → identisches SHA-256 (`4b642340…`). 216 Fast-Tests + 23/23
 3. 3M-Fuzz-Kampagne vor einem 1.1.x-Tag wiederholen
    (`python3 tools/fuzz_native_v2.py`).
 4. Gates 4–6: vollständige Re-Regression auf dem Qt-Player bleibt PARTIAL.
+
+### 11.8 NACHTRAG SESSION 6 (Teil 2): UI-PERFEKTIONIERUNG — RELEASE 1.0.2
+
+Nutzerforderung: UI/Habndhabung/Funktionalität aller Programme am Webplayer
+orientiert perfektionieren, keine Popups, Choose-files rechts, Playlists
+ausklappbar mit Scrollbar + Entfernen/Bearbeiten/Speichern, Options-Bereich,
+Visualisierung, YouTube/Spotify-Consent+Suche, IPTV/EPG.
+
+**Qt-Player (mpcasu):**
+- theme.py neu: 1:1 aus casu.design-TOKENS (web/styles.css-Werte), Metriken
+  240/310/72/66/52, Scrollbars immer sichtbar rot/dunkel, Nav-Active mit
+  rotem Rand + Gradient, runder Play-Button mit Glow.
+- Layout wie Web: Topbar (‹ Back + View-Titel + Queue-Suche), Stage-Overlays
+  (Badge oben links, Caption-Gradient unten, dezenter Empty-Hint), Transport
+  mit sicheren DejaVu-Glyphen (keine Emoji-Boxen), Sekundär-Menüs, Cards.
+- Playlist-Panel rechts: „Choose files" (rot) + „Add URL" oben, Thumbnails
+  (54×38 roter Gradient + Glyphe), ↑ ↓ × ✎ Load Save, Shuffle/Repeat.
+- ALLE Popups ersetzt durch In-Window-Seiten im Center-Stack: OPTIONS
+  (Volume/Rate/Mute/Resume/Visualizer/Cache/DB/Consent + Apply), ABOUT,
+  LIBRARY (Suche + Vorschau + Add to queue), LIVE TV / EPG (M3U/XMLTV laden,
+  Channel-Cards im Web-Stil, Klick spielt).
+- Visualizer-Overlay (Web-Stil): rote Spectrum-Balken + Waveform + Cursor,
+  gemessen via casu.waveform (nur Audio-only, Modus aus Options).
+- Smokes: qt_playback/qt_sources/qt_playlist PASS; „no QMessageBox left".
+
+**Webplayer:**
+- Choose files aus der Mitte ins Queue-Panel (+ Add URL); Hero nur noch Hint.
+- Consent-Gate (localStorage) im Such-Dialog mit Accept-Button; Suche
+  verifiziert (12 Ergebnisse Chromium-E2E).
+- Queue-Items: ✎ Inline-Rename + × Remove pro Item; Footer + Rename.
+- OPTIONS-Dialog (Volume/Resume/Visualizer/Consent) in der Sidebar.
+- Scrollbars sichtbar; `[hidden]{display:none!important}`-Fix (Author-CSS
+  `dialog form div` hatte hidden überstimmt).
+
+**Codec:** schema.py akzeptiert 1.0.1/1.0.2 (Manifest trägt Produktversion —
+2 Strict-Test-Fails nach Bump, behoben).
+
+**Verifikation:** 216 passed + 18 GUI-Smokes + alle Qt/Web/Backend/Owner-
+Smokes PASS; DEBs 1.0.2 gebaut/installiert, dpkg -V sauber; Screenshots
+docs/screenshots/{mpcasu,web-casu}.png neu; GitHub main = 9fab49a.
