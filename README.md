@@ -6,7 +6,7 @@ media player suite: a Qt desktop player, a local web player, a batch converter
 and a CLI. Everything installs system-wide via Debian packages and does not
 interfere with VLC, GStreamer or FFmpeg.
 
-> **Version:** `1.0.2` — see [RELEASE_GATE_STATUS.json](RELEASE_GATE_STATUS.json).
+> **Version:** `1.0.3` — see [RELEASE_GATE_STATUS.json](RELEASE_GATE_STATUS.json).
 > Gates 1–3 (source-resolution STRICT, CASUNAT2 native payload, integrity /
 > recovery / fuzzing) are **PASS**. Gates 4–6 (native player path, media
 > management / converter, product UI / release regression) are honestly
@@ -39,10 +39,10 @@ source file is **not** required for native playback.
 ./packaging/build_debs.sh          # builds into dist/ (or use shipped DEBs)
 cd dist
 sha256sum -c SHA256SUMS
-sudo dpkg -i casu-codec_1.0.2_all.deb \
-             casu-converter_1.0.2_all.deb \
-             mpcasu_1.0.2_all.deb \
-             web-casu_1.0.2_all.deb
+sudo dpkg -i casu-codec_1.0.3_all.deb \
+             casu-converter_1.0.3_all.deb \
+             mpcasu_1.0.3_all.deb \
+             web-casu_1.0.3_all.deb
 sudo apt-get -f install            # only if dependencies are missing
 ```
 
@@ -51,7 +51,9 @@ The packages install `/usr/bin/casu`, `/usr/bin/casu-converter`,
 documentation/web assets under `/usr/share/casu-codec/`.
 
 Requirements: Python 3.10+ (3.14 tested), libVLC, FFmpeg/ffprobe, PyAV,
-PySide6 (desktop player), yt-dlp (optional, YouTube/Spotify only).
+PySide6 (desktop player), yt-dlp (optional, YouTube),
+  spotDL (optional, legitimate Spotify provider: Spotify Web API metadata +
+  YouTube matching, `pip install spotdl` or /opt/casu-spotdl venv).
 
 ---
 
@@ -88,13 +90,17 @@ The playback route is selected automatically by content inspection:
 
 - **CASUNAT2** → `NativeCasuBackend` (key-state/tile/PCM, Qt video sink,
   PulseAudio)
-- **CASUNAT1 / sidecars / MP5** → verified compatibility path via libVLC
+- **CASUNAT1** compatibility containers and **MP5** enhanced containers →
+  verified extraction path via libVLC
+- **Legacy JSON CASU manifests** (require the original source file) →
+  explicitly labelled legacy compatibility path; re-pack to CASUNAT2 for
+  standalone playback
 - All other audio/video/streams → libVLC in-process
 
 Features: playlists (M3U/M3U8/PLS/JSON) as expandable groups with format
 badges, drag-and-drop reorder, context menu and load/save; shuffle and repeat
 (off/all/one); session restore; EPG (Extended-M3U/XMLTV) with now/next;
-YouTube/Spotify resolution behind the yt-dlp consent gate (personal use only,
+YouTube resolution behind the yt-dlp consent gate (personal use only,
 URLs never stored or redistributed); track/chapter/subtitle selection;
 snapshot; A–B loop; bookmarks; equalizer; mini mode.
 
@@ -226,7 +232,12 @@ Media ─ FFmpeg/PyAV ─ CASUNAT1/CASUNAT2/MP5 ─ CASU reader/player/exporter
   expose — no artificial whitelist, no untested universal claims.
 - Bitmap subtitles play natively and burn into video on export; PGS/DVD/DVB/
   XSub cannot remux into every target container.
-- YouTube/Spotify resolution requires yt-dlp and explicit user consent
+- YouTube resolution requires yt-dlp and explicit user consent.
+- Spotify uses spotDL as provider (Spotify Web API metadata + YouTube
+  match, `spotdl url`, no downloads written). Without spotDL or on blocked
+  networks the players say so honestly and offer the explicit, clearly
+  labelled “Find on YouTube” handoff; YouTube results are never labelled as
+  Spotify streams.
   (personal use only).
 - Physical audio hardware, Windows/macOS packages and long-duration power
   measurement require separate platform tests.

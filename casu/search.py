@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
 # SPDX-FileCopyrightText: 2026 Lino Casu
-"""YouTube and music search via yt-dlp with structured, bounded results.
+"""YouTube search via yt-dlp with structured, bounded results.
 
-Both search paths use YouTube's index (yt-dlp has no native Spotify search);
-the music variant labels results for the Spotify-style music workflow that
-``casu.spotify`` already uses for URL resolution.  Results are metadata only
-— playback resolves each entry on demand and never writes downloads to disk.
+All search in this product runs against the YouTube index; the music variant
+is a convenience preset for music queries.  Results are always labelled with
+their real provider ("youtube") — never as Spotify.  Spotify remains a
+separate metadata-only provider (casu.spotify) with an explicit "Find on
+YouTube" handoff.  Results are metadata only — playback resolves each entry
+on demand and never writes downloads to disk.
 """
 from __future__ import annotations
 
@@ -102,8 +104,8 @@ def search_youtube(query: str, *, limit: int = 12,
 
 def search_music(query: str, *, limit: int = 12,
                  timeout: float = DEFAULT_TIMEOUT) -> list[SearchResult]:
-    """Music search for the Spotify-style workflow (YouTube-backed)."""
+    """Music-oriented YouTube search preset (results labelled "youtube")."""
     query = (query or "").strip()
     if not query:
         raise SearchError("search query must not be empty")
-    return _to_results(_run_ytdlp_search(query, limit, timeout), "spotify", limit)
+    return _to_results(_run_ytdlp_search(query, limit, timeout), "youtube", limit)

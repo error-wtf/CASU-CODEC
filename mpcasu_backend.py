@@ -853,7 +853,7 @@ class LegacyCasuBackend(LibVLCBackend):
         if magic == b"CASUMP5\x00":
             try:
                 extracted = mp5_extract_source(
-                    manifest_path, Path(tempfile.gettempdir()) / "mpcasu-mp5")
+                    manifest_path, Path(tempfile.mkdtemp(prefix="mpcasu-mp5-")))
             except (Mp5Error, OSError) as exc:
                 raise BackendError(f"invalid MP5 container: {exc}") from exc
             self.open_source(extracted)

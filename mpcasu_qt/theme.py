@@ -93,6 +93,10 @@ def format_duration(seconds: float) -> str:
 def stylesheet(palette: Palette = PALETTE, metrics: Metrics = METRICS) -> str:
     """Build the complete application stylesheet (web tokens, Qt syntax)."""
     p, m = palette, metrics
+    from pathlib import Path as _Path
+    assets = _Path(__file__).resolve().parent.parent / "assets"
+    branch_closed = assets / "branch_closed.png"
+    branch_open = assets / "branch_open.png"
     return f"""
 QWidget {{
     background-color: {p.window};
@@ -260,11 +264,11 @@ QTreeWidget::item:selected {{
 }}
 QTreeWidget::branch {{ background: transparent; border: none; }}
 QTreeWidget::branch:has-children:closed {{
-    image: none;
+    image: url({branch_closed});
     border-left: 3px solid {p.accent};
 }}
 QTreeWidget::branch:has-children:open {{
-    image: none;
+    image: url({branch_open});
     border-left: 3px solid {p.accent};
     background-color: #1d0c10;
 }}

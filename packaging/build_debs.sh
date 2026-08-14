@@ -4,7 +4,7 @@
 set -euo pipefail
 export SOURCE_DATE_EPOCH=0
 root=$(cd "$(dirname "$0")/.." && pwd)
-version=1.0.2
+version=1.0.3
 out="$root/dist"
 rm -rf "$out"; mkdir -p "$out"
 

@@ -25,6 +25,7 @@ class PlayerSettings:
     visualizer: str = "spectrum"
     resume_playback: bool = True
     cache_limit_mib: int = 512
+    recordings_dir: str = ""
 
     def validated(self) -> "PlayerSettings":
         rate = float(self.rate)
@@ -45,11 +46,16 @@ class PlayerSettings:
             cache_limit = int(self.cache_limit_mib)
         except (TypeError, ValueError):
             cache_limit = 512
+        recordings = str(self.recordings_dir or "")
+        if recordings and ("\0" in recordings
+                           or len(recordings.encode("utf-8")) > MAX_SETTING_TEXT_BYTES):
+            recordings = ""
         return PlayerSettings(max(0, min(200, int(self.volume))), bool(self.muted),
                               max(0.25, min(4.0, rate)), device, folders,
                               bool(self.ytdlp_consent), visualizer,
                               bool(self.resume_playback),
-                              max(0, min(65536, cache_limit)))
+                              max(0, min(65536, cache_limit)),
+                              recordings)
 
 
 class SettingsStore:
@@ -78,6 +84,7 @@ class SettingsStore:
                 settings.get("visualizer", "spectrum"),
                 settings.get("resume_playback", True),
                 settings.get("cache_limit_mib", 512),
+                settings.get("recordings_dir", ""),
             ).validated()
         except (OSError, TypeError, ValueError, CasuError):
             return PlayerSettings()

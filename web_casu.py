@@ -24,7 +24,8 @@ from casu.epg import EpgError, MAX_XMLTV_BYTES, fetch_document
 from casu.locations import (LocationResolutionError, is_youtube_url,
                             resolve_media_location)
 from casu.search import SearchError, search_music, search_youtube
-from casu.spotify import SpotifyError, is_spotify_url, resolve_spotify_url
+from casu.spotify import (SpotifyError, fetch_spotify_metadata, is_spotify_url,
+                          spotify_playback_notice)
 
 from casu.export import CasuExportError, export_casu
 
@@ -446,6 +447,14 @@ class WebPlayerHandler(http.server.SimpleHTTPRequestHandler):
                     raise WebPlayerError("resolve request must be a JSON object")
                 self._resolve(request)
                 return
+            elif self.path == "/api/spotify-metadata":
+                if length <= 0 or length > 64 * 1024:
+                    raise WebPlayerError("metadata request size is invalid")
+                request = json.loads(self.rfile.read(length))
+                if not isinstance(request, dict):
+                    raise WebPlayerError("metadata request must be a JSON object")
+                self._spotify_metadata(request)
+                return
             else:
                 self.send_error(404)
                 return
@@ -472,12 +481,18 @@ class WebPlayerHandler(http.server.SimpleHTTPRequestHandler):
         self._json(200, {"results": [item.as_dict() for item in results]})
 
     def _resolve(self, request: dict) -> None:
-        """Resolve a YouTube/Spotify URL to a direct playable stream URL."""
+        """Resolve a YouTube or Spotify URL to a direct playable stream URL.
+
+        Spotify goes through the spotDL provider (Spotify Web API + YouTube
+        matching); on failure the client is told honestly and can use the
+        explicit YouTube handoff.
+        """
         url = str(request.get("url", "")).strip()
         if not url:
             raise WebPlayerError("resolve request needs a url")
         try:
             if is_spotify_url(url):
+                from casu.spotify import resolve_spotify_url
                 resolved = resolve_spotify_url(url)
             elif is_youtube_url(url):
                 resolved = resolve_media_location(url)
@@ -486,6 +501,17 @@ class WebPlayerHandler(http.server.SimpleHTTPRequestHandler):
         except (LocationResolutionError, SpotifyError) as exc:
             raise WebPlayerError(str(exc)) from exc
         self._json(200, {"url": resolved})
+
+    def _spotify_metadata(self, request: dict) -> None:
+        """Honest Spotify provider: public oEmbed title for the handoff."""
+        url = str(request.get("url", "")).strip()
+        if not url:
+            raise WebPlayerError("metadata request needs a url")
+        try:
+            meta = fetch_spotify_metadata(url)
+        except SpotifyError as exc:
+            raise WebPlayerError(str(exc)) from exc
+        self._json(200, {"title": meta.title, "kind": meta.kind})
 
     def _stream_proxy(self, parsed) -> None:
         """Relay an HTTP(S) stream same-origin so the Web Audio analyser can read it.
@@ -530,6 +556,10 @@ class WebPlayerHandler(http.server.SimpleHTTPRequestHandler):
         if not self._trusted_request():
             return
         parsed = urllib.parse.urlsplit(self.path)
+        if parsed.path == "/api/version":
+            from casu import __version__
+            self._json(200, {"version": __version__})
+            return
         if parsed.path == "/api/stream-proxy":
             self._stream_proxy(parsed)
             return

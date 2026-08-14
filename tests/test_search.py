@@ -55,11 +55,12 @@ def test_search_youtube_structured_results(tmp_path, monkeypatch):
     assert first.as_dict()["title"] == "Result 0"
 
 
-def test_search_music_labels_spotify_source(tmp_path, monkeypatch):
+def test_search_music_never_labels_results_as_spotify(tmp_path, monkeypatch):
+    """Provider semantics must not be mixed: music search is YouTube search."""
     _fake_ytdlp(tmp_path, _entries(1))
     monkeypatch.setenv("PATH", f"{tmp_path}:{__import__('os').environ['PATH']}")
     results = search_music("error wtf", limit=3)
-    assert results[0].source == "spotify"
+    assert results[0].source == "youtube"
 
 
 def test_search_entries_without_url_get_canonical_link(tmp_path, monkeypatch):

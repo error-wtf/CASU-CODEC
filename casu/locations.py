@@ -24,14 +24,22 @@ def is_youtube_url(value: str) -> bool:
 
 
 def resolve_media_location(value: str, *, timeout_seconds: float = 30.0) -> str:
-    """Return a direct media URL, using yt-dlp for YouTube/Spotify."""
+    """Return a direct media URL, using yt-dlp for YouTube only.
+
+    Spotify URLs are never silently resolved here: Spotify is a separate,
+    metadata-only provider (see casu.spotify) and the UI must offer the
+    explicit "Find on YouTube" handoff instead.
+    """
     source = value.strip()
     if not source or "\0" in source:
         raise LocationResolutionError("media URL is empty or invalid")
     from .spotify import is_spotify_url as _is_spotify
+    from .spotify import SpotifyError, resolve_spotify_url
     if _is_spotify(source):
-        from .spotify import resolve_spotify_url
-        return resolve_spotify_url(source, timeout=timeout_seconds)
+        try:
+            return resolve_spotify_url(source, timeout=timeout_seconds)
+        except SpotifyError as exc:
+            raise LocationResolutionError(str(exc)) from exc
     if not is_youtube_url(source):
         return source
     executable = shutil.which("yt-dlp")
