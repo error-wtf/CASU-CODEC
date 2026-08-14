@@ -358,6 +358,7 @@ class MPCASUPlayer(tk.Tk):
         self.library = tk.Listbox(left, height=4, bg=PANEL_ALT, fg=SECONDARY, selectbackground=RED_DARK, selectforeground=TEXT, relief="flat", highlightthickness=0, activestyle="none", exportselection=False)
         self.library.pack(fill="x", padx=10)
         self.library.bind("<Double-Button-1>", lambda _event: self.play_selected())
+        self.library.bind("<Return>", lambda _event: self.play_selected())
         actions = tk.Frame(left, bg=PANEL); actions.pack(fill="x", padx=12, pady=(12, 12))
         ttk.Button(actions, text="＋ Add media", style="MPC.TButton", command=self.add_dialog).pack(fill="x")
         ttk.Button(actions, text="＋ Add folder", style="MPC.TButton", command=self.add_folder_dialog).pack(fill="x", pady=(5, 0))
@@ -518,6 +519,7 @@ class MPCASUPlayer(tk.Tk):
         self.queue.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=(0, 4))
         pl_scroll.pack(side="right", fill="y", pady=(0, 4))
         self.queue.bind("<Double-Button-1>", self._play_queue_item)
+        self.queue.bind("<Return>", self._play_queue_item)
         pl_actions = tk.Frame(pl_frame, bg=PANEL)
         pl_actions.pack(fill="x", padx=6, pady=(0, 6))
         ttk.Button(pl_actions, text="↑", width=3, style="MPC.TButton", command=lambda: self.move_queue(-1)).pack(side="left")
@@ -1101,7 +1103,7 @@ class MPCASUPlayer(tk.Tk):
         threading.Thread(target=worker, name="mpcasu-folder-scan", daemon=True).start()
 
     def show_capture_dialog(self) -> None:
-        dialog = tk.Toplevel(self); dialog.title("MPCASU · Disc and capture")
+        dialog = tk.Toplevel(self); dialog.bind("<Escape>", lambda _event, _dialog=dialog: _dialog.destroy()); dialog.title("MPCASU · Disc and capture")
         dialog.configure(bg=BG); dialog.transient(self)
         tk.Label(dialog, text="DISC · CAMERA · SCREEN · AUDIO CAPTURE", bg=BG,
                  fg=RED, font=("TkDefaultFont", 10, "bold")).pack(anchor="w", padx=16, pady=(16, 6))
@@ -1130,7 +1132,7 @@ class MPCASUPlayer(tk.Tk):
                  bg=BG, fg=MUTED, wraplength=520, justify="left").pack(fill="x", padx=16, pady=(0, 16))
 
     def show_settings_dialog(self):
-        dialog = tk.Toplevel(self)
+        dialog = tk.Toplevel(self); dialog.bind("<Escape>", lambda _event, _dialog=dialog: _dialog.destroy())
         dialog.title("MPCASU · Options")
         dialog.configure(bg=BG)
         dialog.transient(self)
@@ -1250,7 +1252,7 @@ class MPCASUPlayer(tk.Tk):
                    command=dialog.destroy).pack(side="right", padx=8)
 
     def open_youtube_dialog(self):
-        dialog = tk.Toplevel(self)
+        dialog = tk.Toplevel(self); dialog.bind("<Escape>", lambda _event, _dialog=dialog: _dialog.destroy())
         dialog.title("YouTube Video")
         dialog.configure(bg=BG)
         dialog.transient(self)
@@ -1269,7 +1271,7 @@ class MPCASUPlayer(tk.Tk):
         entry.bind("<Return>", lambda _event: open_source())
 
     def open_spotify_dialog(self):
-        dialog = tk.Toplevel(self)
+        dialog = tk.Toplevel(self); dialog.bind("<Escape>", lambda _event, _dialog=dialog: _dialog.destroy())
         dialog.title("Spotify Stream")
         dialog.configure(bg=BG)
         dialog.transient(self)
@@ -1288,7 +1290,7 @@ class MPCASUPlayer(tk.Tk):
         entry.bind("<Return>", lambda _event: open_source())
 
     def open_url_dialog(self):
-        dialog = tk.Toplevel(self)
+        dialog = tk.Toplevel(self); dialog.bind("<Escape>", lambda _event, _dialog=dialog: _dialog.destroy())
         dialog.title("Open network URL")
         dialog.configure(bg=BG)
         dialog.transient(self)
@@ -1422,7 +1424,7 @@ class MPCASUPlayer(tk.Tk):
 
     def show_epg_dialog(self) -> None:
         """Open a real Extended-M3U/XMLTV browser with current/next programmes."""
-        dialog = tk.Toplevel(self); dialog.title("MPCASU · Live TV & EPG")
+        dialog = tk.Toplevel(self); dialog.bind("<Escape>", lambda _event, _dialog=dialog: _dialog.destroy()); dialog.title("MPCASU · Live TV & EPG")
         dialog.configure(bg=BG); dialog.transient(self); dialog.geometry("980x620")
         toolbar = tk.Frame(dialog, bg=BG, padx=14, pady=12); toolbar.pack(fill="x")
         search = tk.StringVar(); guide_hint = tk.StringVar(value="No XMLTV guide loaded")
@@ -1573,7 +1575,7 @@ class MPCASUPlayer(tk.Tk):
             self.status.set(f"Library refresh failed: {exc}")
 
     def show_library_dialog(self):
-        dialog = tk.Toplevel(self)
+        dialog = tk.Toplevel(self); dialog.bind("<Escape>", lambda _event, _dialog=dialog: _dialog.destroy())
         dialog.title("MPCASU Library")
         dialog.geometry("760x480")
         dialog.configure(bg=BG)
@@ -2253,7 +2255,7 @@ class MPCASUPlayer(tk.Tk):
                 if stream.get("channels"): details.append(f"{stream['channels']} channels")
                 if stream.get("avg_frame_rate") and stream.get("avg_frame_rate") != "0/0": details.append(f"fps={stream['avg_frame_rate']}")
                 lines.append(" · ".join(details))
-            dialog = tk.Toplevel(self); dialog.title("Media information"); dialog.configure(bg=BG); dialog.transient(self)
+            dialog = tk.Toplevel(self); dialog.bind("<Escape>", lambda _event, _dialog=dialog: _dialog.destroy()); dialog.title("Media information"); dialog.configure(bg=BG); dialog.transient(self)
             text = tk.Text(dialog, width=76, height=max(8, len(lines) + 2), bg=PANEL_ALT, fg=TEXT, relief="flat", wrap="word")
             text.insert("1.0", "\n".join(lines)); text.configure(state="disabled"); text.pack(padx=16, pady=16)
         except (CasuError, NativeCasuError, NativeV2Error, OSError, ValueError) as exc:

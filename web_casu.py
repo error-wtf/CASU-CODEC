@@ -14,7 +14,9 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.error
 import urllib.parse
+import urllib.request
 import webbrowser
 from pathlib import Path
 
@@ -432,10 +434,52 @@ class WebPlayerHandler(http.server.SimpleHTTPRequestHandler):
                 WebPlayerError) as exc:
             self._json(400, {"error": str(exc)[:1000]})
 
+    def _stream_proxy(self, parsed) -> None:
+        """Relay an HTTP(S) stream same-origin so the Web Audio analyser can read it.
+
+        Browsers silence `createMediaElementSource` for cross-origin media without
+        CORS headers, which kills the FFT visualizer for radio streams.  Serving
+        the bytes from this loopback origin keeps playback and analysis working.
+        """
+        query = urllib.parse.parse_qs(parsed.query)
+        target = (query.get("url") or [""])[0].strip()
+        try:
+            remote = urllib.parse.urlsplit(target)
+        except ValueError:
+            remote = None
+        if not target or remote is None or remote.scheme not in {"http", "https"} or not remote.hostname:
+            self._json(400, {"error": "only HTTP(S) stream URLs can be proxied"})
+            return
+        request = urllib.request.Request(
+            target, headers={"User-Agent": "mpcasu-web/1.0", "Icy-MetaData": "0"})
+        try:
+            upstream = urllib.request.urlopen(request, timeout=20)
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            self._json(502, {"error": f"upstream unavailable: {exc}"[:1000]})
+            return
+        content_type = upstream.headers.get("Content-Type") or "application/octet-stream"
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Cache-Control", "no-store")
+            length = upstream.headers.get("Content-Length")
+            if length and length.isdigit():
+                self.send_header("Content-Length", length)
+            self.end_headers()
+            while block := upstream.read(128 * 1024):
+                self.wfile.write(block)
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
+        finally:
+            upstream.close()
+
     def do_GET(self) -> None:  # noqa: N802 - stdlib handler API
         if not self._trusted_request():
             return
         parsed = urllib.parse.urlsplit(self.path)
+        if parsed.path == "/api/stream-proxy":
+            self._stream_proxy(parsed)
+            return
         if not parsed.path.startswith("/api/media/"):
             super().do_GET()
             return
