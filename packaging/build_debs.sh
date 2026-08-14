@@ -4,7 +4,7 @@
 set -euo pipefail
 export SOURCE_DATE_EPOCH=0
 root=$(cd "$(dirname "$0")/.." && pwd)
-version=1.0.0-rc8
+version=1.0.0-rc9
 out="$root/dist"
 rm -rf "$out"; mkdir -p "$out"
 
@@ -90,9 +90,25 @@ EOF
   chmod 0755 "$stage/usr/bin/web-casu"
 }
 
+install_qtplayer() {
+  local stage="$1"; mkdir -p "$stage/usr/share/casu-codec" "$stage/usr/bin" "$stage/usr/share/applications" "$stage/usr/share/icons/hicolor/256x256/apps"
+  cp -a "$root/mpcasu_qt" "$stage/usr/share/casu-codec/"
+  cp "$root/packaging/mpcasu.desktop" "$stage/usr/share/applications/mpcasu-qt.desktop"
+  sed -i 's|^Exec=.*|Exec=mpcasu-qt %U|; s|^Name=.*|Name=MPCASU Qt|' "$stage/usr/share/applications/mpcasu-qt.desktop"
+  cp "$root/assets/mpcasu_player_icon.png" "$stage/usr/share/icons/hicolor/256x256/apps/mpcasu-qt.png"
+  cat > "$stage/usr/bin/mpcasu-qt" <<'EOF'
+#!/bin/sh
+export PYTHONDONTWRITEBYTECODE=1
+export PYTHONPATH=/usr/share/casu-codec${PYTHONPATH:+:$PYTHONPATH}
+exec /usr/bin/python3 -m mpcasu_qt.app "$@"
+EOF
+  chmod 0755 "$stage/usr/bin/mpcasu-qt"
+}
+
 make_pkg casu-codec "CASU Codec for All Segmented Units" "python3 (>= 3.10), python3-numpy, python3-av (>= 14), ffmpeg" install_codec
 make_pkg casu-converter "CASU full graphical audio video and CASU converter" "casu-codec (= $version), python3-tk" install_converter
 make_pkg mpcasu "MPCASU CASU and legacy media player" "casu-codec (= $version), python3-tk, libvlc5, vlc-plugin-base, vlc-plugin-video-output, libpulse0, libass9, yt-dlp" install_player
+make_pkg mpcasu-qt "MPCASU Qt desktop player (official red/black design system)" "casu-codec (= $version), mpcasu (= $version), python3-pyside6.qtcore, python3-pyside6.qtgui, python3-pyside6.qtwidgets, libvlc5" install_qtplayer
 make_pkg web-casu "MPCASU local web media player" "casu-codec (= $version), python3 (>= 3.10)" install_webplayer
 cd "$out"
 sha256sum ./*.deb | sed 's# \./# #' > SHA256SUMS

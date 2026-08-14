@@ -29,6 +29,10 @@ try:
 except ImportError:  # pragma: no cover - optional presentation enhancement
     Image = ImageTk = None
 
+from casu.design import (BG, PANEL, PANEL_ALT, LINE, RED, RED_DARK, TEXT,
+                          SECONDARY, MUTED, STAGE, TOAST_BG, TOAST_BORDER,
+                          BADGE_BG, BADGE_BORDER, INPUT_BG, INPUT_BORDER,
+                          SCROLLBAR, SIDEBAR, TOKENS)
 from casu.core import CasuError, resolve_casu_source, ffprobe
 from casu.schema import validate_manifest
 from casu.scheduler import CasuScheduler
@@ -40,6 +44,7 @@ from casu.epg import (EpgError, EpgGuide, StreamCatalog, StreamChannel,
 from casu.filetypes import (CASUNAT1 as LOCAL_CASUNAT1,
                             CASUNAT2 as LOCAL_CASUNAT2,
                             CASU_SIDECAR as LOCAL_CASU_SIDECAR,
+                            CASUMP5 as LOCAL_MP5,
                             MAX_SIDECAR_BYTES, detect_casu_kind)
 from casu.playlist import (MAX_PLAYLIST_FILE_BYTES, PlaylistError,
                            PlaylistModel, detect_entry_type, detect_media_type,
@@ -72,14 +77,6 @@ MEDIA = {
     ".webm", ".wma", ".wmv", ".wv", ".xm", ".mp5",
 }
 
-BG = "#090B0D"
-PANEL = "#111418"
-PANEL_ALT = "#14181D"
-RED = "#FF1E2D"
-RED_DARK = "#3A1015"
-TEXT = "#F2F2F2"
-SECONDARY = "#A7ABB0"
-MUTED = "#686E75"
 LOCAL_MEDIA = "media"
 
 
@@ -95,7 +92,7 @@ def detect_local_playback_kind(path: str | Path) -> str:
     route = detect_casu_kind(source)
     if route is not None:
         return route
-    if source.suffix.lower() == ".casu":
+    if source.suffix.lower() in {".casu", ".mp5"}:
         # A user or download manager may have given ordinary media a misleading
         # extension. Accept it only after the bounded production probe proves a
         # real timed audio/video stream; malformed CASU still fails closed.
@@ -106,8 +103,24 @@ def detect_local_playback_kind(path: str | Path) -> str:
         if any(isinstance(item, dict) and item.get("codec_type") in {"audio", "video"}
                for item in streams):
             return LOCAL_MEDIA
-        raise CasuError("invalid CASU container or sidecar: unknown CASU signature")
+        raise CasuError("invalid CASU/MP5 container or sidecar: unknown CASU signature")
     return LOCAL_MEDIA
+
+
+def discover_vlc_plugin_path() -> str | None:
+    """Locate the VLC plugin directory across common distributions."""
+    candidates = (
+        "/usr/lib/x86_64-linux-gnu/vlc/plugins",
+        "/usr/lib/aarch64-linux-gnu/vlc/plugins",
+        "/usr/lib64/vlc/plugins",
+        "/usr/lib/vlc/plugins",
+        "/usr/local/lib/vlc/plugins",
+        "/snap/vlc/current/usr/lib/vlc/plugins",
+    )
+    for candidate in candidates:
+        if os.path.isdir(candidate):
+            return candidate
+    return None
 
 
 def _asset_path(name: str) -> Path:
@@ -237,6 +250,9 @@ class MPCASUPlayer(tk.Tk):
         self._recorder: MediaRecorder | None = None
         self._recording_finishing = False
         self._backend_events: queue.SimpleQueue[PlaybackState] = queue.SimpleQueue()
+        self._toast_job: str | None = None
+        self._format_badge = "MPCASU"
+        self._integrity_badge = "READY"
         self.playlist_model = PlaylistModel()
         self._session_file = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "mpcasu" / "session.json"
         self.settings_store = SettingsStore(self._session_file.parent / "settings.json")
@@ -266,7 +282,7 @@ class MPCASUPlayer(tk.Tk):
         style.configure("MPC.TButton", background=PANEL_ALT, foreground=TEXT, borderwidth=0, padding=(10, 6))
         style.map("MPC.TButton", background=[("active", RED_DARK)],
                   foreground=[("active", TEXT)])
-        style.configure("MPC.Horizontal.TScale", troughcolor="#24282d", background=RED)
+        style.configure("MPC.Horizontal.TScale", troughcolor=LINE, background=RED)
         style.configure("TNotebook", background=PANEL, borderwidth=0,
                         tabmargins=(6, 4, 6, 0))
         style.configure("TNotebook.Tab", background=PANEL_ALT, foreground=SECONDARY,
@@ -276,9 +292,9 @@ class MPCASUPlayer(tk.Tk):
                   background=[("selected", RED_DARK)],
                   foreground=[("selected", RED)],
                   expand=[("selected", (0, 0, 0, 2))])
-        style.configure("TEntry", fieldbackground="#080A0C", foreground=TEXT,
-                        insertcolor=RED, bordercolor="#333942",
-                        lightcolor="#333942", darkcolor="#333942")
+        style.configure("TEntry", fieldbackground=INPUT_BG, foreground=TEXT,
+                        insertcolor=RED, bordercolor=INPUT_BORDER,
+                        lightcolor=INPUT_BORDER, darkcolor=INPUT_BORDER)
         style.configure("TRadiobutton", background=PANEL, foreground=SECONDARY)
         style.map("TRadiobutton", background=[("active", PANEL)],
                   foreground=[("active", TEXT)])
@@ -287,7 +303,7 @@ class MPCASUPlayer(tk.Tk):
         style.configure("Vertical.TScrollbar", background=PANEL_ALT,
                         troughcolor=PANEL, borderwidth=0, arrowsize=10)
         style.map("Vertical.TScrollbar",
-                  background=[("active", "#1B2026"), ("pressed", "#1B2026")])
+                  background=[("active", SCROLLBAR), ("pressed", SCROLLBAR)])
         root = tk.Frame(self, bg=BG)
         root.pack(fill="both", expand=True)
         top = tk.Frame(root, bg=BG, height=76); top.pack(fill="x", padx=18, pady=(10, 6)); top.pack_propagate(False)
@@ -368,12 +384,12 @@ class MPCASUPlayer(tk.Tk):
 
         center = tk.Frame(body, bg=PANEL); center.pack(side="left", fill="both", expand=True)
         self.center_shell = center
-        self.canvas = tk.Canvas(center, background="#0D1013", highlightthickness=0)
+        self.canvas = tk.Canvas(center, background=STAGE, highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
-        self.canvas.create_text(20, 20, anchor="nw", text="MPCASU", fill=TEXT, font=("TkDefaultFont", 24, "bold"), tags="title")
-        self.canvas.create_text(20, 58, anchor="nw", text="Legacy-safe playback · CASU state/provenance", fill=SECONDARY, tags="subtitle")
-        self.canvas.create_text(20, 92, anchor="nw", text="Measured PCM waveform / decoded CASU activity", fill=MUTED, tags="viz-label")
+        self._empty_cta_bbox = None
         self.canvas.bind("<Configure>", lambda _event: self._draw_visualizer())
+        self.canvas.bind("<Button-1>", self._on_stage_click)
+        self._enable_drag_drop()
         self.timeline = ttk.Scale(center, from_=0, to=1, variable=self.position, command=self.seek_preview, style="MPC.Horizontal.TScale")
         self.timeline.pack(fill="x", padx=14, pady=(10, 0))
         self.timeline.bind("<ButtonPress-1>", lambda _event: setattr(self, "_dragging", True))
@@ -527,7 +543,7 @@ class MPCASUPlayer(tk.Tk):
             tk.Label(card, textvariable=variable, bg=PANEL_ALT, fg=SECONDARY, font=("TkDefaultFont", 9)).pack(anchor="w", pady=(3, 0))
         statusbar = tk.Frame(root, bg=BG); statusbar.pack(fill="x", padx=18, pady=(4, 10))
         self.statusbar = statusbar
-        tk.Label(statusbar, text="MPCASU 1.0.0rc8  ● Pre-release", bg=BG, fg=SECONDARY).pack(side="left")
+        tk.Label(statusbar, text="MPCASU 1.0.0rc9  ● Pre-release", bg=BG, fg=SECONDARY).pack(side="left")
         tk.Label(statusbar, text="Optimized for performance and integrity", bg=BG, fg=MUTED).pack(side="left", padx=28)
         tk.Label(statusbar, textvariable=self.resource_status, bg=BG, fg=MUTED).pack(side="right")
         self.bind("<space>", lambda _event: self.pause())
@@ -1346,16 +1362,20 @@ class MPCASUPlayer(tk.Tk):
         try:
             self._try_libvlc_network(source, visible_source)
         except (BackendError, OSError) as exc:
-            self.status.set(f"libVLC failed ({exc}), trying FFmpeg fallback...")
+            self.status.set(f"libVLC failed ({exc})")
             try:
                 self._try_ffmpeg_network(source, visible_source)
             except Exception as fb_exc:
                 self._retire_backend()
                 self.status.set(f"Could not open network source: {fb_exc}")
+                self._toast("Network source could not be opened")
                 messagebox.showerror("MPCASU", str(fb_exc))
 
     def _try_libvlc_network(self, source: str, visible_source: str) -> None:
-        import os; os.environ.setdefault("VLC_PLUGIN_PATH", "/usr/lib/x86_64-linux-gnu/vlc/plugins"); self.backend = LibVLCBackend(self.canvas)
+        plugin_path = discover_vlc_plugin_path()
+        if plugin_path:
+            os.environ.setdefault("VLC_PLUGIN_PATH", plugin_path)
+        self.backend = LibVLCBackend(self.canvas)
         self.backend.on_event = self._backend_event
         self.backend.open_source(source)
         self.controller.attach(self.backend, visible_source)
@@ -1372,27 +1392,13 @@ class MPCASUPlayer(tk.Tk):
         self.after(20_000, lambda: self._check_network_playback_start(backend))
 
     def _try_ffmpeg_network(self, source: str, visible_source: str) -> None:
-        import subprocess, shutil, signal
-        ffplay = shutil.which("ffplay") or shutil.which("mpv")
-        if not ffplay:
-            raise BackendError("No external player (install ffplay or mpv)")
-        self.status.set(f"Starting external player for network stream...")
-        proc = subprocess.Popen(
-            [ffplay, "-nodisp", "-autoexit", "-v", "error", source],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            preexec_fn=lambda: signal.signal(signal.SIGCHLD, signal.SIG_IGN))
-        self._network_proc = proc
-        self._set_diagnostics(support=f"External player ({os.path.basename(ffplay)})",
-                              integrity="unavailable", segmented="unavailable",
-                              energy="unavailable")
-        self.status.set(f"Playing via {os.path.basename(ffplay)} \u00b7 {visible_source}")
-        def check_proc():
-            if hasattr(self, '_network_proc') and self._network_proc is not None and self._network_proc.poll() is not None:
-                self._network_proc = None
-                self.status.set("Network stream ended")
-            else:
-                self.after(2000, check_proc)
-        self.after(2000, check_proc)
+        # MPCASU never launches an external player window.  When libVLC cannot
+        # open a network source the stream is refused in-process with an
+        # actionable message instead of handing control to ffplay/mpv.
+        raise BackendError(
+            "network source refused: libVLC could not open it and MPCASU "
+            "does not start external players (check the URL, codec support "
+            "and network access)")
 
     def _check_network_playback_start(self, expected_backend) -> None:
         """Fail a stream that never leaves buffering without touching a newer one."""
@@ -1834,9 +1840,18 @@ class MPCASUPlayer(tk.Tk):
                 ]
                 self._visual_video_segments = list(self._visual_segments)
                 return
-            manifest = (read_native(path, verify_payload=True).manifest if route == LOCAL_CASUNAT1
-                        else read_bounded_json(path, max_bytes=MAX_SIDECAR_BYTES,
-                                               label="CASU sidecar"))
+            if route == LOCAL_MP5:
+                from casu.mp5 import Mp5Error, read_mp5
+                try:
+                    manifest = read_mp5(path).manifest
+                except Mp5Error:
+                    self._visual_state = "invalid CASU MP5"
+                    return
+                self._visual_state = "CASU MP5 enhanced container"
+            else:
+                manifest = (read_native(path, verify_payload=True).manifest if route == LOCAL_CASUNAT1
+                            else read_bounded_json(path, max_bytes=MAX_SIDECAR_BYTES,
+                                                   label="CASU sidecar"))
             errors = validate_manifest(manifest)
             if errors:
                 self._visual_state = "invalid CASU: " + errors[0]
@@ -1866,10 +1881,108 @@ class MPCASUPlayer(tk.Tk):
                 continue
         return self._visual_state
 
+    def _enable_drag_drop(self) -> None:
+        """OS-level drag & drop when tkdnd is available; dialogs stay the fallback."""
+        try:
+            from tkinterdnd2 import DND_FILES
+        except ImportError:
+            return
+        try:
+            self.drop_target_register(DND_FILES)
+            self.dnd_bind("<<Drop>>", self._on_drop)
+        except (tk.TclError, AttributeError):
+            pass
+
+    def _on_drop(self, event) -> None:
+        import re
+        paths: list[Path] = []
+        for braced, plain in re.findall(r"\{(.+?)\}|(\S+)", event.data or ""):
+            candidate = Path((braced or plain)).expanduser()
+            if candidate.exists():
+                paths.append(candidate)
+        if paths:
+            self.add_files(paths)
+            self._toast(f"{len(paths)} file(s) added from drop")
+
+    def _on_stage_click(self, event) -> None:
+        if self._stage_is_empty() and self._empty_cta_bbox:
+            x0, y0, x1, y1 = self._empty_cta_bbox
+            if x0 <= event.x <= x1 and y0 <= event.y <= y1:
+                self.add_dialog()
+
+    def _stage_is_empty(self) -> bool:
+        if self.backend is not None:
+            return False
+        return not self._waveform and self._pcm_buffer[0] is None
+
+    def _toast(self, message: str) -> None:
+        """Non-blocking web-style toast: bottom-center, red accent, auto-hide."""
+        if getattr(self, "_toast_label", None) is None:
+            self._toast_label = tk.Label(
+                self.center_shell, text="", bg=TOAST_BG, fg=TEXT,
+                padx=14, pady=8, font=("TkDefaultFont", 9),
+                highlightthickness=1, highlightbackground=TOAST_BORDER)
+            self._toast_label.bind("<Button-1>", lambda _e: self._hide_toast())
+        if self._toast_job is not None:
+            self.after_cancel(self._toast_job)
+        self._toast_label.configure(text=message)
+        self._toast_label.place(relx=0.5, rely=1.0, anchor="s", y=-25)
+        self._toast_job = self.after(TOKENS.toast_ms, self._hide_toast)
+
+    def _hide_toast(self) -> None:
+        self._toast_job = None
+        if getattr(self, "_toast_label", None) is not None:
+            self._toast_label.place_forget()
+
+    def _draw_empty_state(self, width: int, height: int) -> None:
+        """Web-player hero: icon, drop hint and a clickable choose-files CTA."""
+        cx, cy = width // 2, max(150, height // 2 - 40)
+        self.canvas.create_oval(cx - 190, cy - 130, cx + 190, cy + 52,
+                                fill="#160a0e", outline="", tags="viz")
+        self.canvas.create_oval(cx - 46, cy - 96, cx + 46, cy - 4,
+                                outline=RED, width=2, tags="viz")
+        self.canvas.create_polygon(cx - 12, cy - 70, cx - 12, cy - 30,
+                                   cx + 22, cy - 50, fill=RED, outline="", tags="viz")
+        self.canvas.create_text(cx, cy + 32, text="Drop media here",
+                                fill=TEXT, font=("TkDefaultFont", 16, "bold"), tags="viz")
+        self.canvas.create_text(cx, cy + 58,
+                                text="Audio · Video · Streams · Playlists · CASU · MP5",
+                                fill=MUTED, font=("TkDefaultFont", 10), tags="viz")
+        bw, bh = 150, 40
+        x0, y0 = cx - bw // 2, cy + 84
+        x1, y1 = cx + bw // 2, cy + 84 + bh
+        self.canvas.create_rectangle(x0, y0, x1, y1, fill=RED_DARK,
+                                     outline=RED, width=2, tags="viz")
+        self.canvas.create_text(cx, y0 + bh // 2, text="Choose files",
+                                fill=TEXT, font=("TkDefaultFont", 10, "bold"), tags="viz")
+        self._empty_cta_bbox = (x0, y0, x1, y1)
+
+    def _draw_overlay_badges(self, width: int) -> None:
+        """Web-player style format/integrity chips floating over the stage."""
+        x = 16
+        for text, accent in ((self._format_badge, False),
+                             (self._integrity_badge, True)):
+            if not text:
+                continue
+            w = 14 + 7 * len(text)
+            self.canvas.create_rectangle(x, 14, x + w, 36, fill=BADGE_BG,
+                                         outline=RED if accent else BADGE_BORDER,
+                                         width=1, tags="viz")
+            self.canvas.create_text(x + w // 2, 25, text=text,
+                                    fill=RED if accent else SECONDARY,
+                                    font=("TkDefaultFont", 8, "bold"), tags="viz")
+            x += w + 8
+
     def _draw_visualizer(self):
         width = max(120, self.canvas.winfo_width())
         height = max(160, self.canvas.winfo_height())
         self.canvas.delete("viz")
+        self._empty_cta_bbox = None
+        if self._stage_is_empty():
+            self._draw_empty_state(width, height)
+            return
+        if self.backend is not None and self._presentation_mode != "VIDEO":
+            self._draw_overlay_badges(width)
         if self._visualizer_mode == "off":
             return
         show_spectrum = self._visualizer_mode in ("spectrum", "both")
@@ -1900,9 +2013,8 @@ class MPCASUPlayer(tk.Tk):
                                         dash=(2, 5), tags="viz")
 
             if has_live_data:
-                live_wave = (window_peaks(pcm_buf, pcm_rate, pos,
-                                          window_s=0.6, points=320)
-                             if show_waveform else ())
+                live_wave = window_peaks(pcm_buf, pcm_rate, pos,
+                                         window_s=0.6, points=320)
                 live_spec = (live_spectrum(pcm_buf, pcm_rate, pos,
                                            fft_size=2048, bands=32)
                              if show_spectrum else ())
@@ -1924,12 +2036,23 @@ class MPCASUPlayer(tk.Tk):
                         bar_h = min(val, updated[idx]) * spec_height * breathe
                         self.canvas.create_rectangle(
                             x, baseline - bar_h, x + bar_width, baseline,
-                            fill=RED_DARK, outline=RED if updated[idx] > 0.65 else "#781721",
+                            fill=RED if idx % 2 == 0 else RED_DARK,
+                            outline=LINE,
                             width=1, tags="viz")
                         peak_y = baseline - updated[idx] * spec_height * breathe
                         self.canvas.create_line(
                             x, peak_y, x + bar_width, peak_y,
                             fill=RED, width=2, tags="viz")
+                    if live_wave:
+                        overlay: list[float] = []
+                        count = len(live_wave)
+                        mid = baseline - spec_height / 2
+                        for idx, peak in enumerate(live_wave):
+                            x = left + (right - left) * idx / max(1, count - 1)
+                            overlay.extend((x, mid - peak * spec_height * 0.45))
+                        if overlay:
+                            self.canvas.create_line(*overlay, fill=RED,
+                                                    width=1, tags="viz")
                 if live_wave:
                     phase_offset = int(self._visual_phase) % len(live_wave)
                     rolled = live_wave[phase_offset:] + live_wave[:phase_offset]
@@ -2186,6 +2309,14 @@ class MPCASUPlayer(tk.Tk):
         self.current = path
         self._ab_start = self._ab_end = None
         self.now_playing.configure(text=path.name.upper())
+        self._format_badge = {
+            LOCAL_CASUNAT1: "CASUNAT1", LOCAL_CASUNAT2: "CASUNAT2",
+            LOCAL_CASU_SIDECAR: "CASU", LOCAL_MP5: "MP5",
+        }.get(route, path.suffix.lstrip(".").upper() or "MEDIA")
+        self._integrity_badge = ("VERIFIED"
+                                 if route in {LOCAL_CASUNAT1, LOCAL_CASUNAT2,
+                                              LOCAL_CASU_SIDECAR, LOCAL_MP5}
+                                 else "READY")
         selected = self.library.curselection()
         selected_index = (selected[0] if selected
                           else self.playlist_model.index_of(path))
@@ -2216,6 +2347,13 @@ class MPCASUPlayer(tk.Tk):
                 segmented=(f"{len(self._visual_segments)} segments"
                            if self._visual_segments else "no segment data"),
             )
+        elif route == LOCAL_MP5:
+            self._set_diagnostics(
+                support="CASU MP5 envelope + libVLC",
+                integrity="verified MP5 container",
+                segmented=(f"{len(self._visual_segments)} segments"
+                           if self._visual_segments else "no segment data"),
+            )
         else:
             self._set_diagnostics(support="Legacy backend",
                                   integrity="unavailable",
@@ -2228,6 +2366,7 @@ class MPCASUPlayer(tk.Tk):
             self.status.set("Cannot play \u2014 safe fallback refused an invalid CASU manifest")
             return
         state = ("CASU native container" if route in {LOCAL_CASUNAT1, LOCAL_CASUNAT2}
+                 else "CASU MP5 container" if route == LOCAL_MP5
                  else "CASU sidecar found" if route == LOCAL_CASU_SIDECAR
                  else "legacy fallback \u2014 no CASU sidecar")
         self.status.set(f"{path.name} \u00b7 {state}")
@@ -2240,12 +2379,12 @@ class MPCASUPlayer(tk.Tk):
                     audio_sink = None
                 self.backend = NativeCasuBackend(TkCanvasVideoSink(self.canvas),
                                                  audio_sink)
-            elif route in {LOCAL_CASUNAT1, LOCAL_CASU_SIDECAR}:
+            elif route in {LOCAL_CASUNAT1, LOCAL_CASU_SIDECAR, LOCAL_MP5}:
                 self.backend = CasuBackend(self.canvas)
             else:
                 self.backend = LibVLCBackend(self.canvas)
             self.backend.on_event = self._backend_event
-            if route in {LOCAL_CASUNAT1, LOCAL_CASUNAT2, LOCAL_CASU_SIDECAR}:
+            if route in {LOCAL_CASUNAT1, LOCAL_CASUNAT2, LOCAL_CASU_SIDECAR, LOCAL_MP5}:
                 self.backend.open_casu(path)
             else:
                 self.backend.open(source)
@@ -2697,7 +2836,7 @@ class MPCASUPlayer(tk.Tk):
         route = route or detect_local_playback_kind(path)
         if route == LOCAL_MEDIA:
             return path
-        if route in {LOCAL_CASUNAT1, LOCAL_CASUNAT2}:
+        if route in {LOCAL_CASUNAT1, LOCAL_CASUNAT2, LOCAL_MP5}:
             return path
         try:
             manifest = read_bounded_json(path, max_bytes=MAX_SIDECAR_BYTES,

@@ -10,6 +10,7 @@ from .schema import validate_manifest
 CASUNAT1 = "casunat1"
 CASUNAT2 = "casunat2"
 CASU_SIDECAR = "casu-sidecar"
+CASUMP5 = "mp5"
 MAX_SIDECAR_BYTES = 64 * 1024 * 1024
 
 
@@ -25,6 +26,8 @@ def detect_casu_kind(path: str | Path) -> str | None:
         return CASUNAT1
     if prefix[:8] == b"CASUNAT2":
         return CASUNAT2
+    if prefix[:8] == b"CASUMP5\x00":
+        return CASUMP5
     if not prefix.lstrip().startswith(b"{"):
         return None
     try:

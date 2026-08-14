@@ -1,12 +1,34 @@
-"""Convert media to CASU MP5 format."""
+# SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
+# SPDX-FileCopyrightText: 2026 Lino Casu
+"""Convert media into a playable CASU MP5 container.
+
+MP5 is the enhanced CASU envelope: zstd-compressed chunks, JSON stream
+configuration, a verified copy of the original source carried in ATTACHMENT
+chunks (split below the chunk payload limit), an INTEGRITY_TABLE with
+SHA-256 coverage and a footer digest over the manifest.  A `.mp5` produced
+here is content-detected, verified and playable by extraction, mirroring the
+CASUNAT1 compatibility envelope while using the MP5 chunk topology.
+"""
 from __future__ import annotations
 
-import tempfile
+import hashlib
+import json
+import struct
 from pathlib import Path
 
-from .format import ChunkType
+from .format import ChunkType, MAX_CHUNK_PAYLOAD
 from .writer import write_mp5, Mp5Error
 from casu.core import analyze, ffprobe, sha256_file
+
+ATTACHMENT_PART_BYTES = min(48 * 1024 * 1024, MAX_CHUNK_PAYLOAD)
+
+
+def _attachment_payload(name: str, part_index: int, part_count: int,
+                        data: bytes) -> bytes:
+    meta = json.dumps({"filename": name, "part": part_index,
+                       "parts": part_count},
+                      sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return struct.pack("<H", len(meta)) + meta + data
 
 
 def convert_to_mp5(source: str | Path, output: str | Path, *,
@@ -21,21 +43,47 @@ def convert_to_mp5(source: str | Path, output: str | Path, *,
     manifest = analyze(source, mode=mode)
     manifest["format"]["kind"] = "CASU MP5 enhanced container"
     manifest["format"]["mp5_version"] = 1
-    manifest["source"]["sha256"] = sha256_file(source)
+    source_digest = sha256_file(source)
+    manifest["source"]["sha256"] = source_digest
+    manifest["source"]["filename"] = source.name
+    manifest["source"]["bytes"] = source.stat().st_size
+
     chunks: list[tuple[ChunkType, int, int, bytes]] = []
-    streams = probe.get("streams", [])
-    for index, stream in enumerate(streams):
-        st = {
-            "stream_id": index,
-            "type": stream.get("codec_type", "data"),
-            "codec": stream.get("codec_name", "unknown"),
-            "time_base": stream.get("time_base", "1/1000"),
-        }
+    for index, stream in enumerate(probe.get("streams", [])):
+        if not isinstance(stream, dict):
+            continue
+        config = {"stream_id": index,
+                  "type": stream.get("codec_type", "data"),
+                  "codec": stream.get("codec_name"),
+                  "width": stream.get("width"),
+                  "height": stream.get("height"),
+                  "sample_rate": stream.get("sample_rate"),
+                  "channels": stream.get("channels")}
         chunks.append((ChunkType.STREAM_CONFIG, index, 0,
-                       str(st).encode("utf-8")))
-    chunks.append((ChunkType.METADATA, 0, 0,
-                   str(manifest.get("source", {})).encode("utf-8")))
+                       json.dumps(config, sort_keys=True,
+                                  separators=(",", ":")).encode("utf-8")))
+
+    data = source.read_bytes()
+    part_count = max(1, (len(data) + ATTACHMENT_PART_BYTES - 1) // ATTACHMENT_PART_BYTES)
+    attachment_digest = hashlib.sha256()
+    for part in range(part_count):
+        chunk_data = data[part * ATTACHMENT_PART_BYTES:(part + 1) * ATTACHMENT_PART_BYTES]
+        attachment_digest.update(chunk_data)
+        chunks.append((ChunkType.ATTACHMENT, 0, part,
+                       _attachment_payload(source.name, part, part_count, chunk_data)))
+
+    integrity = {"source_sha256": source_digest,
+                 "attachment_sha256": attachment_digest.hexdigest(),
+                 "attachment_parts": part_count,
+                 "chunk_count": len(chunks)}
     chunks.append((ChunkType.INTEGRITY_TABLE, 0, 0,
-                   sha256_file(source).encode("utf-8")))
+                   json.dumps(integrity, sort_keys=True,
+                              separators=(",", ":")).encode("utf-8")))
+    chunks.append((ChunkType.METADATA, 0, 0,
+                   json.dumps({"converted_by": "casu.mp5", "mode": mode,
+                               "tile_width": tile_width,
+                               "tile_height": tile_height,
+                               "key_interval_seconds": key_interval_seconds},
+                              sort_keys=True, separators=(",", ":")).encode("utf-8")))
     chunks.append((ChunkType.END, 0, 0, b""))
     return write_mp5(output, manifest, chunks)
