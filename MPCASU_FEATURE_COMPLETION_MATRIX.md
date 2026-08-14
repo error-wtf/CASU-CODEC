@@ -1,4 +1,15 @@
-# MPCASU feature completion matrix — updated 2026-08-13
+# MPCASU feature completion matrix — updated 2026-08-14
+
+> **Note (1.0.0):** Since release 1.0.0 the official desktop player shipped as
+> `mpcasu` is the **Qt player** (`mpcasu_qt/`): in-UI YouTube/Spotify/network
+> sources with consent gate, playlist tree, toasts instead of popups, and
+> native CASUNAT2 playback with a Qt video sink (playback > 1 s verified,
+> 23/23 `test_native_player_backend`, qt_sources/qt_playlist/qt_playback
+> smokes). The rows below document the gate evidence as gathered on the Tk
+> player (`mpcasu_player.py`), which remains in the repository as the
+> reference implementation and test base. Re-running the full gate 4–6
+> matrices on the Qt player is tracked as PARTIAL in
+> `RELEASE_GATE_STATUS.json`.
 
 | Feature | Backend | UI | Evidence | Status |
 |---|---|---|---|---|
