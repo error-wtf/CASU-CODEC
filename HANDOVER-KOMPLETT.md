@@ -220,3 +220,62 @@ Mini-Player, Fullscreen.
 - Nutzer will: funktionierenden Player (Bild+Ton), schöne UI wie Webplayer,
   alle alten Versionen als Wiederherstellungsquelle verfügbar.
 - Nutzer bevorzugt Deutsch. Kurze, konkrete Ergebnisse statt Erklärungen.
+
+---
+
+## 10. SESSION 4 (2026-08-14, opencode) — NEUES HAUPT-REPO `/home/error/Codec-Casu/`
+
+**Regeln wurden eingehalten: nichts gelöscht, nur gelesen, kopiert und neu gebaut.**
+
+### 10.1 Was gebaut wurde
+
+Neues Ordner-Repo `/home/error/Codec-Casu/` = vollständige Kopie des verifizierten
+Lino-Codec-Standes (202 Tests grün) **plus** Session-4-Integrationen, eigenen
+Git-Commits (`29b8156` Baseline, `a864f65` Integration). Alle Original-Quellen
+(Lino-Codec, VOLLBACKUP, work-recovered, tmp_mp5, Downloads-Dokus) bleiben
+unverändert erhalten.
+
+### 10.2 Integrationen (alle verifiziert)
+
+| Bereich | Umsetzung |
+|---|---|
+| **Einheitliches Design-System** | `casu/design.py`: Webplayer-Tokens (`web/styles.css`) als bindende Referenz; Tk-Player-Farben exakt darauf ausgerichtet (BG #07090b, Panel #101317, Rot #ff1e2d …) |
+| **Web-UX im Desktop-Player** | Empty-State-Hero („Drop media here" + klickbarer Choose-files-Button), Web-artige Toasts (unten, Rot-Akzent, 2,6 s), Format-/Integritäts-Overlay-Badges über der Bühne, Drag&Drop-Hook (tkinterdnd2 optional) |
+| **Visualizer im Web-Stil** | alternierende Rot/Dunkelrot-Balken + Oszilloskop-Overlay-Linie (wie `web/app.js`), Peak-Linien bleiben |
+| **MP5 jetzt echt integriert** | `CASUMP5\0`-Magic in `casu/filetypes.py`; `casu/mp5/` schreibt abspielbare Container (Originalquelle als zstd/zlib-komprimierte ATTACHMENT-Teile + STREAM_CONFIG-JSON + INTEGRITY_TABLE mit SHA-256); Reader mit `extract_attachment/extract_source/verify_mp5`; CLI `casu pack-mp5` + `casu mp5-info`; Player routed MP5 inhaltsbasiert über LegacyCasuBackend (Extraktion → libVLC) |
+| **VLC-Parität (rote Linien entfernt)** | `discover_vlc_plugin_path()` statt Debian-Hardcode; ffplay/mpv-External-Window-Fallback entfernt → saubere In-Process-Ablehnung mit Fehlermeldung |
+| **Qt-Player lauffähig** | PySide6 war auf System-Python 3.14 längst installiert; `mpcasu_qt` startet und spielt (Smoke: pos > 1 s); neues DEB-Paket `mpcasu-qt` |
+| **Version** | 1.0.0-rc9 (casu/__init__.py, pyproject.toml, Player, Build-Skript) |
+
+### 10.3 Verifikation (alles auf dieser Maschine gemessen)
+
+- `pytest -m 'not media'`: **209 passed, 154 deselected** (202 Basis + 7 neue MP5-Tests)
+- MP5-Tests inkl. Media-Roundtrip: **9 passed** (SHA-256-identische Extraktion, Korruptions-/Truncation-/Magic-Negativtests)
+- GUI-Smoke xvfb: **18 passed** (Player + Converter)
+- `tools/smoke_session4.py`: Hero + Toast + Badges + **MP5-Wiedergabe 1,15 s** OK
+- `tools/smoke_backends.py`: **MP4→LibVLCBackend, CASUNAT2→NativeCasuBackend, MP5→LegacyCasuBackend**, je > 1 s
+- Qt: Start + Wiedergabe > 1 s (xvfb)
+- DEBs rc9: 5 Pakete gebaut, installiert, **`dpkg -V` alle sauber**; `casu pack-mp5`/`mp5-info` installiert getestet (issues: [])
+
+### 10.4 Installationszustand (14.08., Session 4)
+
+`casu-codec`, `casu-converter`, `mpcasu`, `mpcasu-qt`, `web-casu` — alle **1.0.0-rc9**.
+Binary: `/usr/bin/mpcasu`, `/usr/bin/mpcasu-qt`, `/usr/bin/casu`, `/usr/bin/casu-converter`, `/usr/bin/web-casu`.
+
+### 10.5 Wichtige Orte (aktualisiert)
+
+| Ort | Inhalt |
+|---|---|
+| `/home/error/Codec-Casu/` | **neues Haupt-Repo (rc9)**, alle Integrationen, Git-Historie |
+| `/home/error/Codec-Casu/backups/debs-pre-session4-*/` | dist-Sicherung vor rc9-Neubau |
+| `/home/error/Lino-Codec/` | altes Repo (rc8), unverändert gelassen |
+| `/home/error/tmp_mp5/format.py` | MP5-Urentwurf, unangetastet (Inhalt ist längst in `casu/mp5/format.py`) |
+| `/home/error/Lino-Codec-VOLLBACKUP-2026-08-14.tar.gz` | Vollbackup, SHA256 unverändert |
+
+### 10.6 Offene Punkte (übernommen aus Abschnitt 7)
+
+1. 3M-Fuzz-Kampagne vor Final-Release (`python3 tools/fuzz_native_v2.py`).
+2. Chromium-Test bleibt lastabhängig flaky (einzeln grün).
+3. Live-Internet-Streams nur mit Netz verifizierbar.
+4. `tkinterdnd2` optional installieren für echtes OS-Drag&Drop (`pip install tkinterdnd2`); CTA-Button und Ctrl+O sind der Fallback.
+5. MP5-Nativpfad (segmentierte Video/Audio-Chunks statt Envelope) ist der nächste große Schritt gemäß `02_GATE_NATIVE_PAYLOAD_KEYSTATES_SEEK.md`.
