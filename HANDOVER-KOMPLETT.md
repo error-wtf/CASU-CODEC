@@ -311,3 +311,13 @@ Chromium-E2E grün · Playwright-Smoke (`tools/smoke_web_nav.py`): Playlist 2/2,
 View-Filter 0/2, Back→NOW PLAYING, Proxy 200 · Stream-Proxy gegen echten
 Radio-Stream (ice.bassdrive.net): 200, audio/mpeg, 128 KB live · DEBs rc9
 neu gebaut, installiert, `dpkg -V` sauber, installierte Dateien byteidentisch.
+
+### 10.9 Nachtrag Session 4 (Teil 3): Qt-Player komplettiert
+
+- Shuffle/Repeat im Qt-Player waren nur Beschriftung → jetzt echte Funktionen
+  (Shuffle-Toggle, Repeat off/all/one-Zyklus, Repeat-one wiederholt per Seek 0,
+  Repeat-all wrappt in beide Richtungen; Auto-Advance bei ENDED mit
+  `automatic=True` wie im Tk-Player).
+- Qt-Smoke verifiziert: Playback, Shuffle, Repeat-Zyklus, Repeat-one-Seek OK.
+- DEBs rc9 neu gebaut, installiert, `dpkg -V` alle 5 sauber; 209 Tests +
+  18 GUI-Smokes grün.
