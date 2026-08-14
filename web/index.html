@@ -25,6 +25,7 @@
       <p class="eyebrow">CASU</p>
       <button class="nav" id="open-casu" data-view="casu">◆ <span>CASU Files</span></button>
       <div class="sidebar-spacer"></div>
+      <button class="nav" id="open-options">⚙ <span>Options</span></button>
       <button class="nav" id="clear-all">⌫ <span>Clear Library</span></button>
       <p class="build">MPCASU WEB · RC</p>
     </aside>
@@ -45,8 +46,7 @@
         <div class="empty-state" id="empty-state">
           <img src="../assets/web_casu_icon.png" alt="" aria-hidden="true">
           <h1>Drop media here</h1>
-          <p>Audio, video, CASU sidecars, CASUNAT1, playlists and direct streams</p>
-          <button class="primary" id="empty-open">Choose files</button>
+          <p>Audio, video, CASU sidecars, CASUNAT1, playlists and direct streams — use “Choose files” in the playlist panel</p>
         </div>
         <div class="media-badges"><span id="format-badge">MPCASU</span><span id="integrity-badge">READY</span></div>
         <div class="media-caption">
@@ -84,9 +84,10 @@
     </section>
 
     <aside class="queue-panel">
-      <header><div><strong>PLAYLIST</strong><small id="queue-summary">0 items</small></div><button id="add-more">＋</button></header>
+      <header><div><strong>PLAYLIST</strong><small id="queue-summary">0 items</small></div><button id="add-more" title="Add more files">＋</button></header>
+      <div class="queue-actions"><button id="queue-open" class="primary">Choose files</button><button id="queue-url">Add URL</button></div>
       <ol id="queue" aria-label="Playlist"></ol>
-      <footer><button id="move-up" title="Move up">↑</button><button id="move-down" title="Move down">↓</button><button id="remove" title="Remove selected">⌫</button><button id="save-pl" title="Save playlist as M3U">⤓</button></footer>
+      <footer><button id="move-up" title="Move up">↑</button><button id="move-down" title="Move down">↓</button><button id="rename" title="Rename selected">✎</button><button id="remove" title="Remove selected">⌫</button><button id="save-pl" title="Save playlist as M3U">⤓</button></footer>
     </aside>
   </main>
 
@@ -109,9 +110,23 @@
   <dialog id="search-dialog">
     <form method="dialog">
       <header class="dialog-title"><div><h2>YouTube &amp; Spotify search</h2><p>Metadata search via yt-dlp (GNU GPL) · personal use only</p></div><div><button value="cancel" aria-label="Close">×</button></div></header>
+      <div id="consent-box" class="consent-box" hidden>
+        <p>Legal notice — YouTube/Spotify playback and search resolve stream URLs with yt-dlp (open source, GNU GPL). URLs are resolved temporarily, never stored or redistributed. Personal use only.</p>
+        <button id="consent-accept" type="button" class="primary">Accept and enable yt-dlp features</button>
+      </div>
       <div class="epg-source"><input id="search-query" type="text" placeholder="Search term…" autocomplete="off"><button id="search-run" type="button">Search</button></div>
       <label class="search-source">Source <select id="search-source"><option value="youtube">YouTube</option><option value="spotify">Spotify (music)</option></select></label>
       <div id="search-results" class="epg-guide"></div>
+    </form>
+  </dialog>
+  <dialog id="options-dialog">
+    <form method="dialog">
+      <header class="dialog-title"><div><h2>Options</h2><p>Playback, visualizer and legal settings</p></div><div><button value="cancel" aria-label="Close">×</button></div></header>
+      <label class="search-source">Volume <input id="opt-volume" type="range" min="0" max="200" value="100"></label>
+      <label class="search-source"><input id="opt-resume" type="checkbox" checked> Resume playback on startup</label>
+      <label class="search-source"><input id="opt-viz" type="checkbox" checked> Audio visualizer (spectrum / waveform)</label>
+      <label class="search-source"><input id="opt-consent" type="checkbox"> yt-dlp consent (YouTube/Spotify, personal use only)</label>
+      <div class="epg-source"><button id="opt-cache" type="button">Cache note</button><button id="opt-apply" type="button" class="primary">Apply</button></div>
     </form>
   </dialog>
   <div id="toast" role="status" aria-live="polite"></div>

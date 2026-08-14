@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "product_version": "1.0.1",
+  "product_version": "1.0.2",
   "release_status": "RELEASE_1_0_1",
   "updated": "2026-08-14",
   "gates": [
@@ -94,5 +94,5 @@
       ]
     }
   ],
-  "notes": "Release 1.0.1 ships the complete product surface (Qt desktop player, web player, converter, CLI, DEB packages) with gates 1-3 PASS. Codec/converter repairs in 1.0.1: byte-identical CASUNAT2 writer/validator speedup (zero-copy tile hashing, cached identity prefixes, reused previous-frame tile hashes, in-place tile application), MP5 converter no longer embeds a full temporal analysis (bounded ffprobe manifest, streaming attachment reads) which fixes 'manifest exceeds size limit' on long sources, fast audio-block metadata reads make NativeCasuBackend open long containers without decoding every PCM block, and native-info reports the real seek index. Gates 4-6 remain honestly PARTIAL: their full regression matrices were gathered on the Tk reference player; the Qt player (mpcasu since 1.0.0) passes its own backend and smoke suites (216 fast tests, 23/23 native_player_backend, all backend-path and owner-content smokes) but has not re-run every gate-4..6 matrix."
+  "notes": "Release 1.0.2 perfects the product UI against the web reference: Qt player rebuilt on exact web tokens (240px sidebar with logo, topbar with back/title/queue-search, stage overlays, web-style transport with round red play button, right playlist panel with Choose files/Add URL, thumbnails, always-visible scrollbars, remove/rename/load/save, expandable playlists), in-window pages replace all popups (Options, About, Library, Live TV/EPG with channel cards), web-style FFT visualizer overlay for audio-only media; web player gains consent gate, per-item remove/inline rename, queue-panel Choose files, Options dialog and visible scrollbars. Codec 1.0.1 fixes carried forward (byte-identical CASUNAT2, MP5 bounded manifest, fast audio-meta open). Gates 4-6 remain honestly PARTIAL."
 }

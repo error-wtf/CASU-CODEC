@@ -1,62 +1,75 @@
-# SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4 | SPDX-FileCopyrightText: 2026 Lino Casu
-"""MPCASU dark/red visual theme.
+# SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
+# SPDX-FileCopyrightText: 2026 Lino Casu
+"""MPCASU dark/red visual theme — exact mirror of the web player.
 
-Single source of truth for every colour, radius and metric used by the Qt
-player. Keeping this in one module means the whole application restyles
-consistently and the values can be asserted in tests.
+Every colour, radius and metric is taken from ``casu.design.TOKENS`` (the
+binding copy of ``web/styles.css`` ``:root``), so the Qt player, the web
+player and the converter render as one product family.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from casu import design
+
 
 @dataclass(frozen=True)
 class Palette:
-    """Immutable colour set matching the MPCASU product design."""
+    """Immutable colour set — values identical to web/styles.css tokens."""
 
-    # Structural surfaces, darkest to lightest.
-    window: str = "#0a0a0c"
-    sidebar: str = "#0d0d10"
-    surface: str = "#121217"
-    surface_alt: str = "#16161c"
-    card: str = "#141419"
-    border: str = "#232329"
-    border_strong: str = "#2e2e36"
+    window: str = design.BG                      # --bg #07090b
+    sidebar: str = design.SIDEBAR                # #0c0f12
+    surface: str = design.PANEL                  # --panel #101317
+    surface_alt: str = design.PANEL_ALT          # --panel2 #15191e
+    card: str = design.PANEL
+    border: str = design.LINE                    # --line #252a30
+    border_strong: str = design.BADGE_BORDER     # #383d43
+    shell_border: str = "#292d31"
+    stage: str = design.STAGE                    # #050608
+    stage_border: str = "#1e2328"
+    button: str = "#161a1f"
+    button_text: str = "#d7d9dc"
+    button_hover_border: str = "#442222"
+    input_bg: str = design.INPUT_BG              # #080a0c
+    input_border: str = design.INPUT_BORDER      # #333942
 
-    # Brand accent.
-    accent: str = "#e01020"
-    accent_hot: str = "#ff2436"
-    accent_dim: str = "#8c0a16"
-    accent_wash: str = "#1d0c10"
+    accent: str = design.RED                     # --red #ff1e2d
+    accent_hot: str = design.RED
+    accent_dim: str = design.RED_DARK            # #3a1015
+    accent_wash: str = "#1b0a0d"
+    accent_glow: str = design.TOKENS.red_glow    # #ff1e2d55
 
-    # Text.
-    text: str = "#f2f2f5"
-    text_muted: str = "#9a9aa6"
-    text_faint: str = "#66666f"
+    text: str = design.TEXT                      # --text #f4f5f7
+    text_muted: str = design.SECONDARY           # #b9bec5
+    text_faint: str = design.MUTED               # --muted #858b93
     text_on_accent: str = "#ffffff"
 
-    # Semantic states.
     ok: str = "#25c065"
     warn: str = "#e0a010"
     error: str = "#ff4040"
+    toast_bg: str = design.TOAST_BG              # #171b20
+    toast_border: str = design.TOAST_BORDER      # #444444
+    scrollbar: str = design.SCROLLBAR            # #1b2026
 
 
 @dataclass(frozen=True)
 class Metrics:
-    """Layout constants shared by the widgets."""
+    """Layout constants — identical to the web shell metrics."""
 
-    sidebar_width: int = 236
-    playlist_width: int = 320
-    radius: int = 8
-    radius_small: int = 6
-    radius_large: int = 12
-    control_height: int = 34
-    transport_button: int = 42
-    play_button: int = 58
+    sidebar_width: int = design.TOKENS.sidebar_width        # 240
+    playlist_width: int = design.TOKENS.right_panel_width   # 310
+    topbar_height: int = design.TOKENS.topbar_height        # 72
+    transport_height: int = design.TOKENS.transport_height  # 66
+    radius: int = design.TOKENS.radius_panel                # 10
+    radius_small: int = design.TOKENS.radius_control        # 7
+    radius_large: int = design.TOKENS.radius_shell          # 18
+    control_height: int = 38
+    transport_button: int = 40
+    play_button: int = design.TOKENS.play_button            # 52
     pad: int = 12
     pad_small: int = 8
     pad_large: int = 18
-    thumbnail_width: int = 64
+    thumbnail_width: int = 54
     thumbnail_height: int = 38
 
 
@@ -64,8 +77,21 @@ PALETTE = Palette()
 METRICS = Metrics()
 
 
+def format_duration(seconds: float) -> str:
+    """Render a playback position as H:MM:SS / M:SS like the web player."""
+    try:
+        total = int(max(0.0, float(seconds)))
+    except (TypeError, ValueError):
+        return "00:00"
+    hours, remainder = divmod(total, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
+
+
 def stylesheet(palette: Palette = PALETTE, metrics: Metrics = METRICS) -> str:
-    """Build the complete application stylesheet."""
+    """Build the complete application stylesheet (web tokens, Qt syntax)."""
     p, m = palette, metrics
     return f"""
 QWidget {{
@@ -74,24 +100,24 @@ QWidget {{
     font-family: "Inter", "Segoe UI", "Ubuntu", "DejaVu Sans", sans-serif;
     font-size: 13px;
 }}
-QMainWindow, QDialog {{ background-color: {p.window}; }}
+QMainWindow {{ background-color: {p.window}; }}
 
-/* ---------- Sidebar ---------- */
+/* ---------- Sidebar (web .sidebar) ---------- */
 #Sidebar {{
     background-color: {p.sidebar};
     border-right: 1px solid {p.border};
 }}
 #SidebarSection {{
-    color: {p.text_faint};
+    color: #656b73;
     font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 1.4px;
-    padding: 14px 16px 6px 16px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    padding: 16px 10px 6px 10px;
     background: transparent;
 }}
 #BrandName {{
     color: {p.text};
-    font-size: 21px;
+    font-size: 20px;
     font-weight: 800;
     letter-spacing: 0.5px;
     background: transparent;
@@ -110,153 +136,172 @@ QPushButton#NavItem {{
     border-left: 3px solid transparent;
     color: {p.text_muted};
     text-align: left;
-    padding: 9px 14px 9px 15px;
+    padding: 11px 12px;
     font-size: 13px;
-    border-radius: 0px;
+    border-radius: {m.radius_small}px;
 }}
 QPushButton#NavItem:hover {{
-    background-color: {p.surface};
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 {p.accent_dim}, stop:1 #221217);
     color: {p.text};
 }}
-QPushButton#NavItem:checked {{
-    background-color: {p.accent_wash};
+QPushButton#NavItem[active="true"] {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 {p.accent_dim}, stop:1 #221217);
     border-left: 3px solid {p.accent};
-    color: {p.text};
-    font-weight: 600;
+    color: {p.accent};
 }}
 
-/* ---------- Top bar ---------- */
+/* ---------- Panels / stage ---------- */
+#Panel {{
+    background-color: {p.surface};
+    border: 1px solid {p.border};
+    border-radius: {m.radius_small + 1}px;
+}}
+#VideoSurface {{
+    background-color: {p.stage};
+    border: 1px solid {p.stage_border};
+    border-radius: {m.radius}px;
+}}
 #TopBar {{
-    background-color: {p.surface};
-    border-bottom: 1px solid {p.border};
-}}
-#BreadcrumbLabel {{ color: {p.accent}; font-weight: 600; background: transparent; }}
-
-QLineEdit {{
-    background-color: {p.surface_alt};
-    border: 1px solid {p.border_strong};
-    border-radius: {m.radius_small}px;
-    padding: 6px 10px;
-    color: {p.text};
-    selection-background-color: {p.accent};
-    selection-color: {p.text_on_accent};
-}}
-QLineEdit:focus {{ border: 1px solid {p.accent}; }}
-
-QComboBox {{
-    background-color: {p.surface_alt};
-    border: 1px solid {p.border_strong};
-    border-radius: {m.radius_small}px;
-    padding: 5px 10px;
-    color: {p.text};
-    min-height: 22px;
-}}
-QComboBox:hover {{ border: 1px solid {p.accent_dim}; }}
-QComboBox::drop-down {{ border: none; width: 20px; }}
-QComboBox QAbstractItemView {{
-    background-color: {p.surface};
-    border: 1px solid {p.border_strong};
-    selection-background-color: {p.accent};
-    selection-color: {p.text_on_accent};
-    outline: none;
-}}
-
-/* ---------- Buttons ---------- */
-QPushButton {{
-    background-color: {p.surface_alt};
-    border: 1px solid {p.border_strong};
-    border-radius: {m.radius_small}px;
-    padding: 6px 12px;
-    color: {p.text};
-}}
-QPushButton:hover {{ background-color: {p.card}; border-color: {p.accent_dim}; }}
-QPushButton:pressed {{ background-color: {p.accent_wash}; }}
-QPushButton:disabled {{ color: {p.text_faint}; border-color: {p.border}; }}
-QPushButton:checked {{
-    background-color: {p.accent_wash};
-    border-color: {p.accent};
-    color: {p.text};
-}}
-
-QPushButton#IconButton {{
     background: transparent;
     border: none;
-    border-radius: {m.radius_small}px;
-    padding: 6px;
-    color: {p.text_muted};
-    font-size: 15px;
-}}
-QPushButton#IconButton:hover {{ background-color: {p.surface_alt}; color: {p.text}; }}
-QPushButton#IconButton:checked {{ color: {p.accent}; background-color: {p.accent_wash}; }}
-
-QPushButton#TransportButton {{
-    background: transparent;
-    border: none;
-    color: {p.accent};
-    font-size: 20px;
-    padding: 0px;
-}}
-QPushButton#TransportButton:hover {{ color: {p.accent_hot}; }}
-QPushButton#TransportButton:disabled {{ color: {p.text_faint}; }}
-
-QPushButton#PlayButton {{
-    background-color: transparent;
-    border: 2px solid {p.accent};
-    border-radius: {m.play_button // 2}px;
-    color: {p.accent};
-    font-size: 20px;
-    padding: 0px;
-}}
-QPushButton#PlayButton:hover {{
-    border-color: {p.accent_hot};
-    color: {p.accent_hot};
-    background-color: {p.accent_wash};
-}}
-QPushButton#PlayButton:disabled {{ border-color: {p.text_faint}; color: {p.text_faint}; }}
-
-/* ---------- Video stage ---------- */
-#VideoStage {{ background-color: #000000; border: none; }}
-#VideoSurface {{ background-color: #000000; }}
-
-#OverlayBadge {{
-    background-color: rgba(10, 10, 12, 200);
-    border: 1px solid {p.border_strong};
-    border-radius: {m.radius_small}px;
-    color: {p.text};
-    font-size: 10px;
-    font-weight: 700;
-    padding: 3px 7px;
-}}
-#OverlayBadgeAccent {{
-    background-color: rgba(224, 16, 32, 40);
-    border: 1px solid {p.accent};
-    border-radius: {m.radius_small}px;
-    color: {p.accent};
-    font-size: 10px;
-    font-weight: 700;
-    padding: 3px 7px;
 }}
 #NowPlayingTitle {{
-    color: {p.text};
-    font-size: 17px;
-    font-weight: 700;
+    color: {p.accent};
+    font-size: 15px;
+    font-weight: 800;
     background: transparent;
 }}
-#NowPlayingMeta {{ color: {p.text_muted}; font-size: 11px; background: transparent; }}
+#NowPlayingMeta {{
+    color: {p.text_faint};
+    font-size: 11px;
+    background: transparent;
+}}
+#StatusText {{
+    color: {p.text_faint};
+    font-size: 11px;
+    background: transparent;
+}}
 #TimeLabel {{
     color: {p.text_muted};
     font-size: 11px;
-    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
     background: transparent;
 }}
 
-/* ---------- Sliders ---------- */
-QSlider::groove:horizontal {{
-    height: 4px;
-    background: {p.border_strong};
-    border-radius: 2px;
+/* ---------- Buttons (web .transport button) ---------- */
+QPushButton#TransportButton, QPushButton#IconButton {{
+    background-color: {p.button};
+    border: 1px solid transparent;
+    border-radius: {m.radius_small}px;
+    color: {p.button_text};
+    min-width: {m.transport_button}px;
+    min-height: {m.control_height}px;
+    font-family: "DejaVu Sans", sans-serif;
 }}
-QSlider::sub-page:horizontal {{ background: {p.accent}; border-radius: 2px; }}
+QPushButton#TransportButton:hover, QPushButton#IconButton:hover {{
+    color: {p.accent};
+    border-color: {p.button_hover_border};
+}}
+QPushButton#TransportButton[on="true"], QPushButton#IconButton[on="true"] {{
+    color: {p.accent};
+    box-shadow: inset 0 -2px {p.accent};
+}}
+QPushButton#PlayButton {{
+    background-color: {p.accent_wash};
+    border: 2px solid {p.accent};
+    border-radius: {m.play_button // 2}px;
+    color: {p.accent};
+    font-size: 18px;
+    font-family: "DejaVu Sans", sans-serif;
+}}
+QPushButton#PlayButton:hover {{
+    background-color: #2a0d12;
+}}
+QPushButton#PrimaryButton {{
+    background-color: {p.accent};
+    border: 1px solid {p.accent};
+    border-radius: {m.radius_small}px;
+    color: {p.text_on_accent};
+    font-weight: 600;
+    min-height: {m.control_height}px;
+    padding: 6px 14px;
+}}
+QPushButton#PrimaryButton:hover {{ background-color: {p.accent_hot}; }}
+
+/* ---------- Inputs (web dialog input) ---------- */
+QLineEdit {{
+    background-color: {p.input_bg};
+    border: 1px solid {p.input_border};
+    border-radius: {m.radius_small}px;
+    color: {p.text};
+    padding: 8px 12px;
+    selection-background-color: {p.accent_dim};
+}}
+QLineEdit:focus {{ border-color: {p.accent}; }}
+
+/* ---------- Queue tree (web #queue) ---------- */
+QTreeWidget {{
+    background-color: {p.sidebar};
+    border: none;
+    outline: none;
+    font-size: 12px;
+}}
+QTreeWidget::item {{
+    border-bottom: 1px solid #20242a;
+    border-radius: {m.radius_small}px;
+    padding: 6px 4px;
+}}
+QTreeWidget::item:hover {{ background-color: #171b20; }}
+QTreeWidget::item:selected {{
+    background-color: #171b20;
+    outline: 1px solid {p.accent};
+    color: {p.accent};
+}}
+QTreeWidget::branch {{ background: transparent; border: none; }}
+QTreeWidget::branch:has-children:closed {{
+    image: none;
+    border-left: 3px solid {p.accent};
+}}
+QTreeWidget::branch:has-children:open {{
+    image: none;
+    border-left: 3px solid {p.accent};
+    background-color: #1d0c10;
+}}
+
+/* ---------- Scrollbars (always visible, web-dark) ---------- */
+QScrollBar:vertical {{
+    background: {p.scrollbar};
+    width: 10px;
+    border-radius: 5px;
+    margin: 0;
+}}
+QScrollBar::handle:vertical {{
+    background: {p.accent_dim};
+    border-radius: 5px;
+    min-height: 28px;
+}}
+QScrollBar::handle:vertical:hover {{ background: {p.accent}; }}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+QScrollBar:horizontal {{
+    background: {p.scrollbar};
+    height: 10px;
+    border-radius: 5px;
+}}
+QScrollBar::handle:horizontal {{
+    background: {p.accent_dim};
+    border-radius: 5px;
+    min-width: 28px;
+}}
+QScrollBar::handle:horizontal:hover {{ background: {p.accent}; }}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
+
+/* ---------- Sliders (web accent-color red) ---------- */
+QSlider::groove:horizontal {{
+    background: {p.border};
+    height: 5px;
+    border-radius: 3px;
+}}
 QSlider::handle:horizontal {{
     background: {p.accent};
     width: 12px;
@@ -264,177 +309,74 @@ QSlider::handle:horizontal {{
     margin: -4px 0;
     border-radius: 6px;
 }}
-QSlider::handle:horizontal:hover {{ background: {p.accent_hot}; }}
-QSlider::groove:vertical {{ width: 4px; background: {p.border_strong}; border-radius: 2px; }}
-QSlider::sub-page:vertical {{ background: {p.border_strong}; }}
-QSlider::add-page:vertical {{ background: {p.accent}; border-radius: 2px; }}
-QSlider::handle:vertical {{
-    background: {p.accent}; height: 12px; margin: 0 -4px; border-radius: 6px;
-}}
-
-/* ---------- Panels / cards ---------- */
-#Panel {{
-    background-color: {p.card};
-    border: 1px solid {p.border};
-    border-radius: {m.radius}px;
-}}
-#PanelTitle {{
-    color: {p.text_muted};
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 1.1px;
-    background: transparent;
-}}
-#PanelValue {{ color: {p.accent}; font-size: 12px; font-weight: 700; background: transparent; }}
-#PanelHint {{ color: {p.text_faint}; font-size: 10px; background: transparent; }}
-
-/* ---------- Playlist ---------- */
-#PlaylistPane {{
-    background-color: {p.sidebar};
-    border-left: 1px solid {p.border};
-}}
-QListWidget {{
-    background-color: transparent;
-    border: none;
-    outline: none;
-}}
-QListWidget::item {{
-    background-color: transparent;
-    border: 1px solid transparent;
-    border-radius: {m.radius_small}px;
-    padding: 0px;
-    margin: 2px 6px;
-}}
-QListWidget::item:hover {{ background-color: {p.surface}; }}
-QListWidget::item:selected {{
-    background-color: {p.accent_wash};
-    border: 1px solid {p.accent};
-}}
-
-QTableWidget {{
-    background-color: {p.window};
-    border: none;
-    gridline-color: {p.border};
-    outline: none;
-}}
-QTableWidget::item {{ padding: 6px; border: none; }}
-QTableWidget::item:selected {{ background-color: {p.accent_wash}; color: {p.text}; }}
-QHeaderView::section {{
-    background-color: {p.surface};
-    color: {p.text_muted};
-    border: none;
-    border-bottom: 1px solid {p.border};
-    padding: 7px;
-    font-size: 11px;
-    font-weight: 600;
-}}
-
-/* ---------- Status bar ---------- */
-#StatusBar {{
-    background-color: {p.surface};
-    border-top: 1px solid {p.border};
-}}
-#StatusText {{ color: {p.text_muted}; font-size: 11px; background: transparent; }}
-#StatusAccent {{ color: {p.accent}; font-size: 11px; font-weight: 600; background: transparent; }}
-
-QProgressBar {{
-    background-color: {p.border};
-    border: none;
-    border-radius: 2px;
-    height: 4px;
-    text-align: center;
-}}
-QProgressBar::chunk {{ background-color: {p.accent}; border-radius: 2px; }}
+QSlider::sub-page:horizontal {{ background: {p.accent}; border-radius: 3px; }}
 
 /* ---------- Menus ---------- */
 QMenu {{
+    background-color: #111418;
+    border: 1px solid #343940;
+    border-radius: 8px;
+    padding: 6px;
+}}
+QMenu::item {{
+    padding: 7px 22px;
+    border-radius: 5px;
+}}
+QMenu::item:selected {{ background-color: {p.accent_dim}; color: {p.accent}; }}
+
+/* ---------- Cards (web .cards) ---------- */
+#Card {{
     background-color: {p.surface};
-    border: 1px solid {p.border_strong};
-    border-radius: {m.radius_small}px;
-    padding: 4px;
+    border: 1px solid {p.border};
+    border-radius: {m.radius_small + 1}px;
+    padding: 12px;
 }}
-QMenu::item {{ padding: 7px 26px 7px 22px; border-radius: 4px; color: {p.text}; }}
-QMenu::item:selected {{ background-color: {p.accent}; color: {p.text_on_accent}; }}
-QMenu::item:disabled {{ color: {p.text_faint}; }}
-QMenu::separator {{ height: 1px; background: {p.border}; margin: 4px 8px; }}
-QMenu::indicator {{ width: 14px; height: 14px; left: 6px; }}
-
-QMenuBar {{ background-color: {p.surface}; border-bottom: 1px solid {p.border}; }}
-QMenuBar::item {{ padding: 6px 11px; background: transparent; color: {p.text_muted}; }}
-QMenuBar::item:selected {{ background-color: {p.surface_alt}; color: {p.text}; }}
-
-/* ---------- Scrollbars ---------- */
-QScrollBar:vertical {{ background: transparent; width: 9px; margin: 0; }}
-QScrollBar::handle:vertical {{
-    background: {p.border_strong}; border-radius: 4px; min-height: 26px;
-}}
-QScrollBar::handle:vertical:hover {{ background: {p.accent_dim}; }}
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
-QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: none; }}
-QScrollBar:horizontal {{ background: transparent; height: 9px; margin: 0; }}
-QScrollBar::handle:horizontal {{
-    background: {p.border_strong}; border-radius: 4px; min-width: 26px;
-}}
-QScrollBar::handle:horizontal:hover {{ background: {p.accent_dim}; }}
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
-QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{ background: none; }}
-
-/* ---------- Misc ---------- */
-QToolTip {{
-    background-color: {p.surface};
-    color: {p.text};
-    border: 1px solid {p.accent_dim};
-    border-radius: 4px;
-    padding: 5px 8px;
-}}
-QSplitter::handle {{ background-color: {p.border}; }}
-QSplitter::handle:horizontal {{ width: 1px; }}
-QSplitter::handle:hover {{ background-color: {p.accent_dim}; }}
-QCheckBox, QRadioButton {{ spacing: 8px; background: transparent; }}
-QCheckBox::indicator, QRadioButton::indicator {{ width: 15px; height: 15px; }}
-QCheckBox::indicator:unchecked {{
-    border: 1px solid {p.border_strong};
-    border-radius: 3px;
-    background: {p.surface_alt};
-}}
-QCheckBox::indicator:checked {{
-    border: 1px solid {p.accent};
-    border-radius: 3px;
-    background: {p.accent};
-}}
-QSpinBox, QDoubleSpinBox {{
-    background-color: {p.surface_alt};
-    border: 1px solid {p.border_strong};
-    border-radius: {m.radius_small}px;
-    padding: 5px 7px;
-    color: {p.text};
-}}
-QSpinBox:focus, QDoubleSpinBox:focus {{ border: 1px solid {p.accent}; }}
-QTabWidget::pane {{ border: 1px solid {p.border}; border-radius: {m.radius}px; top: -1px; }}
-QTabBar::tab {{
+#CardTitle {{
+    color: #a7abb0;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
     background: transparent;
-    color: {p.text_muted};
-    padding: 8px 16px;
-    border-bottom: 2px solid transparent;
 }}
-QTabBar::tab:selected {{ color: {p.text}; border-bottom: 2px solid {p.accent}; }}
-QTabBar::tab:hover {{ color: {p.text}; }}
+#CardValue {{
+    color: {p.accent};
+    font-size: 12px;
+    font-weight: 700;
+    background: transparent;
+}}
+
+/* ---------- Toast (web #toast) ---------- */
+QLabel#Toast {{
+    background-color: {p.toast_bg};
+    border: 1px solid {p.toast_border};
+    border-left: 3px solid {p.accent};
+    border-radius: {m.radius_small}px;
+    color: {p.text};
+    padding: 12px 18px;
+}}
+
+/* ---------- Status bar ---------- */
+QStatusBar {{
+    background-color: {p.sidebar};
+    border-top: 1px solid {p.border};
+    color: {p.text_faint};
+}}
+
+/* ---------- In-window pages (web dialog look) ---------- */
+#Page {{
+    background-color: #0b0d10;
+}}
+#PagePanel {{
+    background-color: #111418;
+    border: 1px solid #343940;
+    border-radius: 12px;
+}}
+#EpgChannel {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 #171b20, stop:1 #0c0f12);
+    border: 1px solid {p.border};
+    border-left: 3px solid {p.accent};
+    border-radius: {m.radius_small + 1}px;
+    padding: 12px;
+}}
 """
-
-
-def format_duration(seconds: float | None) -> str:
-    """Format seconds as H:MM:SS or MM:SS; unknown values become ``--:--``."""
-    if seconds is None:
-        return "--:--"
-    try:
-        value = float(seconds)
-    except (TypeError, ValueError):
-        return "--:--"
-    if value < 0 or value != value or value in (float("inf"), float("-inf")):
-        return "--:--"
-    total = int(value)
-    hours, remainder = divmod(total, 3600)
-    minutes, secs = divmod(remainder, 60)
-    if hours:
-        return f"{hours}:{minutes:02d}:{secs:02d}"
-    return f"{minutes:02d}:{secs:02d}"
