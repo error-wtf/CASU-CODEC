@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "product_version": "1.0.0rc8",
-  "release_status": "DEVELOPMENT_RC",
-  "updated": "2026-08-13",
+  "product_version": "1.0.0",
+  "release_status": "RELEASE_1_0_0",
+  "updated": "2026-08-14",
   "gates": [
     {
       "id": 1,
@@ -93,5 +93,6 @@
         "The production `/usr/bin/python3` PyAV path has exact generated-frame parity with the monitored FFmpeg STRICT adapter; bounded atomic playlist/session/settings/report/journal paths, content-routed streaming recursive batches, symlink containment, interrupted-upload cleanup and browser playlist limits are regression-tested; the current 354-test collection passes through bounded split groups (202 non-media plus all media files), with 4 opt-in corpus skips and 9 environment-specific libVLC XFAIL. The monolithic media aggregate is intentionally stopped at the 60-second policy ceiling while still progressing. Qt migration, physical output/network coverage, cross-platform packages and complete runtime matrix remain open"
       ]
     }
-  ]
+  ],
+  "notes": "Release 1.0.0 ships the complete product surface (Qt desktop player, web player, converter, CLI, DEB packages) with gates 1-3 PASS. Gates 4-6 remain honestly PARTIAL: native-player, media-management and product-UI evidence was largely gathered on the Tk reference player; the Qt player (mpcasu since 1.0.0) passes its own smoke/backend suites (23/23 native_player_backend, qt_sources/qt_playlist/qt_playback smokes, CASUNAT2 Qt video sink playback >1s) but has not yet re-run the full gate-4..6 regression matrices. The 3,000,000-run fuzz campaign of gate 3 predates the final packaging changes."
 }
