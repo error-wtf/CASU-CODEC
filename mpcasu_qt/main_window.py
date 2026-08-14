@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import random
 import threading
 from pathlib import Path
 
@@ -266,9 +267,17 @@ class PlaylistPane(QFrame):
         self.empty_label.setStyleSheet(f"color: {PALETTE.text_faint}; padding: 20px; background: transparent;")
         layout.addWidget(self.empty_label)
 
-        footer = QLabel("QUEUE · SHUFFLE · REPEAT")
-        footer.setObjectName("NowPlayingMeta")
-        footer.setContentsMargins(12, 4, 12, 12)
+        footer = QFrame()
+        footer_layout = QHBoxLayout(footer)
+        footer_layout.setContentsMargins(12, 4, 12, 12)
+        self.shuffle_btn = QPushButton("Shuffle off")
+        self.shuffle_btn.setObjectName("IconButton")
+        self.shuffle_btn.setCheckable(True)
+        footer_layout.addWidget(self.shuffle_btn)
+        self.repeat_btn = QPushButton("Repeat off")
+        self.repeat_btn.setObjectName("IconButton")
+        footer_layout.addWidget(self.repeat_btn)
+        footer_layout.addStretch()
         layout.addWidget(footer)
 
     def _selected_row(self) -> int:
@@ -917,6 +926,11 @@ class MainWindow(QMainWindow):
         self._playlist_pane.playRequested.connect(self._play_playlist_row)
         self._playlist_pane.removeRequested.connect(self._on_playlist_remove)
         self._playlist_pane.moveRequested.connect(self._on_playlist_move)
+        self._shuffle = False
+        self._repeat_mode = "off"
+        self._random = random.SystemRandom()
+        self._playlist_pane.shuffle_btn.toggled.connect(self._toggle_shuffle)
+        self._playlist_pane.repeat_btn.clicked.connect(self._cycle_repeat)
         body.addWidget(self._playlist_pane)
 
         main_layout.addLayout(body)
@@ -1236,24 +1250,56 @@ class MainWindow(QMainWindow):
         self._paused = False
         self._play_btn.setText("⏸")
 
-    def play_next(self):
+    def _toggle_shuffle(self, checked: bool) -> None:
+        self._shuffle = checked
+        self._playlist_pane.shuffle_btn.setText("Shuffle on" if checked else "Shuffle off")
+        self.status(f"Shuffle {'on' if checked else 'off'}")
+
+    def _cycle_repeat(self) -> None:
+        values = ("off", "all", "one")
+        self._repeat_mode = values[(values.index(self._repeat_mode) + 1) % len(values)]
+        self._playlist_pane.repeat_btn.setText(f"Repeat {self._repeat_mode}")
+        self.status(f"Repeat mode: {self._repeat_mode}")
+
+    def play_next(self, automatic: bool = False):
+        count = len(self.playlist_model)
+        if automatic and self._repeat_mode == "one" and self.current and self.backend:
+            self.controller.seek(0.0)
+            return
+        if not count:
+            self.status("Playlist is empty")
+            return
         selected_index = self._selected_playlist_row()
         current_index = self.playlist_model.index_of(self.current) if self.current else None
         index = selected_index if selected_index >= 0 else (-1 if current_index is None else current_index)
-        if index + 1 >= len(self.playlist_model):
+        if self._shuffle and count > 1:
+            choices = [value for value in range(count) if value != index]
+            target = self._random.choice(choices)
+        else:
+            target = index + 1
+        if target >= count and self._repeat_mode == "all":
+            target = 0
+        if target >= count:
             self.status("End of playlist")
             return
-        self._playlist_pane.list_widget.setCurrentRow(index + 1)
+        self._playlist_pane.list_widget.setCurrentRow(target)
         self.play_selected()
 
     def play_previous(self):
+        count = len(self.playlist_model)
+        if not count:
+            self.status("Playlist is empty")
+            return
         selected_index = self._selected_playlist_row()
         current_index = self.playlist_model.index_of(self.current) if self.current else None
         index = selected_index if selected_index >= 0 else (0 if current_index is None else current_index)
-        if index <= 0:
+        target = index - 1
+        if target < 0 and self._repeat_mode == "all":
+            target = count - 1
+        if target < 0:
             self.status("Beginning of playlist")
             return
-        self._playlist_pane.list_widget.setCurrentRow(index - 1)
+        self._playlist_pane.list_widget.setCurrentRow(target)
         self.play_selected()
 
     def _selected_playlist_row(self) -> int:
@@ -1985,7 +2031,7 @@ class MainWindow(QMainWindow):
             self._end_handled = True
             self._advancing = True
             try:
-                self.play_next()
+                self.play_next(automatic=True)
             finally:
                 self._advancing = False
 
@@ -2033,7 +2079,7 @@ class MainWindow(QMainWindow):
                 self._end_handled = True
                 self._advancing = True
                 try:
-                    self.play_next()
+                    self.play_next(automatic=True)
                 finally:
                     self._advancing = False
             elif state == PlaybackState.ERROR:
