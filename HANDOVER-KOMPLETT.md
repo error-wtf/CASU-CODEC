@@ -289,3 +289,25 @@ rc8 trotz rc9-Quellen. Behoben: altes Cache entfernt (einzige Löschaktion der
 Session, nur Bytecode-Müll) und `DEBIAN/postinst` in allen Paketen ergänzt,
 das bei jedem Install/Upgrade `__pycache__` unter `/usr/share/casu-codec`
 leert. Verifiziert: installiert läuft rc9, `dpkg -V` alle 5 Pakete sauber.
+
+### 10.8 Nachtrag Session 4 (Teil 2): Webplayer-Mängel + Navigation behoben
+
+Nutzer-Rückmeldung: Playlists nicht scrollbar, Videobild nicht immer sichtbar,
+Responsive unvollständig, kein FFT bei Streams, Navigation unzureichend.
+
+**Alles behoben und E2E-verifiziert:**
+
+| Problem | Fix |
+|---|---|
+| Playlist/Inhalte nicht scrollbar | `min-height:0` auf `.app-shell`-Row (minmax(0,1fr)), `.workspace`, `.queue-panel`, `#queue`, Sidebar `overflow-y:auto` |
+| Videobild nicht immer sichtbar | Visualizer-Canvas wird bei echtem Video (`videoWidth>0`) ausgeblendet (`video-mode`-Klasse + `vizAllowed()`), Operator-Prioritätsbug `!youtube.hidden===false` entfernt |
+| Responsive | Transport `flex-wrap`, `92dvh`, ≤780px: Playlist als Overlay-Drawer mit `#queue-toggle`-Button statt versteckt |
+| Kein FFT bei Streams | Neuer Endpunkt `/api/stream-proxy` in `web_casu.py` (HTTP(S)-Relay, Loopback, Schema-Prüfung, 502 bei totem Upstream). Streams werden same-origin abgespielt → `AnalyserNode` bekommt Daten. Fallback auf Direkt-URL falls Proxy scheitert (`proxyFailed`); Cross-Origin-Direktwiedergabe wird NICHT durch den Analyser geschleift (verhindert Stummschaltung) |
+| Navigation Web | Echte Views: Now Playing / Local Files / Web & Streams / Playlists / CASU Files filtern die Queue (`VIEWS`), Back-Button (‹) funktioniert, View-Titel aktualisiert sich, neue Items wechseln automatisch in passende View, aktiver Eintrag scrollt in Sicht |
+| Navigation Desktop | Alle 8 Tk-Dialoge schließen mit Escape; Enter spielt in Queue- und Library-Liste (zusätzlich zu Doppelklick) |
+
+**Verifikation:** `node --check` OK · 209 Tests grün · 18 GUI-Smokes grün ·
+Chromium-E2E grün · Playwright-Smoke (`tools/smoke_web_nav.py`): Playlist 2/2,
+View-Filter 0/2, Back→NOW PLAYING, Proxy 200 · Stream-Proxy gegen echten
+Radio-Stream (ice.bassdrive.net): 200, audio/mpeg, 128 KB live · DEBs rc9
+neu gebaut, installiert, `dpkg -V` sauber, installierte Dateien byteidentisch.

@@ -13,12 +13,12 @@
       <img class="brand" src="../assets/mpcasu_player_logo_header.png" alt="MPCASU Player">
       <p class="eyebrow">LIBRARY</p>
       <button class="nav active" data-view="now">▶ <span>Now Playing</span></button>
-      <button class="nav" id="open-files">▣ <span>Local Files</span></button>
-      <button class="nav" id="open-url">◎ <span>Web & Streams</span></button>
-      <button class="nav" id="open-playlist">☷ <span>Playlists</span></button>
+      <button class="nav" id="open-files" data-view="files">▣ <span>Local Files</span></button>
+      <button class="nav" id="open-url" data-view="streams">◎ <span>Web & Streams</span></button>
+      <button class="nav" id="open-playlist" data-view="playlists">☷ <span>Playlists</span></button>
       <button class="nav" id="open-epg">◫ <span>Live TV & EPG</span></button>
       <p class="eyebrow">CASU</p>
-      <button class="nav" id="open-casu">◆ <span>CASU Files</span></button>
+      <button class="nav" id="open-casu" data-view="casu">◆ <span>CASU Files</span></button>
       <div class="sidebar-spacer"></div>
       <button class="nav" id="clear-all">⌫ <span>Clear Library</span></button>
       <p class="build">MPCASU WEB · RC</p>
@@ -26,8 +26,9 @@
 
     <section class="workspace">
       <header class="topbar">
-        <div><span class="back">‹</span><strong>NOW PLAYING</strong></div>
+        <div><button class="back" id="back-button" title="Back to Now Playing" aria-label="Back to Now Playing">‹</button><strong id="view-title">NOW PLAYING</strong></div>
         <label class="search"><span>⌕</span><input id="search" type="search" placeholder="Search playlist" aria-label="Search playlist"></label>
+        <button id="queue-toggle" title="Toggle playlist" aria-label="Toggle playlist">☷</button>
       </header>
 
       <section class="stage" id="drop-zone">
