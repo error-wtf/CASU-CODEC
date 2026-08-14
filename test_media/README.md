@@ -41,3 +41,32 @@ Override it with `CASU_TEST_AUDIO=/path/to/file.mp3`.
 
 The sidecar is optional metadata. The original MP4/MP3 remains the canonical
 source and remains usable by ordinary media players.
+
+## Regenerated conversion demo fixtures (1.0.0)
+
+Generated from a deterministic 6-second `testsrc`/sine clip (320×240, 12 fps,
+H.264/AAC) so every artifact is reproducible without external downloads:
+
+- `demo_clip.mp4` — the source clip
+- `demo_casunat2.casu` — CASUNAT2 segmented container produced by
+  `casu pack-v2` (2 streams, video key states + tile updates + PCM audio,
+  integrity verified)
+- `demo.mp5` — CASU MP5 container produced by `casu pack-mp5` (strict mode,
+  original source embedded and SHA-256 bound)
+- `demo_clip.mp4.casu` — CASUNAT1 compatibility envelope produced by
+  `casu pack` (payload SHA-256 verified)
+
+Reproduce them with:
+
+```bash
+ffmpeg -y -f lavfi -i "testsrc=duration=6:size=320x240:rate=12" \
+  -f lavfi -i "sine=frequency=440:duration=6" \
+  -c:v libx264 -preset ultrafast -c:a aac -shortest test_media/demo_clip.mp4
+casu pack-v2 test_media/demo_clip.mp4 -o test_media/demo_casunat2.casu
+casu pack-mp5 test_media/demo_clip.mp4 -o test_media/demo.mp5
+casu pack test_media/demo_clip.mp4 -o test_media/demo_clip.mp4.casu
+```
+
+`lino_casu_error.casu` and `lino_lol_test_pattern.casu` are intentionally
+invalid sidecars kept as fail-closed rejection fixtures; the player refuses
+them by design. Do not regenerate them into valid containers.

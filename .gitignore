@@ -11,3 +11,6 @@ artifacts/*.opus
 artifacts/*.casu
 # Owner-authorized reference fixtures are tracked; generated artifacts remain
 # reproducible and may be kept outside the repository.
+*.bak
+*.bak-*
+*~

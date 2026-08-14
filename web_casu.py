@@ -21,6 +21,10 @@ import webbrowser
 from pathlib import Path
 
 from casu.epg import EpgError, MAX_XMLTV_BYTES, fetch_document
+from casu.locations import (LocationResolutionError, is_youtube_url,
+                            resolve_media_location)
+from casu.search import SearchError, search_music, search_youtube
+from casu.spotify import SpotifyError, is_spotify_url, resolve_spotify_url
 
 from casu.export import CasuExportError, export_casu
 
@@ -426,6 +430,22 @@ class WebPlayerHandler(http.server.SimpleHTTPRequestHandler):
                     raise WebPlayerError(str(exc)) from exc
                 self._catalog(body)
                 return
+            elif self.path == "/api/search":
+                if length <= 0 or length > 64 * 1024:
+                    raise WebPlayerError("search request size is invalid")
+                request = json.loads(self.rfile.read(length))
+                if not isinstance(request, dict):
+                    raise WebPlayerError("search request must be a JSON object")
+                self._search(request)
+                return
+            elif self.path == "/api/resolve":
+                if length <= 0 or length > 64 * 1024:
+                    raise WebPlayerError("resolve request size is invalid")
+                request = json.loads(self.rfile.read(length))
+                if not isinstance(request, dict):
+                    raise WebPlayerError("resolve request must be a JSON object")
+                self._resolve(request)
+                return
             else:
                 self.send_error(404)
                 return
@@ -433,6 +453,39 @@ class WebPlayerHandler(http.server.SimpleHTTPRequestHandler):
         except (BrokenPipeError, json.JSONDecodeError, OSError, ValueError,
                 WebPlayerError) as exc:
             self._json(400, {"error": str(exc)[:1000]})
+
+    def _search(self, request: dict) -> None:
+        """YouTube/music search via yt-dlp; metadata only, no downloads."""
+        query = str(request.get("query", "")).strip()
+        source = str(request.get("source", "youtube")).lower()
+        try:
+            limit = int(request.get("limit", 12))
+        except (TypeError, ValueError):
+            limit = 12
+        if not query:
+            raise WebPlayerError("search query must not be empty")
+        engine = search_music if source == "spotify" else search_youtube
+        try:
+            results = engine(query, limit=limit)
+        except SearchError as exc:
+            raise WebPlayerError(str(exc)) from exc
+        self._json(200, {"results": [item.as_dict() for item in results]})
+
+    def _resolve(self, request: dict) -> None:
+        """Resolve a YouTube/Spotify URL to a direct playable stream URL."""
+        url = str(request.get("url", "")).strip()
+        if not url:
+            raise WebPlayerError("resolve request needs a url")
+        try:
+            if is_spotify_url(url):
+                resolved = resolve_spotify_url(url)
+            elif is_youtube_url(url):
+                resolved = resolve_media_location(url)
+            else:
+                raise WebPlayerError("only YouTube and Spotify URLs can be resolved")
+        except (LocationResolutionError, SpotifyError) as exc:
+            raise WebPlayerError(str(exc)) from exc
+        self._json(200, {"url": resolved})
 
     def _stream_proxy(self, parsed) -> None:
         """Relay an HTTP(S) stream same-origin so the Web Audio analyser can read it.

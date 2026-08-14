@@ -1,9 +1,13 @@
 # SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
 # SPDX-FileCopyrightText: 2026 Lino Casu
-"""Small, accessible Tk front-end for the CASU converter.
+"""Accessible Tk front-end for the CASU converter (red/black design system).
 
-The CLI remains the automation/reference interface; this window only collects
-the same explicit options and runs the converter without changing the source.
+The CLI remains the automation/reference interface; this window collects the
+same explicit options and runs the converter without changing the source.
+
+UX goals: three clear steps (source → direction → convert), direction-aware
+options, advanced settings collapsed by default, and no modal popups — all
+feedback is given as in-window toasts, status text or the inline replace bar.
 """
 from __future__ import annotations
 
@@ -17,6 +21,9 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+from casu.design import (BG, PANEL, PANEL_ALT, LINE, RED, RED_DARK, TEXT,
+                         SECONDARY, MUTED, TOAST_BG, TOAST_BORDER, INPUT_BG,
+                         INPUT_BORDER, SCROLLBAR, TOKENS)
 from casu.core import ANALYSIS_MODES, CasuCancelled, CasuError, ffprobe, duration
 from casu.jobs import (ConversionCancelled, ConversionEngine, ConversionJob,
                        ConversionProfile, ConversionProgress,
@@ -32,13 +39,6 @@ from casu.export import CasuExportError, export_casu
 from casu.fileio import atomic_write_json, read_bounded_json
 from casu.filetypes import MAX_SIDECAR_BYTES, detect_casu_kind
 from casu.transcode import MEDIA_OUTPUT_EXTENSIONS, MEDIA_PRESETS, SUBTITLE_MODES
-
-BG = "#090B0D"
-PANEL = "#111418"
-PANEL_ALT = "#14181D"
-RED = "#FF1E2D"
-TEXT = "#F2F2F2"
-SECONDARY = "#A7ABB0"
 
 
 def collect_folder_sources(folder: str | Path, *, from_casu: bool) -> list[Path]:
@@ -77,8 +77,8 @@ class CASUConverter(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("CASU Full Media Converter")
-        self.geometry("980x700")
-        self.minsize(600, 360)
+        self.geometry("1000x760")
+        self.minsize(680, 420)
         self.source = tk.StringVar()
         self.output = tk.StringVar()
         self._sources: list[Path] = []
@@ -100,7 +100,7 @@ class CASUConverter(tk.Tk):
         self.tile_size = tk.IntVar(value=64)
         self.key_interval_seconds = tk.DoubleVar(value=3.0)
         self.retries = tk.IntVar(value=0)
-        self.status = tk.StringVar(value="Choose media or CASU source files.")
+        self.status = tk.StringVar(value="Step 1 — choose media or CASU source files.")
         self.source_info = tk.StringVar(value="No source inspected")
         self.output_info = tk.StringVar(value="The original source is never modified.")
         self._cancel_event = threading.Event()
@@ -109,11 +109,16 @@ class CASUConverter(tk.Tk):
         self._busy = False
         self._paused = False
         self._inspection_generation = 0
+        self._pending_start = None
+        self._packed_rows: set = set()
+        self._toast_after_id: str | None = None
         self._ui_queue: queue.SimpleQueue[object] = queue.SimpleQueue()
         self._destroying = False
         self._ui_after_id: str | None = None
         self._build()
         self._ui_after_id = self.after(40, self._drain_ui_queue)
+
+    # --- UI plumbing ---
 
     def _post_ui(self, callback) -> None:
         if threading.current_thread() is threading.main_thread() and not self._destroying:
@@ -142,115 +147,290 @@ class CASUConverter(tk.Tk):
             except tk.TclError:
                 pass
             self._ui_after_id = None
+        if self._toast_after_id is not None:
+            try:
+                self.after_cancel(self._toast_after_id)
+            except tk.TclError:
+                pass
+            self._toast_after_id = None
         super().destroy()
+
+    def toast(self, text: str, *, error: bool = False) -> None:
+        """Web-player style transient message — replaces modal popups."""
+        if self._destroying:
+            return
+        self._toast.configure(text=str(text),
+                              fg=TOKENS.text if not error else "#ffb4b4",
+                              highlightbackground=RED if error else TOAST_BORDER)
+        self._toast.update_idletasks()
+        width = min(self._toast.winfo_reqwidth(), max(360, self.winfo_width() - 48))
+        x = max(24, (self.winfo_width() - width) // 2)
+        y = max(12, self.winfo_height() - self._toast.winfo_reqheight() - 46)
+        self._toast.place(x=x, y=y, width=width)
+        self._toast.lift()
+        if self._toast_after_id is not None:
+            try:
+                self.after_cancel(self._toast_after_id)
+            except tk.TclError:
+                pass
+        self._toast_after_id = self.after(TOKENS.toast_ms, self._toast.place_forget)
+
+    # --- Layout ---
 
     def _build(self) -> None:
         self.configure(bg=BG)
         style = ttk.Style(self)
-        try: style.theme_use("clam")
-        except tk.TclError: pass
-        style.configure("CASU.TButton", background=PANEL_ALT, foreground=TEXT, borderwidth=0, padding=(10, 6))
-        style.map("CASU.TButton", background=[("active", "#3A1015")])
-        root = tk.Frame(self, bg=BG, padx=22, pady=20)
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+        style.configure("CASU.TButton", background=PANEL_ALT, foreground=TEXT,
+                        borderwidth=0, padding=(12, 7))
+        style.map("CASU.TButton", background=[("active", RED_DARK), ("disabled", PANEL)],
+                  foreground=[("disabled", MUTED)])
+        style.configure("CASU.Primary.TButton", background=RED, foreground="#ffffff",
+                        borderwidth=0, padding=(22, 10), font=("TkDefaultFont", 11, "bold"))
+        style.map("CASU.Primary.TButton", background=[("active", "#ff3a47"), ("disabled", RED_DARK)],
+                  foreground=[("disabled", MUTED)])
+        style.configure("CASU.TEntry", fieldbackground=INPUT_BG, foreground=TEXT,
+                        bordercolor=INPUT_BORDER, insertcolor=TEXT)
+        style.configure("TEntry", fieldbackground=INPUT_BG, foreground=TEXT,
+                        bordercolor=INPUT_BORDER, insertcolor=TEXT)
+        style.configure("TCombobox", fieldbackground=INPUT_BG, background=PANEL_ALT,
+                        foreground=TEXT, arrowcolor=SECONDARY, bordercolor=INPUT_BORDER)
+        style.map("TCombobox", fieldbackground=[("readonly", INPUT_BG)],
+                  foreground=[("readonly", TEXT)])
+        style.configure("TSpinbox", fieldbackground=INPUT_BG, background=PANEL_ALT,
+                        foreground=TEXT, arrowcolor=SECONDARY, bordercolor=INPUT_BORDER)
+        style.configure("TCheckbutton", background=BG, foreground=SECONDARY)
+        style.map("TCheckbutton", background=[("active", BG)])
+        style.configure("CASU.TRadiobutton", background=BG, foreground=TEXT,
+                        indicatorcolor=RED, font=("TkDefaultFont", 10, "bold"))
+        style.map("CASU.TRadiobutton", background=[("active", BG)])
+        style.configure("CASU.Horizontal.TProgressbar", background=RED, troughcolor=LINE,
+                        bordercolor=LINE, lightcolor=RED, darkcolor=RED_DARK)
+        style.configure("Vertical.TScrollbar", background=PANEL_ALT, troughcolor=BG,
+                        bordercolor=BG, arrowcolor=SECONDARY)
+        style.map("Vertical.TScrollbar", background=[("active", RED_DARK)])
+        style.configure("Treeview", background=PANEL, fieldbackground=PANEL,
+                        foreground=TEXT, rowheight=24, borderwidth=0)
+        style.configure("Treeview.Heading", background=PANEL_ALT, foreground=RED,
+                        borderwidth=0, font=("TkDefaultFont", 8, "bold"))
+
+        root = tk.Frame(self, bg=BG, padx=24, pady=18)
         root.pack(fill="both", expand=True)
+
         logo_path = _asset_path("casu_codec_logo_header.png")
         self._logo_image = None
         try:
-            image = tk.PhotoImage(file=str(logo_path)); self._logo_image = image.subsample(max(1, image.width() // 140), max(1, image.height() // 60))
+            image = tk.PhotoImage(file=str(logo_path))
+            self._logo_image = image.subsample(max(1, image.width() // 140),
+                                               max(1, image.height() // 60))
             self.iconphoto(True, self._logo_image)
             tk.Label(root, image=self._logo_image, bg=BG).pack(anchor="w")
         except (tk.TclError, OSError):
-            tk.Label(root, text="CASU CONVERTER", bg=BG, fg=RED, font=("TkDefaultFont", 22, "bold")).pack(anchor="w")
-        tk.Label(root, text="Codec for All Segmented Units · source media remains untouched", bg=BG, fg=SECONDARY).pack(anchor="w", pady=(0, 18))
-        for label, variable, command in (("Source files", self.source, self.choose_source), ("Output folder", self.output, self.choose_output)):
-            row = ttk.Frame(root); row.pack(fill="x", pady=5)
-            tk.Label(row, text=label, width=16, bg=BG, fg=TEXT, anchor="w").pack(side="left")
+            tk.Label(root, text="CASU CONVERTER", bg=BG, fg=RED,
+                     font=("TkDefaultFont", 22, "bold")).pack(anchor="w")
+        tk.Label(root, text="Codec for All Segmented Units · source media remains untouched",
+                 bg=BG, fg=MUTED).pack(anchor="w", pady=(0, 14))
+
+        # --- Step 1: sources ---
+        step1 = tk.Frame(root, bg=PANEL, padx=16, pady=12)
+        step1.pack(fill="x")
+        tk.Label(step1, text="1 · SOURCES", bg=PANEL, fg=RED,
+                 font=("TkDefaultFont", 9, "bold")).pack(anchor="w")
+        for label, variable, command in (("Source files", self.source, self.choose_source),
+                                         ("Output folder", self.output, self.choose_output)):
+            row = tk.Frame(step1, bg=PANEL)
+            row.pack(fill="x", pady=4)
+            tk.Label(row, text=label, width=14, bg=PANEL, fg=SECONDARY, anchor="w").pack(side="left")
             ttk.Entry(row, textvariable=variable).pack(side="left", fill="x", expand=True)
             ttk.Button(row, text="Browse…", style="CASU.TButton", command=command).pack(side="left", padx=(8, 0))
-        folder_actions = tk.Frame(root, bg=BG); folder_actions.pack(fill="x", pady=(0, 4))
-        ttk.Button(folder_actions, text="Add folder (recursive)", style="CASU.TButton", command=self.choose_folder).pack(side="left")
-        ttk.Button(folder_actions, text="Remove selected", style="CASU.TButton", command=self.remove_selected).pack(side="left", padx=6)
-        ttk.Button(folder_actions, text="Clear queue", style="CASU.TButton", command=self.clear_queue).pack(side="left")
-        tk.Label(folder_actions, text="Each file is probed independently.", bg=BG, fg=SECONDARY).pack(side="left", padx=10)
-        self.queue = tk.Listbox(root, height=4, bg=PANEL_ALT, fg=TEXT, selectbackground="#3A1015",
-                                relief="flat", highlightthickness=0, activestyle="none", exportselection=False)
-        self.queue.pack(fill="x", pady=(2, 6))
-        info = tk.Frame(root, bg=PANEL_ALT, padx=14, pady=10)
-        info.pack(fill="x", pady=(8, 4))
-        tk.Label(info, text="SOURCE INSPECTION", bg=PANEL_ALT, fg=RED, font=("TkDefaultFont", 8, "bold")).pack(anchor="w")
-        tk.Label(info, textvariable=self.source_info, bg=PANEL_ALT, fg=TEXT, anchor="w", justify="left").pack(fill="x", pady=(4, 0))
-        tk.Label(info, textvariable=self.output_info, bg=PANEL_ALT, fg=SECONDARY, anchor="w").pack(fill="x", pady=(3, 0))
-        options = tk.Frame(root, bg=BG); options.pack(fill="x", pady=12)
-        ttk.Label(options, text="Direction").pack(side="left")
-        ttk.Combobox(options, textvariable=self.direction,
-                     values=("media-to-media", "to-casu", "from-casu"),
-                     state="readonly", width=15).pack(side="left", padx=(8, 14))
-        ttk.Label(options, text="Analysis mode").pack(side="left")
-        ttk.Combobox(options, textvariable=self.mode, values=sorted(ANALYSIS_MODES), state="readonly", width=18).pack(side="left", padx=8)
-        ttk.Label(options, text="FPS").pack(side="left")
-        ttk.Spinbox(options, from_=0.1, to=120.0, increment=0.5, textvariable=self.fps, width=8).pack(side="left", padx=8)
-        ttk.Label(options, text="Retries").pack(side="left")
-        ttk.Spinbox(options, from_=0, to=10, increment=1,
-                    textvariable=self.retries, width=4).pack(side="left", padx=6)
-        ttk.Checkbutton(options, text="Standalone segmented CASUNAT2", variable=self.native_output).pack(side="left", padx=12)
-        ttk.Checkbutton(options, text="Resume verified jobs", variable=self.resume_jobs).pack(side="left", padx=4)
-        segmentation = tk.Frame(root, bg=BG); segmentation.pack(fill="x", pady=(0, 6))
-        ttk.Label(segmentation, text="CASU tile size").pack(side="left")
-        ttk.Spinbox(segmentation, from_=8, to=1024, increment=8,
-                    textvariable=self.tile_size, width=7).pack(side="left", padx=(8, 14))
-        ttk.Label(segmentation, text="Key-state interval (s)").pack(side="left")
-        ttk.Spinbox(segmentation, from_=0.1, to=3600.0, increment=0.5,
-                    textvariable=self.key_interval_seconds, width=8).pack(side="left", padx=8)
-        ttk.Label(segmentation,
-                  text="Used by standalone CASUNAT2 encoding and recorded in the report.").pack(side="left")
-        export_options = tk.Frame(root, bg=BG); export_options.pack(fill="x", pady=(0, 6))
-        ttk.Label(export_options, text="Output format").pack(side="left")
-        ttk.Combobox(export_options, textvariable=self.export_format,
+        folder_actions = tk.Frame(step1, bg=PANEL)
+        folder_actions.pack(fill="x", pady=(4, 2))
+        ttk.Button(folder_actions, text="Add folder (recursive)", style="CASU.TButton",
+                   command=self.choose_folder).pack(side="left")
+        ttk.Button(folder_actions, text="Remove selected", style="CASU.TButton",
+                   command=self.remove_selected).pack(side="left", padx=6)
+        ttk.Button(folder_actions, text="Clear queue", style="CASU.TButton",
+                   command=self.clear_queue).pack(side="left")
+        tk.Label(folder_actions, text="Each file is probed independently.",
+                 bg=PANEL, fg=MUTED).pack(side="left", padx=10)
+        self.queue = tk.Listbox(step1, height=4, bg=INPUT_BG, fg=TEXT,
+                                selectbackground=RED_DARK, selectforeground=TEXT,
+                                relief="flat", highlightthickness=0, activestyle="none",
+                                exportselection=False)
+        self.queue.pack(fill="x", pady=(4, 6))
+        tk.Label(step1, text="SOURCE INSPECTION", bg=PANEL, fg=RED,
+                 font=("TkDefaultFont", 8, "bold")).pack(anchor="w")
+        tk.Label(step1, textvariable=self.source_info, bg=PANEL, fg=TEXT,
+                 anchor="w", justify="left", wraplength=880).pack(fill="x", pady=(2, 0))
+        tk.Label(step1, textvariable=self.output_info, bg=PANEL, fg=MUTED,
+                 anchor="w").pack(fill="x", pady=(2, 0))
+
+        # --- Step 2: direction ---
+        step2 = tk.Frame(root, bg=PANEL, padx=16, pady=12)
+        step2.pack(fill="x", pady=(10, 0))
+        tk.Label(step2, text="2 · DIRECTION", bg=PANEL, fg=RED,
+                 font=("TkDefaultFont", 9, "bold")).pack(anchor="w")
+        directions = tk.Frame(step2, bg=PANEL)
+        directions.pack(fill="x", pady=(6, 0))
+        for text, value, hint in (
+                ("Media → Media", "media-to-media", "transcode between legacy formats"),
+                ("To CASU", "to-casu", "pack media into segmented CASU"),
+                ("From CASU", "from-casu", "export CASU back to media")):
+            cell = tk.Frame(directions, bg=PANEL)
+            cell.pack(side="left", padx=(0, 26))
+            ttk.Radiobutton(cell, text=text, value=value, variable=self.direction,
+                            style="CASU.TRadiobutton",
+                            command=self._sync_direction).pack(anchor="w")
+            tk.Label(cell, text=hint, bg=PANEL, fg=MUTED,
+                     font=("TkDefaultFont", 8)).pack(anchor="w", padx=(24, 0))
+
+        # --- Step 3: direction-aware options ---
+        step3 = tk.Frame(root, bg=PANEL, padx=16, pady=12)
+        step3.pack(fill="x", pady=(10, 0))
+        tk.Label(step3, text="3 · OPTIONS", bg=PANEL, fg=RED,
+                 font=("TkDefaultFont", 9, "bold")).pack(anchor="w")
+
+        self._casu_row = tk.Frame(step3, bg=PANEL)
+        ttk.Checkbutton(self._casu_row, text="Standalone segmented CASUNAT2 (recommended)",
+                        variable=self.native_output).pack(side="left")
+        tk.Label(self._casu_row, text="Sidecar output remains available by clearing this option.",
+                 bg=PANEL, fg=MUTED).pack(side="left", padx=12)
+
+        self._fmt_row = tk.Frame(step3, bg=PANEL)
+        ttk.Label(self._fmt_row, text="Output format", background=PANEL,
+                  foreground=SECONDARY).pack(side="left")
+        ttk.Combobox(self._fmt_row, textvariable=self.export_format,
                      values=tuple(sorted(extension.lstrip(".")
                                          for extension in MEDIA_OUTPUT_EXTENSIONS)),
-                     state="normal",
-                     width=10).pack(side="left", padx=8)
-        ttk.Label(export_options,
-                  text="Used for From-CASU and Media-to-Media batches.").pack(side="left")
-        media_options = tk.Frame(root, bg=BG); media_options.pack(fill="x", pady=(0, 6))
-        ttk.Label(media_options, text="Media profile").pack(side="left")
-        ttk.Combobox(media_options, textvariable=self.media_preset,
+                     state="normal", width=10).pack(side="left", padx=(8, 12))
+        tk.Label(self._fmt_row, text="Container used for the exported media.",
+                 bg=PANEL, fg=MUTED).pack(side="left")
+
+        self._preset_row = tk.Frame(step3, bg=PANEL)
+        ttk.Label(self._preset_row, text="Media profile", background=PANEL,
+                  foreground=SECONDARY).pack(side="left")
+        ttk.Combobox(self._preset_row, textvariable=self.media_preset,
                      values=tuple(sorted(MEDIA_PRESETS)), state="readonly",
                      width=10).pack(side="left", padx=(8, 12))
-        ttk.Label(media_options, text="Video codec").pack(side="left")
-        ttk.Combobox(media_options, textvariable=self.video_codec,
+        tk.Label(self._preset_row,
+                 text="Remux copies codecs; Lossless uses lossless codecs where the container permits.",
+                 bg=PANEL, fg=MUTED).pack(side="left")
+
+        self._advanced_btn = tk.Label(step3, text="▸ Advanced options", bg=PANEL, fg=SECONDARY,
+                                      cursor="hand2", font=("TkDefaultFont", 9, "bold"))
+        self._advanced_btn.pack(anchor="w", pady=(8, 0))
+        self._advanced_btn.bind("<Button-1>", lambda _event: self._toggle_advanced())
+
+        self._advanced_frame = tk.Frame(step3, bg=PANEL_ALT, padx=14, pady=10)
+        row_a = tk.Frame(self._advanced_frame, bg=PANEL_ALT)
+        row_a.pack(fill="x", pady=2)
+        ttk.Label(row_a, text="Analysis mode", background=PANEL_ALT, foreground=SECONDARY).pack(side="left")
+        ttk.Combobox(row_a, textvariable=self.mode, values=sorted(ANALYSIS_MODES),
+                     state="readonly", width=18).pack(side="left", padx=(8, 18))
+        ttk.Label(row_a, text="Analysis FPS", background=PANEL_ALT, foreground=SECONDARY).pack(side="left")
+        ttk.Spinbox(row_a, from_=0.1, to=120.0, increment=0.5,
+                    textvariable=self.fps, width=8).pack(side="left", padx=(8, 18))
+        ttk.Label(row_a, text="Retries", background=PANEL_ALT, foreground=SECONDARY).pack(side="left")
+        ttk.Spinbox(row_a, from_=0, to=10, increment=1,
+                    textvariable=self.retries, width=4).pack(side="left", padx=(8, 0))
+        row_b = tk.Frame(self._advanced_frame, bg=PANEL_ALT)
+        row_b.pack(fill="x", pady=2)
+        ttk.Label(row_b, text="CASU tile size", background=PANEL_ALT, foreground=SECONDARY).pack(side="left")
+        ttk.Spinbox(row_b, from_=8, to=1024, increment=8,
+                    textvariable=self.tile_size, width=7).pack(side="left", padx=(8, 18))
+        ttk.Label(row_b, text="Key-state interval (s)", background=PANEL_ALT,
+                  foreground=SECONDARY).pack(side="left")
+        ttk.Spinbox(row_b, from_=0.1, to=3600.0, increment=0.5,
+                    textvariable=self.key_interval_seconds, width=8).pack(side="left", padx=(8, 0))
+        row_c = tk.Frame(self._advanced_frame, bg=PANEL_ALT)
+        row_c.pack(fill="x", pady=2)
+        ttk.Label(row_c, text="Video codec", background=PANEL_ALT, foreground=SECONDARY).pack(side="left")
+        ttk.Combobox(row_c, textvariable=self.video_codec,
                      values=("auto", "libx264", "libx265", "libvpx-vp9",
                              "libaom-av1", "ffv1", "mpeg4", "mpeg2video"),
-                     state="normal", width=12).pack(side="left", padx=(6, 12))
-        ttk.Label(media_options, text="Audio codec").pack(side="left")
-        ttk.Combobox(media_options, textvariable=self.audio_codec,
+                     state="normal", width=12).pack(side="left", padx=(8, 18))
+        ttk.Label(row_c, text="Audio codec", background=PANEL_ALT, foreground=SECONDARY).pack(side="left")
+        ttk.Combobox(row_c, textvariable=self.audio_codec,
                      values=("auto", "aac", "libmp3lame", "libopus",
                              "libvorbis", "flac", "alac", "pcm_s16le"),
-                     state="normal", width=12).pack(side="left", padx=(6, 12))
-        ttk.Label(media_options, text="Subtitles").pack(side="left")
-        ttk.Combobox(media_options, textvariable=self.subtitle_mode,
+                     state="normal", width=12).pack(side="left", padx=(8, 18))
+        ttk.Label(row_c, text="Subtitles", background=PANEL_ALT, foreground=SECONDARY).pack(side="left")
+        ttk.Combobox(row_c, textvariable=self.subtitle_mode,
                      values=tuple(sorted(SUBTITLE_MODES)), state="readonly",
-                     width=7).pack(side="left", padx=6)
-        preservation = tk.Frame(root, bg=BG); preservation.pack(fill="x", pady=(0, 6))
-        ttk.Checkbutton(preservation, text="All compatible tracks",
-                        variable=self.all_tracks).pack(side="left")
-        ttk.Checkbutton(preservation, text="Preserve metadata and chapters",
-                        variable=self.preserve_metadata).pack(side="left", padx=12)
-        ttk.Label(preservation,
-                  text="Remux copies codecs; Lossless uses lossless codecs where the container permits.").pack(side="left")
-        self.progress = ttk.Progressbar(root, mode="determinate", maximum=100.0)
-        self.progress.pack(fill="x", pady=(8, 4))
-        tk.Label(root, textvariable=self.status, wraplength=680, bg=BG, fg=SECONDARY, anchor="w", justify="left").pack(fill="x", pady=5)
-        actions = tk.Frame(root, bg=BG); actions.pack(anchor="e", pady=(12, 0))
-        ttk.Button(actions, text="Convert", style="CASU.TButton", command=self.convert).pack(side="left")
-        ttk.Button(actions, text="Verify output", style="CASU.TButton", command=self.verify_output).pack(side="left", padx=8)
+                     width=7).pack(side="left", padx=(8, 0))
+        row_d = tk.Frame(self._advanced_frame, bg=PANEL_ALT)
+        row_d.pack(fill="x", pady=2)
+        ttk.Checkbutton(row_d, text="All compatible tracks", variable=self.all_tracks).pack(side="left")
+        ttk.Checkbutton(row_d, text="Preserve metadata and chapters",
+                        variable=self.preserve_metadata).pack(side="left", padx=14)
+        ttk.Checkbutton(row_d, text="Resume verified jobs", variable=self.resume_jobs).pack(side="left")
+
+        # --- Inline replace confirmation (no popup) ---
+        self._confirm_frame = tk.Frame(root, bg=RED_DARK, padx=14, pady=8)
+        self._confirm_label = tk.Label(self._confirm_frame, text="", bg=RED_DARK, fg=TEXT)
+        self._confirm_label.pack(side="left")
+        ttk.Button(self._confirm_frame, text="Keep existing", style="CASU.TButton",
+                   command=self._cancel_replace).pack(side="right")
+        ttk.Button(self._confirm_frame, text="Replace files", style="CASU.Primary.TButton",
+                   command=self._confirm_replace).pack(side="right", padx=(0, 8))
+
+        # --- Actions + progress ---
+        actions = tk.Frame(root, bg=BG)
+        self._actions_frame = actions
+        actions.pack(fill="x", pady=(14, 0))
+        self.convert_button = ttk.Button(actions, text="Convert", style="CASU.Primary.TButton",
+                                         command=self.convert)
+        self.convert_button.pack(side="left")
+        ttk.Button(actions, text="Verify output", style="CASU.TButton",
+                   command=self.verify_output).pack(side="left", padx=(10, 0))
         ttk.Button(actions, text="Last report", style="CASU.TButton",
-                   command=self.show_last_report).pack(side="left", padx=(0, 8))
-        self.pause_button = ttk.Button(actions, text="Pause queue", style="CASU.TButton", command=self.pause_queue, state="disabled")
-        self.pause_button.pack(side="left", padx=(0, 8))
-        self.cancel_button = ttk.Button(actions, text="Cancel", style="CASU.TButton", command=self.cancel, state="disabled")
-        self.cancel_button.pack(side="left")
-        ttk.Button(actions, text="Close", style="CASU.TButton", command=self.destroy).pack(side="left")
+                   command=self.show_last_report).pack(side="left", padx=(10, 0))
+        self.pause_button = ttk.Button(actions, text="Pause queue", style="CASU.TButton",
+                                       command=self.pause_queue, state="disabled")
+        self.pause_button.pack(side="right", padx=(10, 0))
+        self.cancel_button = ttk.Button(actions, text="Cancel", style="CASU.TButton",
+                                        command=self.cancel, state="disabled")
+        self.cancel_button.pack(side="right")
+
+        self.progress = ttk.Progressbar(root, mode="determinate", maximum=100.0,
+                                        style="CASU.Horizontal.TProgressbar")
+        self.progress.pack(fill="x", pady=(12, 4))
+        tk.Label(root, textvariable=self.status, wraplength=920, bg=BG, fg=SECONDARY,
+                 anchor="w", justify="left").pack(fill="x", pady=4)
+
+        self._toast = tk.Label(self, text="", bg=TOAST_BG, fg=TEXT, padx=14, pady=9,
+                               wraplength=640, justify="left", relief="solid",
+                               borderwidth=1, highlightthickness=1,
+                               highlightbackground=TOAST_BORDER)
+        self._toast.place_forget()
+
+        self._sync_direction()
+
+    def _sync_direction(self) -> None:
+        direction = self.direction.get()
+        for frame, visible in ((self._casu_row, direction == "to-casu"),
+                               (self._fmt_row, direction in {"from-casu", "media-to-media"}),
+                               (self._preset_row, direction == "media-to-media")):
+            packed = frame in self._packed_rows
+            if visible and not packed:
+                frame.pack(fill="x", pady=3)
+                self._packed_rows.add(frame)
+            elif not visible and packed:
+                frame.pack_forget()
+                self._packed_rows.discard(frame)
+
+    def _toggle_advanced(self) -> None:
+        if self._advanced_frame.winfo_ismapped():
+            self._advanced_frame.pack_forget()
+            self._advanced_btn.configure(text="▸ Advanced options")
+        else:
+            self._advanced_frame.pack(fill="x", pady=(6, 0))
+            self._advanced_btn.configure(text="▾ Advanced options")
+
+    # --- Source selection ---
 
     def choose_source(self) -> None:
         # Let ffprobe/libVLC decide support; a short extension whitelist would
@@ -269,13 +449,14 @@ class CASUConverter(tk.Tk):
             try:
                 self._set_sources(collect_folder_sources(folder, from_casu=from_casu))
             except CasuError as exc:
-                messagebox.showerror("CASU", str(exc))
+                self.toast(str(exc), error=True)
+                self.status.set(f"Folder rejected: {exc}")
 
     def _set_sources(self, paths: list[Path]) -> None:
         self._sources = list(dict.fromkeys(path.expanduser().resolve() for path in paths if path.is_file()))
         if len(self._sources) > MAX_REPORT_RESULTS:
             self._sources = []
-            messagebox.showerror("CASU", f"A batch is limited to {MAX_REPORT_RESULTS} files.")
+            self.toast(f"A batch is limited to {MAX_REPORT_RESULTS} files.", error=True)
         self.queue.delete(0, "end")
         for path in self._sources:
             self.queue.insert("end", str(path))
@@ -299,7 +480,8 @@ class CASUConverter(tk.Tk):
 
     def choose_output(self) -> None:
         path = filedialog.askdirectory(mustexist=True)
-        if path: self.output.set(path)
+        if path:
+            self.output.set(path)
 
     def inspect_source(self, path: Path) -> None:
         self._inspection_generation += 1
@@ -347,6 +529,8 @@ class CASUConverter(tk.Tk):
             self._post_ui(present)
         threading.Thread(target=worker, name="casu-source-inspection", daemon=True).start()
 
+    # --- Conversion entry point ---
+
     def convert(self) -> None:
         if self._busy:
             return
@@ -354,68 +538,106 @@ class CASUConverter(tk.Tk):
         if not sources and self.source.get() and Path(self.source.get()).is_file():
             sources = [Path(self.source.get()).expanduser().resolve()]
         if not sources:
-            messagebox.showerror("CASU", "Choose one or more existing source files first."); return
+            self.toast("Choose one or more existing source files first.", error=True)
+            self.status.set("Step 1 — choose media or CASU source files.")
+            return
         direction = self.direction.get()
         from_casu = direction == "from-casu"
         media_to_media = direction == "media-to-media"
         try:
             casu_inputs = [detect_casu_kind(path) is not None for path in sources]
         except CasuError as exc:
-            messagebox.showerror("CASU", str(exc)); return
+            self.toast(str(exc), error=True)
+            return
         if from_casu and not all(casu_inputs):
-            messagebox.showerror("CASU", "From-CASU mode accepts only verified CASU content."); return
+            self.toast("From-CASU mode accepts only verified CASU content.", error=True)
+            return
         if not from_casu and any(casu_inputs):
-            messagebox.showerror("CASU", "This mode expects ordinary media; use From-CASU for CASU content."); return
+            self.toast("This mode expects ordinary media; use From-CASU for CASU content.", error=True)
+            return
         if from_casu or media_to_media:
             try:
                 extension = self._export_extension()
             except ValueError as exc:
-                messagebox.showerror("CASU", str(exc)); return
+                self.toast(str(exc), error=True)
+                return
             if extension not in MEDIA_OUTPUT_EXTENSIONS:
-                messagebox.showerror("CASU", "The selected media output format is unsupported."); return
+                self.toast("The selected media output format is unsupported.", error=True)
+                return
         output_dir = Path(self.output.get()).expanduser() if self.output.get() else sources[0].parent
         if output_dir.exists() and not output_dir.is_dir():
-            messagebox.showerror("CASU", "Output must be a directory."); return
+            self.toast("Output must be a directory.", error=True)
+            return
         output_dir.mkdir(parents=True, exist_ok=True)
         outputs = ([self._export_target_for(source, output_dir) for source in sources]
                    if from_casu or media_to_media else
                    [self._target_for(source, output_dir) for source in sources])
         if len(set(outputs)) != len(outputs):
-            messagebox.showerror("CASU", "Multiple sources map to the same output name. Choose a different output folder or convert them separately.")
+            self.toast("Multiple sources map to the same output name. Choose a different "
+                       "output folder or convert them separately.", error=True)
             return
         source_paths = {path.expanduser().resolve() for path in sources}
         if any(path.expanduser().resolve() in source_paths for path in outputs):
-            messagebox.showerror(
-                "CASU",
-                "An output would overwrite its source. Choose another output "
-                "folder or a different output format.",
-            )
-            return
-        existing = [item for item in outputs if item.exists()]
-        if existing and not messagebox.askyesno(
-                "Replace output?", f"Replace {len(existing)} existing output file(s)?"):
+            self.toast("An output would overwrite its source. Choose another output "
+                       "folder or a different output format.", error=True)
             return
         try:
             fps = float(self.fps.get())
         except (TypeError, ValueError):
-            messagebox.showerror("CASU", "FPS must be a finite positive number."); return
+            self.toast("FPS must be a finite positive number.", error=True)
+            return
         if not math.isfinite(fps) or fps <= 0:
-            messagebox.showerror("CASU", "FPS must be positive."); return
+            self.toast("FPS must be positive.", error=True)
+            return
         try:
             retries = int(self.retries.get())
         except (TypeError, ValueError, tk.TclError):
-            messagebox.showerror("CASU", "Retries must be an integer from 0 to 10."); return
+            self.toast("Retries must be an integer from 0 to 10.", error=True)
+            return
         if retries < 0 or retries > 10:
-            messagebox.showerror("CASU", "Retries must be between 0 and 10."); return
+            self.toast("Retries must be between 0 and 10.", error=True)
+            return
         try:
             tile_size = int(self.tile_size.get())
             key_interval = float(self.key_interval_seconds.get())
         except (TypeError, ValueError, tk.TclError):
-            messagebox.showerror("CASU", "Tile size and key-state interval must be numbers."); return
+            self.toast("Tile size and key-state interval must be numbers.", error=True)
+            return
         if tile_size < 8 or tile_size > 1024:
-            messagebox.showerror("CASU", "Tile size must be between 8 and 1024 pixels."); return
+            self.toast("Tile size must be between 8 and 1024 pixels.", error=True)
+            return
         if not math.isfinite(key_interval) or key_interval < 0.1 or key_interval > 3600.0:
-            messagebox.showerror("CASU", "Key-state interval must be between 0.1 and 3600 seconds."); return
+            self.toast("Key-state interval must be between 0.1 and 3600 seconds.", error=True)
+            return
+        existing = [item for item in outputs if item.exists()]
+        start = lambda: self._start_conversion(  # noqa: E731 - deferred start hook
+            sources, output_dir, outputs, from_casu, media_to_media,
+            fps, retries, tile_size, key_interval)
+        if existing:
+            self._pending_start = start
+            self._confirm_label.configure(
+                text=f"{len(existing)} output file(s) already exist — replace them?")
+            self._confirm_frame.pack(fill="x", pady=(10, 0),
+                                     before=self._actions_frame)
+            self.status.set("Waiting for replace confirmation.")
+            return
+        start()
+
+    def _confirm_replace(self) -> None:
+        self._confirm_frame.pack_forget()
+        start, self._pending_start = self._pending_start, None
+        if start is not None:
+            start()
+
+    def _cancel_replace(self) -> None:
+        self._confirm_frame.pack_forget()
+        self._pending_start = None
+        self.status.set("Replace cancelled — existing outputs were kept.")
+
+    def _start_conversion(self, sources: list[Path], output_dir: Path,
+                          outputs: list[Path], from_casu: bool,
+                          media_to_media: bool, fps: float, retries: int,
+                          tile_size: int, key_interval: float) -> None:
         mode = self.mode.get()
         self._cancel_event.clear()
         self._pause_event.set()
@@ -623,23 +845,23 @@ class CASUConverter(tk.Tk):
                 "Conversion cancelled; no incomplete output was kept.",
                 error=False, cancelled=True))
         except (CasuError, NativeCasuError, NativeV2Error, OSError, ValueError) as exc:
-            self._post_ui(lambda: self._done(f"Conversion failed: {exc}", error=True))
+            self._post_ui(lambda exc=exc: self._done(f"Conversion failed: {exc}", error=True))
 
     def verify_output(self) -> None:
         """Verify every CASU file in the selected output directory."""
         directory = Path(self.output.get()).expanduser() if self.output.get() else None
         if directory is None or not directory.is_dir():
-            messagebox.showerror("CASU", "Choose an existing output folder first.")
+            self.toast("Choose an existing output folder first.", error=True)
             return
         if self.direction.get() in {"from-casu", "media-to-media"}:
             try:
                 extension = self._export_extension()
             except ValueError as exc:
-                messagebox.showerror("CASU Verify", str(exc))
+                self.toast(str(exc), error=True)
                 return
             files = sorted(directory.rglob(f"*{extension}"))
             if not files:
-                messagebox.showinfo("CASU Verify", f"No {extension} exports found in the output folder.")
+                self.toast(f"No {extension} exports found in the output folder.")
                 return
             failures = []
             for path in files:
@@ -656,13 +878,14 @@ class CASUConverter(tk.Tk):
                                        "failed": len(failures), "errors": failures},
                               max_bytes=MAX_REPORT_BYTES)
             if failures:
-                messagebox.showerror("CASU Verify", f"{len(files) - len(failures)}/{len(files)} exports passed. Details: {report}")
+                self.toast(f"{len(files) - len(failures)}/{len(files)} exports passed. "
+                           f"Details: {report}", error=True)
             else:
-                messagebox.showinfo("CASU Verify", f"{len(files)} exported media file(s) verified.\nReport: {report}")
+                self.toast(f"{len(files)} exported media file(s) verified. Report: {report}")
             return
         files = sorted(directory.rglob("*.casu"))
         if not files:
-            messagebox.showinfo("CASU Verify", "No .casu files found in the output folder.")
+            self.toast("No .casu files found in the output folder.")
             return
         passed = 0
         failures: list[str] = []
@@ -689,20 +912,21 @@ class CASUConverter(tk.Tk):
                                    "passed": passed, "failed": len(failures),
                                    "errors": failures}, max_bytes=MAX_REPORT_BYTES)
         if failures:
-            messagebox.showerror("CASU Verify", f"{passed}/{len(files)} files passed. Details: {report}")
+            self.toast(f"{passed}/{len(files)} files passed. Details: {report}", error=True)
         else:
-            messagebox.showinfo("CASU Verify", f"{passed}/{len(files)} files verified successfully.\nReport: {report}")
+            self.toast(f"{passed}/{len(files)} files verified successfully. Report: {report}")
 
     def show_last_report(self) -> None:
         directory = Path(self.output.get()).expanduser() if self.output.get() else None
         if directory is None or not directory.is_dir():
-            messagebox.showerror("CASU Report", "Choose an existing output folder first.")
+            self.toast("Choose an existing output folder first.", error=True)
             return
         report = directory / "casu_batch_report.json"
         try:
             payload = load_conversion_report(report)
         except CasuError as exc:
-            messagebox.showerror("CASU Report", str(exc)); return
+            self.toast(str(exc), error=True)
+            return
         dialog = tk.Toplevel(self); dialog.title("CASU · Last conversion report")
         dialog.geometry("1050x540"); dialog.minsize(700, 320)
         dialog.configure(bg=BG); dialog.transient(self)
@@ -718,15 +942,15 @@ class CASUConverter(tk.Tk):
         statuses = sorted({str(item.get("status", "unknown"))
                            for item in payload["files"]}, key=str.casefold)
         selected_status = tk.StringVar(value="all")
-        ttk.Label(controls, text="Filter").pack(side="left")
+        tk.Label(controls, text="Filter", bg=BG, fg=SECONDARY).pack(side="left")
         search = ttk.Entry(controls, textvariable=query, width=38)
         search.pack(side="left", padx=(7, 12))
-        ttk.Label(controls, text="Status").pack(side="left")
+        tk.Label(controls, text="Status", bg=BG, fg=SECONDARY).pack(side="left")
         status_box = ttk.Combobox(controls, textvariable=selected_status,
                                   values=("all", *statuses), state="readonly", width=14)
         status_box.pack(side="left", padx=7)
         count = tk.StringVar()
-        tk.Label(controls, textvariable=count, bg=BG, fg=SECONDARY).pack(side="right")
+        tk.Label(controls, textvariable=count, bg=BG, fg=MUTED).pack(side="right")
 
         frame = tk.Frame(dialog, bg=BG); frame.pack(fill="both", expand=True, padx=16, pady=10)
         columns = ("status", "source", "output", "attempts", "time", "error")
@@ -780,9 +1004,9 @@ class CASUConverter(tk.Tk):
                 exported = exporter(payload, target, status=selected_status.get(),
                                     query=query.get())
             except (OSError, CasuError) as exc:
-                messagebox.showerror("CASU Report", str(exc), parent=dialog)
+                self.toast(str(exc), error=True)
             else:
-                messagebox.showinfo("CASU Report", f"Exported: {exported}", parent=dialog)
+                self.toast(f"Exported: {exported}")
 
         actions = tk.Frame(dialog, bg=BG); actions.pack(fill="x", padx=16, pady=(0, 14))
         ttk.Button(actions, text="Export filtered CSV…", style="CASU.TButton",
@@ -826,7 +1050,7 @@ class CASUConverter(tk.Tk):
         self.status.set(message)
         if cancelled:
             return
-        (messagebox.showerror if error else messagebox.showinfo)("CASU Converter", message)
+        self.toast(message, error=error)
 
 
 def main() -> int:
