@@ -15,6 +15,7 @@ import numpy as np
 from . import __version__
 from .tiles import compare_tile_frames, tile_regions
 from .strict import StrictDecoderError, iter_source_frames, iter_state_map
+from .probe import ProbeError, run_json
 
 
 class CasuError(RuntimeError):
@@ -23,6 +24,29 @@ class CasuError(RuntimeError):
 
 class CasuCancelled(CasuError):
     """Raised when a user cancels an active analysis job."""
+
+
+MAX_MANIFEST_BYTES = 64 * 1024 * 1024
+MAX_FFPROBE_JSON_BYTES = 64 * 1024 * 1024
+FFPROBE_TIMEOUT_SECONDS = 30.0
+
+
+def _read_manifest_json(path: Path) -> dict:
+    """Read one bounded UTF-8 manifest without a stat/read race."""
+    try:
+        with path.open("rb") as handle:
+            raw = handle.read(MAX_MANIFEST_BYTES + 1)
+    except OSError as exc:
+        raise CasuError(f"CASU manifest is unavailable: {path}") from exc
+    if len(raw) > MAX_MANIFEST_BYTES:
+        raise CasuError(f"CASU manifest exceeds its safety limit: {path}")
+    try:
+        value = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise CasuError(f"invalid CASU manifest: {path}") from exc
+    if not isinstance(value, dict):
+        raise CasuError(f"invalid CASU manifest: {path}")
+    return value
 
 
 ANALYSIS_MODES = frozenset({"strict", "visually_lossless", "adaptive"})
@@ -39,10 +63,8 @@ def sha256_file(path: Path) -> str:
 def resolve_casu_source(path: Path) -> Path:
     """Resolve a CASU manifest to its original media without changing it."""
     path = path.expanduser().resolve()
-    if path.suffix.lower() != ".casu":
-        return path
     try:
-        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest = _read_manifest_json(path)
         source = Path(manifest["source"]["path"]).expanduser()
         if source.name != manifest["source"].get("filename"):
             raise CasuError(f"CASU source path does not match recorded filename: {path}")
@@ -106,12 +128,16 @@ def run(command: list[str], *, capture: bool = False) -> subprocess.CompletedPro
 
 
 def ffprobe(path: Path) -> dict[str, Any]:
-    require_tool("ffprobe")
-    result = run([
-        "ffprobe", "-v", "error", "-show_streams", "-show_format",
-        "-of", "json", str(path),
-    ], capture=True)
-    return json.loads(result.stdout)
+    executable = require_tool("ffprobe")
+    try:
+        return run_json([
+            executable, "-v", "error", "-show_streams", "-show_format",
+            "-show_chapters",
+            "-of", "json", str(path),
+        ], max_output_bytes=MAX_FFPROBE_JSON_BYTES,
+           timeout_seconds=FFPROBE_TIMEOUT_SECONDS)
+    except ProbeError as exc:
+        raise CasuError(f"media probe failed: {exc}") from exc
 
 
 def stream(probe: dict[str, Any], kind: str) -> dict[str, Any] | None:
@@ -162,6 +188,8 @@ def rle(states: list[str], step: float, end_s: float | None = None,
         result[-1]["duration_s"] = round(max(0.0, result[-1]["end_s"] - result[-1]["start_s"]), 6)
         result[-1]["valid_until_s"] = result[-1]["end_s"]
         result[-1]["deadline_s"] = result[-1]["end_s"]
+        if result[-1]["end_s"] <= result[-1]["start_s"]:
+            result.pop()
     return result
 
 
@@ -579,9 +607,9 @@ def play(path: Path, extra: list[str] | None = None) -> None:
     if path.suffix.lower() == ".casu":
         try:
             from .schema import validate_manifest
-            manifest = json.loads(path.read_text(encoding="utf-8"))
+            manifest = _read_manifest_json(path)
             errors = validate_manifest(manifest)
-        except (OSError, json.JSONDecodeError, TypeError) as exc:
+        except (OSError, json.JSONDecodeError, TypeError, CasuError) as exc:
             raise CasuError(f"invalid CASU manifest: {path}") from exc
         if errors:
             raise CasuError(f"invalid CASU manifest: {errors[0]}")

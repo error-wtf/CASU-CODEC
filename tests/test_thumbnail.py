@@ -30,7 +30,8 @@ def test_thumbnail_uses_native_cover_attachment(tmp_path):
     ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout
     native = write_native_v2(tmp_path / "album.casu", {
         "format": "CASUNAT2", "version": 2,
-        "streams": [{"stream_id": 1, "type": "attachment", "role": "cover-art"}],
+        "streams": [{"stream_id": 1, "type": "attachment",
+                     "role": "cover-art", "time_base": [1, 1]}],
     }, [NativeChunk(ChunkType.ATTACHMENT, 1, 0,
                     encode_attachment("cover.png", "image/png", image,
                                       role="cover-art"))])

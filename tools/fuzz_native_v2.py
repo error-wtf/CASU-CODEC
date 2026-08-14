@@ -13,9 +13,14 @@ import sys
 import tempfile
 from pathlib import Path
 
+import numpy as np
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from casu.native_v2 import (ChunkType, NativeChunk, encode_bitmap_subtitle,
-                            read_native_v2, write_native_v2)
+from casu.native_v2 import (ChunkType, NativeChunk, encode_audio_block,
+                            encode_bitmap_subtitle, encode_key_state,
+                            encode_tile_update, read_native_v2,
+                            write_native_v2)
+from casu.strict import canonical_frame
 
 
 def campaign(iterations: int = 10_000, seed: int = 0xCA5A) -> dict[str, int]:
@@ -25,12 +30,29 @@ def campaign(iterations: int = 10_000, seed: int = 0xCA5A) -> dict[str, int]:
         bitmap = encode_bitmap_subtitle(
             start_pts=0, end_pts=1000, canvas_width=2, canvas_height=2,
             x=0, y=0, width=2, height=2, rgba=b"\xff\x00\x00\xff" * 4)
-        write_native_v2(target, {"format": "CASUNAT2", "streams": [0, 1, 2]}, [
-            NativeChunk(ChunkType.STREAM_CONFIG, 0, 0, b"video:yuv420p"),
-            NativeChunk(ChunkType.VIDEO_KEY_STATE, 0, 0, b"key-state"),
-            NativeChunk(ChunkType.VIDEO_TILE_UPDATE, 0, 1, b"tile-update"),
-            NativeChunk(ChunkType.AUDIO_BLOCK, 1, 0, b"audio-block"),
-            NativeChunk(ChunkType.SUBTITLE_BITMAP, 2, 0, bitmap),
+        first = canonical_frame(np.zeros((2, 6), dtype=np.uint8),
+                                pixel_format="rgb24", source_shape=(2, 2))
+        changed_pixels = np.zeros((2, 6), dtype=np.uint8)
+        changed_pixels[0, :3] = 7
+        changed = canonical_frame(changed_pixels, pixel_format="rgb24",
+                                  source_shape=(2, 2))
+        video = {"stream_id": 1, "type": "video", "time_base": [1, 1000],
+                 "width": 2, "height": 2, "pix_fmt": "rgb24"}
+        audio = {"stream_id": 2, "type": "audio", "time_base": [1, 1000],
+                 "sample_rate": 1000, "channels": 1}
+        subtitle = {"stream_id": 3, "type": "subtitle",
+                    "time_base": [1, 1000]}
+        write_native_v2(target, {"format": "CASUNAT2", "version": 2,
+                                 "streams": [video, audio, subtitle]}, [
+            NativeChunk(ChunkType.VIDEO_KEY_STATE, 1, 0,
+                        encode_key_state(first)),
+            NativeChunk(ChunkType.VIDEO_TILE_UPDATE, 1, 1,
+                        encode_tile_update(changed, x=0, y=0,
+                                           width=2, height=1)),
+            NativeChunk(ChunkType.AUDIO_BLOCK, 2, 0, encode_audio_block(
+                pcm=b"\0\0", pts=0, time_base_num=1, time_base_den=1000,
+                sample_rate=1000, channels=1, sample_count=1)),
+            NativeChunk(ChunkType.SUBTITLE_BITMAP, 3, 0, bitmap),
         ], recovery_interval=1)
         pristine = target.read_bytes()
         rejected = verified = unexpected = 0

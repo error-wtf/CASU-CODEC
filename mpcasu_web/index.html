@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MPCASU Web Media Player v2</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;background:#090B0D;color:#F2F2F2;font-family:"Segoe UI",system-ui,-apple-system,sans-serif;overflow:hidden;user-select:none}
+#mpcasu-container{height:100vh;display:flex;flex-direction:column}
+
+/* Sidebar responsive */
+.sidebar{transition:width 0.2s,opacity 0.2s}
+@media(max-width:768px){
+  .sidebar{width:50px!important}
+  .sidebar span:last-child{display:none}
+  .sidebar div{gap:0!important;justify-content:center}
+}
+@media(max-width:480px){
+  .sidebar{width:0!important;overflow:hidden;padding:0!important;border-right:none!important}
+  #mpcasu-container>:nth-child(2){flex-direction:column}
+}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:#111418}
+::-webkit-scrollbar-thumb{background:#3A1015;border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#FF1E2D}
+
+/* Range slider */
+input[type="range"]{-webkit-appearance:none;appearance:none;height:4px;background:#24282D;border-radius:2px;outline:none}
+input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:12px;height:12px;border-radius:50%;background:#FF1E2D;cursor:pointer;border:2px solid #FFF}
+input[type="range"]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#FF1E2D;cursor:pointer;border:2px solid #FFF}
+
+/* Focus styles */
+input:focus,button:focus{outline:1px solid #FF1E2D;outline-offset:2px}
+
+/* Animations */
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+#mpcasu-view-panels{animation:fadeIn 0.15s ease}
+</style>
+<script src="player.js"></script>
+</head>
+<body>
+<div id="mpcasu-container"></div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var player = new MPCASUPlayer('mpcasu-container');
+
+  // Expose to console for debugging
+  window.player = player;
+
+  // Handle legacy URL param style
+  var params = new URLSearchParams(window.location.search);
+  var file = params.get('file');
+  if (file) {
+    fetch(file).then(function(r) { return r.blob() }).then(function(b) {
+      player.loadFile(new File([b], file.split('/').pop()));
+    }).catch(function(e) { console.log('Auto-load failed:', e) });
+  }
+});
+</script>
+</body>
+</html>

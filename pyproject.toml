@@ -11,7 +11,7 @@ description = "CASU (Codec for All Segmented Units): legacy-compatible segmented
 readme = "README.md"
 license = {file = "LICENSE"}
 requires-python = ">=3.10"
-dependencies = ["numpy>=1.24"]
+dependencies = ["numpy>=1.24", "zstd>=1.5"]
 
 [project.optional-dependencies]
 libav = ["av>=14"]
@@ -21,12 +21,13 @@ casu = "casu.cli:main"
 casu-converter = "casu_converter:main"
 mpc = "casu.cli:main"
 mpcasu = "mpcasu_player:main"
+web-casu = "web_casu:main"
 
 [tool.setuptools.packages.find]
 include = ["casu*"]
 
 [tool.setuptools]
-py-modules = ["mpcasu_player", "mpcasu_backend", "mpcasu_native_backend", "mpcasu_playback", "casu_converter"]
+py-modules = ["mpcasu_player", "mpcasu_backend", "mpcasu_native_backend", "mpcasu_playback", "web_casu", "casu_converter"]
 
 [tool.setuptools.data-files]
 "share/casu-codec/assets" = [
@@ -50,6 +51,15 @@ py-modules = ["mpcasu_player", "mpcasu_backend", "mpcasu_native_backend", "mpcas
 ]
 "share/doc/casu-codec/THIRD_PARTY_LICENSES" = [
   "THIRD_PARTY_LICENSES/README.md",
+]
+"share/casu-codec/web" = [
+  "web/index.html",
+  "web/styles.css",
+  "web/app.js",
+  "web/casu-native.js",
+  "web/native-smoke.html",
+  "web/native-smoke.js",
+  "web/README.md",
 ]
 
 [tool.pytest.ini_options]

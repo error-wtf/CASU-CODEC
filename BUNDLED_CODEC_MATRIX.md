@@ -14,6 +14,13 @@ The same rule applies to URI schemes: non-empty, NUL-free locations reach
 libVLC, whose installed access modules make the actual protocol decision.
 Windows drive paths and `file:` URIs remain local-path inputs.
 
+The installed loopback web player first uses the browser decoder. On rejection,
+it uploads the explicitly selected local file to its `127.0.0.1` launcher or
+registers the explicitly entered network URL and uses distribution FFmpeg to
+produce VP9/Opus WebM or H.264/AAC MP4. This extends web playback to every input
+the installed FFmpeg can actually demux and decode; it does not claim support
+for a codec absent from that runtime.
+
 ## Inspected development runtime
 
 - libVLC/libvlccore/VLC base plugins: Ubuntu `3.0.23-1`.

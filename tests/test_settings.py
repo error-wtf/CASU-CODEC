@@ -23,3 +23,13 @@ def test_watched_folders_survive_repeated_save(tmp_path):
     loaded = store.load()
     store.save(loaded)
     assert store.load().watched_folders == loaded.watched_folders
+
+
+def test_settings_read_is_bounded_and_nonfinite_rate_defaults(tmp_path, monkeypatch):
+    import casu.settings as settings_module
+    path = tmp_path / "settings.json"
+    path.write_text('{"version":1,"player":{"rate":NaN}}', encoding="utf-8")
+    assert SettingsStore(path).load().rate == 1.0
+    path.write_bytes(b"{}" * 9)
+    monkeypatch.setattr(settings_module, "MAX_SETTINGS_BYTES", 8)
+    assert SettingsStore(path).load() == PlayerSettings()

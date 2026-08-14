@@ -2,11 +2,19 @@
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
+
+from .playlist import PlaylistError, PlaylistModel
+
+
+MAX_LIBRARY_METADATA_BYTES = 1024 * 1024
+MAX_LIBRARY_SCAN_FILES = 100_000
+MAX_PLAYLIST_NAME_BYTES = 255
 
 
 @dataclass(frozen=True)
@@ -27,6 +35,14 @@ class PlaybackPreferences:
     subtitle_track: int | None = None
     audio_delay_ms: float = 0.0
     subtitle_delay_ms: float = 0.0
+
+
+@dataclass(frozen=True)
+class MediaBookmark:
+    identifier: int
+    path: Path
+    position_seconds: float
+    label: str
 
 
 class MediaLibrary:
@@ -64,6 +80,14 @@ class MediaLibrary:
                 media_path TEXT NOT NULL,
                 PRIMARY KEY (playlist_id, position)
             );
+            CREATE TABLE IF NOT EXISTS bookmarks (
+                id INTEGER PRIMARY KEY,
+                media_path TEXT NOT NULL,
+                position_seconds REAL NOT NULL,
+                label TEXT NOT NULL,
+                created_ns INTEGER NOT NULL,
+                UNIQUE(media_path, position_seconds)
+            );
         """)
         existing = {row[1] for row in self.connection.execute("PRAGMA table_info(media)")}
         migrations = {
@@ -82,10 +106,23 @@ class MediaLibrary:
 
     def upsert(self, path: str | Path, *, duration_seconds: float | None = None,
                metadata: dict | None = None) -> LibraryItem:
+        item = self._upsert(path, duration_seconds=duration_seconds,
+                            metadata=metadata)
+        self.connection.commit()
+        return item
+
+    def _upsert(self, path: str | Path, *, duration_seconds: float | None = None,
+                metadata: dict | None = None) -> LibraryItem:
         source = Path(path).expanduser().resolve()
         stat = source.stat()
         now = time.time_ns()
-        values = json.dumps(metadata or {}, sort_keys=True, separators=(",", ":"))
+        try:
+            values = json.dumps(metadata or {}, sort_keys=True, separators=(",", ":"),
+                                ensure_ascii=False, allow_nan=False)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("media metadata must be finite JSON") from exc
+        if len(values.encode("utf-8")) > MAX_LIBRARY_METADATA_BYTES:
+            raise ValueError("media metadata exceeds its 1 MiB safety limit")
         self.connection.execute("""
             INSERT INTO media(path,size_bytes,modified_ns,duration_seconds,metadata_json,last_seen_ns)
             VALUES(?,?,?,?,?,?)
@@ -95,10 +132,23 @@ class MediaLibrary:
               metadata_json=CASE WHEN excluded.metadata_json='{}' THEN media.metadata_json ELSE excluded.metadata_json END,
               last_seen_ns=excluded.last_seen_ns
         """, (str(source), stat.st_size, stat.st_mtime_ns, duration_seconds, values, now))
-        self.connection.commit()
         item = self.get(source)
         assert item is not None
         return item
+
+    def upsert_many(self, paths: Iterable[str | Path]) -> tuple[LibraryItem, ...]:
+        """Index a bounded batch with one durable SQLite transaction."""
+        items: list[LibraryItem] = []
+        try:
+            for index, path in enumerate(paths):
+                if index >= MAX_LIBRARY_SCAN_FILES:
+                    break
+                items.append(self._upsert(path))
+            self.connection.commit()
+        except Exception:
+            self.connection.rollback()
+            raise
+        return tuple(items)
 
     def get(self, path: str | Path) -> LibraryItem | None:
         source = str(Path(path).expanduser().resolve())
@@ -136,14 +186,24 @@ class MediaLibrary:
             base = Path(root).expanduser().resolve()
             candidates = (value for value in base.rglob("*") if value.is_file()) if base.is_dir() else (base,)
             for candidate in candidates:
+                candidate = candidate.resolve()
+                if base.is_dir():
+                    try:
+                        candidate.relative_to(base)
+                    except ValueError:
+                        continue
                 if candidate == self.path or candidate.name in {
                     f"{self.path.name}-wal", f"{self.path.name}-shm"
                 }:
                     continue
                 try:
-                    found.append(self.upsert(candidate))
+                    found.append(self._upsert(candidate))
+                    if len(found) >= MAX_LIBRARY_SCAN_FILES:
+                        self.connection.commit()
+                        return tuple(found)
                 except OSError:
                     continue
+        self.connection.commit()
         return tuple(found)
 
     def record_progress(self, path: str | Path, seconds: float,
@@ -151,7 +211,10 @@ class MediaLibrary:
         source = Path(path).expanduser().resolve()
         if self.get(source) is None:
             self.upsert(source, duration_seconds=duration_seconds)
-        position = max(0.0, float(seconds))
+        position = float(seconds)
+        if not math.isfinite(position):
+            raise ValueError("playback position must be finite")
+        position = max(0.0, position)
         if duration_seconds and position >= max(0.0, duration_seconds - 5.0):
             position = 0.0
         self.connection.execute(
@@ -200,14 +263,19 @@ class MediaLibrary:
         title = str(name).strip()
         if not title:
             raise ValueError("playlist name cannot be empty")
+        if "\0" in title or len(title.encode("utf-8")) > MAX_PLAYLIST_NAME_BYTES:
+            raise ValueError("playlist name must be at most 255 UTF-8 bytes without NUL")
+        try:
+            items = PlaylistModel(paths).items
+        except PlaylistError as exc:
+            raise ValueError(str(exc)) from exc
         with self.connection:
             self.connection.execute("INSERT INTO playlists(name) VALUES(?) ON CONFLICT(name) DO NOTHING", (title,))
             playlist_id = self.connection.execute("SELECT id FROM playlists WHERE name=?", (title,)).fetchone()[0]
             self.connection.execute("DELETE FROM playlist_items WHERE playlist_id=?", (playlist_id,))
             self.connection.executemany(
                 "INSERT INTO playlist_items(playlist_id,position,media_path) VALUES(?,?,?)",
-                ((playlist_id, index, str(Path(path).expanduser().resolve()))
-                 for index, path in enumerate(paths)))
+                ((playlist_id, index, str(path)) for index, path in enumerate(items)))
 
     def load_playlist(self, name: str) -> tuple[Path, ...]:
         rows = self.connection.execute("""
@@ -215,6 +283,43 @@ class MediaLibrary:
             JOIN playlists p ON p.id=i.playlist_id WHERE p.name=? ORDER BY i.position
         """, (name,))
         return tuple(Path(row[0]) for row in rows)
+
+    def add_bookmark(self, path: str | Path, position_seconds: float,
+                     label: str = "") -> MediaBookmark:
+        source = Path(path).expanduser().resolve()
+        position = float(position_seconds)
+        if not math.isfinite(position) or position < 0:
+            raise ValueError("bookmark position must be finite and non-negative")
+        title = str(label).strip() or f"{position:.1f} s"
+        if "\0" in title or len(title.encode("utf-8")) > 255:
+            raise ValueError("bookmark label must be at most 255 UTF-8 bytes without NUL")
+        with self.connection:
+            self.connection.execute(
+                "INSERT INTO bookmarks(media_path,position_seconds,label,created_ns) "
+                "VALUES(?,?,?,?) ON CONFLICT(media_path,position_seconds) "
+                "DO UPDATE SET label=excluded.label",
+                (str(source), position, title, time.time_ns()))
+        row = self.connection.execute(
+            "SELECT id,media_path,position_seconds,label FROM bookmarks "
+            "WHERE media_path=? AND position_seconds=?", (str(source), position)).fetchone()
+        return MediaBookmark(int(row["id"]), Path(row["media_path"]),
+                             float(row["position_seconds"]), str(row["label"]))
+
+    def bookmarks(self, path: str | Path, *, limit: int = 500) -> tuple[MediaBookmark, ...]:
+        source = str(Path(path).expanduser().resolve())
+        maximum = max(1, min(5000, int(limit)))
+        rows = self.connection.execute(
+            "SELECT id,media_path,position_seconds,label FROM bookmarks "
+            "WHERE media_path=? ORDER BY position_seconds,id LIMIT ?",
+            (source, maximum))
+        return tuple(MediaBookmark(int(row["id"]), Path(row["media_path"]),
+                                   float(row["position_seconds"]), str(row["label"]))
+                     for row in rows)
+
+    def remove_bookmark(self, identifier: int) -> None:
+        with self.connection:
+            self.connection.execute("DELETE FROM bookmarks WHERE id=?",
+                                    (int(identifier),))
 
     @staticmethod
     def _item(row: sqlite3.Row) -> LibraryItem:

@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
+from .jsonutil import StrictJsonError, strict_json_loads
+
 
 class TextPayloadError(ValueError):
     pass
@@ -11,11 +13,12 @@ class TextPayloadError(ValueError):
 
 MAX_SUBTITLE_TEXT_BYTES = 1024 * 1024
 MAX_CHAPTERS = 100_000
+MAX_CHAPTER_TABLE_BYTES = 64 * 1024 * 1024
 
 
 def _json_bytes(value: object) -> bytes:
     return json.dumps(value, ensure_ascii=False, sort_keys=True,
-                      separators=(",", ":")).encode("utf-8")
+                      separators=(",", ":"), allow_nan=False).encode("utf-8")
 
 
 @dataclass(frozen=True)
@@ -42,8 +45,10 @@ def encode_subtitle_packet(packet: SubtitlePacket) -> bytes:
 
 
 def decode_subtitle_packet(payload: bytes) -> SubtitlePacket:
+    if len(payload) > MAX_SUBTITLE_TEXT_BYTES + 16 * 1024:
+        raise TextPayloadError("subtitle payload exceeds limit")
     try:
-        value = json.loads(payload)
+        value = strict_json_loads(payload)
         if value.get("version") != 1:
             raise ValueError
         packet = SubtitlePacket(int(value["start_pts"]), int(value["end_pts"]),
@@ -55,7 +60,7 @@ def decode_subtitle_packet(payload: bytes) -> SubtitlePacket:
                 or len(packet.format.encode("utf-8")) > 64):
             raise ValueError
         return packet
-    except (TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
+    except (TypeError, ValueError, KeyError, StrictJsonError) as exc:
         raise TextPayloadError("invalid subtitle payload") from exc
 
 
@@ -75,12 +80,17 @@ def encode_chapter_table(chapters: list[dict]) -> bytes:
             raise TextPayloadError("invalid chapter bounds/title")
         normalized.append({"start_pts": start, "end_pts": end, "title": title,
                            "language": language})
-    return _json_bytes({"version": 1, "chapters": normalized})
+    encoded = _json_bytes({"version": 1, "chapters": normalized})
+    if len(encoded) > MAX_CHAPTER_TABLE_BYTES:
+        raise TextPayloadError("chapter table exceeds limit")
+    return encoded
 
 
 def decode_chapter_table(payload: bytes) -> list[dict]:
+    if len(payload) > MAX_CHAPTER_TABLE_BYTES:
+        raise TextPayloadError("chapter table exceeds limit")
     try:
-        value = json.loads(payload)
+        value = strict_json_loads(payload)
         if (value.get("version") != 1 or not isinstance(value["chapters"], list)
                 or len(value["chapters"]) > MAX_CHAPTERS):
             raise ValueError
@@ -95,5 +105,5 @@ def decode_chapter_table(payload: bytes) -> list[dict]:
             result.append({"start_pts": start, "end_pts": end, "title": title,
                            "language": language})
         return result
-    except (TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
+    except (TypeError, ValueError, KeyError, StrictJsonError) as exc:
         raise TextPayloadError("invalid chapter table") from exc

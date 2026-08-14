@@ -388,6 +388,28 @@ def test_native_rapid_seek_delivers_only_final_generation(tmp_path):
     backend.close()
 
 
+def test_native_play_after_eof_restarts_from_beginning(tmp_path):
+    source = tmp_path / "native.casu"; first, second = _native_fixture(source)
+    video, audio = InstrumentedVideoSink(), InstrumentedAudioSink()
+    backend = NativeCasuBackend(video, audio)
+    backend.open_casu(source); backend.play()
+    deadline = time.monotonic() + 1
+    while backend.state() != PlaybackState.ENDED and time.monotonic() < deadline:
+        time.sleep(0.005)
+    assert backend.state() == PlaybackState.ENDED
+    frame_start, audio_start = len(video.frames), len(audio.blocks)
+    backend.play()
+    deadline = time.monotonic() + 1
+    while backend.state() != PlaybackState.ENDED and time.monotonic() < deadline:
+        time.sleep(0.005)
+    assert backend.state() == PlaybackState.ENDED
+    assert video.frames[frame_start:] == [(0.0, first.digest()),
+                                          (0.01, second.digest())]
+    assert [(block.pts, block.sample_count)
+            for block in audio.blocks[audio_start:]] == [(0, 10)]
+    backend.close()
+
+
 def test_native_pause_stop_and_close_flush_audio(tmp_path):
     source = tmp_path / "native.casu"; _native_fixture(source)
     video, audio = InstrumentedVideoSink(), InstrumentedAudioSink()

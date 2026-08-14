@@ -1,4 +1,4 @@
-# CASU Converter deep audit — updated 2026-08-09
+# CASU Converter deep audit — updated 2026-08-13
 
 ## Executive result
 
@@ -6,7 +6,9 @@ The repository now has a real source-to-CASUNAT2 converter, not only a sidecar
 analyzer. CLI and GUI submit the same `ConversionJob`/`ConversionProfile`
 objects to `ConversionEngine`; the engine calls the production native-v2
 converter and writes an atomic progress journal. The CLI additionally exposes
-`pack-v2`, `verify`, `repair-v2` and `info`.
+`pack-v2`, `verify`, `repair-v2`, `info`, `export` and the general
+media-to-media `transcode` command. The GUI exposes the same full conversion
+direction as its default.
 
 ```text
 ffprobe stream/frame inventory
@@ -26,15 +28,17 @@ ffprobe stream/frame inventory
 | Seek/verify/info | PASS | Real byte-offset validation and SHA-256 verification; CLI smoke passes. |
 | Atomic output/cancel cleanup | PASS reference path | Engine cancellation is fail-closed and journaled; typed partial-result evidence and atomic CANCELLED reports pass engine and real Tk/Xvfb GUI tests. |
 | Subtitle/chapter/attachments | PASS reference matrix | Text, ASS/SSA libass+font and typed PGS/DVD/DVB/XSub bitmap paths pass source deletion; chapters, attachments, bounded metadata and PNG/JPEG/WebP covers pass. Cover decode has explicit geometry/memory ceilings. |
-| Batch queue/retry/journal | PASS core | Recursive GUI queue, CLI/GUI retry, per-file isolation and collision-resistant hash-verified journal resume are behavior-tested. |
-| Progress/ETA/reports | PASS reference path | Shared monotonic batch progress exposes per-job/overall fraction, measured elapsed time, throughput ETA and state; JSON results retain conversion duration. Broader accuracy calibration remains. |
-| Hostile-input budgets | PARTIAL | Reader/decompression limits plus monitored probe time/output and decoded-frame dimension/byte ceilings exist; broader decoder/corpus stress remains. |
+| Batch queue/retry/journal | PASS core | Recursive GUI/CLI queues preserve subfolders, disambiguate equal explicit filenames, isolate failures, retry, and resume only collision-resistant hash-verified journal entries. CLI and GUI both batch CASU→media exports. |
+| General media conversion | PASS advertised-output matrix | Shared-engine CLI/GUI media-to-media jobs provide atomic verified publication, cancellation, retry/resume, five profiles, explicit codecs, compatible all-track mapping and metadata/chapter preservation. Generated tests pass all 14 advertised audio and 18 advertised video extensions. |
+| Progress/ETA/reports | PASS reference path | Shared monotonic batch progress exposes per-job/overall fraction, measured elapsed time, throughput ETA and state. Bounded atomic JSON/CSV/Markdown reports retain source/output/profile hashes, tool versions, frame/key/tile/hold/audio/subtitle counts, verification, warnings and duration. |
+| Hostile-input budgets | PARTIAL | Reader/decompression limits plus centrally monitored 30-second/64-MiB FFprobe output and decoded-frame dimension/byte ceilings exist; broader decoder/corpus stress remains. |
 | Stable release | OPEN | Package remains `1.0.0rc8`. |
 
 ## Remaining converter work
 
-1. Expand the implemented GUI retry and bounded prior-run detail view with
-   filtering/export for very large heterogeneous production batches.
+1. Calibrate the implemented bounded report/filter/export view on very large
+   heterogeneous production batches; the required JSON/CSV/Markdown metrics
+   and exact 17-valid/3-corrupt 20-file isolation acceptance already pass.
 2. Expand the working typed PGS/DVD/DVB/XSub path across platforms and malformed
    libass ASS/SSA, text fallback, chapters/attachments, PNG/JPEG/WebP artwork, bounded tags
    and complete dispositions already pass.
@@ -42,6 +46,7 @@ ffprobe stream/frame inventory
    batches; recursive jobs, retry/isolation and machine-readable durations are implemented.
 4. Expand the existing probe/frame resource budgets with a corrupt decoder
    corpus and long-media tests.
-5. Run clean installed wheel/Debian converter and player matrices before 1.0.
+5. Expand the clean installed Debian converter matrix beyond the generated
+   reference corpus and Linux/FFmpeg version currently tested before 1.0.
 
 No energy saving or perceptual-quality result is inferred from conversion.

@@ -1,8 +1,9 @@
 <!-- SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4 | SPDX-FileCopyrightText: 2026 Lino Casu -->
-# CASU converter
+# CASU full media converter
 
-The converter never modifies its input. It exposes three distinct outputs:
+The converter never modifies its input. It supports three conversion directions:
 
+- `media-to-media`: general FFmpeg media conversion;
 - `sidecar`: JSON analysis that resolves and verifies the original source;
 - `native`: CASUNAT1 compatibility envelope containing the original bytes;
 - `native-v2`: standalone CASUNAT2 key-state/tile/PCM media.
@@ -16,15 +17,51 @@ casu pack-v2 input.mkv --output input-v2.casu --tile-size 64 --key-interval 3
 casu verify input-v2.casu
 casu info input-v2.casu
 casu repair-v2 damaged.casu --output recovered.casu
+casu export input-v2.casu --output restored.mp4
+casu export album.casu --output restored.flac
+casu transcode input.avi --output output.mp4 --preset high
+casu transcode input.mkv --output repacked.mkv --preset remux
+casu transcode media-folder --output webm-folder --format webm --preset small --retry 1 --resume --report transcode.json
 ```
+
+General conversion accepts every input that the installed FFmpeg can decode.
+The explicitly supported output set covers MP4/MOV/M4V/3GP, MKV/MKA, WebM,
+AVI, MPEG/TS/MTS/M2TS, FLV/F4V, Ogg video, ASF/WMV and MP3/MP2/AAC/M4A,
+FLAC/ALAC, WAV/AIFF, Ogg/Vorbis, Opus and WMA. Automatic container-compatible
+codec selection is the default. `remux` copies streams, while `balanced`,
+`high`, `small` and compatible `lossless` profiles encode them. By default all
+compatible A/V/subtitle tracks, global/stream metadata and chapters survive;
+`--first-tracks`, `--subtitles drop` and `--strip-metadata` opt out. Output is
+written to a same-directory temporary file, probed for a playable stream and
+atomically published only after success. Cancellation removes the partial file.
+
+Reverse export verifies every CASU representation before writing media.
+Sidecars resolve their hash-bound source and map all A/V/text/chapter tracks;
+CASUNAT1 extracts its lossless source payload with the same mapping; CASUNAT2 reconstructs all native video key/tile streams, PCM,
+text/rich ASS subtitles and chapter tables after the original source has been
+deleted. FFmpeg chooses the destination container from the output extension;
+containers without ASS support receive FFmpeg's compatible subtitle form.
+The default (or first) native bitmap subtitle track is alpha-composited into
+each active reconstructed video frame during reverse export. This portable
+burn-in preserves its timing and appearance when the destination cannot carry
+the original PGS/DVD/DVB/XSub codec, but it is intentionally not advertised as
+an editable remuxed subtitle track. The GUI's `from-casu` direction applies one selected
+format to single files, multiple selections or a recursive folder tree and
+publishes the same bounded batch report.
 
 The CLI and GUI `casu-converter` use the same `ConversionEngine`, job and
 profile model. The engine provides atomic output, an atomic JSON journal,
 per-file failure isolation, progress, cancellation, retry (CLI) and resume
 only after the output size/SHA-256 and exact prior job/profile list match. The
-GUI adds recursive queues, pause/cancel and batch verification.
-It also exposes a validated 0–10 retry count and a bounded last-report view with
-per-file state, attempt count, conversion time and error detail. Reports are
+GUI adds recursive queues, pause/cancel and batch verification. CASUNAT2 tile
+size and periodic key-state interval are validated GUI profile controls; source
+probing runs off the Tk thread with bounded FFprobe time and output.
+It also exposes a validated 0–10 retry count and a bounded last-report table with
+live text/status filtering and atomic filtered CSV and Markdown export.
+Spreadsheet formula prefixes in text fields are escaped during CSV export.
+Per-file source/output hashes, profile hash, tool versions, frame/key/tile/hold,
+audio/subtitle counts, verification result, warnings, attempt count and elapsed
+time remain available in JSON/CSV/Markdown evidence. Reports are
 validated and atomically published with an explicit `COMPLETE` or `CANCELLED`
 state; cancellation retains evidence for already verified jobs and identifies
 the uncompleted remainder.

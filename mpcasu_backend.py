@@ -25,16 +25,37 @@ from casu.native import NativeCasuError, read_native
 from casu.media import (AudioDeviceDescriptor, ChapterDescriptor,
                         TrackDescriptor, TrackKind)
 import json
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse
+
+
+_SENSITIVE_QUERY_KEYS = frozenset({
+    "access_token", "api_key", "apikey", "auth", "authorization", "key",
+    "passwd", "password", "sig", "signature", "token", "x-amz-signature",
+    "x-goog-signature",
+})
 
 
 def display_media_source(source: str | Path) -> str:
-    """Return a UI/error-safe source string with URL userinfo removed."""
+    """Return a bounded UI/error-safe source with common credentials removed."""
     value = str(source)
-    parsed = urlparse(value)
+    try:
+        parsed = urlparse(value)
+    except ValueError:
+        return (value[:2047] + "…") if len(value) > 2048 else value
     if parsed.netloc and "@" in parsed.netloc:
-        return parsed._replace(netloc=parsed.netloc.rsplit("@", 1)[-1]).geturl()
-    return value
+        parsed = parsed._replace(netloc=parsed.netloc.rsplit("@", 1)[-1])
+    if parsed.query:
+        try:
+            pairs = parse_qsl(parsed.query, keep_blank_values=True,
+                              max_num_fields=256)
+        except ValueError:
+            pairs = []
+        if pairs:
+            sanitized = [(key, "[redacted]" if key.casefold() in _SENSITIVE_QUERY_KEYS else val)
+                         for key, val in pairs]
+            parsed = parsed._replace(query=urlencode(sanitized, doseq=True))
+    result = parsed.geturl()
+    return (result[:2047] + "…") if len(result) > 2048 else result
 
 
 class PlaybackState(str, Enum):
@@ -86,6 +107,9 @@ _AudioOutputDevice._fields_ = [
 class LibVLCBackend:
     """Minimal, real in-process libVLC backend for the MPCASU window."""
 
+    EMBEDDED_RUNTIME_OPTIONS = ("--no-video-title-show", "--avcodec-hw=none")
+    SAFE_MEDIA_OPTIONS = (":avcodec-hw=none",)
+
     def __init__(self, video_widget, *, runtime_options: tuple[str, ...] = ()):
         # Python/ctypes does not inherit the plugin-path setup that the VLC
         # launcher normally performs. Point libVLC at its installed modules so
@@ -116,8 +140,13 @@ class LibVLCBackend:
         # VLC 3.x discovers modules through VLC_PLUGIN_PATH. The historical
         # --plugin-path command-line option is no longer accepted and can
         # prevent codec modules from loading in embedded libVLC builds.
-        options = [b"--no-video-title-show", *(
-            value.encode("utf-8") for value in self.runtime_options)]
+        # Hardware decode is intentionally disabled for the embedded player.
+        # On hybrid Intel/NVIDIA desktops libVLC/VDPAU can enter a permanent
+        # YUVA blending-error loop, monopolise the compositor, and make other
+        # GPU-backed applications flicker or appear frozen. Software decoding
+        # is deterministic and isolates MPCASU from the system compositor.
+        options = [*(value.encode("utf-8") for value in self.EMBEDDED_RUNTIME_OPTIONS),
+                   *(value.encode("utf-8") for value in self.runtime_options)]
         argv = (ctypes.c_char_p * len(options))(*options)
         self.instance = self._call("libvlc_new", ctypes.c_void_p, [ctypes.c_int, ctypes.POINTER(ctypes.c_char_p)])(len(options), argv)
         if not self.instance:
@@ -160,11 +189,49 @@ class LibVLCBackend:
         # step failures even though libVLC accepted the command.
         self._frame_step_api = self._optional_install(
             "libvlc_media_player_next_frame", None, [ctypes.c_void_p])
+        self._snapshot_api = self._optional_install(
+            "libvlc_video_take_snapshot", ctypes.c_int,
+            [ctypes.c_void_p, ctypes.c_uint, ctypes.c_char_p,
+             ctypes.c_uint, ctypes.c_uint])
+        self._aspect_api = all(self._optional_install(name, restype, args)
+                               for name, restype, args in (
+            ("libvlc_video_get_aspect_ratio", ctypes.c_void_p, [ctypes.c_void_p]),
+            ("libvlc_video_set_aspect_ratio", None, [ctypes.c_void_p, ctypes.c_char_p]),
+            ("libvlc_free", None, [ctypes.c_void_p]),
+        ))
+        self._crop_api = all(self._optional_install(name, restype, args)
+                             for name, restype, args in (
+            ("libvlc_video_get_crop_geometry", ctypes.c_void_p, [ctypes.c_void_p]),
+            ("libvlc_video_set_crop_geometry", None, [ctypes.c_void_p, ctypes.c_char_p]),
+            ("libvlc_free", None, [ctypes.c_void_p]),
+        ))
+        self._scale_api = all(self._optional_install(name, restype, args)
+                              for name, restype, args in (
+            ("libvlc_video_get_scale", ctypes.c_float, [ctypes.c_void_p]),
+            ("libvlc_video_set_scale", None, [ctypes.c_void_p, ctypes.c_float]),
+        ))
+        self._deinterlace_api = self._optional_install(
+            "libvlc_video_set_deinterlace", None,
+            [ctypes.c_void_p, ctypes.c_char_p])
         self._install("libvlc_media_player_set_rate", ctypes.c_int, [ctypes.c_void_p, ctypes.c_float])
         self._install("libvlc_media_player_get_rate", ctypes.c_float, [ctypes.c_void_p])
         self._install("libvlc_audio_set_volume", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int])
         self._install("libvlc_audio_get_volume", ctypes.c_int, [ctypes.c_void_p])
         self._install("libvlc_audio_set_mute", None, [ctypes.c_void_p, ctypes.c_int])
+        self._audio_channel_api = all(self._optional_install(name, restype, args)
+                                      for name, restype, args in (
+            ("libvlc_audio_get_channel", ctypes.c_int, [ctypes.c_void_p]),
+            ("libvlc_audio_set_channel", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int]),
+        ))
+        self._equalizer_api = all(self._optional_install(name, restype, args)
+                                  for name, restype, args in (
+            ("libvlc_audio_equalizer_get_preset_count", ctypes.c_uint, []),
+            ("libvlc_audio_equalizer_get_preset_name", ctypes.c_char_p, [ctypes.c_uint]),
+            ("libvlc_audio_equalizer_new_from_preset", ctypes.c_void_p, [ctypes.c_uint]),
+            ("libvlc_audio_equalizer_release", None, [ctypes.c_void_p]),
+            ("libvlc_media_player_set_equalizer", ctypes.c_int,
+             [ctypes.c_void_p, ctypes.c_void_p]),
+        ))
         self._audio_delay_api = self._optional_install(
             "libvlc_audio_set_delay", ctypes.c_int,
             [ctypes.c_void_p, ctypes.c_int64])
@@ -286,7 +353,7 @@ class LibVLCBackend:
             "changeset": changeset.decode("utf-8", "replace") if changeset else "unknown",
             "plugin_path": os.environ.get("VLC_PLUGIN_PATH", "runtime default"),
             "network": "available",
-            "hardware_decode": "delegated to installed libVLC modules",
+            "hardware_decode": "disabled for compositor and process isolation",
             "player_process": "none",
             "runtime_options": " ".join(self.runtime_options) or "default",
         }
@@ -312,6 +379,11 @@ class LibVLCBackend:
             self._state = PlaybackState.ERROR
             raise BackendError(
                 f"libVLC could not open {display_media_source(source)}")
+        # Some VLC 3 builds let the persisted user preference override the
+        # instance argument. Repeat the safety setting as a per-media option.
+        if self._subtitle_option_api:
+            for option in self.SAFE_MEDIA_OPTIONS:
+                self.libvlc_media_add_option(self.media, option.encode("utf-8"))
         if subtitle is not None:
             subtitle = subtitle.expanduser().resolve()
             if not subtitle.is_file():
@@ -391,6 +463,100 @@ class LibVLCBackend:
             raise BackendError("frame stepping is unavailable in this libVLC build")
         self.libvlc_media_player_next_frame(self.player)
         self._state = PlaybackState.PAUSED
+
+    def take_snapshot(self, path: str | Path, *, width: int = 0,
+                      height: int = 0) -> Path:
+        if not self._snapshot_api or not self.player:
+            raise BackendError("video snapshots are unavailable in this libVLC build")
+        target = Path(path).expanduser().resolve()
+        if target.suffix.lower() != ".png":
+            raise BackendError("video snapshots must use a .png destination")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        width = max(0, min(16384, int(width))); height = max(0, min(16384, int(height)))
+        if self.libvlc_video_take_snapshot(self.player, 0, os_path(target),
+                                           width, height) != 0:
+            raise BackendError("libVLC could not capture the current video frame")
+        return target
+
+    @staticmethod
+    def _video_geometry(value: str | None, *, crop: bool = False) -> bytes | None:
+        allowed = ({"16:10", "16:9", "4:3", "5:4", "1:1", "2.21:1", "2.35:1", "2.39:1"}
+                   if not crop else
+                   {"16:10", "16:9", "4:3", "5:4", "1:1", "2.21:1", "2.35:1", "2.39:1"})
+        if value in {None, "", "default", "original"}:
+            return None
+        if value not in allowed:
+            raise BackendError("unsupported video geometry")
+        return value.encode("ascii")
+
+    def _owned_vlc_text(self, function) -> str:
+        pointer = function(self.player)
+        if not pointer:
+            return "default"
+        try:
+            return ctypes.string_at(pointer).decode("utf-8", "replace")
+        finally:
+            self.libvlc_free(pointer)
+
+    def aspect_ratio(self) -> str:
+        if not self._aspect_api or not self.player:
+            return "default"
+        return self._owned_vlc_text(self.libvlc_video_get_aspect_ratio)
+
+    def set_aspect_ratio(self, value: str | None) -> str:
+        if not self._aspect_api or not self.player:
+            raise BackendError("aspect-ratio control is unavailable")
+        self.libvlc_video_set_aspect_ratio(
+            self.player, self._video_geometry(value))
+        return value or "default"
+
+    def crop_geometry(self) -> str:
+        if not self._crop_api or not self.player:
+            return "default"
+        return self._owned_vlc_text(self.libvlc_video_get_crop_geometry)
+
+    def set_crop_geometry(self, value: str | None) -> str:
+        if not self._crop_api or not self.player:
+            raise BackendError("crop control is unavailable")
+        self.libvlc_video_set_crop_geometry(
+            self.player, self._video_geometry(value, crop=True))
+        return value or "default"
+
+    def scale(self) -> float:
+        return float(self.libvlc_video_get_scale(self.player)) if self._scale_api and self.player else 0.0
+
+    def set_scale(self, value: float) -> float:
+        if not self._scale_api or not self.player:
+            raise BackendError("video zoom is unavailable")
+        scale = float(value)
+        if scale != 0.0 and not 0.25 <= scale <= 4.0:
+            raise BackendError("video zoom must be automatic or between 0.25x and 4x")
+        self.libvlc_video_set_scale(self.player, ctypes.c_float(scale))
+        return scale
+
+    def set_deinterlace(self, mode: str | None) -> str:
+        if not self._deinterlace_api or not self.player:
+            raise BackendError("deinterlacing is unavailable")
+        allowed = {None, "", "off", "auto", "blend", "bob", "discard", "linear", "mean", "x", "yadif", "yadif2x"}
+        if mode not in allowed:
+            raise BackendError("unsupported deinterlace mode")
+        encoded = None if mode in {None, "", "off"} else str(mode).encode("ascii")
+        self.libvlc_video_set_deinterlace(self.player, encoded)
+        return mode or "off"
+
+    def title_count(self) -> int:
+        return max(0, int(self.libvlc_media_player_get_title_count(self.player))) if self._chapter_api and self.player else 0
+
+    def title(self) -> int:
+        return int(self.libvlc_media_player_get_title(self.player)) if self._chapter_api and self.player else -1
+
+    def set_title(self, title: int) -> None:
+        if not self._chapter_api or not self.player:
+            raise BackendError("title selection is unavailable")
+        value = int(title)
+        if value < 0 or value >= self.title_count():
+            raise BackendError("title index is out of range")
+        self.libvlc_media_player_set_title(self.player, value)
 
     def chapter_count(self) -> int:
         if not self._chapter_api or not self.player:
@@ -475,6 +641,51 @@ class LibVLCBackend:
 
     def set_mute(self, muted: bool) -> None:
         if self.player: self.libvlc_audio_set_mute(self.player, int(bool(muted)))
+
+    def audio_channel(self) -> int:
+        if not self._audio_channel_api or not self.player:
+            return 0
+        return int(self.libvlc_audio_get_channel(self.player))
+
+    def set_audio_channel(self, channel: int) -> int:
+        if not self._audio_channel_api or not self.player:
+            raise BackendError("audio channel control is unavailable")
+        value = int(channel)
+        if value not in {1, 2, 3, 4, 5}:
+            raise BackendError("unsupported audio channel mode")
+        if self.libvlc_audio_set_channel(self.player, value) != 0:
+            raise BackendError("libVLC rejected the audio channel mode")
+        return value
+
+    def equalizer_presets(self) -> tuple[str, ...]:
+        if not self._equalizer_api:
+            return ()
+        count = min(256, int(self.libvlc_audio_equalizer_get_preset_count()))
+        return tuple(
+            ((self.libvlc_audio_equalizer_get_preset_name(index) or b"")
+             .decode("utf-8", "replace") or f"Preset {index + 1}")
+            for index in range(count))
+
+    def set_equalizer_preset(self, preset: int | None) -> str:
+        if not self._equalizer_api or not self.player:
+            raise BackendError("audio equalizer is unavailable")
+        if preset is None:
+            if self.libvlc_media_player_set_equalizer(self.player, None) != 0:
+                raise BackendError("libVLC could not disable the equalizer")
+            return "off"
+        value = int(preset)
+        names = self.equalizer_presets()
+        if value < 0 or value >= len(names):
+            raise BackendError("equalizer preset index is out of range")
+        equalizer = self.libvlc_audio_equalizer_new_from_preset(value)
+        if not equalizer:
+            raise BackendError("libVLC could not create the equalizer preset")
+        try:
+            if self.libvlc_media_player_set_equalizer(self.player, equalizer) != 0:
+                raise BackendError("libVLC rejected the equalizer preset")
+        finally:
+            self.libvlc_audio_equalizer_release(equalizer)
+        return names[value]
 
     def set_audio_delay(self, milliseconds: float) -> float:
         value = max(-5000.0, min(5000.0, float(milliseconds)))

@@ -146,6 +146,49 @@ def _run(command: list[str]) -> None:
     subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
+def _system_pyav_available() -> bool:
+    executable = Path("/usr/bin/python3")
+    if not executable.is_file():
+        return False
+    result = subprocess.run(
+        [str(executable), "-c", "import av, numpy"], check=False,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return result.returncode == 0
+
+
+@pytest.mark.media
+@pytest.mark.skipif(not shutil.which("ffmpeg") or not _system_pyav_available(),
+                    reason="system PyAV/FFmpeg unavailable")
+def test_system_pyav_and_ffmpeg_adapters_are_pts_and_sample_identical(tmp_path):
+    source = tmp_path / "adapter-parity.mkv"
+    _run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
+          "testsrc2=size=24x16:rate=5:duration=0.6", "-c:v", "ffv1",
+          "-pix_fmt", "yuv420p", str(source)])
+    script = """
+import hashlib, json, sys
+from casu.strict import iter_source_frames
+result = {}
+for engine in ('pyav', 'ffmpeg'):
+    frames = list(iter_source_frames(sys.argv[1], engine=engine))
+    result[engine] = [{
+        'pts': frame.pts, 'num': frame.time_base_num,
+        'den': frame.time_base_den, 'duration': frame.duration_pts,
+        'format': frame.frame.pixel_format, 'shape': frame.frame.shape,
+        'sha256': hashlib.sha256(b''.join(
+            plane.tobytes() for plane in frame.frame.planes)).hexdigest(),
+    } for frame in frames]
+print(json.dumps(result, sort_keys=True))
+"""
+    completed = subprocess.run(
+        ["/usr/bin/python3", "-c", script, str(source)], check=True,
+        capture_output=True, text=True,
+        env={"PYTHONPATH": str(Path(__file__).resolve().parents[1]),
+             "PATH": "/usr/bin:/bin"}, timeout=15)
+    result = json.loads(completed.stdout)
+    assert result["pyav"] == result["ffmpeg"]
+    assert len(result["pyav"]) == 3
+
+
 @pytest.mark.media
 @pytest.mark.skipif(not shutil.which("ffmpeg") or not shutil.which("ffprobe"),
                     reason="ffmpeg/ffprobe unavailable")

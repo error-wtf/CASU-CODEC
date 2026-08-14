@@ -66,6 +66,7 @@ def test_installed_libvlc_runtime_initializes_and_reports_version():
         assert capabilities["backend"] == "libVLC shared library"
         assert capabilities["version"] != "unknown"
         assert capabilities["player_process"] == "none"
+        assert capabilities["hardware_decode"].startswith("disabled")
         # Capability is decided by libVLC at open time, never by extension.
         assert backend.supports("movie.codec-not-known-to-mpcasu")
     finally:
@@ -812,7 +813,19 @@ def test_installed_libvlc_real_single_frame_step(tmp_path):
         assert decoded.count >= 2
 
         backend.pause()
-        time.sleep(0.1)
+        # libVLC can still deliver pictures already queued before the pause
+        # request.  Frame-step semantics begin only after that queue has been
+        # stable, otherwise a valid one-frame step is miscounted as two.
+        stable_count = decoded.count
+        stable_since = time.monotonic()
+        settle_deadline = stable_since + 1.0
+        while time.monotonic() < settle_deadline:
+            if decoded.count != stable_count:
+                stable_count = decoded.count
+                stable_since = time.monotonic()
+            if time.monotonic() - stable_since >= 0.15:
+                break
+            time.sleep(0.01)
         before_count = decoded.count
         before_digest = hashlib.sha256(decoded.buffer.raw).digest()
         backend.next_frame()

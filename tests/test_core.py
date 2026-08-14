@@ -4,12 +4,16 @@ import ctypes
 import json
 import os
 import shutil
+import subprocess
 import time
+import wave
 from pathlib import Path
 
 import pytest
+import casu.core as core_module
 
-from casu.core import CasuCancelled, CasuError, analyze, play, resolve_casu_source, rle, stream
+from casu.core import (CasuCancelled, CasuError, analyze, play,
+                       resolve_casu_source, rle, sha256_file, stream)
 from casu.schema import validate_manifest
 from casu.scheduler import CasuScheduler
 from casu.native import NativeCasuError, read_native, write_native
@@ -33,8 +37,38 @@ from mpcasu_backend import (BackendError, CasuBackend, LibVLCBackend,
 from mpcasu_backend import _TrackDescription
 from mpcasu_native_backend import NativeCasuBackend
 from mpcasu_playback import ControllerState, PlaybackController
-from mpcasu_player import MPCASUPlayer, chapter_marker_positions, presentation_mode
+from mpcasu_player import (MPCASUPlayer, chapter_marker_positions,
+                           LOCAL_CASUNAT1, LOCAL_CASUNAT2,
+                           LOCAL_CASU_SIDECAR, LOCAL_MEDIA,
+                           detect_local_playback_kind, presentation_mode,
+                           process_resource_snapshot)
 from casu.strict import StrictFrame, build_state_map, canonical_frame, iter_source_frames
+
+
+def test_ffprobe_is_time_and_output_bounded_and_reads_chapters(tmp_path, monkeypatch):
+    source = tmp_path / "input.mkv"; source.write_bytes(b"x")
+    captured = {}
+    monkeypatch.setattr(core_module, "require_tool", lambda _name: "/usr/bin/ffprobe")
+
+    def fake_run_json(command, **kwargs):
+        captured["command"] = command
+        captured.update(kwargs)
+        return {"streams": [], "format": {}, "chapters": []}
+
+    monkeypatch.setattr(core_module, "run_json", fake_run_json)
+    assert core_module.ffprobe(source)["chapters"] == []
+    assert "-show_chapters" in captured["command"]
+    assert captured["max_output_bytes"] == core_module.MAX_FFPROBE_JSON_BYTES
+    assert captured["timeout_seconds"] == core_module.FFPROBE_TIMEOUT_SECONDS
+
+
+def test_ffprobe_maps_bounded_probe_failure_to_domain_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(core_module, "require_tool", lambda _name: "ffprobe")
+    monkeypatch.setattr(core_module, "run_json",
+                        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                            core_module.ProbeError("time limit exceeded")))
+    with pytest.raises(CasuError, match="time limit exceeded"):
+        core_module.ffprobe(tmp_path / "input.mkv")
 
 
 VIDEO = Path(os.environ.get("CASU_TEST_VIDEO", "test_media/lino_lol_test_pattern.mp4"))
@@ -45,11 +79,28 @@ if not AUDIO.is_absolute():
     AUDIO = Path(__file__).resolve().parents[1] / AUDIO
 
 
+def _resolution_manifest(path: Path) -> dict:
+    """Small resolver fixture; media analysis is covered by dedicated tests."""
+    path = path.resolve()
+    return {"source": {"path": str(path), "filename": path.name,
+                       "size_bytes": path.stat().st_size,
+                       "sha256": sha256_file(path)}}
+
+
 @pytest.mark.media
 @pytest.mark.skipif(not VIDEO.exists() or not shutil.which("ffmpeg"), reason="test video/ffmpeg unavailable")
 def test_reference_video_manifest_preserves_source_metadata(tmp_path):
-    manifest = analyze(VIDEO, analysis_fps=2.0)
-    assert manifest["source"]["duration_s"] > 100
+    # Keep the behavioral fixture short: STRICT intentionally decodes every
+    # source-resolution frame, so processing the full 17-minute owner sample
+    # made an ordinary regression test exceed the 60-second test budget.
+    fixture = tmp_path / "reference-short.mkv"
+    subprocess.run([
+        "ffmpeg", "-v", "error", "-ss", "0", "-t", "1", "-i", str(VIDEO),
+        "-map", "0:v:0", "-map", "0:a:0", "-c:v", "ffv1",
+        "-c:a", "pcm_s16le", "-y", str(fixture),
+    ], check=True)
+    manifest = analyze(fixture, analysis_fps=2.0)
+    assert 0.5 < manifest["source"]["duration_s"] < 2
     assert manifest["streams"][0]["codec_type"] == "video"
     assert manifest["streams"][1]["codec_type"] == "audio"
     assert manifest["integrity"]["timestamps_are_source_of_truth"] is True
@@ -122,6 +173,95 @@ def test_cli_convert_expands_directories_and_writes_report(tmp_path, monkeypatch
     assert json.loads(report_path.read_text(encoding="utf-8"))["files"][0]["status"] == "converted"
 
 
+def test_cli_convert_preserves_recursive_layout_and_avoids_name_collisions(
+        tmp_path, monkeypatch, capsys):
+    source_dir = tmp_path / "sources"
+    first = source_dir / "disc1" / "track.mp3"
+    second = source_dir / "disc2" / "track.mp3"
+    first.parent.mkdir(parents=True); second.parent.mkdir(parents=True)
+    first.write_bytes(b"first"); second.write_bytes(b"second")
+    output_dir = tmp_path / "out"
+    monkeypatch.setattr("casu.jobs.analyze", lambda *_args, **_kwargs: {
+        "source": {"duration_s": 1}, "video": {"segments": []},
+        "audio": {"segments": []},
+    })
+    monkeypatch.setattr("sys.argv", ["casu", "convert", str(source_dir),
+                                     "-o", str(output_dir)])
+    assert casu_cli_main() == 0
+    report = json.loads(capsys.readouterr().out)
+    assert len(report["files"]) == 2
+    assert (output_dir / "disc1" / "track.casu").is_file()
+    assert (output_dir / "disc2" / "track.casu").is_file()
+
+
+def test_cli_convert_disambiguates_same_named_explicit_inputs(
+        tmp_path, monkeypatch, capsys):
+    first = tmp_path / "a" / "track.mp3"
+    second = tmp_path / "b" / "track.mp3"
+    first.parent.mkdir(); second.parent.mkdir()
+    first.write_bytes(b"first"); second.write_bytes(b"second")
+    output_dir = tmp_path / "out"
+    monkeypatch.setattr("casu.jobs.analyze", lambda *_args, **_kwargs: {
+        "source": {"duration_s": 1}, "video": {"segments": []},
+        "audio": {"segments": []},
+    })
+    monkeypatch.setattr("sys.argv", ["casu", "convert", str(first), str(second),
+                                     "-o", str(output_dir)])
+    assert casu_cli_main() == 0
+    report = json.loads(capsys.readouterr().out)
+    outputs = [Path(item["output"]) for item in report["files"]]
+    assert len(set(outputs)) == 2
+    assert all(path.is_file() and path.name.startswith("track-") for path in outputs)
+
+
+def test_cli_export_recurses_and_preserves_layout(tmp_path, monkeypatch, capsys):
+    source_dir = tmp_path / "casu"
+    first = source_dir / "album1" / "track.casu"
+    second = source_dir / "album2" / "track.casu"
+    first.parent.mkdir(parents=True); second.parent.mkdir(parents=True)
+    first.write_bytes(b"CASUNAT2-a"); second.write_bytes(b"CASUNAT2-b")
+    output_dir = tmp_path / "exports"
+
+    def fake_export(source, output):
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(source.read_bytes())
+        return output
+
+    monkeypatch.setattr("casu.cli.export_casu", fake_export)
+    monkeypatch.setattr("sys.argv", ["casu", "export", str(source_dir),
+                                     "-o", str(output_dir), "--format", "mp4"])
+    assert casu_cli_main() == 0
+    report = json.loads(capsys.readouterr().out)
+    assert [item["status"] for item in report["files"]] == ["exported", "exported"]
+    assert (output_dir / "album1" / "track.mp4").is_file()
+    assert (output_dir / "album2" / "track.mp4").is_file()
+
+
+def test_cli_batch_export_isolates_failure_and_writes_report(
+        tmp_path, monkeypatch, capsys):
+    good = tmp_path / "good.casu"; bad = tmp_path / "bad.casu"
+    # Batch planning is content-based; the mocked exporter below owns the
+    # per-file success/failure decision after both inputs route as CASU.
+    good.write_bytes(b"CASUNAT1good"); bad.write_bytes(b"CASUNAT1bad")
+    output_dir = tmp_path / "exports"; report_path = tmp_path / "report.json"
+
+    def fake_export(source, output):
+        if source.name == "bad.casu":
+            raise CasuError("broken input")
+        output.parent.mkdir(parents=True, exist_ok=True); output.write_bytes(b"ok")
+        return output
+
+    monkeypatch.setattr("casu.cli.export_casu", fake_export)
+    monkeypatch.setattr("sys.argv", ["casu", "export", str(good), str(bad),
+                                     "-o", str(output_dir), "--format", "mp3",
+                                     "--report", str(report_path)])
+    assert casu_cli_main() == 1
+    displayed = json.loads(capsys.readouterr().out)
+    persisted = json.loads(report_path.read_text(encoding="utf-8"))
+    assert displayed == persisted
+    assert {item["status"] for item in persisted["files"]} == {"exported", "failed"}
+
+
 def test_cli_convert_rejects_negative_retry(tmp_path, monkeypatch, capsys):
     source = tmp_path / "clip.mp4"; source.write_bytes(b"clip")
     monkeypatch.setattr("sys.argv", ["casu", "convert", str(source), "--retry", "-1"])
@@ -142,6 +282,7 @@ def test_cli_convert_native_container_mode_is_explicit(tmp_path, monkeypatch, ca
         output.write_bytes(b"native")
         return output
     monkeypatch.setattr("casu.jobs.write_native", fake_write)
+    monkeypatch.setattr("casu.jobs.read_native", lambda *_args, **_kwargs: None)
     monkeypatch.setattr("sys.argv", ["casu", "convert", str(source), "-o", str(output_dir), "--container", "native"])
     assert casu_cli_main() == 0
     report = json.loads(capsys.readouterr().out)
@@ -279,17 +420,36 @@ def test_native_casu_roundtrip_is_standalone_and_integrity_checked(tmp_path):
 
 
 def test_native_v2_is_segmented_standalone_and_has_byte_seek_index(tmp_path):
+    np = __import__("numpy")
     target = tmp_path / "segment.casu"
+    first = canonical_frame(np.zeros((2, 6), dtype="uint8"),
+                            pixel_format="rgb24", source_shape=(2, 2))
+    changed_pixels = np.zeros((2, 6), dtype="uint8"); changed_pixels[0, :3] = 9
+    changed = canonical_frame(changed_pixels, pixel_format="rgb24",
+                              source_shape=(2, 2))
+    video = {"stream_id": 1, "type": "video", "codec_origin": "test",
+             "time_base": [1, 1000], "width": 2, "height": 2,
+             "pix_fmt": "rgb24", "frame_timeline": [
+                 {"pts": 0, "duration_pts": 1}, {"pts": 1, "duration_pts": 1}]}
+    audio = {"stream_id": 2, "type": "audio", "codec_origin": "test",
+             "time_base": [1, 1000], "sample_rate": 1000, "channels": 1}
     chunks = [
-        NativeChunk(ChunkType.STREAM_CONFIG, 0, 0, b"video:yuv420p"),
-        NativeChunk(ChunkType.VIDEO_KEY_STATE, 0, 0, b"key-state"),
-        NativeChunk(ChunkType.VIDEO_TILE_UPDATE, 0, 1, b"tile-update"),
-        NativeChunk(ChunkType.AUDIO_BLOCK, 1, 0, b"pcm-block"),
+        NativeChunk(ChunkType.STREAM_CONFIG, 1, 0, json.dumps(
+            video, sort_keys=True, separators=(",", ":")).encode()),
+        NativeChunk(ChunkType.VIDEO_KEY_STATE, 1, 0, encode_key_state(first)),
+        NativeChunk(ChunkType.VIDEO_TILE_UPDATE, 1, 1, encode_tile_update(
+            changed, x=0, y=0, width=2, height=1)),
+        NativeChunk(ChunkType.AUDIO_BLOCK, 2, 0, encode_audio_block(
+            pcm=b"\0\0", pts=0, time_base_num=1, time_base_den=1000,
+            sample_rate=1000, channels=1, sample_count=1)),
     ]
-    write_native_v2(target, {"format": "CASUNAT2", "streams": [0, 1]}, chunks)
+    write_native_v2(target, {"format": "CASUNAT2", "version": 2,
+                             "streams": [video, audio]}, chunks)
     container = read_native_v2(target)
     assert container.integrity_verified is True
-    assert [item.chunk_type for item in container.chunks[:2]] == [ChunkType.STREAM_CONFIG, ChunkType.VIDEO_KEY_STATE]
+    assert [item.chunk_type for item in container.chunks[:3]] == [
+        ChunkType.STREAM_CONFIG, ChunkType.STREAM_CONFIG,
+        ChunkType.VIDEO_KEY_STATE]
     assert container.seek_entries
     assert container.seek_entries[0].key_state_offset > 0
     assert container.seek_entries[0].first_update_offset >= container.seek_entries[0].key_state_offset
@@ -312,8 +472,15 @@ def test_native_v2_key_state_and_tile_update_reconstruct_subsampled_planes():
 
 def test_native_v2_recovery_points_and_reader_limits(tmp_path):
     target = tmp_path / "recoverable.casu"
-    chunks = [NativeChunk(ChunkType.VIDEO_KEY_STATE, 0, i, bytes([i])) for i in range(3)]
-    write_native_v2(target, {"format": "CASUNAT2"}, chunks, recovery_interval=1)
+    np = __import__("numpy")
+    payload = encode_key_state(canonical_frame(
+        np.zeros((2, 6), dtype="uint8"), pixel_format="rgb24",
+        source_shape=(2, 2)))
+    chunks = [NativeChunk(ChunkType.VIDEO_KEY_STATE, 1, i, payload)
+              for i in range(3)]
+    write_native_v2(target, {"format": "CASUNAT2", "version": 2,
+        "streams": [{"stream_id": 1, "type": "video",
+                     "time_base": [1, 1000]}]}, chunks, recovery_interval=1)
     container = read_native_v2(target)
     assert len(container.recovery_points) == 3
     assert all(point["key_state_offsets"] for point in container.recovery_points)
@@ -323,8 +490,13 @@ def test_native_v2_recovery_points_and_reader_limits(tmp_path):
 
 def test_native_v2_lazy_reader_keeps_payloads_on_disk(tmp_path):
     target = tmp_path / "lazy.casu"
-    payload = b"x" * 100_000
-    write_native_v2(target, {"format": "CASUNAT2"}, [
+    np = __import__("numpy")
+    payload = encode_key_state(canonical_frame(
+        np.arange(2 * 6, dtype="uint8").reshape(2, 6),
+        pixel_format="rgb24", source_shape=(2, 2)))
+    write_native_v2(target, {"format": "CASUNAT2", "version": 2,
+        "streams": [{"stream_id": 1, "type": "video",
+                     "time_base": [1, 1000]}]}, [
         NativeChunk(ChunkType.VIDEO_KEY_STATE, 1, 0, payload),
     ])
     container = read_native_v2(target, load_payloads=False)
@@ -345,8 +517,15 @@ def test_native_v2_lazy_reader_keeps_payloads_on_disk(tmp_path):
 
 def test_native_v2_recovers_last_complete_prefix_after_truncation(tmp_path):
     target = tmp_path / "interrupted.casu"
-    chunks = [NativeChunk(ChunkType.VIDEO_KEY_STATE, 0, i, bytes([i])) for i in range(4)]
-    write_native_v2(target, {"format": "CASUNAT2"}, chunks, recovery_interval=1)
+    np = __import__("numpy")
+    payload = encode_key_state(canonical_frame(
+        np.zeros((2, 6), dtype="uint8"), pixel_format="rgb24",
+        source_shape=(2, 2)))
+    chunks = [NativeChunk(ChunkType.VIDEO_KEY_STATE, 1, i, payload)
+              for i in range(4)]
+    write_native_v2(target, {"format": "CASUNAT2", "version": 2,
+        "streams": [{"stream_id": 1, "type": "video",
+                     "time_base": [1, 1000]}]}, chunks, recovery_interval=1)
     raw = target.read_bytes()
     with pytest.raises(NativeV2Error, match="recovery size limit"):
         recover_native_v2(target, max_file_bytes=1)
@@ -619,7 +798,7 @@ def test_play_rejects_malformed_casu_before_launch(tmp_path):
 @pytest.mark.media
 @pytest.mark.skipif(not VIDEO.exists() or not shutil.which("ffmpeg"), reason="test video/ffmpeg unavailable")
 def test_casu_manifest_resolves_original_media(tmp_path):
-    manifest = analyze(VIDEO, analysis_fps=1.0)
+    manifest = _resolution_manifest(VIDEO)
     sidecar = tmp_path / "video.casu"
     sidecar.write_text(json.dumps(manifest), encoding="utf-8")
     assert resolve_casu_source(sidecar) == VIDEO.resolve()
@@ -628,7 +807,7 @@ def test_casu_manifest_resolves_original_media(tmp_path):
 @pytest.mark.media
 @pytest.mark.skipif(not VIDEO.exists() or not shutil.which("ffmpeg"), reason="test video/ffmpeg unavailable")
 def test_casu_manifest_rejects_changed_source_digest(tmp_path):
-    manifest = analyze(VIDEO, analysis_fps=1.0)
+    manifest = _resolution_manifest(VIDEO)
     manifest["source"]["sha256"] = "0" * 64
     sidecar = tmp_path / "changed.casu"
     sidecar.write_text(json.dumps(manifest), encoding="utf-8")
@@ -639,7 +818,7 @@ def test_casu_manifest_rejects_changed_source_digest(tmp_path):
 @pytest.mark.media
 @pytest.mark.skipif(not VIDEO.exists() or not shutil.which("ffmpeg"), reason="test video/ffmpeg unavailable")
 def test_casu_manifest_rejects_changed_source_size(tmp_path):
-    manifest = analyze(VIDEO, analysis_fps=1.0)
+    manifest = _resolution_manifest(VIDEO)
     manifest["source"]["sha256"] = None
     manifest["source"]["size_bytes"] += 1
     sidecar = tmp_path / "changed-size.casu"
@@ -650,9 +829,12 @@ def test_casu_manifest_rejects_changed_source_size(tmp_path):
 
 @pytest.mark.media
 @pytest.mark.skipif(not AUDIO.exists() or not shutil.which("ffmpeg"), reason="test audio/ffmpeg unavailable")
-def test_reference_mp3_manifest_preserves_audio_stream():
-    manifest = analyze(AUDIO, analysis_fps=1.0)
-    assert manifest["source"]["duration_s"] > 270
+def test_reference_mp3_manifest_preserves_audio_stream(tmp_path):
+    fixture = tmp_path / "reference-short.mp3"
+    subprocess.run(["ffmpeg", "-v", "error", "-t", "1", "-i", str(AUDIO),
+                    "-map", "0:a:0", "-c:a", "copy", "-y", str(fixture)], check=True)
+    manifest = analyze(fixture, analysis_fps=1.0)
+    assert 0.5 < manifest["source"]["duration_s"] < 2
     assert any(item.get("codec_type") == "audio" and item.get("codec_name") == "mp3" for item in manifest["streams"])
     assert manifest["audio"]["segments"]
     assert manifest["integrity"]["timestamps_are_source_of_truth"] is True
@@ -750,11 +932,15 @@ def test_player_surfaces_native_backend_error_detail():
     player = MPCASUPlayer.__new__(MPCASUPlayer)
     player.backend = type("Backend", (), {
         "last_error": lambda self: "BackendError: sink underrun",
+        "stop": lambda self: setattr(self, "stopped", True),
     })()
+    player._paused = False
     player.status = Status()
     player._set_diagnostics = lambda **_values: None
     player._apply_backend_event(PlaybackState.ERROR)
     assert "sink underrun" in player.status.value
+    assert player.backend.stopped is True
+    assert player._paused is True
 
 
 def test_libvlc_delay_controls_convert_milliseconds_to_microseconds():
@@ -848,12 +1034,35 @@ def test_libvlc_runtime_options_are_explicit_and_bounded():
         LibVLCBackend.validate_runtime_options(tuple("--x" for _ in range(17)))
 
 
+def test_embedded_libvlc_disables_unstable_hardware_decode():
+    assert "--avcodec-hw=none" in LibVLCBackend.EMBEDDED_RUNTIME_OPTIONS
+    assert ":avcodec-hw=none" in LibVLCBackend.SAFE_MEDIA_OPTIONS
+
+
+def test_process_resource_snapshot_reports_measured_cpu_and_ram():
+    text, cpu, wall = process_resource_snapshot(
+        1.0, 10.0, cpu_now=1.25, wall_now=10.5, max_rss=2048)
+    assert text == "CPU 50.0% · RAM 2.0 MiB"
+    assert cpu == 1.25 and wall == 10.5
+
+
 def test_network_source_display_removes_all_url_userinfo():
     assert display_media_source(
         "https://alice:s3cr%40t@example.test:8443/live/index.m3u8?token=public"
-    ) == "https://example.test:8443/live/index.m3u8?token=public"
+    ) == "https://example.test:8443/live/index.m3u8?token=%5Bredacted%5D"
     assert display_media_source("rtsp://camera@example.test/feed") == (
         "rtsp://example.test/feed")
+
+
+def test_network_source_display_redacts_tokens_and_bounds_malformed_values():
+    visible = display_media_source(
+        "https://example.test/live.m3u8?quality=high&token=secret&X-Amz-Signature=abc")
+    assert "quality=high" in visible
+    assert "secret" not in visible and "abc" not in visible
+    assert visible.count("%5Bredacted%5D") == 2
+    malformed = "http://[" + ("x" * 3000)
+    assert len(display_media_source(malformed)) == 2048
+    assert display_media_source(malformed).endswith("…")
     assert display_media_source("/media/alice@example.test/video.mp4") == (
         "/media/alice@example.test/video.mp4")
 
@@ -966,6 +1175,14 @@ def test_playback_controller_owns_transport_state():
     assert controller.state is ControllerState.EMPTY
 
 
+def test_playback_controller_can_detach_a_blocking_backend_without_closing_it():
+    backend = _FakePlaybackBackend(); controller = PlaybackController()
+    controller.attach(backend, "sample.mp4")
+    assert controller.detach() is backend
+    assert backend.calls == []
+    assert controller.state is ControllerState.EMPTY
+
+
 def test_legacy_playback_delegates_to_in_process_libvlc_api():
     calls = []
     backend = LibVLCBackend.__new__(LibVLCBackend)
@@ -976,6 +1193,30 @@ def test_legacy_playback_delegates_to_in_process_libvlc_api():
     backend.play()
     assert calls == [backend.player]
     assert backend.state() is PlaybackState.PLAYING
+
+
+def test_libvlc_audio_channel_and_equalizer_use_real_api_boundaries():
+    backend = LibVLCBackend.__new__(LibVLCBackend)
+    backend.player = object(); backend._audio_channel_api = True
+    selected = []
+    backend.libvlc_audio_get_channel = lambda _player: 1
+    backend.libvlc_audio_set_channel = lambda _player, value: selected.append(value) or 0
+    assert backend.audio_channel() == 1
+    assert backend.set_audio_channel(4) == 4
+    with pytest.raises(BackendError, match="unsupported"):
+        backend.set_audio_channel(99)
+
+    backend._equalizer_api = True
+    backend.libvlc_audio_equalizer_get_preset_count = lambda: 2
+    backend.libvlc_audio_equalizer_get_preset_name = lambda index: (b"Flat", b"Rock")[index]
+    equalizer = object(); released = []
+    backend.libvlc_audio_equalizer_new_from_preset = lambda index: equalizer
+    backend.libvlc_media_player_set_equalizer = lambda player, value: selected.append(value) or 0
+    backend.libvlc_audio_equalizer_release = released.append
+    assert backend.equalizer_presets() == ("Flat", "Rock")
+    assert backend.set_equalizer_preset(1) == "Rock"
+    assert released == [equalizer]
+    assert backend.set_equalizer_preset(None) == "off"
 
 
 def test_presentation_mode_is_stream_derived():
@@ -989,6 +1230,72 @@ def test_presentation_mode_ignores_attached_cover_art():
         {"codec_type": "video", "disposition": {"attached_pic": 1}},
         {"codec_type": "audio"},
     ]}) == "AUDIO"
+
+
+def test_libvlc_video_controls_validate_and_call_real_api_boundary(tmp_path):
+    backend = LibVLCBackend.__new__(LibVLCBackend)
+    backend.player = object(); calls = []
+    backend._snapshot_api = backend._aspect_api = backend._crop_api = True
+    backend._scale_api = backend._deinterlace_api = backend._chapter_api = True
+    backend.libvlc_video_take_snapshot = lambda player, output, path, width, height: calls.append(("snapshot", path, width, height)) or 0
+    backend.libvlc_video_set_aspect_ratio = lambda player, value: calls.append(("aspect", value))
+    backend.libvlc_video_set_crop_geometry = lambda player, value: calls.append(("crop", value))
+    backend.libvlc_video_set_scale = lambda player, value: calls.append(("scale", float(value.value)))
+    backend.libvlc_video_set_deinterlace = lambda player, value: calls.append(("deinterlace", value))
+    backend.libvlc_media_player_get_title_count = lambda player: 3
+    backend.libvlc_media_player_set_title = lambda player, value: calls.append(("title", value))
+    assert backend.take_snapshot(tmp_path / "frame.png").name == "frame.png"
+    assert backend.set_aspect_ratio("16:9") == "16:9"
+    assert backend.set_crop_geometry("4:3") == "4:3"
+    assert backend.set_scale(1.5) == 1.5
+    assert backend.set_deinterlace("yadif2x") == "yadif2x"
+    backend.set_title(2)
+    assert ("title", 2) in calls
+    with pytest.raises(BackendError, match="geometry"):
+        backend.set_aspect_ratio("123456:1")
+    with pytest.raises(BackendError, match="out of range"):
+        backend.set_title(3)
+
+
+def test_local_playback_routing_uses_content_not_filename(tmp_path):
+    native1 = tmp_path / "renamed-one.bin"
+    native1.write_bytes(b"CASUNAT1" + b"not parsed during routing")
+    native2 = tmp_path / "renamed-two.mp4"
+    native2.write_bytes(b"CASUNAT2" + b"not parsed during routing")
+    media = tmp_path / "extensionless"
+    media.write_bytes(b"ordinary media bytes")
+    assert detect_local_playback_kind(native1) == LOCAL_CASUNAT1
+    assert detect_local_playback_kind(native2) == LOCAL_CASUNAT2
+    assert detect_local_playback_kind(media) == LOCAL_MEDIA
+
+
+def test_local_playback_routing_recognizes_valid_renamed_sidecar(tmp_path):
+    source = tmp_path / "song.wav"
+    source.write_bytes(b"audio")
+    sidecar = tmp_path / "metadata.json"
+    manifest = _resolution_manifest(source)
+    manifest.update({
+        "casu": {"name": "CASU", "container_extension": ".casu",
+                 "version": "1.0.0"},
+        "integrity": {"timestamps_are_source_of_truth": True},
+    })
+    manifest["source"]["duration_s"] = 0
+    sidecar.write_text(json.dumps(manifest), encoding="utf-8")
+    assert detect_local_playback_kind(sidecar) == LOCAL_CASU_SIDECAR
+    broken = tmp_path / "broken.casu"
+    broken.write_text("not a CASU file", encoding="utf-8")
+    with pytest.raises(CasuError, match="invalid CASU"):
+        detect_local_playback_kind(broken)
+
+
+@pytest.mark.media
+@pytest.mark.skipif(not shutil.which("ffprobe"), reason="FFprobe unavailable")
+def test_local_playback_routing_probes_media_with_misleading_casu_suffix(tmp_path):
+    renamed = tmp_path / "actually-audio.casu"
+    with wave.open(str(renamed), "wb") as output:
+        output.setnchannels(1); output.setsampwidth(2); output.setframerate(8000)
+        output.writeframes(b"\0\0" * 800)
+    assert detect_local_playback_kind(renamed) == LOCAL_MEDIA
 
 
 def test_native_v2_subtitle_and_chapter_payloads_are_deterministic():

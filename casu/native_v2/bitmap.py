@@ -10,6 +10,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .jsonutil import StrictJsonError, strict_json_loads
+
 
 _U32 = struct.Struct(">I")
 MAX_BITMAP_RAW_BYTES = 256 * 1024 * 1024
@@ -65,8 +67,9 @@ def encode_bitmap_subtitle(*, start_pts: int, end_pts: int,
             "canvas_height": canvas_h, "x": left, "y": top,
             "width": region_w, "height": region_h, "pixel_format": "rgba",
             "raw_length": len(raw), "compressed_length": len(compressed),
-            "sha256": hashlib.sha256(raw).hexdigest()}
-    header = json.dumps(meta, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            "compression": "zlib", "sha256": hashlib.sha256(raw).hexdigest()}
+    header = json.dumps(meta, sort_keys=True, separators=(",", ":"),
+                        allow_nan=False).encode("utf-8")
     return _U32.pack(len(header)) + header + compressed
 
 
@@ -77,10 +80,11 @@ def decode_bitmap_subtitle(payload: bytes) -> BitmapSubtitle:
     if length > len(payload) - _U32.size or length > 64 * 1024:
         raise BitmapSubtitleError("invalid bitmap subtitle metadata length")
     try:
-        meta = json.loads(payload[_U32.size:_U32.size + length])
+        meta = strict_json_loads(payload[_U32.size:_U32.size + length])
         if not isinstance(meta, dict):
             raise ValueError
-        if meta.get("version") != 1 or meta.get("pixel_format") != "rgba":
+        if (meta.get("version") != 1 or meta.get("pixel_format") != "rgba"
+                or meta.get("compression", "zlib") != "zlib"):
             raise ValueError
         if meta.get("time_base") != [1, 1000]:
             raise ValueError
@@ -111,6 +115,6 @@ def decode_bitmap_subtitle(payload: bytes) -> BitmapSubtitle:
             raise ValueError
         return BitmapSubtitle(start, end, canvas_w, canvas_h, left, top,
                               width, height, raw, digest)
-    except (AttributeError, KeyError, TypeError, ValueError, json.JSONDecodeError, zlib.error,
-            UnicodeDecodeError) as exc:
+    except (AttributeError, KeyError, TypeError, ValueError, StrictJsonError,
+            zlib.error) as exc:
         raise BitmapSubtitleError("invalid bitmap subtitle payload") from exc
