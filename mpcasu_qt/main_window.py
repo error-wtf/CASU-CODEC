@@ -13,14 +13,15 @@ from pathlib import Path
 
 from PySide6.QtCore import (
     QEasingCurve, QObject, QPropertyAnimation, QRect, Qt, QTimer, Signal, Slot,
+    QSize,
 )
 from PySide6.QtGui import (
     QAction, QColor, QFont, QIcon, QKeySequence, QPainter, QPen, QPixmap,
-    QTextDocument, QImage,
+    QTextDocument, QImage, QLinearGradient, QBrush,
 )
 from PySide6.QtWidgets import (
     QApplication, QAbstractItemView, QButtonGroup, QCheckBox, QComboBox, QDialog,
-    QDialogButtonBox, QFrame, QHBoxLayout, QLabel, QLineEdit,
+    QDialogButtonBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QMainWindow, QMenu,
     QPushButton, QScrollArea, QSizePolicy, QSlider, QSpinBox,
     QStackedWidget, QStatusBar, QTextBrowser, QTreeWidget, QTreeWidgetItem,
@@ -42,6 +43,7 @@ from casu.playlist import (
 from casu.settings import PlayerSettings, SettingsStore
 from casu.spotify import SpotifyError, is_spotify_url, resolve_spotify_url
 from casu.thumbnail import thumbnail_for
+from casu.waveform import spectrum_bands, waveform_peaks
 
 from casu.native import NativeCasuError, read_native
 from casu.native_v2 import ChunkType, NativeV2Error, read_native_v2
@@ -151,7 +153,7 @@ class Sidebar(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("Sidebar")
-        self.setFixedWidth(220)
+        self.setFixedWidth(METRICS.sidebar_width)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -165,8 +167,18 @@ class Sidebar(QFrame):
         sub = QLabel("PLAYER")
         sub.setObjectName("BrandSub")
         sub.setFixedHeight(16)
-        sub.setContentsMargins(44, 0, 16, 12)
+        sub.setContentsMargins(16, 0, 16, 12)
         layout.addWidget(sub)
+
+        logo_path = Path(__file__).resolve().parent.parent / "assets" / "mpcasu_player_logo_header.png"
+        if logo_path.is_file():
+            logo = QLabel()
+            logo.setContentsMargins(16, 0, 16, 10)
+            pixmap = QPixmap(str(logo_path))
+            if not pixmap.isNull():
+                logo.setPixmap(pixmap.scaledToWidth(150, Qt.SmoothTransformation))
+                logo.setFixedHeight(44)
+                layout.addWidget(logo)
 
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)
@@ -176,8 +188,8 @@ class Sidebar(QFrame):
 
         nav_items = [
             ("MEDIA", ["LIBRARY", "PLAYLIST", "CASU FILES"]),
-            ("SOURCES", ["YOUTUBE", "SPOTIFY", "NETWORK STREAM"]),
-            ("SYSTEM", ["SETTINGS", "ABOUT"]),
+            ("SOURCES", ["YOUTUBE", "SPOTIFY", "NETWORK STREAM", "LIVE TV / EPG"]),
+            ("SYSTEM", ["OPTIONS", "ABOUT"]),
         ]
         self._nav_buttons: list[QPushButton] = []
         self._nav_group = QButtonGroup(self)
@@ -198,7 +210,7 @@ class Sidebar(QFrame):
 
         layout.addStretch()
 
-        version = QLabel("MPCASU 1.0.1")
+        version = QLabel("MPCASU 1.0.2")
         version.setObjectName("NowPlayingMeta")
         version.setContentsMargins(16, 8, 16, 8)
         version.setAlignment(Qt.AlignLeft | Qt.AlignBottom)
@@ -279,13 +291,16 @@ class PlaylistPane(QFrame):
     childPlayRequested = Signal(str)
     saveRequested = Signal()
     loadRequested = Signal()
+    addRequested = Signal()
+    urlRequested = Signal()
+    renameRequested = Signal(int)
 
     PLAYLIST_SUFFIXES = {".m3u", ".m3u8", ".pls", ".json"}
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("PlaylistPane")
-        self.setFixedWidth(300)
+        self.setFixedWidth(METRICS.playlist_width)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -301,6 +316,19 @@ class PlaylistPane(QFrame):
         sub = QLabel("Queue · expandable · drag to reorder")
         sub.setObjectName("NowPlayingMeta")
         header_layout.addWidget(sub)
+        actions = QHBoxLayout()
+        actions.setSpacing(6)
+        choose_btn = QPushButton("Choose files")
+        choose_btn.setObjectName("PrimaryButton")
+        choose_btn.setToolTip("Add media files to the queue (Ctrl+O)")
+        choose_btn.clicked.connect(lambda: self.addRequested.emit())
+        actions.addWidget(choose_btn, 1)
+        url_btn = QPushButton("Add URL")
+        url_btn.setObjectName("IconButton")
+        url_btn.setToolTip("Add a network stream URL (Ctrl+L)")
+        url_btn.clicked.connect(lambda: self.urlRequested.emit())
+        actions.addWidget(url_btn)
+        header_layout.addLayout(actions)
         layout.addWidget(header)
 
         self.tree = QueueTree(self)
@@ -310,6 +338,9 @@ class PlaylistPane(QFrame):
         self.tree.removePressed.connect(lambda rows: self.removeRequested.emit(rows))
         self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._context_menu)
+        self.tree.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.tree.setIconSize(QSize(METRICS.thumbnail_width, METRICS.thumbnail_height))
         layout.addWidget(self.tree, 1)
 
         controls = QFrame()
@@ -318,30 +349,39 @@ class PlaylistPane(QFrame):
         cl.setContentsMargins(10, 8, 10, 8)
         up_btn = QPushButton("↑")
         up_btn.setObjectName("IconButton")
-        up_btn.setFixedWidth(32)
+        up_btn.setFixedWidth(30)
         up_btn.setToolTip("Move up")
         up_btn.clicked.connect(lambda: self.moveRequested.emit(-1, self.selected_row()))
         cl.addWidget(up_btn)
         down_btn = QPushButton("↓")
         down_btn.setObjectName("IconButton")
-        down_btn.setFixedWidth(32)
+        down_btn.setFixedWidth(30)
         down_btn.setToolTip("Move down")
         down_btn.clicked.connect(lambda: self.moveRequested.emit(1, self.selected_row()))
         cl.addWidget(down_btn)
-        clear_btn = QPushButton("⌫")
-        clear_btn.setObjectName("IconButton")
-        clear_btn.setFixedWidth(32)
-        clear_btn.setToolTip("Remove selected (or clear all)")
-        clear_btn.clicked.connect(self._on_clear)
-        cl.addWidget(clear_btn)
+        remove_btn = QPushButton("×")
+        remove_btn.setObjectName("IconButton")
+        remove_btn.setFixedWidth(30)
+        remove_btn.setToolTip("Remove selected entry (Del)")
+        remove_btn.clicked.connect(lambda: self.removeRequested.emit([self.selected_row()])
+                                   if self.selected_row() >= 0 else None)
+        cl.addWidget(remove_btn)
+        rename_btn = QPushButton("✎")
+        rename_btn.setObjectName("IconButton")
+        rename_btn.setFixedWidth(30)
+        rename_btn.setToolTip("Rename the selected queue entry")
+        rename_btn.clicked.connect(lambda: self.renameRequested.emit(self.selected_row()))
+        cl.addWidget(rename_btn)
         cl.addStretch()
         load_btn = QPushButton("Load")
         load_btn.setObjectName("IconButton")
+        load_btn.setFixedWidth(46)
         load_btn.setToolTip("Load M3U/PLS/JSON playlist")
         load_btn.clicked.connect(lambda: self.loadRequested.emit())
         cl.addWidget(load_btn)
         save_btn = QPushButton("Save")
         save_btn.setObjectName("IconButton")
+        save_btn.setFixedWidth(46)
         save_btn.setToolTip("Save queue as M3U/PLS/JSON playlist")
         save_btn.clicked.connect(lambda: self.saveRequested.emit())
         cl.addWidget(save_btn)
@@ -390,6 +430,7 @@ class PlaylistPane(QFrame):
             item = QTreeWidgetItem([self._label_for(path)])
             item.setData(0, Qt.UserRole, str(path))
             item.setToolTip(0, str(path))
+            item.setIcon(0, QIcon(self._thumb_for(path)))
             item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled
                           | Qt.ItemIsDragEnabled | Qt.ItemIsDropEnabled)
             self.tree.addTopLevelItem(item)
@@ -414,6 +455,27 @@ class PlaylistPane(QFrame):
         self.empty_label.setVisible(True)
 
     # --- internals ---
+
+    @staticmethod
+    def _thumb_for(path) -> QPixmap:
+        """Web-style 54x38 thumbnail: red/dark gradient + format glyph."""
+        pixmap = QPixmap(METRICS.thumbnail_width, METRICS.thumbnail_height)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        gradient = QLinearGradient(0, 0, METRICS.thumbnail_width, METRICS.thumbnail_height)
+        gradient.setColorAt(0.0, QColor("#391119"))
+        gradient.setColorAt(1.0, QColor("#080b0f"))
+        painter.setBrush(QBrush(gradient))
+        painter.setPen(Qt.NoPen)
+        painter.drawRoundedRect(0, 0, METRICS.thumbnail_width, METRICS.thumbnail_height, 5, 5)
+        label = PlaylistPane._label_for(path)
+        glyph = label.split("]", 1)[0].strip("[").strip() if label.startswith("[") else "•"
+        short = {"MP4": "▶", "MP3": "♪", "CASU": "◈", "MP5": "◉", "PLAYLIST": "≡",
+                 "STREAM": "∿", "YT": "▶", "RTSP": "∿", "RTMP": "∿", "HLS": "∿"}.get(glyph, "•")
+        painter.setPen(QPen(QColor(PALETTE.text), 15))
+        painter.drawText(pixmap.rect(), Qt.AlignCenter, short)
+        painter.end()
+        return pixmap
 
     @staticmethod
     def _is_playlist(path) -> bool:
@@ -515,6 +577,78 @@ class PlaylistPane(QFrame):
                 menu.addAction("Play", lambda: self.childPlayRequested.emit(
                     str(item.data(0, Qt.UserRole))))
         menu.exec(self.tree.viewport().mapToGlobal(position))
+
+
+class VisualizerWidget(QWidget):
+    """Web-style audio visualizer overlay: red spectrum bars + waveform + cursor.
+
+    Renders measured PCM peaks/spectrum (casu.waveform) for audio-only media,
+    mirroring the web player's canvas visualizer. Hidden while real video is
+    on screen or when the visualizer mode is "off".
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.hide()
+        self._peaks: tuple[float, ...] = ()
+        self._bands: tuple[float, ...] = ()
+        self._mode = "spectrum"
+        self._position = 0.0
+        self._duration = 0.0
+        self._timer = QTimer(self)
+        self._timer.setInterval(66)
+        self._timer.timeout.connect(self.update)
+        self._timer.start()
+
+    def configure(self, mode: str, peaks, bands, duration: float):
+        self._mode = mode
+        self._peaks = tuple(peaks or ())
+        self._bands = tuple(bands or ())
+        self._duration = max(0.0, float(duration or 0.0))
+        visible = mode != "off" and (self._peaks or self._bands)
+        self.setVisible(bool(visible))
+        self.update()
+
+    def set_position(self, position: float):
+        self._position = float(position or 0.0)
+
+    def paintEvent(self, event):  # noqa: N802 - Qt naming
+        if self._mode == "off":
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        width, height = self.width(), self.height()
+        if self._mode in ("spectrum", "both") and self._bands:
+            count = len(self._bands)
+            bar_w = max(2, width // max(1, count) - 2)
+            for index, value in enumerate(self._bands):
+                bar_h = max(2, int(value * (height - 6)))
+                x = index * (width // count)
+                color = QColor(PALETTE.accent) if index % 2 == 0 else QColor(PALETTE.accent_dim)
+                painter.fillRect(x, height - bar_h, bar_w, bar_h, color)
+        if self._mode in ("waveform", "both") and self._peaks:
+            pen = QPen(QColor(PALETTE.accent_hot), 1.5)
+            painter.setPen(pen)
+            count = len(self._peaks)
+            mid = height // 2
+            previous = None
+            for index, value in enumerate(self._peaks):
+                x = int(index * width / max(1, count - 1))
+                amp = max(1, int(value * (height // 2 - 3)))
+                point = (x, mid - amp)
+                if previous is not None:
+                    painter.drawLine(previous[0], previous[1], x, mid + amp)
+                previous = (x, mid - amp)
+            painter.setPen(QPen(QColor(PALETTE.text_muted), 1))
+            for index, value in enumerate(self._peaks):
+                x = int(index * width / max(1, count - 1))
+                amp = max(1, int(value * (height // 2 - 3)))
+                painter.drawLine(x, mid - amp, x, mid + amp)
+        if self._duration > 0:
+            cursor_x = int(min(1.0, self._position / self._duration) * width)
+            painter.fillRect(cursor_x, 0, 2, height, QColor(PALETTE.text))
+        painter.end()
 
 
 class SeekSliderWithChapters(QWidget):
@@ -652,14 +786,15 @@ class DiagnosticsBar(QFrame):
                 self._labels[key].setText(value)
 
 
-class LibraryDialog(QDialog):
-    """Searchable media library dialog."""
+class LibraryPage(QFrame):
+    """In-window searchable media library (no popup)."""
+
+    addRequested = Signal(list)
+    refreshRequested = Signal()
 
     def __init__(self, media_library, thumbnail_dir, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("MPCASU Library")
-        self.setMinimumSize(760, 520)
-        self.setObjectName("Dialog")
+        self.setObjectName("Page")
         self._media_library = media_library
         self._thumbnail_dir = thumbnail_dir
         self._paths: list[Path] = []
@@ -668,21 +803,37 @@ class LibraryDialog(QDialog):
         self._build()
 
     def _build(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(24, 18, 24, 16)
+        header = QHBoxLayout()
+        title = QLabel("LIBRARY")
+        title.setObjectName("NowPlayingTitle")
+        header.addWidget(title)
+        header.addStretch()
+        back_btn = QPushButton("‹ Back to player")
+        back_btn.setObjectName("IconButton")
+        back_btn.clicked.connect(lambda: self.backRequested.emit())
+        header.addWidget(back_btn)
+        outer.addLayout(header)
+
+        panel = QFrame()
+        panel.setObjectName("PagePanel")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(16, 16, 16, 16)
 
         top = QHBoxLayout()
-        search_label = QLabel("Search")
-        search_label.setObjectName("PanelTitle")
-        top.addWidget(search_label)
         self._search_entry = QLineEdit()
-        self._search_entry.setPlaceholderText("Type to search library...")
+        self._search_entry.setPlaceholderText("Search the media database…")
         self._search_entry.textChanged.connect(self._refresh)
-        top.addWidget(self._search_entry)
+        top.addWidget(self._search_entry, 1)
+        refresh_btn = QPushButton("Refresh watched folders")
+        refresh_btn.setObjectName("IconButton")
+        refresh_btn.clicked.connect(self._on_refresh)
+        top.addWidget(refresh_btn)
         layout.addLayout(top)
 
         self._results = QListWidget()
-        self._results.setMinimumHeight(200)
+        self._results.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self._results.itemDoubleClicked.connect(self._add_selected)
         self._results.currentItemChanged.connect(self._load_preview)
         layout.addWidget(self._results, 1)
@@ -691,20 +842,18 @@ class LibraryDialog(QDialog):
         self._preview.setAlignment(Qt.AlignCenter)
         self._preview.setFixedHeight(160)
         self._preview.setObjectName("Panel")
-        self._preview.setStyleSheet(f"background-color: {PALETTE.surface}; border-radius: 8px; padding: 12px;")
         layout.addWidget(self._preview)
 
         bottom = QHBoxLayout()
-        refresh_btn = QPushButton("Refresh watched folders")
-        refresh_btn.clicked.connect(self._on_refresh)
-        bottom.addWidget(refresh_btn)
         bottom.addStretch()
-        add_btn = QPushButton("Add selected")
-        add_btn.setObjectName("NavItem")
-        add_btn.setStyleSheet(f"background-color: {PALETTE.accent}; color: white;")
+        add_btn = QPushButton("Add to queue")
+        add_btn.setObjectName("PrimaryButton")
         add_btn.clicked.connect(self._add_selected)
         bottom.addWidget(add_btn)
         layout.addLayout(bottom)
+        outer.addWidget(panel, 1)
+
+    backRequested = Signal()
 
     def _refresh(self):
         self._paths.clear()
@@ -716,22 +865,13 @@ class LibraryDialog(QDialog):
             resume = f" · resume {item.resume_seconds:.1f}s" if item.resume_seconds else ""
             self._results.addItem(f"{marker}{item.path.name}{resume}  —  {item.path.parent}")
 
-    def _add_selected(self):
+    def _add_selected(self, *_args):
         item = self._results.currentItem()
         if item is None:
             return
         row = self._results.row(item)
         if 0 <= row < len(self._paths):
-            self.accept()
-
-    def selected_paths(self) -> list[Path]:
-        item = self._results.currentItem()
-        if item is None:
-            return []
-        row = self._results.row(item)
-        if 0 <= row < len(self._paths):
-            return [self._paths[row]]
-        return []
+            self.addRequested.emit([self._paths[row]])
 
     def _load_preview(self, current, previous):
         if current is None:
@@ -763,118 +903,330 @@ class LibraryDialog(QDialog):
         threading.Thread(target=worker, daemon=True).start()
 
     def _on_refresh(self):
-        if isinstance(self.parent(), MainWindow):
-            self.parent().refresh_watched_folders()
+        self.refreshRequested.emit()
         self._refresh()
 
 
-class SettingsDialog(QDialog):
-    """Settings dialog for audio device, rate, and folders."""
+class OptionsPage(QFrame):
+    """In-window options area (replaces the settings popup)."""
+
+    applied = Signal(object)
+    actionRequested = Signal(str)
+    backRequested = Signal()
 
     def __init__(self, settings_store, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("MPCASU Settings")
-        self.setMinimumSize(500, 380)
+        self.setObjectName("Page")
         self._settings_store = settings_store
-        self._settings = settings_store.load()
         self._build()
 
     def _build(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
-
-        title = QLabel("Settings")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(24, 18, 24, 16)
+        header = QHBoxLayout()
+        title = QLabel("OPTIONS")
         title.setObjectName("NowPlayingTitle")
-        layout.addWidget(title)
+        header.addWidget(title)
+        header.addStretch()
+        back_btn = QPushButton("‹ Back to player")
+        back_btn.setObjectName("IconButton")
+        back_btn.clicked.connect(self.backRequested.emit)
+        header.addWidget(back_btn)
+        outer.addLayout(header)
 
-        grid = QGridLayout()
-        grid.setSpacing(8)
+        panel = QFrame()
+        panel.setObjectName("PagePanel")
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(14)
 
-        row = 0
-        grid.addWidget(QLabel("Volume:"), row, 0)
+        def section(label_text):
+            label = QLabel(label_text)
+            label.setObjectName("SidebarSection")
+            label.setContentsMargins(0, 0, 0, 0)
+            layout.addWidget(label)
+
+        settings = self._settings_store.load()
+
+        section("PLAYBACK")
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Volume"))
         self._volume_spin = QSpinBox()
+        self._volume_spin.setObjectName("IconButton")
         self._volume_spin.setRange(0, 200)
-        self._volume_spin.setValue(self._settings.volume)
-        grid.addWidget(self._volume_spin, row, 1)
-
-        row += 1
-        self._muted_cb = QCheckBox("Muted")
-        self._muted_cb.setChecked(self._settings.muted)
-        grid.addWidget(self._muted_cb, row, 0, 1, 2)
-
-        row += 1
-        grid.addWidget(QLabel("Playback rate:"), row, 0)
+        self._volume_spin.setValue(settings.volume)
+        row.addWidget(self._volume_spin)
+        row.addSpacing(18)
+        row.addWidget(QLabel("Rate"))
         self._rate_spin = QDoubleSpinBox()
+        self._rate_spin.setObjectName("IconButton")
         self._rate_spin.setRange(0.25, 4.0)
         self._rate_spin.setSingleStep(0.25)
-        self._rate_spin.setValue(self._settings.rate)
-        grid.addWidget(self._rate_spin, row, 1)
+        self._rate_spin.setValue(settings.rate)
+        row.addWidget(self._rate_spin)
+        row.addStretch()
+        layout.addLayout(row)
+        self._muted_cb = QCheckBox("Muted")
+        self._muted_cb.setChecked(settings.muted)
+        layout.addWidget(self._muted_cb)
+        self._resume_cb = QCheckBox("Resume playback on startup")
+        self._resume_cb.setChecked(settings.resume_playback)
+        layout.addWidget(self._resume_cb)
 
-        row += 1
-        grid.addWidget(QLabel("Watched folders:"), row, 0)
-        self._folders_text = QLabel("\n".join(self._settings.watched_folders) if self._settings.watched_folders else "None")
-        self._folders_text.setObjectName("NowPlayingMeta")
-        self._folders_text.setWordWrap(True)
-        grid.addWidget(self._folders_text, row, 1)
+        section("VISUALIZER")
+        viz_row = QHBoxLayout()
+        self._viz_combo = QComboBox()
+        self._viz_combo.setObjectName("IconButton")
+        for label, value in [("Spectrum", "spectrum"), ("Waveform", "waveform"),
+                             ("Both", "both"), ("Off", "off")]:
+            self._viz_combo.addItem(label, value)
+        index = self._viz_combo.findData(settings.visualizer)
+        self._viz_combo.setCurrentIndex(max(0, index))
+        viz_row.addWidget(self._viz_combo)
+        viz_row.addStretch()
+        layout.addLayout(viz_row)
 
-        layout.addLayout(grid)
+        section("CACHE")
+        cache_row = QHBoxLayout()
+        self._cache_spin = QSpinBox()
+        self._cache_spin.setObjectName("IconButton")
+        self._cache_spin.setRange(64, 8192)
+        self._cache_spin.setSuffix(" MiB")
+        self._cache_spin.setValue(settings.cache_limit_mib)
+        cache_row.addWidget(self._cache_spin)
+        clear_btn = QPushButton("Clear yt-dlp temp cache")
+        clear_btn.setObjectName("IconButton")
+        clear_btn.clicked.connect(lambda: self.actionRequested.emit("clear-cache"))
+        cache_row.addWidget(clear_btn)
+        cache_row.addStretch()
+        layout.addLayout(cache_row)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self._save_and_accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        section("DATABASE")
+        self._folders_label = QLabel("\n".join(settings.watched_folders)
+                                     if settings.watched_folders else "No watched folders yet")
+        self._folders_label.setObjectName("NowPlayingMeta")
+        self._folders_label.setWordWrap(True)
+        layout.addWidget(self._folders_label)
+        db_btn = QPushButton("Refresh watched folders")
+        db_btn.setObjectName("IconButton")
+        db_btn.clicked.connect(lambda: self.actionRequested.emit("refresh-db"))
+        layout.addWidget(db_btn, 0, Qt.AlignLeft)
 
-    def _save_and_accept(self):
-        self._settings = PlayerSettings(
-            volume=self._volume_spin.value(),
-            muted=self._muted_cb.isChecked(),
-            rate=self._rate_spin.value(),
-            audio_device=self._settings.audio_device,
-            watched_folders=tuple(self._settings.watched_folders),
-        )
-        self._settings_store.save(self._settings)
-        self.accept()
+        section("LEGAL")
+        self._consent_cb = QCheckBox("I understand that yt-dlp resolves YouTube/Spotify URLs (personal use only)")
+        self._consent_cb.setChecked(settings.ytdlp_consent)
+        layout.addWidget(self._consent_cb)
 
-    def settings(self) -> PlayerSettings:
-        return self._settings
+        apply_row = QHBoxLayout()
+        apply_row.addStretch()
+        apply_btn = QPushButton("Apply")
+        apply_btn.setObjectName("PrimaryButton")
+        apply_btn.clicked.connect(self._apply)
+        apply_row.addWidget(apply_btn)
+        layout.addLayout(apply_row)
+        layout.addStretch()
+
+        scroll.setWidget(panel)
+        outer.addWidget(scroll, 1)
+
+    def _apply(self):
+        settings = self._settings_store.load()
+        updated = replace(settings,
+                          volume=self._volume_spin.value(),
+                          muted=self._muted_cb.isChecked(),
+                          rate=self._rate_spin.value(),
+                          ytdlp_consent=self._consent_cb.isChecked(),
+                          visualizer=str(self._viz_combo.currentData()),
+                          resume_playback=self._resume_cb.isChecked(),
+                          cache_limit_mib=self._cache_spin.value())
+        self._settings_store.save(updated)
+        self.applied.emit(updated)
+
+    def reload(self):
+        settings = self._settings_store.load()
+        self._volume_spin.setValue(settings.volume)
+        self._muted_cb.setChecked(settings.muted)
+        self._rate_spin.setValue(settings.rate)
+        self._resume_cb.setChecked(settings.resume_playback)
+        self._consent_cb.setChecked(settings.ytdlp_consent)
+        self._cache_spin.setValue(settings.cache_limit_mib)
+        index = self._viz_combo.findData(settings.visualizer)
+        self._viz_combo.setCurrentIndex(max(0, index))
+        self._folders_label.setText("\n".join(settings.watched_folders)
+                                      if settings.watched_folders else "No watched folders yet")
 
 
-class AboutDialog(QDialog):
-    """About MPCASU."""
+class EpgPage(QFrame):
+    """In-window Live TV / EPG guide (M3U + XMLTV), web-style channel cards."""
+
+    channelActivated = Signal(object)
+    backRequested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("About MPCASU")
-        self.setFixedSize(420, 280)
-        layout = QVBoxLayout(self)
+        self.setObjectName("Page")
+        self._catalog = None
+        self._guide = None
+        self._build()
+
+    def _build(self):
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(24, 18, 24, 16)
+        header = QHBoxLayout()
+        title = QLabel("LIVE TV / EPG")
+        title.setObjectName("NowPlayingTitle")
+        header.addWidget(title)
+        header.addStretch()
+        back_btn = QPushButton("‹ Back to player")
+        back_btn.setObjectName("IconButton")
+        back_btn.clicked.connect(self.backRequested.emit)
+        header.addWidget(back_btn)
+        outer.addLayout(header)
+
+        source_row = QHBoxLayout()
+        self._source_entry = QLineEdit()
+        self._source_entry.setPlaceholderText("M3U / XMLTV path or http(s) URL…")
+        source_row.addWidget(self._source_entry, 1)
+        load_file_btn = QPushButton("Load file")
+        load_file_btn.setObjectName("IconButton")
+        load_file_btn.clicked.connect(self._load_file)
+        source_row.addWidget(load_file_btn)
+        load_url_btn = QPushButton("Load URL")
+        load_url_btn.setObjectName("IconButton")
+        load_url_btn.clicked.connect(lambda: self._load_source(self._source_entry.text().strip()))
+        source_row.addWidget(load_url_btn)
+        outer.addLayout(source_row)
+
+        self._status = QLabel("Load an Extended-M3U playlist (and optional XMLTV guide) to browse channels.")
+        self._status.setObjectName("NowPlayingMeta")
+        outer.addWidget(self._status)
+
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.NoFrame)
+        self._scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self._grid_host = QWidget()
+        self._grid_host.setStyleSheet("background: transparent;")
+        self._grid = QGridLayout(self._grid_host)
+        self._grid.setSpacing(8)
+        self._scroll.setWidget(self._grid_host)
+        outer.addWidget(self._scroll, 1)
+
+    def _load_file(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Load playlist / guide", str(Path.home()),
+            "Playlists & guides (*.m3u *.m3u8 *.pls *.xml *.xmltv);;All files (*)")
+        if path:
+            self._load_source(path)
+
+    def _load_source(self, source: str):
+        if not source:
+            return
+        try:
+            if source.endswith((".xml", ".xmltv")):
+                from casu.epg import load_xmltv, fetch_xmltv
+                self._guide = fetch_xmltv(source) if source.startswith(("http://", "https://")) else load_xmltv(source)
+                self._status.setText(f"Guide loaded: {len(self._guide.entries) if hasattr(self._guide, 'entries') else ''} programmes")
+                self._render()
+                return
+            from casu.epg import load_m3u, fetch_m3u
+            self._catalog = fetch_m3u(source) if source.startswith(("http://", "https://")) else load_m3u(source)
+            self._status.setText(f"{len(self._catalog.channels)} channels loaded")
+            self._render()
+        except Exception as exc:  # noqa: BLE001 - show any loader failure inline
+            self._status.setText(f"Load failed: {exc}")
+
+    def _now_next(self, channel):
+        if self._guide is None:
+            return ""
+        try:
+            programmes = self._guide.for_channel(getattr(channel, "tvg_id", "") or channel.name)
+        except Exception:  # noqa: BLE001
+            return ""
+        current = next((p for p in programmes if p.current), None) if programmes else None
+        if current is not None:
+            return f"{current.title}"
+        return ""
+
+    def _render(self):
+        while self._grid.count():
+            item = self._grid.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        if self._catalog is None:
+            return
+        for index, channel in enumerate(self._catalog.channels):
+            card = QFrame()
+            card.setObjectName("EpgChannel")
+            card.setCursor(Qt.PointingHandCursor)
+            cl = QVBoxLayout(card)
+            cl.setContentsMargins(12, 10, 12, 10)
+            name = QLabel(channel.name)
+            name.setObjectName("NowPlayingTitle")
+            name.setStyleSheet("font-size: 13px;")
+            name.setWordWrap(True)
+            cl.addWidget(name)
+            now = self._now_next(channel)
+            meta = QLabel(now or (getattr(channel, "group", "") or ""))
+            meta.setObjectName("NowPlayingMeta")
+            meta.setWordWrap(True)
+            cl.addWidget(meta)
+            card.mousePressEvent = lambda event, ch=channel: self.channelActivated.emit(ch)
+            self._grid.addWidget(card, index // 3, index % 3)
+
+
+class AboutPage(QFrame):
+    """In-window about view (no popup)."""
+
+    backRequested = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("Page")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(24, 18, 24, 16)
+        header = QHBoxLayout()
+        title = QLabel("ABOUT")
+        title.setObjectName("NowPlayingTitle")
+        header.addWidget(title)
+        header.addStretch()
+        back_btn = QPushButton("‹ Back to player")
+        back_btn.setObjectName("IconButton")
+        back_btn.clicked.connect(self.backRequested.emit)
+        header.addWidget(back_btn)
+        outer.addLayout(header)
+
+        panel = QFrame()
+        panel.setObjectName("PagePanel")
+        layout = QVBoxLayout(panel)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setAlignment(Qt.AlignCenter)
 
-        title = QLabel("MPCASU")
-        title.setObjectName("BrandName")
-        title.setAlignment(Qt.AlignCenter)
-        layout.addWidget(title)
-
+        brand = QLabel("MPCASU")
+        brand.setObjectName("BrandName")
+        brand.setAlignment(Qt.AlignCenter)
+        layout.addWidget(brand)
         sub = QLabel("PLAYER")
         sub.setObjectName("BrandSub")
         sub.setAlignment(Qt.AlignCenter)
         layout.addWidget(sub)
-
         layout.addSpacing(12)
-
-        info = QLabel("Version 1.0.1\nMedia Player for CASU & Legacy Media\nIn-process playback · No external player")
+        info = QLabel("Version 1.0.2\nMedia Player for CASU & Legacy Media\nIn-process playback · No external player")
         info.setObjectName("NowPlayingMeta")
         info.setAlignment(Qt.AlignCenter)
         layout.addWidget(info)
-
         layout.addSpacing(12)
-
-        close_btn = QPushButton("Close")
-        close_btn.clicked.connect(self.accept)
-        layout.addWidget(close_btn, 0, Qt.AlignCenter)
-
-
+        note = QLabel("Design inspired by VLC and Webamp — independent original code.\nAnti-Capitalist License 1.4 · Lino Casu")
+        note.setObjectName("NowPlayingMeta")
+        note.setAlignment(Qt.AlignCenter)
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        outer.addWidget(panel, 1)
 class _ThreadBridge(QObject):
     """Marshals worker-thread results onto the Qt event loop (no popups)."""
 
@@ -1160,7 +1512,7 @@ class MainWindow(QMainWindow):
         main_layout.setSpacing(0)
 
         self._now_playing_bar = NowPlayingBar()
-        main_layout.addWidget(self._now_playing_bar)
+        self._now_playing_bar.hide()
 
         body = QHBoxLayout()
         body.setContentsMargins(0, 0, 0, 0)
@@ -1175,16 +1527,55 @@ class MainWindow(QMainWindow):
         center_column.setContentsMargins(0, 0, 0, 0)
         center_column.setSpacing(0)
 
+        topbar = QFrame()
+        topbar.setObjectName("TopBar")
+        topbar.setFixedHeight(METRICS.topbar_height)
+        tb_layout = QHBoxLayout(topbar)
+        tb_layout.setContentsMargins(10, 0, 10, 0)
+        self._back_btn = QPushButton("‹")
+        self._back_btn.setObjectName("IconButton")
+        self._back_btn.setFixedSize(40, 40)
+        self._back_btn.setToolTip("Back to Now Playing")
+        self._back_btn.clicked.connect(self._show_player_page)
+        tb_layout.addWidget(self._back_btn)
+        self._topbar_title = QLabel("NOW PLAYING")
+        self._topbar_title.setObjectName("NowPlayingTitle")
+        tb_layout.addWidget(self._topbar_title)
+        tb_layout.addStretch()
+        self._queue_filter = QLineEdit()
+        self._queue_filter.setPlaceholderText("Search queue…")
+        self._queue_filter.setFixedWidth(220)
+        self._queue_filter.setFixedHeight(34)
+        self._queue_filter.textChanged.connect(self._filter_queue)
+        tb_layout.addWidget(self._queue_filter)
+        center_column.addWidget(topbar)
+
         self._video_surface = VideoSurface()
         self._video_surface.doubleClicked.connect(self.toggle_fullscreen)
         center_column.addWidget(self._video_surface, 1)
 
+        self._badges_label = QLabel(self._video_surface)
+        self._badges_label.setStyleSheet(
+            "background-color: #090b0ddd; border: 1px solid #383d43; color: #f4f5f7;"
+            " font-size: 11px; font-weight: 800; padding: 5px 8px;")
+        self._badges_label.hide()
+        self._caption_label = QLabel(self._video_surface)
+        self._caption_label.setStyleSheet(
+            "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 transparent,"
+            " stop:1 #050607e8); color: #f4f5f7; font-size: 14px; font-weight: 700;"
+            " padding: 40px 18px 12px 18px; border: none;")
+        self._caption_label.hide()
+        self._empty_hint = QLabel("Drop media here — or use “Choose files” in the playlist panel",
+                                  self._video_surface)
+        self._empty_hint.setObjectName("NowPlayingMeta")
+        self._empty_hint.setStyleSheet("color: #858b93; background: transparent; font-size: 12px;")
+        self._empty_hint.setAlignment(Qt.AlignCenter)
+
+        self._visualizer = VisualizerWidget(self._video_surface)
+        self._visualizer.setFixedHeight(96)
+
         self._toast_label = QLabel(self._video_surface)
         self._toast_label.setObjectName("Toast")
-        self._toast_label.setStyleSheet(
-            f"background-color: {PALETTE.surface_alt}; color: {PALETTE.text};"
-            f" border: 1px solid {PALETTE.border_strong}; border-left: 3px solid {PALETTE.accent};"
-            f" border-radius: 6px; padding: 8px 14px;")
         self._toast_label.hide()
         self._toast_timer = QTimer(self)
         self._toast_timer.setSingleShot(True)
@@ -1216,13 +1607,13 @@ class MainWindow(QMainWindow):
         controls = QHBoxLayout()
         controls.setSpacing(3)
 
-        self._prev_btn = QPushButton("⏮")
+        self._prev_btn = QPushButton("«")
         self._prev_btn.setObjectName("TransportButton")
         self._prev_btn.clicked.connect(self.play_previous)
         self._prev_btn.setToolTip("Previous track")
         controls.addWidget(self._prev_btn)
 
-        self._seek_back_btn = QPushButton("⏪")
+        self._seek_back_btn = QPushButton("‹")
         self._seek_back_btn.setObjectName("TransportButton")
         self._seek_back_btn.clicked.connect(lambda: self.seek_by(-10))
         self._seek_back_btn.setToolTip("Rewind 10s")
@@ -1241,13 +1632,13 @@ class MainWindow(QMainWindow):
         self._stop_btn.setToolTip("Stop")
         controls.addWidget(self._stop_btn)
 
-        self._seek_fwd_btn = QPushButton("⏩")
+        self._seek_fwd_btn = QPushButton("›")
         self._seek_fwd_btn.setObjectName("TransportButton")
         self._seek_fwd_btn.clicked.connect(lambda: self.seek_by(10))
         self._seek_fwd_btn.setToolTip("Forward 10s")
         controls.addWidget(self._seek_fwd_btn)
 
-        self._next_btn = QPushButton("⏭")
+        self._next_btn = QPushButton("»")
         self._next_btn.setObjectName("TransportButton")
         self._next_btn.clicked.connect(self.play_next)
         self._next_btn.setToolTip("Next track")
@@ -1257,7 +1648,7 @@ class MainWindow(QMainWindow):
 
         volume_layout = QHBoxLayout()
         volume_layout.setSpacing(4)
-        self._mute_btn = QPushButton("🔊")
+        self._mute_btn = QPushButton("♪")
         self._mute_btn.setObjectName("IconButton")
         self._mute_btn.setFixedSize(32, 32)
         self._mute_btn.clicked.connect(self.toggle_mute)
@@ -1344,7 +1735,7 @@ class MainWindow(QMainWindow):
         info_btn.clicked.connect(self.show_media_info)
         secondary.addWidget(info_btn)
 
-        fullscreen_btn = QPushButton("⛶")
+        fullscreen_btn = QPushButton("□")
         fullscreen_btn.setObjectName("IconButton")
         fullscreen_btn.clicked.connect(self.toggle_fullscreen)
         secondary.addWidget(fullscreen_btn)
@@ -1371,9 +1762,26 @@ class MainWindow(QMainWindow):
         self._center_stack = QStackedWidget()
         self._center_stack.addWidget(player_page)
         self._center_stack.addWidget(self._sources_view)
+        self._pages: list = []
+        self._library_page = LibraryPage(self.media_library, self._thumbnail_dir, self)
+        self._library_page.addRequested.connect(lambda paths: self.add_files(paths))
+        self._library_page.refreshRequested.connect(self.refresh_watched_folders)
+        self._library_page.backRequested.connect(self._show_player_page)
+        self._options_page = OptionsPage(self.settings_store, self)
+        self._options_page.applied.connect(self._apply_settings)
+        self._options_page.actionRequested.connect(self._options_action)
+        self._options_page.backRequested.connect(self._show_player_page)
+        self._epg_page = EpgPage(self)
+        self._epg_page.channelActivated.connect(self._on_epg_channel)
+        self._epg_page.backRequested.connect(self._show_player_page)
+        self._about_page = AboutPage(self)
+        self._about_page.backRequested.connect(self._show_player_page)
         body.addWidget(self._center_stack, 1)
 
         self._playlist_pane = PlaylistPane()
+        self._playlist_pane.addRequested.connect(self.add_dialog)
+        self._playlist_pane.urlRequested.connect(lambda: self.show_sources("url"))
+        self._playlist_pane.renameRequested.connect(self._rename_queue_row)
         self._playlist_pane.playRequested.connect(self._play_playlist_row)
         self._playlist_pane.removeRequested.connect(self._on_playlist_remove)
         self._playlist_pane.moveRequested.connect(self._on_playlist_move)
@@ -1392,7 +1800,7 @@ class MainWindow(QMainWindow):
 
         status_bar = QStatusBar()
         status_bar.setObjectName("StatusBar")
-        self._status_left = QLabel("MPCASU 1.0.1")
+        self._status_left = QLabel("MPCASU 1.0.2")
         self._status_left.setObjectName("StatusText")
         self._status_left.setStyleSheet(f"color: {PALETTE.text_muted};")
         status_bar.addWidget(self._status_left)
@@ -1477,27 +1885,29 @@ class MainWindow(QMainWindow):
         if name == "NETWORK STREAM":
             self.show_sources("url")
             return
-        self._show_player_page()
+        if name == "LIVE TV / EPG":
+            self._show_page(self._epg_page, "LIVE TV / EPG")
+            self._sidebar.set_active("LIVE TV / EPG")
+            return
+        if name == "OPTIONS":
+            self._options_page.reload()
+            self._show_page(self._options_page, "OPTIONS")
+            self._sidebar.set_active("OPTIONS")
+            return
+        if name == "ABOUT":
+            self._show_page(self._about_page, "ABOUT")
+            self._sidebar.set_active("ABOUT")
+            return
         if name == "LIBRARY":
-            self.show_library_dialog()
-        elif name == "PLAYLIST":
+            self._library_page._refresh()
+            self._show_page(self._library_page, "LIBRARY")
+            self._sidebar.set_active("LIBRARY")
+            return
+        self._show_player_page()
+        if name == "PLAYLIST":
             self._playlist_pane.setVisible(not self._playlist_pane.isVisible())
         elif name == "CASU FILES":
             self._add_dialog_filter("CASU media", "*.casu")
-        elif name == "SETTINGS":
-            dlg = SettingsDialog(self.settings_store, self)
-            if dlg.exec() == QDialog.Accepted:
-                s = dlg.settings()
-                self._volume = s.volume
-                self._muted = s.muted
-                self._rate = s.rate
-                self._watched_folders = list(s.watched_folders)
-                self._volume_slider.setValue(self._volume)
-                self._rate_btn.setText(f"{self._rate:g}×")
-                self.status(f"Settings updated")
-        elif name == "ABOUT":
-            dlg = AboutDialog(self)
-            dlg.exec()
 
     def status(self, text: str):
         self._status_label.setText(str(text))
@@ -1522,7 +1932,7 @@ class MainWindow(QMainWindow):
                 self.controller.pause_or_resume()
                 self._paused = True
                 self.status("Paused — source timing is preserved")
-                self._play_btn.setText("⏸")
+                self._play_btn.setText("| |")
 
     def stop(self):
         if self.backend:
@@ -1599,7 +2009,7 @@ class MainWindow(QMainWindow):
                 self.status(str(exc))
                 return
         self.status("Muted" if self._muted else f"Volume {self._volume}%")
-        self._mute_btn.setText("🔇" if self._muted else "🔊")
+        self._mute_btn.setText("×" if self._muted else "♪")
 
     def cycle_rate(self):
         rates = (0.5, 1.0, 1.25, 1.5, 2.0)
@@ -1624,12 +2034,14 @@ class MainWindow(QMainWindow):
         self._end_handled = False
         self.current = path
         self._now_playing_bar.set_now_playing(path.name)
+        self._set_caption(path.name, path)
         selected_index = self.playlist_model.index_of(path)
         if selected_index is not None:
             self._playlist_pane.populate(list(self.playlist_model.items), selected_index)
 
         sidecar = path if path.suffix.lower() == ".casu" else path.with_suffix(path.suffix + ".casu")
         self._load_visual_state(sidecar if sidecar.exists() else path)
+        self._load_visualizer(path)
 
         if path.suffix.lower() == ".casu":
             magic = b""
@@ -1716,7 +2128,7 @@ class MainWindow(QMainWindow):
             self.toast(f"Could not start internal playback: {exc}")
             return
         self._paused = False
-        self._play_btn.setText("⏸")
+        self._play_btn.setText("| |")
 
     def _toggle_shuffle(self, checked: bool) -> None:
         self._shuffle = checked
@@ -2008,9 +2420,11 @@ class MainWindow(QMainWindow):
         """Switch the center area to the in-window sources view (no popup)."""
         self._sources_view.set_mode(mode)
         self._center_stack.setCurrentWidget(self._sources_view)
+        self._topbar_title.setText(self._sources_view.MODES[mode]["title"])
 
     def _show_player_page(self):
         self._center_stack.setCurrentIndex(0)
+        self._topbar_title.setText("NOW PLAYING")
 
     def toast(self, text: str):
         """Web-player style transient toast over the stage (no popup)."""
@@ -2027,6 +2441,121 @@ class MainWindow(QMainWindow):
         self._toast_label.raise_()
         self._toast_label.show()
         self._toast_timer.start(2600)
+
+    def _set_caption(self, text: str, path=None):
+        if not text:
+            self._caption_label.hide()
+            self._badges_label.hide()
+            self._empty_hint.show()
+            return
+        self._empty_hint.hide()
+        self._caption_label.setText(text)
+        self._caption_label.show()
+        badge = ""
+        if path is not None:
+            suffix = Path(str(path)).suffix.lower()
+            badge = {"casu": "CASU", "mp5": "MP5", "mp3": "MP3", "mp4": "MP4"}.get(
+                suffix.lstrip("."), suffix.lstrip(".").upper() or "MEDIA")
+        else:
+            badge = "STREAM"
+        self._badges_label.setText(badge)
+        self._badges_label.show()
+        self._reposition_overlays()
+
+    def _reposition_overlays(self):
+        stage = self._video_surface
+        self._badges_label.move(16, 16)
+        self._caption_label.setGeometry(0, max(0, stage.height() - 64),
+                                         stage.width(), 64)
+        self._empty_hint.setGeometry(0, stage.height() // 2 - 12, stage.width(), 24)
+        self._visualizer.setGeometry(12, max(0, stage.height() - 108),
+                                     max(0, stage.width() - 24), 96)
+        self._visualizer.raise_()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._reposition_overlays()
+
+    def _filter_queue(self, text: str):
+        for index in range(self._playlist_pane.tree.topLevelItemCount()):
+            item = self._playlist_pane.tree.topLevelItem(index)
+            item.setHidden(bool(text) and text.lower() not in item.text(0).lower())
+
+    def _rename_queue_row(self, row: int):
+        if row < 0:
+            return
+        item = self._playlist_pane.tree.topLevelItem(row)
+        if item is None:
+            return
+        current = item.text(0)
+        entry = QLineEdit(self._playlist_pane)
+        entry.setText(current)
+        entry.setObjectName("IconButton")
+        self._playlist_pane.tree.setItemWidget(item, 0, entry)
+        entry.returnPressed.connect(lambda: self._commit_rename(item, entry))
+        entry.editingFinished.connect(lambda: self._commit_rename(item, entry))
+        entry.setFocus()
+        entry.selectAll()
+
+    def _commit_rename(self, item, entry):
+        text = entry.text().strip()
+        self._playlist_pane.tree.removeItemWidget(item, 0)
+        if text:
+            item.setText(0, text)
+
+    def _apply_settings(self, settings):
+        self._volume = settings.volume
+        self._muted = settings.muted
+        self._rate = settings.rate
+        self._watched_folders = list(settings.watched_folders)
+        self._volume_slider.setValue(self._volume)
+        self._rate_btn.setText(f"{self._rate:g}×")
+        self.toast("Settings saved")
+        self.status("Settings updated")
+
+    def _load_visualizer(self, path):
+        mode = str(self.settings_store.load().visualizer)
+        if mode == "off" or path is None or not Path(str(path)).is_file():
+            self._visualizer.configure("off", (), (), 0.0)
+            return
+        source = Path(str(path))
+
+        def worker():
+            try:
+                probe = ffprobe(source)
+                streams = probe.get("streams", []) if isinstance(probe, dict) else []
+                has_video = any(isinstance(s, dict) and s.get("codec_type") == "video"
+                                for s in streams)
+                duration = float((probe.get("format") or {}).get("duration") or 0)
+                if has_video:
+                    peaks: tuple = ()
+                    bands: tuple = ()
+                else:
+                    peaks = waveform_peaks(source, points=240)
+                    bands = spectrum_bands(source, bands=48)
+            except Exception:  # noqa: BLE001 - visualizer is optional
+                peaks, bands, duration = (), (), 0.0
+            QTimer.singleShot(0, lambda: self._visualizer.configure(
+                mode, peaks, bands, duration))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _options_action(self, action: str):
+        if action == "clear-cache":
+            import shutil, tempfile
+            cache_dir = Path(tempfile.gettempdir()) / "yt-dlp"
+            if cache_dir.is_dir():
+                shutil.rmtree(cache_dir, ignore_errors=True)
+                self.toast(f"Cleared {cache_dir}")
+            else:
+                self.toast("No yt-dlp cache found")
+        elif action == "refresh-db":
+            self.refresh_watched_folders()
+
+    def _on_epg_channel(self, channel):
+        url = getattr(channel, "url", None) or ""
+        name = getattr(channel, "name", str(channel))
+        if url:
+            self._resolve_and_open_external_source(url, display_label=name)
 
     def _on_source_activated(self, payload):
         if isinstance(payload, str):
@@ -2080,6 +2609,7 @@ class MainWindow(QMainWindow):
         self.current = None
         visible_source = display_media_source(display_label or source)
         self._now_playing_bar.set_now_playing(visible_source)
+        self._set_caption(visible_source)
         try:
             self.backend = LibVLCBackend(self._video_surface.handle)
             self.backend.on_event = self._backend_event
@@ -2098,6 +2628,7 @@ class MainWindow(QMainWindow):
             capabilities = self.backend.capabilities()
             self.status(f"Playing network source · {capabilities.get('version', 'libVLC')} · timing owned by libVLC")
             self._video_surface.set_video_active(True)
+            self._visualizer.configure("off", (), (), 0.0)
         except (BackendError, OSError) as exc:
             self.controller.close()
             self.backend = None
@@ -2119,6 +2650,7 @@ class MainWindow(QMainWindow):
             self._render_playlist()
             self.current = None
             self._now_playing_bar.set_now_playing("")
+            self._set_caption("")
             self.status("Playlist cleared")
             return
         try:
@@ -2243,10 +2775,17 @@ class MainWindow(QMainWindow):
             self.status(f"Library refresh failed: {exc}")
 
     def show_library_dialog(self):
-        dlg = LibraryDialog(self.media_library, self._thumbnail_dir, self)
-        if dlg.exec() == QDialog.Accepted:
-            for p in dlg.selected_paths():
-                self.add_files([p])
+        self._library_page._refresh()
+        self._show_page(self._library_page, "LIBRARY")
+        self._sidebar.set_active("LIBRARY")
+
+    def _show_page(self, page, title: str):
+        if page not in self._pages:
+            self._center_stack.addWidget(page)
+            self._pages.append(page)
+        self._center_stack.setCurrentWidget(page)
+        if hasattr(self, "_topbar_title"):
+            self._topbar_title.setText(title)
 
     def show_media_info(self):
         path = self.current or self.selected_path()
@@ -2569,7 +3108,7 @@ class MainWindow(QMainWindow):
     def _apply_backend_event(self, state: PlaybackState):
         if state == PlaybackState.PLAYING:
             self._paused = False
-            self._play_btn.setText("⏸")
+            self._play_btn.setText("| |")
         elif state == PlaybackState.PAUSED:
             self._paused = True
             self._play_btn.setText("▶")
@@ -2620,6 +3159,7 @@ class MainWindow(QMainWindow):
 
     def _update_time_labels(self, pos: float):
         self._time_current.setText(format_duration(pos))
+        self._visualizer.set_position(pos)
         self._time_total.setText(format_duration(self.duration if self.duration > 0 else None))
 
     def _poll(self):
