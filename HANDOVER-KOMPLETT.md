@@ -321,3 +321,105 @@ neu gebaut, installiert, `dpkg -V` sauber, installierte Dateien byteidentisch.
 - Qt-Smoke verifiziert: Playback, Shuffle, Repeat-Zyklus, Repeat-one-Seek OK.
 - DEBs rc9 neu gebaut, installiert, `dpkg -V` alle 5 sauber; 209 Tests +
   18 GUI-Smokes grün.
+
+---
+
+## 11. SESSION 6 (2026-08-14, opencode) — RELEASE 1.0.1, PUBLIC RELEASE, CODEC-REPARATUREN
+
+**Regeln eingehalten: Vor dem History-Rewrite Vollbackup (Git-Bundle + lokale
+Kopien); nichts ohne Sicherung entfernt.**
+
+### 11.1 GitHub-Veröffentlichung
+
+- Repo https://github.com/error-wtf/CASU-CODEC von **privat auf öffentlich**
+  gestellt (API, Token hatte Admin-Rechte).
+- Alter Remote-Stand (fremde, unverwandte 95-Commit-Historie bis 08.08) als
+  Branch `backup/remote-main-pre-session5` auf GitHub gesichert, dann `main`
+  per Force-Push aktualisiert. Nichts ging verloren.
+- **Push-Blockade behoben:** Der Token hat keinen `workflow`-Scope; GitHub
+  verweigerte Updates an `.github/workflows/ci.yml`. Die CI-Datei wurde aus
+  der Historie entfernt (lokale Kopie:
+  `/home/error/Codec-Casu-privat/github-workflows/ci.yml`).
+- Token aus `/home/error/gittoken.env` wurde nie committet; Nutzer revoked ihn.
+
+### 11.2 History-Rewrite (git filter-repo) — Repo-Hygiene
+
+Aus ALLEN Commits entfernt: `test_media/giancarlo.mp4` + `.casu` (fremdes
+Video, durfte nie öffentlich werden), `test_media/lino_lol_test_pattern.mp4`
+(35 MB; bleibt lokal, online nur als Link/yt-dlp-Referenz), `backups/`,
+`dist/` (alle alten rc8-Rebuilds), `.github/workflows/ci.yml`.
+- `.git`: 1,9 GB → 32 MB.
+- Vollbackup VOR dem Rewrite:
+  `/home/error/Codec-Casu-VOLLBACKUP-pre-filter-repo-20260814-1747.bundle`
+  (273 MB, alle Refs). Lokale Kopien der entfernten Dateien:
+  `/home/error/Codec-Casu-privat/` (giancarlo, Test-Pattern-MP4, alle alten
+  DEB-Backups, finales 1.0.0-dist, ci.yml).
+- **Alle Commit-Hashes haben sich geändert** (alte Hash-Referenzen in
+  Session-1–5-Doks sind ungültig).
+- `.gitignore` neu geschrieben: Python, Backups, Secrets (gittoken.env),
+  lokale Owner-Medien (giancarlo*, Test-Pattern-MP4/-MP5/-nat2, lokale
+  Audio-Konvertate), generierte Artefakte, CI-Datei.
+- Test-Pattern-Referenz online = `test_media/README.md` mit YouTube-Link
+  (Lino.Lol – TEST PATTERN, JG4fMJXvpZ0), yt-dlp-Befehl, SHA-256 und
+  `CASU_TEST_VIDEO`-Override. Audio-Fixtures (Owner-eigene Tracks) bleiben
+  verteilt.
+
+### 11.3 Doku: VLC/Webamp-Inspiration
+
+README („Acknowledgments") und LICENSE (neuer Abschnitt 5a) stellen klar:
+Design/Features von VLC (Open Source) und Webamp (Winamp-Stil) studiert,
+aber **eigenständiger, originärer Code** — nichts kopiert oder abgeleitet.
+
+### 11.4 Codec/Converter-Reparaturen 1.0.1 (byte-identisch verifiziert)
+
+Auslöser: `casu pack-v2` auf dem 17,6-Minuten-Test-Pattern lief >30 min
+(unvollständig), `casu pack-mp5` scheiterte nach 14 min mit
+„manifest exceeds size limit". Nutzeranweisung: Codec reparieren.
+
+| Fix | Datei | Wirkung |
+|---|---|---|
+| Zero-Copy-Tile-Hash (Row-Updates statt `tobytes`-Kopien) | `casu/strict/tiles.py` | ~2× schnelleres Hashen, messbar |
+| Identity-Prefix-Cache + `previous_hashes`-Weiterreichung | `tiles.py`, `casu/native_v2/converter.py` | Tile-Hashes des Vorframes werden nicht neu berechnet |
+| In-Place-Tile-Apply statt Vollframe-Kopie (+ Bit-Tiefen-Check pro Tile) | `casu/native_v2/video.py` | Writer-/Reader-Validierung ohne GB-Memcpy |
+| zlib row-wise via `compressobj` (Output byte-identisch zu level 9) | `video.py` | weniger Allokationen |
+| MP5 ohne Vollanalyse: begrenztes ffprobe-Manifest, Streaming-Attachment-Reads | `casu/mp5/converter.py` | 17-Minuten-Video: 14 min FAIL → 5,4 s OK |
+| `read_audio_block_meta_at` (nur JSON-Meta, kein PCM/Zlib/Hash) | `casu/native_v2/reader.py`, `mpcasu_native_backend.py` | Open eines 17-Minuten-Containers: >300 s → 43 s |
+| `native-info` meldet echte Seek-Index-Einträge | `casu/cli.py` | vorher immer 0 |
+
+**Byte-Identität bewiesen:** 20-Sekunden-Segment vor/nach den Änderungen
+gepackt → identisches SHA-256 (`4b642340…`). 216 Fast-Tests + 23/23
+`test_native_player_backend` grün, alle Backend-Pfade OK.
+
+### 11.5 Owner-Konvertierungen + Verifikation (lokal, gitignored)
+
+- `lino_lol_test_pattern.mp4` → `lino_lol_test_pattern.nat2.casu`
+  (CASUNAT2, Tile 256): **1,03 GB, 133.977 Chunks, 353 Seek-Einträge,
+  integrity_verified**, Vollverifikation via `read_native_v2` PASS.
+- `lino_lol_test_pattern.mp4` → `lino_lol_test_pattern.mp5`: verified,
+  issues [].
+- `lino_casu_error.mp3` → `lino_casu_error.nat2.casu` (integrity_verified)
+  und `lino_casu_error.mp3.casu` (CASUNAT1, VALID).
+- Playback: `tools/smoke_owner_casu.py` **PASS** — beide Container >1 s
+  Wiedergabe + Seek (60 s/120 s) über NativeCasuBackend.
+
+### 11.6 Release 1.0.1
+
+- Version 1.0.1 in `casu/__init__.py`, `pyproject.toml`, `build_debs.sh`,
+  Qt-Statuszeilen, `RELEASE_GATE_STATUS.json` (Gates 4–6 ehrlich PARTIAL).
+- DEBs 1.0.1 gebaut (Backup vorher: `backups/debs-1.0.0-pre-1.0.1-rebuild-*`
+  lokal), installiert, **`dpkg -V` alle 4 sauber**, `casu --version` = 1.0.1.
+- `dist/` enthält jetzt NUR das finale 1.0.1-Build + SHA256SUMS (getrackt).
+- GitHub-`main` aktualisiert (Stand nach diesem Abschnitt: letzter Push
+  `7122811` + Folgecommit mit dieser Doku).
+
+### 11.7 Offene Punkte
+
+1. Nutzer revoked den GitHub-Token (`/home/error/gittoken.env`) — für künftige
+   Pushes neuen Token besorgen (dann idealerweise mit `workflow`-Scope, falls
+   die CI-Datei wieder aufgenommen werden soll).
+2. Open-Zeit großer CASUNAT2-Container (~43 s bei 17 min) ist durch den
+   Integritätsvertrag (Prefix-Digest über alle Chunks) bedingt; weitere
+   Optimierung möglich (z. B. Meta-Index), aber Format-Änderung.
+3. 3M-Fuzz-Kampagne vor einem 1.1.x-Tag wiederholen
+   (`python3 tools/fuzz_native_v2.py`).
+4. Gates 4–6: vollständige Re-Regression auf dem Qt-Player bleibt PARTIAL.
