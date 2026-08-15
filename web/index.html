@@ -125,13 +125,20 @@
   </dialog>
   <dialog id="webplayers-dialog" class="webplayers-dialog">
     <form method="dialog">
-      <header class="dialog-title"><div><h2>WEB PLAYERS</h2><p>Offizielle Web-Player (Anmeldung im jeweiligen Dienst). Spotify/Hearthis verbieten Einbettung → öffnen in neuem Tab; Tidal/Netflix sind eingebettet.</p></div><div><button value="cancel" aria-label="Close">×</button></div></header>
-      <div class="webplayers-grid">
-        <section class="webplayer-card"><h3>◎ Browse (DuckDuckGo)</h3><iframe data-wp="browse" title="Browse" allow="autoplay"></iframe></section>
-        <section class="webplayer-card"><h3>♫ Spotify</h3><iframe data-wp="spotify" title="Spotify" allow="autoplay; encrypted-media"></iframe></section>
-        <section class="webplayer-card"><h3>↗ Hearthis</h3><iframe data-wp="hearthis" title="Hearthis" allow="autoplay"></iframe></section>
-        <section class="webplayer-card"><h3>▤ Tidal</h3><iframe data-wp="tidal" title="Tidal" allow="autoplay; encrypted-media"></iframe></section>
-        <section class="webplayer-card"><h3>▣ Netflix</h3><iframe data-wp="netflix" title="Netflix" allow="autoplay; encrypted-media"></iframe></section>
+      <header class="dialog-title"><div><h2>WEB PLAYERS</h2><p>Eingebettete Web-Player — Spotify/Hearthis/DuckDuckGo blockieren Iframes serverseitig (Sicherheitsrichtlinie), im lokalen MPCASU eingebettet nutzbar.</p></div><div><button value="cancel" aria-label="Close">×</button></div></header>
+      <div class="wp-tabs">
+        <button class="wp-tab active" data-tab="browse" type="button">◎ Browse</button>
+        <button class="wp-tab" data-tab="spotify" type="button">♫ Spotify</button>
+        <button class="wp-tab" data-tab="hearthis" type="button">↗ Hearthis</button>
+        <button class="wp-tab" data-tab="tidal" type="button">▤ Tidal</button>
+        <button class="wp-tab" data-tab="netflix" type="button">▣ Netflix</button>
+      </div>
+      <div class="wp-panels">
+        <div class="wp-panel active" data-panel="browse"><div class="wp-note">DuckDuckGo blockiert Einbettung. Im lokalen MPCASU eingebettet nutzbar.</div><iframe data-wp="browse" title="Browse" allow="autoplay"></iframe></div>
+        <div class="wp-panel" data-panel="spotify"><div class="wp-note">Spotify blockiert Einbettung (DRM/Sicherheit). Im lokalen MPCASU eingebettet nutzbar.</div><iframe data-wp="spotify" title="Spotify" allow="autoplay; encrypted-media"></iframe></div>
+        <div class="wp-panel" data-panel="hearthis"><div class="wp-note">Hearthis blockiert Einbettung. Im lokalen MPCASU eingebettet nutzbar.</div><iframe data-wp="hearthis" title="Hearthis" allow="autoplay"></iframe></div>
+        <div class="wp-panel" data-panel="tidal"><iframe data-wp="tidal" title="Tidal" allow="autoplay; encrypted-media"></iframe></div>
+        <div class="wp-panel" data-panel="netflix"><iframe data-wp="netflix" title="Netflix" allow="autoplay; encrypted-media"></iframe></div>
       </div>
     </form>
   </dialog>

@@ -881,7 +881,7 @@ class VisualizerWidget(QWidget):
 
         if self._cover is not None and not self._cover.isNull():
             scaled = self._cover.scaled(
-                width, height, Qt.KeepAspectRatioByExpanding,
+                width, height, Qt.KeepAspectRatio,
                 Qt.SmoothTransformation)
             painter.setOpacity(0.34)
             painter.drawPixmap((width - scaled.width()) // 2,
@@ -2170,6 +2170,12 @@ class MainWindow(QMainWindow):
         self._viz_btn.setToolTip("Visualizer on/off")
         controls.addWidget(self._viz_btn)
 
+        self._record_btn = QPushButton("●")
+        self._record_btn.setObjectName("IconButton")
+        self._record_btn.clicked.connect(self.toggle_recording)
+        self._record_btn.setToolTip("Record stream / source")
+        controls.addWidget(self._record_btn)
+
         controls.addStretch()
 
         volume_layout = QHBoxLayout()
@@ -2227,12 +2233,6 @@ class MainWindow(QMainWindow):
         self._seek_fwd_btn.clicked.connect(lambda: self.seek_by(10))
         self._seek_fwd_btn.setToolTip("Forward 10s")
         secondary.addWidget(self._seek_fwd_btn)
-
-        self._record_btn = QPushButton("●")
-        self._record_btn.setObjectName("IconButton")
-        self._record_btn.clicked.connect(self.toggle_recording)
-        self._record_btn.setToolTip("Record stream / source")
-        secondary.addWidget(self._record_btn)
 
         self._audio_track_menu = QPushButton("Audio")
         self._audio_track_menu.setObjectName("IconButton")
@@ -3177,7 +3177,12 @@ class MainWindow(QMainWindow):
         display = ""
         if str(text).startswith(("http://", "https://", "rtsp://", "rtmp://")):
             display = self._playlist_pane.name_for(str(text))
-        self._caption_label.setText(display or str(text))
+        caption = display or str(text)
+        if str(text).startswith(("http://", "https://")):
+            epg = self._epg_now_next()
+            if epg and epg != "no EPG loaded" and epg != "EPG loaded":
+                caption = f"{caption}\n{epg}"
+        self._caption_label.setText(caption)
         self._caption_label.show()
         badge = ""
         if path is not None:
@@ -3291,6 +3296,9 @@ class MainWindow(QMainWindow):
         self._muted = settings.muted
         self._rate = settings.rate
         self._watched_folders = list(settings.watched_folders)
+        self._viz_mode = str(settings.visualizer)
+        self._record_format = str(settings.record_format)
+        self._record_split_minutes = int(settings.record_split_minutes)
         self._volume_slider.setValue(self._volume)
         self._rate_btn.setText(f"{self._rate:g}×")
         self.toast("Settings saved")
