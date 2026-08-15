@@ -57,7 +57,7 @@ from casu.spotify import (SpotifyError, expand_spotify, fetch_spotify_metadata,
                           is_spotify_url, open_spotify_web, resolve_spotify_url,
                           search_spotify, spotify_kind, youtube_handoff_query)
 from casu.thumbnail import thumbnail_for
-from casu.waveform import decode_all_pcm, live_spectrum, window_peaks
+from casu.waveform import decode_all_pcm, live_spectrum, window_wave
 from casu.recording import MediaRecorder, RecordingError
 
 from casu.native import NativeCasuError, read_native
@@ -179,12 +179,13 @@ class Sidebar(QFrame):
         self._logo_label = None
         if logo_path.is_file():
             logo = QLabel()
-            logo.setContentsMargins(16, 14, 16, 10)
             logo.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             pixmap = QPixmap(str(logo_path))
             if not pixmap.isNull():
-                logo.setPixmap(pixmap.scaledToWidth(140, Qt.SmoothTransformation))
-                logo.setMinimumHeight(0)
+                scaled = pixmap.scaledToWidth(140, Qt.SmoothTransformation)
+                logo.setPixmap(scaled)
+                logo.setFixedSize(scaled.width() + 32, scaled.height() + 24)
+                logo.setContentsMargins(16, 14, 16, 10)
                 layout.addWidget(logo)
                 self._logo_label = logo
 
@@ -807,6 +808,7 @@ class VisualizerWidget(QWidget):
         self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         self.hide()
         self._peaks: tuple[float, ...] = ()
+        self._wave: tuple[float, ...] = ()
         self._bands: tuple[float, ...] = ()
         self._live: tuple[float, ...] | None = None
         self._caps: tuple[float, ...] = ()
@@ -816,13 +818,13 @@ class VisualizerWidget(QWidget):
         self._position = 0.0
         self._duration = 0.0
         self._timer = QTimer(self)
-        self._timer.setInterval(33)
+        self._timer.setInterval(33)  # ~30 FPS repaint
         self._timer.timeout.connect(self.update)
         self._timer.start()
 
     @staticmethod
-    def _blend(old, new, rise: float = 0.45, fall: float = 0.10) -> tuple:
-        """Smooth frame blending: fast attack, slow decay (no flicker)."""
+    def _blend(old, new, rise: float = 0.55, fall: float = 0.24) -> tuple:
+        """Smooth frame blending: fast attack, moderate decay (little lag)."""
         old = list(old or ())
         new = list(new or ())
         if not old:
@@ -835,14 +837,15 @@ class VisualizerWidget(QWidget):
             out.append(prev + (value - prev) * (rise if value >= prev else fall))
         return tuple(out)
 
-    def configure(self, mode: str, peaks, bands, duration: float, overview=()):
+    def configure(self, mode: str, wave, bands, duration: float, overview=()):
         self._mode = mode
         self._duration = max(0.0, float(duration or 0.0))
-        self._peaks = self._blend(self._peaks, peaks)
+        self._wave = self._blend(self._wave, wave)
         self._bands = self._blend(self._bands, bands)
+        self._caps = self._cap(self._caps, bands)
         self._overview = tuple(overview or ())
         visible = mode != "off" and (
-            self._peaks or self._bands or self._overview or self._live or self._cover)
+            self._wave or self._bands or self._overview or self._live or self._cover)
         self.setVisible(bool(visible))
         self.update()
 
@@ -855,11 +858,11 @@ class VisualizerWidget(QWidget):
             self.setVisible(True)
         self.update()
 
-    def set_live(self, bands, peaks=()):
+    def set_live(self, bands, wave=()):
         self._live = self._blend(self._live, bands)
-        if peaks:
-            self._peaks = self._blend(self._peaks, peaks)
-            self._caps = self._cap(self._caps, peaks)
+        self._caps = self._cap(self._caps, bands)
+        if wave:
+            self._wave = self._blend(self._wave, wave)
         if self._live and self._mode != "off":
             self.setVisible(True)
         self.update()
@@ -993,6 +996,31 @@ class VisualizerWidget(QWidget):
         painter.setBrush(Qt.NoBrush)
         painter.drawPath(path)
 
+    def _paint_wave_line(self, painter, wave, w, h):
+        """Smooth oscilloscope line in the web player's style."""
+        wave = list(wave or ())
+        if len(wave) < 8 or h <= 0:
+            return
+        count = len(wave)
+        mid = h / 2
+        amp = h * 0.42
+        step = w / (count - 1)
+        path = QPainterPath()
+        for i, value in enumerate(wave):
+            x = i * step
+            y = mid + max(-1.0, min(1.0, value)) * amp
+            if i == 0:
+                path.moveTo(x, y)
+            else:
+                path.lineTo(x, y)
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(QPen(QColor(255, 30, 45, 36), 7))
+        painter.drawPath(path)
+        painter.setPen(QPen(QColor(255, 30, 45, 140), 2.4))
+        painter.drawPath(path)
+        painter.restore()
+
     def paintEvent(self, event):  # noqa: N802 - Qt naming
         if self._mode == "off":
             return
@@ -1024,25 +1052,18 @@ class VisualizerWidget(QWidget):
         bands = self._live if self._live else self._bands
         large = h >= 240
 
-        if self._mode in ("both", "waveform"):
-            self._paint_waveform_fill(painter,
-                                      self._overview or self._peaks, w, h)
+        if self._overview and self._mode in ("both", "waveform"):
+            self._paint_waveform_fill(painter, self._overview, w, h)
+
+        if self._wave and self._mode in ("both", "waveform"):
+            self._paint_wave_line(painter, self._wave, w, h)
 
         if bands and self._mode in ("spectrum", "both"):
-            y_bottom = int(h * 0.86)
-            y_top = int(h * 0.50) if large else 2
-            if not large:
-                y_bottom = h - 2
-                y_top = 2
-            self._paint_bottom_bars(painter, bands, w, y_top, y_bottom)
-        elif self._mode == "waveform" and self._peaks:
-            y_bottom = int(h * 0.84)
-            y_top = int(h * 0.50)
-            if not large:
-                y_top = 2
-                y_bottom = h - 2
-            self._paint_bottom_bars(painter, self._resample(self._peaks, 96),
-                                    w, y_top, y_bottom)
+            if large:
+                self._paint_bottom_bars(painter, bands, w,
+                                        int(h * 0.54), int(h * 0.88))
+            else:
+                self._paint_bottom_bars(painter, bands, w, 2, h - 2)
 
         if self._cover is not None and not self._cover.isNull() and large:
             self._paint_cover_thumb(painter, self._cover, w, h)
@@ -2017,7 +2038,7 @@ class MainWindow(QMainWindow):
         self._viz_overview = ()
         self._viz_mode = "spectrum"
         self._viz_timer = QTimer(self)
-        self._viz_timer.setInterval(50)  # 20 FPS
+        self._viz_timer.setInterval(40)  # ~25 Hz window update
         self._viz_timer.timeout.connect(self._tick_visualizer)
 
         config_dir = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "mpcasu"
@@ -3545,11 +3566,11 @@ class MainWindow(QMainWindow):
 
         # The animated waveform window is always computed so the background
         # waveform scrolls with the playhead in every visualizer mode.
-        peaks = window_peaks(
+        wave = window_wave(
             self._viz_pcm,
             self._viz_rate,
             position,
-            points=240,
+            points=180,
         )
         bands = ()
 
@@ -3563,7 +3584,7 @@ class MainWindow(QMainWindow):
 
         self._visualizer.configure(
             mode,
-            peaks,
+            wave,
             bands,
             self.duration or 0.0,
             self._viz_overview,
@@ -3959,13 +3980,13 @@ class MainWindow(QMainWindow):
             import numpy as np
             while True:
                 try:
-                    data = proc.stdout.read(4410)
+                    data = proc.stdout.read(2205)
                 except (OSError, ValueError):
                     break
                 if not data:
                     break
                 samples = np.frombuffer(data, dtype="<i2").astype(np.float32) / 32768.0
-                if len(samples) < 1024:
+                if len(samples) < 512:
                     continue
                 windowed = samples[:1024] * np.hanning(1024)
                 spectrum = np.abs(np.fft.rfft(windowed))[1:49]
@@ -3977,11 +3998,10 @@ class MainWindow(QMainWindow):
                         float(max(0.0, min(1.0, (value / peak) *
                                            (0.35 + 0.65 * np.log10(index + 2) / np.log10(50)))))
                         for index, value in enumerate(spectrum))
-                wave = np.abs(samples[:1024])
-                width = max(1, len(wave) // 32)
-                peaks = tuple(float(min(1.0, wave[i:i + width].max()))
-                              for i in range(0, len(wave), width))[:32]
-                bridge.resultReady.emit(("live", bands, peaks))
+                width = max(1, len(samples) // 128)
+                wave = tuple(float(samples[i])
+                             for i in range(0, len(samples), width))[:128]
+                bridge.resultReady.emit(("live", bands, wave))
         import threading
         self._stream_viz_thread = threading.Thread(target=reader, daemon=True)
         self._stream_viz_thread.start()
