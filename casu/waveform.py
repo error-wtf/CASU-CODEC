@@ -114,6 +114,30 @@ def window_peaks(pcm: np.ndarray, rate: int, position_s: float, *,
     return tuple(values[:points])
 
 
+def window_wave(pcm: np.ndarray, rate: int, position_s: float, *,
+                window_s: float = 0.45, points: int = 180) -> tuple[float, ...]:
+    """Raw time-domain samples around *position_s*, downsampled.
+
+    Mirrors the web player's oscilloscope waveform
+    (``AnalyserNode.getByteTimeDomainData``): a smooth signed line of the
+    actual signal instead of a peak envelope.  Returns values roughly in
+    [-1.0, 1.0].
+    """
+    if pcm is None or rate <= 0 or points < 8:
+        return ()
+    window_samples = max(64, int(rate * window_s))
+    centre = max(0, min(len(pcm) - 1, int(position_s * rate)))
+    half = window_samples // 2
+    start = max(0, centre - half)
+    end = min(len(pcm), start + window_samples)
+    if end - start < 32:
+        return ()
+    chunk = pcm[start:end]
+    width = max(1, math.ceil(len(chunk) / points))
+    values = [float(chunk[i]) for i in range(0, len(chunk), width)]
+    return tuple(values[:points])
+
+
 def live_spectrum(pcm: np.ndarray, rate: int, position_s: float, *,
                   fft_size: int = 2048, bands: int = 32) -> tuple[float, ...]:
     """Compute a short FFT on a PCM window at *position_s*.

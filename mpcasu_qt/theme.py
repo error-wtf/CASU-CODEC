@@ -97,6 +97,7 @@ def stylesheet(palette: Palette = PALETTE, metrics: Metrics = METRICS) -> str:
     assets = _Path(__file__).resolve().parent.parent / "assets"
     branch_closed = assets / "branch_closed.png"
     branch_open = assets / "branch_open.png"
+    combo_arrow = assets / "combo_arrow.png"
     return f"""
 QWidget {{
     background-color: {p.window};
@@ -250,6 +251,69 @@ QLineEdit {{
     selection-background-color: {p.accent_dim};
 }}
 QLineEdit:focus {{ border-color: {p.accent}; }}
+
+/* ---------- Selects & number boxes (dark, readable popup) ---------- */
+QComboBox {{
+    background-color: {p.input_bg};
+    border: 1px solid {p.input_border};
+    border-radius: {m.radius_small}px;
+    color: {p.text};
+    padding: 5px 10px;
+    min-height: 20px;
+    selection-background-color: {p.accent_dim};
+    selection-color: {p.text};
+}}
+QComboBox:hover {{ border-color: {p.accent}; }}
+QComboBox:focus {{ border-color: {p.accent}; }}
+QComboBox::drop-down {{ border: none; width: 26px; }}
+QComboBox::down-arrow {{
+    image: url({combo_arrow});
+    width: 11px;
+    height: 6px;
+}}
+QComboBox QAbstractItemView {{
+    background-color: {p.sidebar};
+    border: 1px solid {p.border_strong};
+    border-radius: 6px;
+    color: {p.text};
+    selection-background-color: {p.accent_dim};
+    selection-color: {p.text};
+    outline: none;
+    padding: 4px;
+}}
+QComboBox QAbstractItemView::item {{
+    padding: 5px 8px;
+    border-radius: 4px;
+}}
+QSpinBox, QDoubleSpinBox {{
+    background-color: {p.input_bg};
+    border: 1px solid {p.input_border};
+    border-radius: {m.radius_small}px;
+    color: {p.text};
+    padding: 4px 8px;
+    min-height: 20px;
+    selection-background-color: {p.accent_dim};
+}}
+QSpinBox:focus, QDoubleSpinBox:focus {{ border-color: {p.accent}; }}
+QSpinBox::up-button, QSpinBox::down-button,
+QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{
+    background: transparent;
+    border: none;
+    width: 20px;
+}}
+QCheckBox {{ color: {p.text}; spacing: 8px; }}
+QCheckBox::indicator {{
+    width: 15px;
+    height: 15px;
+    border: 1px solid {p.input_border};
+    border-radius: 4px;
+    background: {p.input_bg};
+}}
+QCheckBox::indicator:hover {{ border-color: {p.accent}; }}
+QCheckBox::indicator:checked {{
+    background: {p.accent};
+    border-color: {p.accent};
+}}
 
 /* ---------- Queue tree (web #queue) ---------- */
 QTreeWidget {{
