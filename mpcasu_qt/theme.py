@@ -149,6 +149,13 @@ QPushButton#NavItem:hover {{
         stop:0 {p.accent_dim}, stop:1 #221217);
     color: {p.text};
 }}
+QPushButton#NavItem:checked {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 {p.accent_dim}, stop:1 #221217);
+    border-left: 3px solid {p.accent};
+    color: {p.accent};
+    font-weight: 700;
+}}
 QPushButton#NavItem[active="true"] {{
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
         stop:0 {p.accent_dim}, stop:1 #221217);

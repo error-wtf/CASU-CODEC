@@ -26,9 +26,9 @@ def is_youtube_url(value: str) -> bool:
 def resolve_media_location(value: str, *, timeout_seconds: float = 30.0) -> str:
     """Return a direct media URL, using yt-dlp for YouTube only.
 
-    Spotify URLs are never silently resolved here: Spotify is a separate,
-    metadata-only provider (see casu.spotify) and the UI must offer the
-    explicit "Find on YouTube" handoff instead.
+    Spotify URLs go through spotDL (``casu.spotify``): spotDL matches the
+    Spotify track to a playable audio source at an open provider such as
+    YouTube.  The result is a matched external stream, never a Spotify stream.
     """
     source = value.strip()
     if not source or "\0" in source:

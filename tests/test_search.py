@@ -72,6 +72,25 @@ def test_search_entries_without_url_get_canonical_link(tmp_path, monkeypatch):
     assert results[0].duration is None
 
 
+def test_youtube_playlist_expands_to_videos(tmp_path, monkeypatch):
+    entries = "\n".join(json.dumps({
+        "id": f"vid{i}", "title": f"Video {i}", "duration": 60 + i,
+        "uploader": "Channel",
+    }) for i in range(3)) + "\n"
+    script = tmp_path / "yt-dlp"
+    script.write_text(
+        "#!/bin/sh\ntest \"$1\" = --flat-playlist || exit 99\n"
+        f"cat <<'EOF'\n{entries}EOF\n")
+    script.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{tmp_path}:{__import__('os').environ['PATH']}")
+    from casu.search import search_youtube_playlist
+    results = search_youtube_playlist(
+        "https://www.youtube.com/playlist?list=PLabc123", limit=5)
+    assert len(results) == 3
+    assert results[0].url == "https://www.youtube.com/watch?v=vid0"
+    assert all(item.source == "youtube" for item in results)
+
+
 def test_search_empty_query_rejected():
     with pytest.raises(SearchError, match="empty"):
         search_youtube("   ")
