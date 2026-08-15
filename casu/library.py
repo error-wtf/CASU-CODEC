@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Iterable
 
 from .playlist import PlaylistError, PlaylistModel
+from .tags import metadata_for
 
 
 MAX_LIBRARY_METADATA_BYTES = 1024 * 1024
@@ -114,6 +115,10 @@ class MediaLibrary:
     def _upsert(self, path: str | Path, *, duration_seconds: float | None = None,
                 metadata: dict | None = None) -> LibraryItem:
         source = Path(path).expanduser().resolve()
+        if metadata is None:
+            existing = self.get(source)
+            metadata = (existing.metadata if existing is not None and existing.metadata
+                        else metadata_for(source))
         stat = source.stat()
         now = time.time_ns()
         try:
@@ -179,6 +184,26 @@ class MediaLibrary:
             parameters,
         )
         return tuple(self._item(row) for row in rows)
+
+    def field_values(self, key: str) -> tuple[str, ...]:
+        """Distinct non-empty metadata values for *key* (artist/album/genre…)."""
+        values: set[str] = set()
+        for item in self.items():
+            value = str((item.metadata or {}).get(key) or "").strip()
+            if value:
+                values.add(value)
+        return tuple(sorted(values, key=str.casefold))
+
+    def by_field(self, key: str, value: str) -> tuple[LibraryItem, ...]:
+        """Items whose metadata *key* equals *value* (case-insensitive)."""
+        needle = str(value or "").strip().casefold()
+        if not needle:
+            return ()
+        matches = []
+        for item in self.items():
+            if str((item.metadata or {}).get(key) or "").strip().casefold() == needle:
+                matches.append(item)
+        return tuple(matches)
 
     def scan(self, roots: Iterable[str | Path]) -> tuple[LibraryItem, ...]:
         found = []

@@ -8,6 +8,7 @@ import json
 import math
 import os
 import random
+import re
 import subprocess
 import tempfile
 import threading
@@ -37,7 +38,7 @@ from PySide6.QtWidgets import (
     QListWidget, QListWidgetItem, QMainWindow, QMenu,
     QPushButton, QScrollArea, QSizePolicy, QSlider, QSpinBox,
     QStackedWidget, QStatusBar, QTextBrowser, QTreeWidget, QTreeWidgetItem,
-    QVBoxLayout, QWidget, QDoubleSpinBox, QGridLayout,
+    QVBoxLayout, QWidget, QDoubleSpinBox, QGridLayout, QSplitter,
 )
 
 from casu.core import CasuError, ffprobe, resolve_casu_source
@@ -185,19 +186,13 @@ class Sidebar(QFrame):
             if not pixmap.isNull():
                 scaled = pixmap.scaledToWidth(140, Qt.SmoothTransformation)
                 logo.setPixmap(scaled)
-                logo.setFixedSize(scaled.width() + 32, scaled.height() + 24)
-                logo.setContentsMargins(16, 14, 16, 10)
+                logo.setFixedSize(scaled.size())
                 layout.addWidget(logo)
                 self._logo_label = logo
-
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet(f"color: {PALETTE.border}; max-height: 1px;")
-        sep.setFixedHeight(1)
-        layout.addWidget(sep)
+        layout.addSpacing(16)
 
         nav_items = [
-            ("LIBRARY", ["NOW PLAYING", "LOCAL FILES", "WEB & STREAMS",
+            ("LIBRARY", ["NOW PLAYING", "LIBRARY", "WEB & STREAMS",
                          "PLAYLISTS", "IPTV / EPG"]),
             ("SEARCH", ["YOUTUBE"]),
             ("CASU", ["CASU FILES"]),
@@ -206,7 +201,7 @@ class Sidebar(QFrame):
         ]
         self.NAV_ICONS = {
             "NOW PLAYING": "▶",
-            "LOCAL FILES": "▣",
+            "LIBRARY": "▣",
             "WEB & STREAMS": "▤",
             "PLAYLISTS": "≡",
             "IPTV / EPG": "▦",
@@ -909,90 +904,51 @@ class VisualizerWidget(QWidget):
             out.append(max(0.0, min(1.0, values[a] * (1.0 - frac) + values[b] * frac)))
         return out
 
-    def _paint_waveform_fill(self, painter, peaks, w, h):
-        """Mirrored waveform fill: played portion in accent, rest dim."""
-        peaks = list(peaks or ())
-        if len(peaks) < 2 or h <= 0:
-            return
-        count = len(peaks)
-        mid = h / 2
-        max_h = h / 2 - 4
-        step = w / (count - 1)
-        top = QPainterPath()
-        top.moveTo(0.0, mid)
-        bottom = QPainterPath()
-        bottom.moveTo(0.0, mid)
-        for i, value in enumerate(peaks):
-            x = i * step
-            amp = max(0.0, min(max_h, value * max_h))
-            top.lineTo(x, mid - amp)
-            bottom.lineTo(x, mid + amp)
-        top.lineTo(w, mid)
-        top.closeSubpath()
-        bottom.lineTo(w, mid)
-        bottom.closeSubpath()
-        painter.save()
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor(255, 255, 255, 16))
-        painter.drawPath(top)
-        painter.drawPath(bottom)
-        if self._duration > 0:
-            play_x = min(1.0, self._position / self._duration) * w
-            painter.setClipRect(QRectF(0.0, 0.0, play_x, h))
-            grad = QLinearGradient(0, 0, 0, h)
-            grad.setColorAt(0.0, QColor(PALETTE.accent_hot))
-            grad.setColorAt(0.6, QColor(PALETTE.accent_dim))
-            grad.setColorAt(1.0, QColor(10, 6, 8))
-            painter.setBrush(QBrush(grad))
-            painter.drawPath(top)
-            painter.drawPath(bottom)
-        painter.restore()
-
-    def _paint_bottom_bars(self, painter, values, w, y_top, y_bottom, caps=True):
-        """Bottom-up bars exactly like the web player (alternating red/dark)."""
+    def _paint_bottom_bars(self, painter, values, w, h, caps=True):
+        """Bars exactly like the web player: bottom-anchored, alternating colors."""
         count = len(values)
         if count < 2:
             return
-        gap = max(1.0, w * 0.004)
-        bar_w = max(2.0, (w - gap * (count - 1)) / count)
-        span = max(1.0, y_bottom - y_top)
+        gap = 1.0
+        bar_w = w / count
         painter.setPen(Qt.NoPen)
-        x = 0.0
         for index, value in enumerate(values):
-            bar_h = max(1.5, value * span)
+            bar_h = max(0.0, min(1.0, value) * h * 0.7)
+            x = index * bar_w
             color = QColor(PALETTE.accent if index % 2 == 0 else PALETTE.accent_dim)
-            painter.fillRect(QRectF(x, y_bottom - bar_h, bar_w, bar_h), color)
-            x += bar_w + gap
+            painter.fillRect(QRectF(x + gap, h - bar_h,
+                                    max(1.0, bar_w - 2 * gap), bar_h), color)
         if caps:
             cap_values = self._caps if self._caps else values
             painter.setPen(QPen(QColor(255, 255, 255, 200), max(1.5, bar_w * 0.3)))
-            x = 0.0
-            for value in cap_values:
-                bar_h = max(1.5, min(1.0, value) * span)
-                painter.drawLine(QPointF(x, y_bottom - bar_h),
-                                 QPointF(x + bar_w, y_bottom - bar_h))
-                x += bar_w + gap
+            for index, value in enumerate(cap_values):
+                bar_h = max(0.0, min(1.0, value) * h * 0.7)
+                x = index * bar_w
+                painter.drawLine(QPointF(x, h - bar_h),
+                                 QPointF(x + bar_w, h - bar_h))
 
     def _paint_wave_line(self, painter, wave, w, h):
-        """Oscilloscope line exactly like the web player (single red line)."""
+        """Oscilloscope line with the web player's exact formula.
+
+        Web player: ``y = timeData/128*h*0.5 + h*0.25``; for signed samples
+        ``[-1,1]`` this is ``y = value*h*0.5 + h*0.75``.
+        """
         wave = list(wave or ())
         if len(wave) < 8 or h <= 0:
             return
         count = len(wave)
-        mid = h / 2
-        amp = h * 0.5
         step = w / (count - 1)
         path = QPainterPath()
         for i, value in enumerate(wave):
             x = i * step
-            y = mid + max(-1.0, min(1.0, value)) * amp * 0.5
+            y = h * 0.75 + max(-1.0, min(1.0, value)) * h * 0.5
             if i == 0:
                 path.moveTo(x, y)
             else:
                 path.lineTo(x, y)
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.setPen(QPen(QColor(255, 30, 45, 136), 2.0))
+        painter.setPen(QPen(QColor("#ff1e2d88"), 2.0))
         painter.drawPath(path)
         painter.restore()
 
@@ -1012,7 +968,6 @@ class VisualizerWidget(QWidget):
         painter.fillRect(QRectF(0, 0, w, h), QBrush(bg))
 
         bands = self._live if self._live else self._bands
-        large = h >= 240
 
         if not self._small:
             if self._cover is not None and not self._cover.isNull():
@@ -1028,20 +983,13 @@ class VisualizerWidget(QWidget):
                 shade.setColorAt(1.0, QColor(7, 9, 11, 225))
                 painter.fillRect(QRectF(0, 0, w, h), QBrush(shade))
 
-            if self._overview:
-                self._paint_waveform_fill(painter, self._overview, w, h)
+        # Web-player style, exactly: bottom-up bars first, then the
+        # oscilloscope line on top, for every source.
+        if bands:
+            self._paint_bottom_bars(painter, bands, w, h)
 
-        # Web-player style: always draw the oscilloscope wave AND the
-        # bottom-up spectrum bars together, for every source.
         if self._wave:
             self._paint_wave_line(painter, self._wave, w, h)
-
-        if bands:
-            if large:
-                self._paint_bottom_bars(painter, bands, w,
-                                        int(h * 0.50), int(h * 0.88))
-            else:
-                self._paint_bottom_bars(painter, bands, w, 2, h - 2)
 
         if self._duration > 0:
             play_x = int(min(1.0, self._position / self._duration) * w)
@@ -1187,19 +1135,21 @@ class DiagnosticsBar(QFrame):
 
 
 class LibraryPage(QFrame):
-    """In-window searchable media library (no popup)."""
+    """In-window media library: search + artist/album/genre navigation."""
 
     addRequested = Signal(list)
     refreshRequested = Signal()
+    backRequested = Signal()
+
+    MODES = {"all": "All Tracks", "artists": "Artists", "albums": "Albums",
+             "genres": "Genres", "favorites": "Favorites"}
 
     def __init__(self, media_library, thumbnail_dir, parent=None):
         super().__init__(parent)
         self.setObjectName("Page")
         self._media_library = media_library
         self._thumbnail_dir = thumbnail_dir
-        self._paths: list[Path] = []
-        self._preview_gen = 0
-        self._preview_pixmap: QPixmap | None = None
+        self._tracks: list[Path] = []
         self._build()
 
     def _build(self):
@@ -1209,28 +1159,44 @@ class LibraryPage(QFrame):
 
         top = QHBoxLayout()
         self._search_entry = QLineEdit()
-        self._search_entry.setPlaceholderText("Search the media database…")
-        self._search_entry.textChanged.connect(self._refresh)
+        self._search_entry.setObjectName("IconButton")
+        self._search_entry.setPlaceholderText(
+            "Search library · title, artist, album, genre…")
+        self._search_entry.textChanged.connect(lambda _text: self._refresh())
         top.addWidget(self._search_entry, 1)
-        refresh_btn = QPushButton("Refresh watched folders")
+
+        self._mode_combo = QComboBox()
+        self._mode_combo.setObjectName("IconButton")
+        for value, label in self.MODES.items():
+            self._mode_combo.addItem(label, value)
+        self._mode_combo.currentIndexChanged.connect(lambda _i: self._refresh())
+        top.addWidget(self._mode_combo)
+
+        refresh_btn = QPushButton("Refresh")
         refresh_btn.setObjectName("IconButton")
         refresh_btn.clicked.connect(self._on_refresh)
         top.addWidget(refresh_btn)
         layout.addLayout(top)
 
-        self._results = QListWidget()
-        self._results.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        self._results.itemDoubleClicked.connect(self._add_selected)
-        self._results.currentItemChanged.connect(self._load_preview)
-        layout.addWidget(self._results, 1)
+        split = QSplitter(Qt.Horizontal)
+        self._groups_list = QListWidget()
+        self._groups_list.setObjectName("QueueTree")
+        self._groups_list.currentItemChanged.connect(self._on_group_selected)
+        split.addWidget(self._groups_list)
 
-        self._preview = QLabel("Select media for preview")
-        self._preview.setAlignment(Qt.AlignCenter)
-        self._preview.setFixedHeight(160)
-        self._preview.setObjectName("Panel")
-        layout.addWidget(self._preview)
+        self._tracks_list = QListWidget()
+        self._tracks_list.setObjectName("QueueTree")
+        self._tracks_list.itemDoubleClicked.connect(lambda _item: self._add_selected())
+        split.addWidget(self._tracks_list)
+        split.setStretchFactor(0, 2)
+        split.setStretchFactor(1, 5)
+        split.setSizes([260, 720])
+        layout.addWidget(split, 1)
 
         bottom = QHBoxLayout()
+        self._count_label = QLabel("")
+        self._count_label.setObjectName("NowPlayingMeta")
+        bottom.addWidget(self._count_label)
         bottom.addStretch()
         add_btn = QPushButton("Add to queue")
         add_btn.setObjectName("PrimaryButton")
@@ -1238,54 +1204,144 @@ class LibraryPage(QFrame):
         bottom.addWidget(add_btn)
         layout.addLayout(bottom)
 
-    backRequested = Signal()
+    # --- data ---
+
+    def _query(self) -> str:
+        return str(self._search_entry.text()).strip().casefold()
+
+    def _mode(self) -> str:
+        return str(self._mode_combo.currentData() or "all")
+
+    def _key(self) -> str:
+        return {"artists": "artist", "albums": "album", "genres": "genre"}[self._mode()]
+
+    def _filtered(self, items, query: str):
+        if not query:
+            return items
+        out = []
+        for item in items:
+            meta = item.metadata or {}
+            hay = " ".join(str(meta.get(k) or "") for k in
+                           ("title", "artist", "album_artist", "album", "genre"))
+            hay += " " + item.path.name
+            if query in hay.casefold():
+                out.append(item)
+        return out
+
+    @staticmethod
+    def _track_sort(item):
+        meta = item.metadata or {}
+        track = re.sub(r"\D", "", str(meta.get("track") or ""))
+        return (str(meta.get("album") or "").casefold(),
+                int(track or 0),
+                str(meta.get("title") or "").casefold())
+
+    @staticmethod
+    def _row_text(item):
+        meta = item.metadata or {}
+        title = str(meta.get("title") or item.path.stem)
+        details = " · ".join(str(meta.get(k) or "").strip() for k in
+                             ("artist", "album", "genre") if str(meta.get(k) or "").strip())
+        if details:
+            return f"{title}\n{details}"
+        return title
+
+    def _append_track(self, item):
+        row = QListWidgetItem(self._row_text(item))
+        marker = "★ " if item.favorite else ""
+        row.setText(f"{marker}{self._row_text(item)}")
+        duration = float((item.metadata or {}).get("duration") or 0.0)
+        if duration > 0:
+            minutes, seconds = divmod(int(duration), 60)
+            row.setToolTip(f"{minutes}:{seconds:02d}\n{item.path}")
+        else:
+            row.setToolTip(str(item.path))
+        font = row.font()
+        font.setBold(True)
+        row.setFont(font)
+        self._tracks_list.addItem(row)
+        self._tracks.append(item.path)
+
+    # --- UI flow ---
 
     def _refresh(self):
-        self._paths.clear()
-        self._results.clear()
-        query = self._search_entry.text()
-        for item in self._media_library.search(query):
-            self._paths.append(item.path)
-            marker = "★ " if item.favorite else ""
-            resume = f" · resume {item.resume_seconds:.1f}s" if item.resume_seconds else ""
-            self._results.addItem(f"{marker}{item.path.name}{resume}  —  {item.path.parent}")
+        query = self._query()
+        mode = self._mode()
+        self._tracks.clear()
+        self._tracks_list.clear()
+
+        if mode == "all":
+            self._groups_list.setEnabled(False)
+            self._groups_list.clear()
+            items = self._filtered(self._media_library.items(), query)
+            for item in sorted(items, key=self._track_sort):
+                self._append_track(item)
+        else:
+            self._groups_list.setEnabled(True)
+            self._rebuild_groups(mode, query)
+            if self._groups_list.count() > 0:
+                self._groups_list.setCurrentRow(0)
+            else:
+                self._count_label.setText("No groups found")
+        self._count_label.setText(f"{len(self._tracks)} tracks")
+
+    def _rebuild_groups(self, mode, query):
+        self._groups_list.blockSignals(True)
+        self._groups_list.clear()
+        key = self._key()
+        values = [v for v in self._media_library.field_values(key)
+                  if not query or query in v.casefold()]
+        if mode == "favorites":
+            favorites = {str(i.path) for i in self._media_library.items(favorites_only=True)}
+            values = [v for v in values
+                      if any(str(i.path) in favorites and
+                             str((i.metadata or {}).get(key) or "").casefold() == v.casefold()
+                             for i in self._media_library.items())]
+        if not values:
+            values = ["(unknown)"]
+        for value in values:
+            self._groups_list.addItem(value if value else "(unknown)")
+        self._groups_list.blockSignals(False)
+
+    def _on_group_selected(self, current):
+        if current is None:
+            self._tracks_list.clear()
+            self._tracks.clear()
+            return
+        mode = self._mode()
+        if mode == "favorites":
+            self._show_favorites()
+            return
+        value = current.text()
+        key = self._key()
+        query = self._query()
+        if value == "(unknown)":
+            items = [i for i in self._media_library.items()
+                     if not str((i.metadata or {}).get(key) or "").strip()]
+        else:
+            items = self._media_library.by_field(key, value)
+        self._tracks.clear()
+        self._tracks_list.clear()
+        for item in sorted(self._filtered(items, query), key=self._track_sort):
+            self._append_track(item)
+        self._count_label.setText(f"{len(self._tracks)} tracks")
+
+    def _show_favorites(self):
+        favorites = self._media_library.items(favorites_only=True)
+        query = self._query()
+        self._tracks.clear()
+        self._tracks_list.clear()
+        for item in sorted(self._filtered(favorites, query), key=self._track_sort):
+            self._append_track(item)
+        self._count_label.setText(f"{len(self._tracks)} tracks")
 
     def _add_selected(self, *_args):
-        item = self._results.currentItem()
+        item = self._tracks_list.currentItem()
         if item is None:
             return
-        row = self._results.row(item)
-        if 0 <= row < len(self._paths):
-            self.addRequested.emit([self._paths[row]])
-
-    def _load_preview(self, current, previous):
-        if current is None:
-            return
-        row = self._results.row(current)
-        if row < 0 or row >= len(self._paths):
-            return
-        source = self._paths[row]
-        self._preview_gen += 1
-        gen = self._preview_gen
-        self._preview.setText("Decoding thumbnail…")
-
-        def worker():
-            thumb = thumbnail_for(source, self._thumbnail_dir)
-            def present():
-                if gen != self._preview_gen or not self.isVisible():
-                    return
-                if thumb is None:
-                    self._preview.setText("No video thumbnail available")
-                    return
-                pix = QPixmap(str(thumb))
-                if pix.isNull():
-                    self._preview.setText("Thumbnail could not be displayed")
-                    return
-                scaled = pix.scaled(320, 140, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                self._preview_pixmap = scaled
-                self._preview.setPixmap(scaled)
-            QTimer.singleShot(0, present)
-        threading.Thread(target=worker, daemon=True).start()
+        row = self._tracks_list.row(item)
+        if 0 <= row < len(self._tracks):
+            self.addRequested.emit([self._tracks[row]])
 
     def _on_refresh(self):
         self.refreshRequested.emit()
@@ -1379,16 +1435,35 @@ class OptionsPage(QFrame):
         cache_row.addStretch()
         layout.addLayout(cache_row)
 
-        section("DATABASE")
-        self._folders_label = QLabel("\n".join(settings.watched_folders)
-                                     if settings.watched_folders else "No watched folders yet")
-        self._folders_label.setObjectName("NowPlayingMeta")
-        self._folders_label.setWordWrap(True)
-        layout.addWidget(self._folders_label)
-        db_btn = QPushButton("Refresh watched folders")
-        db_btn.setObjectName("IconButton")
-        db_btn.clicked.connect(lambda: self.actionRequested.emit("refresh-db"))
-        layout.addWidget(db_btn, 0, Qt.AlignLeft)
+        section("LIBRARY FOLDERS")
+        folders_hint = QLabel(
+            "Folders whose audio/video files are indexed into the library "
+            "(tags and file names are read for album/track/artist/genre).")
+        folders_hint.setObjectName("NowPlayingMeta")
+        folders_hint.setWordWrap(True)
+        layout.addWidget(folders_hint)
+        self._folders_list = QListWidget()
+        self._folders_list.setObjectName("QueueTree")
+        self._folders_list.setMinimumHeight(110)
+        self._folders_list.setMaximumHeight(180)
+        for folder in settings.watched_folders:
+            self._folders_list.addItem(str(folder))
+        layout.addWidget(self._folders_list)
+        folder_row = QHBoxLayout()
+        add_folder_btn = QPushButton("Add folder…")
+        add_folder_btn.setObjectName("IconButton")
+        add_folder_btn.clicked.connect(self._add_library_folder)
+        folder_row.addWidget(add_folder_btn)
+        remove_folder_btn = QPushButton("Remove selected")
+        remove_folder_btn.setObjectName("IconButton")
+        remove_folder_btn.clicked.connect(self._remove_library_folder)
+        folder_row.addWidget(remove_folder_btn)
+        scan_btn = QPushButton("Scan now")
+        scan_btn.setObjectName("IconButton")
+        scan_btn.clicked.connect(lambda: self.actionRequested.emit("refresh-db"))
+        folder_row.addWidget(scan_btn)
+        folder_row.addStretch()
+        layout.addLayout(folder_row)
 
         section("RECORDINGS & SNAPSHOTS")
         rec_row = QHBoxLayout()
@@ -1459,7 +1534,8 @@ class OptionsPage(QFrame):
                           cache_limit_mib=self._cache_spin.value(),
                           recordings_dir=self._recordings_entry.text().strip(),
                           record_split_minutes=self._split_spin.value(),
-                          record_format=str(self._format_combo.currentText()))
+                          record_format=str(self._format_combo.currentText()),
+                          watched_folders=self._library_folders())
         self._settings_store.save(updated)
         self.applied.emit(updated)
 
@@ -1467,6 +1543,26 @@ class OptionsPage(QFrame):
         folder = QFileDialog.getExistingDirectory(self, "Recordings & snapshots folder")
         if folder:
             self._recordings_entry.setText(folder)
+
+    def _library_folders(self) -> list[str]:
+        return [self._folders_list.item(i).text().strip()
+                for i in range(self._folders_list.count())
+                if self._folders_list.item(i).text().strip()]
+
+    def _add_library_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, "Add library folder")
+        if not folder:
+            return
+        folders = self._library_folders()
+        if folder in folders:
+            return
+        self._folders_list.addItem(folder)
+        self._folders_list.setCurrentRow(self._folders_list.count() - 1)
+
+    def _remove_library_folder(self):
+        row = self._folders_list.currentRow()
+        if row >= 0:
+            self._folders_list.takeItem(row)
 
     @staticmethod
     def _provider_status() -> str:
@@ -1502,8 +1598,11 @@ class OptionsPage(QFrame):
         self._format_combo.setCurrentIndex(max(0, index))
         index = self._viz_combo.findData(settings.visualizer)
         self._viz_combo.setCurrentIndex(max(0, index))
-        self._folders_label.setText("\n".join(settings.watched_folders)
-                                      if settings.watched_folders else "No watched folders yet")
+        self._folders_list.blockSignals(True)
+        self._folders_list.clear()
+        for folder in settings.watched_folders:
+            self._folders_list.addItem(str(folder))
+        self._folders_list.blockSignals(False)
 
 
 class EpgPage(QFrame):
@@ -2559,10 +2658,10 @@ class MainWindow(QMainWindow):
             self._show_player_page()
             self._sidebar.set_active("NOW PLAYING")
             return
-        if name == "LOCAL FILES":
+        if name == "LIBRARY":
             self._library_page._refresh()
-            self._show_page(self._library_page, "LOCAL FILES")
-            self._sidebar.set_active("LOCAL FILES")
+            self._show_page(self._library_page, "LIBRARY")
+            self._sidebar.set_active("LIBRARY")
             return
         if name == "WEB & STREAMS":
             self.show_sources("url")
@@ -3567,7 +3666,7 @@ class MainWindow(QMainWindow):
             self._viz_pcm,
             self._viz_rate,
             position,
-            bands=48,
+            bands=96,
         )
 
         self._visualizer.configure(
@@ -3983,14 +4082,14 @@ class MainWindow(QMainWindow):
                     samples = (np.frombuffer(payload, dtype="<i2")
                                .astype(np.float32) / 32768.0)
                     windowed = samples[:1024] * np.hanning(1024)
-                    spectrum = np.abs(np.fft.rfft(windowed))[1:49]
+                    spectrum = np.abs(np.fft.rfft(windowed))[1:97]
                     peak = float(spectrum.max()) if spectrum.size else 0.0
                     if peak <= 1e-6:
                         bands = tuple(0.0 for _ in spectrum)
                     else:
                         bands = tuple(
                             float(max(0.0, min(1.0, (value / peak) *
-                                               (0.30 + 0.70 * index / 48.0))))
+                                               (0.30 + 0.70 * index / 96.0))))
                             for index, value in enumerate(spectrum))
                     width = max(1, len(samples) // 128)
                     wave = tuple(float(samples[i])
@@ -4365,8 +4464,8 @@ class MainWindow(QMainWindow):
 
     def show_library_dialog(self):
         self._library_page._refresh()
-        self._show_page(self._library_page, "LOCAL FILES")
-        self._sidebar.set_active("LOCAL FILES")
+        self._show_page(self._library_page, "LIBRARY")
+        self._sidebar.set_active("LIBRARY")
 
     def _show_page(self, page, title: str):
         if page not in self._pages:

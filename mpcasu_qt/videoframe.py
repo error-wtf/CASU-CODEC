@@ -139,20 +139,12 @@ class VideoSurface(QWidget):
         painter = QPainter(self)
         try:
             painter.fillRect(self.rect(), QColor("#000000"))
-            if self._cover is not None and not self._cover.isNull():
-                scaled = self._cover.scaled(
-                    self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
-                )
-                x = (self.width() - scaled.width()) // 2
-                y = (self.height() - scaled.height()) // 2
-                painter.drawPixmap(x, y, scaled)
-            else:
-                painter.setPen(QColor("#2a2a32"))
-                font = painter.font()
-                font.setPointSize(max(16, min(46, self.width() // 16)))
-                font.setBold(True)
-                painter.setFont(font)
-                painter.drawText(self.rect(), Qt.AlignCenter, self._placeholder)
+            painter.setPen(QColor("#2a2a32"))
+            font = painter.font()
+            font.setPointSize(max(16, min(46, self.width() // 16)))
+            font.setBold(True)
+            painter.setFont(font)
+            painter.drawText(self.rect(), Qt.AlignCenter, self._placeholder)
         finally:
             painter.end()
 
