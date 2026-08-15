@@ -18,12 +18,12 @@ from pathlib import Path
 
 from PySide6.QtCore import (
     QEasingCurve, QObject, QPropertyAnimation, QRect, QRectF, QPointF, Qt, QTimer,
-    Signal, Slot, QSize, QUrl,
+    Signal, Slot, QSize, QUrl, QLineF,
 )
 from PySide6.QtGui import (
     QAction, QColor, QFont, QIcon, QKeySequence, QPainter, QPen, QPixmap,
     QTextDocument, QImage, QLinearGradient, QRadialGradient, QBrush, QGuiApplication,
-    QPainterPath,
+    QPainterPath, QPolygonF,
 )
 
 try:
@@ -800,135 +800,32 @@ class PlaylistPane(QFrame):
 
 
 class VisualizerWidget(QWidget):
-    """Web-style audio visualizer: dimmed cover backdrop + spectrum bars + wave.
+    """Native Qt visualizer, pixel-equivalent to web/app.js drawViz.
 
-    Renders exactly like the web player: bottom-up alternating bars plus the
-    oscilloscope line, with the cover only as a dim background. The backdrop
-    is cached (never rescaled per frame) so animation stays smooth.
+    128 raw FFT bars (alternating #ff1e2d/#3a1015, 0.7h, 1px gap) and a
+    256-point oscilloscope line (#ff1e2d@0x88, y=v*0.5h+0.75h) on the web
+    cover-layer background (radial gradient + centered art).  The analyser's
+    0.85 smoothing is applied to the bars.  One 60 Hz update path (no
+    double repaints) so it is as smooth as the web page.  Never over video.
     """
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         self.hide()
-        self._peaks: tuple[float, ...] = ()
-        self._wave: tuple[float, ...] = ()
-        self._bands: tuple[float, ...] = ()
-        self._live: tuple[float, ...] | None = None
-        self._caps: tuple[float, ...] = ()
-        self._overview: tuple[float, ...] = ()
-        self._smoothed_bands: tuple[float, ...] = ()
         self._small = False
         self._cover = None
-        self._backdrop = None
-        self._backdrop_size = (0, 0)
+        self._cover_scaled = None
+        self._cover_scaled_size = (0, 0)
         self._mode = "spectrum"
-        self._position = 0.0
-        self._duration = 0.0
-        self._timer = QTimer(self)
-        self._timer.setInterval(16)  # ~60 FPS repaint
-        self._timer.timeout.connect(self.update)
-        self._timer.start()
-
-    @staticmethod
-    def _blend(old, new, rise: float = 0.9, fall: float = 0.75) -> tuple:
-        """Near-raw blend (like the web player): barely smooths, no lag."""
-        old = list(old or ())
-        new = list(new or ())
-        if not old:
-            return tuple(new)
-        count = max(len(old), len(new))
-        out = []
-        for index in range(count):
-            prev = old[index] if index < len(old) else 0.0
-            value = new[index] if index < len(new) else 0.0
-            out.append(prev + (value - prev) * (rise if value >= prev else fall))
-        return tuple(out)
-
-    def configure(self, mode: str, wave, bands, duration: float, overview=()):
-        self._mode = mode
-        self._duration = max(0.0, float(duration or 0.0))
-        # The oscilloscope wave tracks the playhead directly (no smoothing
-        # lag); the spectrum bars use the analyser's 0.85 smoothing.
-        self._wave = tuple(wave or ())
-        self._bands = self._smooth_bands(bands)
-        self._overview = tuple(overview or ())
-        # The cover is always shown for audio, independently of the
-        # visualization mode; the waves/bars are the toggleable part.
-        # Over video (small) the visualizer is never shown — only subtitles.
-        if self._small:
-            self.setVisible(False)
-        else:
-            visible = ((self._cover is not None)
-                       or (mode != "off" and (
-                           self._wave or self._bands or self._overview or self._live)))
-            self.setVisible(bool(visible))
-        self.update()
-
-    def set_mode(self, mode: str):
-        """Toggle only the visualization layer, keeping cover and data."""
-        self._mode = mode
-        if self._small:
-            self.setVisible(False)
-        else:
-            visible = ((self._cover is not None)
-                       or (mode != "off" and (
-                           self._wave or self._bands or self._overview or self._live)))
-            self.setVisible(bool(visible))
-        self.update()
-
-    def set_position(self, position: float):
-        self._position = float(position or 0.0)
-
-    def set_cover(self, pixmap):
-        self._cover = pixmap
-        self._backdrop = None
-        self._backdrop_size = (0, 0)
-        if pixmap is not None and not self._small:
-            self.setVisible(True)
-        self.update()
-
-    def set_live(self, bands, wave=()):
-        self._live = self._smooth_bands(bands)
-        if wave:
-            self._wave = tuple(wave)
-        if not self._small and (self._live or self._cover):
-            self.setVisible(True)
-        self.update()
-
-    def clear_live(self):
+        self._wave: tuple = ()
+        self._bands: tuple = ()
         self._live = None
-        self.update()
-
-    def set_small(self, small: bool):
-        """Video mode: keep only the bottom bar, no cover backdrop or art."""
-        self._small = bool(small)
-        # Over video, repaint less aggressively to avoid flicker.
-        self._timer.setInterval(33 if small else 16)
-        if small:
-            self.hide()
-        else:
-            self.set_mode(self._mode)
-        self.update()
-
-    @staticmethod
-    def _cap(old, new):
-        """Peak caps: rise instantly, fast decay (minimal trail)."""
-        old = list(old or ())
-        new = list(new or ())
-        if not old:
-            return tuple(new)
-        count = max(len(old), len(new))
-        out = []
-        for index in range(count):
-            prev = old[index] if index < len(old) else 0.0
-            value = new[index] if index < len(new) else 0.0
-            out.append(prev + (value - prev) * (1.0 if value >= prev else 0.5))
-        return tuple(out)
+        self._overview: tuple = ()
+        self._smoothed_bands: tuple = ()
 
     def _smooth_bands(self, new):
-        """Analyser smoothing exactly like the web player's
-        ``smoothingTimeConstant = 0.85`` (smoothed = .85*prev + .15*cur)."""
+        """Web analyser smoothing (smoothingTimeConstant = 0.85)."""
         new = tuple(new or ())
         if not self._smoothed_bands:
             self._smoothed_bands = new
@@ -942,27 +839,46 @@ class VisualizerWidget(QWidget):
         self._smoothed_bands = tuple(out)
         return self._smoothed_bands
 
-    @staticmethod
-    def _resample(values, count: int) -> list:
-        values = list(values or ())
-        if not values:
-            return [0.0] * count
-        if len(values) == count:
-            return [max(0.0, min(1.0, float(v))) for v in values]
-        out = []
-        for i in range(count):
-            pos = (i + 0.5) * len(values) / count
-            a = int(pos)
-            b = min(len(values) - 1, a + 1)
-            frac = pos - a
-            out.append(max(0.0, min(1.0, values[a] * (1.0 - frac) + values[b] * frac)))
-        return out
+    def configure(self, mode, wave, bands, duration, overview=()):
+        self._mode = mode
+        self._duration = max(0.0, float(duration or 0.0))
+        self._wave = tuple(wave or ())
+        self._bands = tuple(bands or ())
+        self._overview = tuple(overview or ())
+        if self._small:
+            self.setVisible(False)
+        else:
+            self.setVisible(mode != "off" or self._cover is not None)
+        self.update()
+
+    def set_mode(self, mode):
+        self._mode = mode
+        if self._small:
+            self.setVisible(False)
+        else:
+            self.setVisible(mode != "off" or self._cover is not None)
+        self.update()
+
+    def set_position(self, position):
+        self._position = float(position or 0.0)
+
+    def set_cover(self, pixmap):
+        self._cover = pixmap
+        self._cover_scaled = None
+        self._cover_scaled_size = (0, 0)
+        if pixmap is not None and not self._small:
+            self.setVisible(True)
+        self.update()
 
     def _paint_cover_art(self, painter, cover, w, h):
-        """Square album art, fitted (never cropped), centered."""
-        size = int(min(w * 0.34, h * 0.5))
-        size = max(80, min(size, 360))
-        pix = cover.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        size = int(min(w, h) * 0.44)
+        size = max(40, min(size, 480))
+        if (self._cover_scaled is None or self._cover_scaled_size != (size, size)
+                or self._cover is not cover):
+            self._cover_scaled = cover.scaled(size, size, Qt.KeepAspectRatio,
+                                              Qt.SmoothTransformation)
+            self._cover_scaled_size = (size, size)
+        pix = self._cover_scaled
         px = (w - pix.width()) // 2
         py = (h - pix.height()) // 2
         radius = 10.0
@@ -973,76 +889,82 @@ class VisualizerWidget(QWidget):
         painter.setClipPath(path)
         painter.drawPixmap(px, py, pix)
         painter.restore()
-        painter.setPen(QPen(QColor(255, 255, 255, 36), 1.2))
-        painter.setBrush(Qt.NoBrush)
-        painter.drawPath(path)
 
-    def _paint_bottom_bars(self, painter, values, w, h, caps=False):
-        """Bars exactly like the web player: bottom-anchored, alternating colors."""
+    def set_live(self, bands, wave=()):
+        self._live = tuple(bands)
+        if wave:
+            self._wave = tuple(wave)
+        if self._small:
+            self.setVisible(False)
+        elif self._live or self._cover:
+            self.setVisible(True)
+        self.update()
+
+    def clear_live(self):
+        self._live = None
+        self.update()
+
+    def set_small(self, small: bool):
+        self._small = bool(small)
+        if small:
+            self.setVisible(False)
+        self.update()
+
+    def _paint_bottom_bars(self, painter, values, w, h):
+        """1024 dense bars like the web canvas, batched for speed."""
         count = len(values)
         if count < 2:
             return
         gap = 1.0
         bar_w = w / count
-        painter.setPen(Qt.NoPen)
-        accent = QColor("#ff1e2d")
-        dim = QColor("#3a1015")
-        x = 0.0
+        even = []
+        odd = []
         for index, value in enumerate(values):
             bar_h = max(0.0, min(1.0, value) * h * 0.7)
-            painter.fillRect(QRectF(x + gap, h - bar_h,
-                                    max(1.0, bar_w - 2 * gap), bar_h),
-                             accent if index % 2 == 0 else dim)
-            x += bar_w
+            x = index * bar_w
+            line = QLineF(x + gap, h - bar_h, x + gap, h)
+            (even if index % 2 == 0 else odd).append(line)
+        painter.setRenderHint(QPainter.Antialiasing, False)
+        if even:
+            painter.setPen(QPen(QColor(0xFF, 0x1E, 0x2D), max(1.0, bar_w - 2 * gap)))
+            painter.drawLines(even)
+        if odd:
+            painter.setPen(QPen(QColor(0x3A, 0x10, 0x15), max(1.0, bar_w - 2 * gap)))
+            painter.drawLines(odd)
 
     def _paint_wave_line(self, painter, wave, w, h):
-        """Oscilloscope line with the web player's exact formula.
-
-        Web player: ``x = i/fftSize*w`` and ``y = timeData/128*h*0.5 + h*0.25``;
-        for signed samples [-1,1] that is ``y = value*h*0.5 + h*0.75``.
-        """
         wave = list(wave or ())
         if len(wave) < 8 or h <= 0:
             return
         count = len(wave)
         step = w / count
-        path = QPainterPath()
+        poly = QPolygonF()
         for i, value in enumerate(wave):
-            x = i * step
-            y = h * 0.75 + max(-1.0, min(1.0, value)) * h * 0.5
-            if i == 0:
-                path.moveTo(x, y)
-            else:
-                path.lineTo(x, y)
+            poly.append(QPointF(i * step,
+                                h * 0.75 + max(-1.0, min(1.0, value)) * h * 0.5))
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.setPen(QPen(QColor("#ff1e2d88"), 2.0))
-        painter.drawPath(path)
+        painter.setPen(QPen(QColor(255, 30, 45, 0x88), 2.0))
+        painter.drawPolyline(poly)
         painter.restore()
 
     def paintEvent(self, event):  # noqa: N802 - Qt naming
+        if self._small:
+            return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setRenderHint(QPainter.SmoothPixmapTransform)
         w, h = self.width(), self.height()
         if w <= 0 or h <= 0:
-            return
-
-        if self._small:
-            # Video mode: transparent — the visualizer is hidden anyway.
             painter.end()
             return
-
-        # Exactly the web player's cover layer: radial background + centered art.
+        # Web cover-layer background.
         bg = QRadialGradient(w / 2.0, h / 2.0, max(w, h) * 0.7)
         bg.setColorAt(0.0, QColor("#1a0e12"))
         bg.setColorAt(0.7, QColor("#050608"))
         painter.fillRect(QRectF(0, 0, w, h), QBrush(bg))
-
         if self._cover is not None and not self._cover.isNull():
             self._paint_cover_art(painter, self._cover, w, h)
-
-        # Exactly the web player's canvas: bars then oscilloscope line.
         if self._mode != "off":
             bands = self._live if self._live else self._bands
             if bands:
@@ -1050,6 +972,26 @@ class VisualizerWidget(QWidget):
             if self._wave:
                 self._paint_wave_line(painter, self._wave, w, h)
         painter.end()
+
+    def _paint_cover_art(self, painter, cover, w, h):
+        size = int(min(w, h) * 0.44)
+        size = max(40, min(size, 480))
+        if (self._cover_scaled is None or self._cover_scaled_size != (size, size)
+                or self._cover is not cover):
+            self._cover_scaled = cover.scaled(size, size, Qt.KeepAspectRatio,
+                                              Qt.SmoothTransformation)
+            self._cover_scaled_size = (size, size)
+        pix = self._cover_scaled
+        px = (w - pix.width()) // 2
+        py = (h - pix.height()) // 2
+        radius = 10.0
+        rect = QRectF(px, py, pix.width(), pix.height())
+        path = QPainterPath()
+        path.addRoundedRect(rect, radius, radius)
+        painter.save()
+        painter.setClipPath(path)
+        painter.drawPixmap(px, py, pix)
+        painter.restore()
 
 
 class SeekSliderWithChapters(QWidget):
@@ -3832,14 +3774,15 @@ class MainWindow(QMainWindow):
             self._viz_pcm,
             self._viz_rate,
             position,
-            points=256,
+            window_s=2048.0 / max(1, self._viz_rate),
+            points=2048,
         )
         bands = live_fft(
             self._viz_pcm,
             self._viz_rate,
             position,
-            fft_size=256,
-            bins=128,
+            fft_size=2048,
+            bins=1024,
         )
 
         self._visualizer.configure(
@@ -4255,7 +4198,7 @@ class MainWindow(QMainWindow):
                 if not data:
                     break
                 buff += data
-                if len(buff) < 512:
+                if len(buff) < 4096:
                     continue
                 # Throttle to a realtime cadence (~40 Hz): ffmpeg may decode
                 # a fast source faster than realtime, which would flood the
@@ -4266,22 +4209,21 @@ class MainWindow(QMainWindow):
                     continue
                 last_emit = now
                 try:
-                    # Slide a 256-sample window (like the web analyser's
-                    # fftSize=256) -> 128 raw FFT bars.
-                    buff = buff[-512:]
+                    # Slide a 2048-sample window -> 1024 raw FFT bars.
+                    buff = buff[-4096:]
                     samples = (np.frombuffer(buff, dtype="<i2")
                                .astype(np.float32) / 32768.0)
                     windowed = samples * np.hanning(len(samples))
-                    spectrum = np.abs(np.fft.rfft(windowed))[1:129]
+                    spectrum = np.abs(np.fft.rfft(windowed))[1:1025]
                     peak = float(spectrum.max()) if spectrum.size else 0.0
                     if peak <= 1e-6:
                         bands = tuple(0.0 for _ in spectrum)
                     else:
                         bands = tuple(float(max(0.0, min(1.0, value / peak)))
                                       for value in spectrum)
-                    width = max(1, len(samples) // 256)
+                    width = max(1, len(samples) // 2048)
                     wave = tuple(float(samples[i])
-                                 for i in range(0, len(samples), width))[:256]
+                                 for i in range(0, len(samples), width))[:2048]
                     bridge.resultReady.emit(("live", bands, wave))
                 except Exception:  # noqa: BLE001 - stream viz is optional
                     continue
