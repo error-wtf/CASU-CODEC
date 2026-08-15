@@ -46,8 +46,8 @@ from casu.playlist import (
 )
 from casu.settings import SettingsStore
 from casu.spotify import (SpotifyError, expand_spotify, fetch_spotify_metadata,
-                          is_spotify_url, resolve_spotify_url, search_spotify,
-                          spotify_kind, youtube_handoff_query)
+                          is_spotify_url, open_spotify_web, resolve_spotify_url,
+                          search_spotify, spotify_kind, youtube_handoff_query)
 from casu.thumbnail import thumbnail_for
 from casu.waveform import decode_all_pcm, live_spectrum, window_peaks
 from casu.recording import MediaRecorder, RecordingError
@@ -200,6 +200,7 @@ class Sidebar(QFrame):
                          "PLAYLISTS", "IPTV / EPG"]),
             ("SEARCH", ["YOUTUBE", "SPOTIFY"]),
             ("CASU", ["CASU FILES"]),
+            ("WEB PLAYERS", ["HEARTHIS", "TIDAL", "NETFLIX"]),
             ("SYSTEM", ["OPTIONS", "ABOUT"]),
         ]
         self.NAV_ICONS = {
@@ -211,6 +212,9 @@ class Sidebar(QFrame):
             "YOUTUBE": "▷",
             "SPOTIFY": "♪",
             "CASU FILES": "◈",
+            "HEARTHIS": "↗",
+            "TIDAL": "≋",
+            "NETFLIX": "▣",
             "OPTIONS": "⚙",
             "ABOUT": "ⓘ",
         }
@@ -1541,16 +1545,37 @@ class SourcesView(QFrame):
             "title": "YOUTUBE",
             "hint": "YouTube URL or search term — e.g. https://www.youtube.com/watch?v=…",
             "search": True,
+            "web": False,
         },
         "spotify": {
             "title": "SPOTIFY",
-            "hint": "Spotify URL — fetches the track title, then explicit “Find on YouTube” handoff",
+            "hint": "Search Spotify — opens the official Web Player (Chromium)",
             "search": True,
+            "web": "spotify",
+        },
+        "hearthis": {
+            "title": "HEARTHIS",
+            "hint": "Search Hearthis.at — opens the official Web Player (Chromium)",
+            "search": True,
+            "web": "hearthis",
+        },
+        "tidal": {
+            "title": "TIDAL",
+            "hint": "Search Tidal — opens the official Web Player (Chromium)",
+            "search": True,
+            "web": "tidal",
+        },
+        "netflix": {
+            "title": "NETFLIX",
+            "hint": "Search Netflix — opens the official Web Player (Chromium)",
+            "search": True,
+            "web": "netflix",
         },
         "url": {
             "title": "NETWORK STREAM",
             "hint": "HTTP(S), HLS, RTSP, RTP, UDP, FTP or SMB URL",
             "search": False,
+            "web": False,
         },
     }
 
@@ -1634,13 +1659,19 @@ class SourcesView(QFrame):
         self._results = []
         self._searching = False
         self._go_btn.setText("Play / search" if spec["search"] else "Play")
-        # The yt-dlp consent gate only applies to YouTube; Spotify runs spotDL
-        # (open.spotify.com metadata), so it is never blocked by it.
+        # The yt-dlp consent gate only applies to YouTube; the other providers
+        # open their own official web players, so no consent is required.
         self._consent_frame.setVisible(
             mode == "youtube" and not self._consent_given())
         if mode == "spotify":
             self._status.setText(
-                "Spotify search via spotDL (open.spotify.com) · personal use only")
+                "Spotify — öffnet den offiziellen Web Player (Chromium) mit deinem Login")
+        elif mode == "hearthis":
+            self._status.setText("Hearthis.at — öffnet den offiziellen Web Player (Chromium)")
+        elif mode == "tidal":
+            self._status.setText("Tidal — öffnet den offiziellen Web Player (Chromium)")
+        elif mode == "netflix":
+            self._status.setText("Netflix — öffnet den offiziellen Web Player (Chromium)")
         elif spec["search"]:
             self._status.setText("Search uses yt-dlp (GNU GPL) · personal use only")
         else:
@@ -1666,26 +1697,25 @@ class SourcesView(QFrame):
         text = self._entry.text().strip()
         if not text:
             return
-        if self._mode == "spotify":
-            kind = spotify_kind(text)
-            if kind:
-                if kind == "track":
-                    self._fetch_spotify_handoff(text)
-                else:
-                    self._expand_spotify_url(text)
+        web = self.MODES[self._mode].get("web")
+        if web:
+            if is_spotify_url(text):
+                self._fetch_spotify_handoff(text)
                 return
+            from casu.webproviders import open_web_player
+            opened = open_web_player(web, query=text)
+            if opened:
+                self._status.setText(
+                    f"{self.MODES[self._mode]['title']} Web Player geöffnet in Chromium")
+            else:
+                self._status.setText("Chromium fehlt — bitte chromium-browser installieren")
+            return
         if is_youtube_url(text) and "list=" in text:
             self._expand_youtube_playlist(text)
             return
         is_url = text.startswith(("http://", "https://", "rtsp://", "rtmp://",
                                   "udp://", "rtp://", "ftp://", "smb://"))
         if not is_url and self.MODES[self._mode]["search"]:
-            if self._mode == "spotify":
-                self._run_search(text)
-                return
-            if not self._consent_given():
-                self._status.setText("Accept the yt-dlp legal notice above to enable YouTube search")
-                return
             self._run_search(text)
             return
         self.sourceActivated.emit(text)
@@ -1730,28 +1760,12 @@ class SourcesView(QFrame):
         threading.Thread(target=worker, daemon=True).start()
 
     def _fetch_spotify_handoff(self, url: str):
-        if self._searching:
-            return
-        self._searching = True
-        self._list.clear()
-        self._results = []
-        self._status.setText("Resolving Spotify via spotDL…")
-
-        def worker():
-            from casu.search import SearchResult
-            try:
-                meta = fetch_spotify_metadata(url)
-                from casu.spotify import download_spotify_track
-                local = download_spotify_track(meta.title)
-            except (SpotifyError, OSError, ValueError) as exc:
-                self._bridge.errorReady.emit(str(exc))
-            else:
-                self._bridge.resultReady.emit([SearchResult(
-                    title=f"Spotify · {meta.title}",
-                    url=str(local), duration=None,
-                    uploader="SPOTIFY via spotDL (matched audio)",
-                    source="spotify")])
-        threading.Thread(target=worker, daemon=True).start()
+        from casu.webproviders import open_web_player
+        opened = open_web_player("spotify", url=url)
+        if opened:
+            self._status.setText("Spotify Web Player geöffnet (Chromium) — dort abspielen")
+        else:
+            self._status.setText("Chromium fehlt — bitte chromium-browser installieren")
 
     def _run_search(self, query: str):
         if self._searching:
@@ -2476,7 +2490,12 @@ class MainWindow(QMainWindow):
             self.show_sources("youtube")
             return
         if name == "SPOTIFY":
-            self.show_sources("spotify")
+            self._open_web_player("spotify")
+            self._sidebar.set_active("SPOTIFY")
+            return
+        if name in ("HEARTHIS", "TIDAL", "NETFLIX"):
+            self._open_web_player(name.lower())
+            self._sidebar.set_active(name)
             return
         if name == "CASU FILES":
             self._show_player_page()
@@ -3095,6 +3114,17 @@ class MainWindow(QMainWindow):
         self._center_stack.setCurrentWidget(self._sources_view)
         self._topbar_title.setText(self._sources_view.MODES[mode]["title"])
         self._back_btn.show()
+
+    def _open_web_player(self, provider: str, *, query: str = "", url: str = ""):
+        from casu.webproviders import WEB_PLAYERS, open_web_player
+        opened = open_web_player(provider, query=query, url=url)
+        label = WEB_PLAYERS.get(provider, WEB_PLAYERS["spotify"])["label"]
+        if opened:
+            self._show_player_page()
+            self.status(f"{label} Web Player geöffnet in Chromium — dort mit deinem Account einloggen")
+            self.toast(f"{label} im offiziellen Web Player geöffnet (Chromium)")
+        else:
+            self.toast("Chromium fehlt — bitte Chromium installieren (chromium-browser)")
 
     def _show_player_page(self):
         self._center_stack.setCurrentIndex(0)

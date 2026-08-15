@@ -96,6 +96,18 @@ def spotdl_binary() -> str | None:
     return venv if os.path.exists(venv) else None
 
 
+def open_spotify_web(query: str = "", url: str = "") -> bool:
+    """Open the official Spotify Web Player in a system Chromium browser.
+
+    Spotify's DRM audio can only be played by the official player, which
+    requires a normal account login. This launches Chromium at the Spotify
+    Web Player (or at a track/search URL) so the user's own login plays the
+    real Spotify audio — spotDL is not involved in playback.
+    """
+    from .webproviders import open_web_player
+    return open_web_player("spotify", query=query, url=url)
+
+
 def spotify_kind(url: str) -> str | None:
     """Return the resource kind (track/album/playlist/...) or None."""
     match = SPOTIFY_TRACK_RE.match((url or "").strip())
