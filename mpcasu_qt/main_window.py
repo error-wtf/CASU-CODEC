@@ -2913,6 +2913,8 @@ class MainWindow(QMainWindow):
     def _do_seek(self, pos: float):
         if not self.current:
             return
+        if pos < 0 or not self.duration or self.duration <= 0:
+            return
         try:
             if self.backend:
                 self.controller.seek(pos)
