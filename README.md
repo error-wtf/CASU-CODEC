@@ -42,7 +42,7 @@ sha256sum -c SHA256SUMS
 sudo dpkg -i casu-codec_2.0.0_all.deb \
              casu-converter_2.0.0_all.deb \
              mpcasu_2.0.0_all.deb \
-             web-casu_1.0.6_all.deb
+             web-casu_2.0.0_all.deb
 sudo apt-get -f install            # only if dependencies are missing
 ```
 
@@ -65,20 +65,25 @@ mpcasu /path/to/video.mp4     # play a file
 mpcasu /path/to/file.casu     # play a CASU container
 ```
 
-The sidebar is organized into **MEDIA** (now playing, local files, web & streams,
-playlists, IPTV), **SEARCH** (YouTube, Spotify), **CASU**, **WEB PLAYERS**
-(Hearthis, Tidal, Netflix) and **SYSTEM** (settings, diagnostics). YouTube and
-network streams resolve in a worker thread and play in-app. DRM-protected
-providers (Spotify, Tidal) open their **official web player in Chromium** with
-your normal account login (Widevine DRM); Hearthis.at and Netflix open embedded
-in the player via QtWebEngine. All feedback uses web-style toasts; there are no
-modal popups during playback.
+The sidebar is organized into **MEDIA** (now playing, library, web & streams,
+playlists, IPTV / EPG), **SEARCH** (YouTube), **CASU** (CASU files),
+**WEB PLAYERS** (Spotify, Hearthis, Tidal, Netflix, Browse — embedded
+QtWebEngine tabs with persistent cookies) and **SYSTEM** (options, about).
+YouTube and network streams resolve in a worker thread and play in-app. The
+library page browses indexed folders by artist / album / genre with a live
+search; watched folders are added/removed and scanned (recursive subfolders,
+audio tags + file-name metadata) right on the page or in Options. All feedback
+uses web-style toasts; there are no modal popups during playback.
 
 ## Screenshots
 
-![Audio visualizer](mpcasu_screenshot_audio_visualizer.png)
+![MPCASU desktop player (Qt) — visualizer & library](screenshots/mpcasu_player.png)
 
-![Playlist queue](mpcasu_screenshot_playlist.png)
+![MPCASU web player](screenshots/web_player.png)
+
+Further screenshots: `docs/screenshots/mpcasu.png` (desktop),
+`docs/screenshots/web-casu.png` (web), `docs/screenshots/casu-converter.png`
+(converter), `docs/screenshots/casu-codec-cli.png` (CLI).
 
 **Shortcuts:**
 
@@ -151,7 +156,7 @@ web-casu --no-browser       # headless
 web-casu --check            # verify assets and exit
 ```
 
-Views (Now Playing / Local Files / Web & Streams / Playlists / CASU) filter
+Views (Now Playing / Web & Streams / Playlists / IPTV / YouTube / CASU) filter
 the queue; playlists load as expandable groups and the queue can be saved as
 an M3U download. Features: drag-and-drop, adaptive FFmpeg fallback for
 browser-unsupported formats, YouTube iframe, M3U/PLS/XMLTV with searchable
@@ -199,7 +204,7 @@ casu repair-v2 damaged.casu --output recovered.casu
 ## Test suite
 
 ```bash
-python3 -m pytest -q -m 'not media'                      # 216 passed
+python3 -m pytest -q -m 'not media'                      # 233 passed
 xvfb-run -a python3 -m pytest tests/test_converter_ui.py tests/test_player_ui.py -q
 python3 -m pytest -q tests/test_native_player_backend.py # 23 passed
 node --check web/app.js && node --check web/casu-native.js
