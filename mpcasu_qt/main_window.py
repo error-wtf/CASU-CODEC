@@ -22,7 +22,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
     QAction, QColor, QFont, QIcon, QKeySequence, QPainter, QPen, QPixmap,
-    QTextDocument, QImage, QLinearGradient, QBrush, QGuiApplication,
+    QTextDocument, QImage, QLinearGradient, QRadialGradient, QBrush, QGuiApplication,
     QPainterPath,
 )
 
@@ -961,7 +961,7 @@ class VisualizerWidget(QWidget):
         painter.setBrush(Qt.NoBrush)
         painter.drawPath(path)
 
-    def _paint_bottom_bars(self, painter, values, w, h, caps=True):
+    def _paint_bottom_bars(self, painter, values, w, h, caps=False):
         """Bars exactly like the web player: bottom-anchored, alternating colors."""
         count = len(values)
         if count < 2:
@@ -978,15 +978,6 @@ class VisualizerWidget(QWidget):
                                     max(1.0, bar_w - 2 * gap), bar_h),
                              accent if index % 2 == 0 else dim)
             x += bar_w
-        if caps:
-            cap_values = self._caps if self._caps else values
-            painter.setPen(QPen(QColor(255, 255, 255, 200), max(1.5, bar_w * 0.3)))
-            x = 0.0
-            for value in cap_values:
-                bar_h = max(0.0, min(1.0, value) * h * 0.7)
-                painter.drawLine(QPointF(x, h - bar_h),
-                                 QPointF(x + bar_w, h - bar_h))
-                x += bar_w
 
     def _paint_wave_line(self, painter, wave, w, h):
         """Oscilloscope line with the web player's exact formula.
@@ -1022,55 +1013,26 @@ class VisualizerWidget(QWidget):
             return
 
         if self._small:
-            # Video mode: fully transparent — just the bars/wave over the
-            # video, no darkening.
-            pass
-        else:
-            bg = QLinearGradient(0, 0, 0, h)
-            bg.setColorAt(0.0, QColor("#0c1015"))
-            bg.setColorAt(1.0, QColor("#05070a"))
-            painter.fillRect(QRectF(0, 0, w, h), QBrush(bg))
+            # Video mode: transparent — the visualizer is hidden anyway.
+            painter.end()
+            return
 
-        bands = self._live if self._live else self._bands
+        # Exactly the web player's cover layer: radial background + centered art.
+        bg = QRadialGradient(w / 2.0, h / 2.0, max(w, h) * 0.7)
+        bg.setColorAt(0.0, QColor("#1a0e12"))
+        bg.setColorAt(0.7, QColor("#050608"))
+        painter.fillRect(QRectF(0, 0, w, h), QBrush(bg))
 
-        # Cover layer: dim full-bleed wash plus the square album art, always
-        # shown for audio (independent of the visualization toggle), and never
-        # cropped (KeepAspectRatio).
-        if not self._small and self._cover is not None and not self._cover.isNull():
-            if (self._backdrop is None
-                    or self._backdrop_size != (w, h)):
-                fill = self._cover.scaled(w, h,
-                                          Qt.KeepAspectRatioByExpanding,
-                                          Qt.SmoothTransformation)
-                backdrop = QPixmap(w, h)
-                backdrop.fill(Qt.transparent)
-                bp = QPainter(backdrop)
-                bp.setOpacity(0.20)
-                bp.drawPixmap((w - fill.width()) // 2,
-                              (h - fill.height()) // 2, fill)
-                bp.setOpacity(1.0)
-                shade = QLinearGradient(0, 0, 0, h)
-                shade.setColorAt(0.0, QColor(7, 9, 11, 110))
-                shade.setColorAt(1.0, QColor(7, 9, 11, 225))
-                bp.fillRect(QRectF(0, 0, w, h), QBrush(shade))
-                bp.end()
-                self._backdrop = backdrop
-                self._backdrop_size = (w, h)
-            painter.drawPixmap(0, 0, self._backdrop)
+        if self._cover is not None and not self._cover.isNull():
             self._paint_cover_art(painter, self._cover, w, h)
 
-        # Visualization layer: only when enabled, exactly like the web player.
+        # Exactly the web player's canvas: bars then oscilloscope line.
         if self._mode != "off":
+            bands = self._live if self._live else self._bands
             if bands:
                 self._paint_bottom_bars(painter, bands, w, h)
             if self._wave:
                 self._paint_wave_line(painter, self._wave, w, h)
-
-        if self._duration > 0:
-            play_x = int(min(1.0, self._position / self._duration) * w)
-            painter.setPen(Qt.NoPen)
-            painter.fillRect(play_x - 1, 0, 3, h, QColor(255, 255, 255, 36))
-            painter.fillRect(play_x - 1, 0, 1, h, QColor(PALETTE.accent_hot))
         painter.end()
 
 
