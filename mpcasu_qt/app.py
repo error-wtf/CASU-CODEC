@@ -141,7 +141,6 @@ def _older_mpcasu_peer() -> int | None:
 
 
 def _log_peer_processes() -> None:
-    """Log every other mpcasu_qt process seen in /proc (cross-process guard)."""
     peers = []
     for entry in os.listdir("/proc"):
         if not entry.isdigit():
@@ -157,6 +156,19 @@ def _log_peer_processes() -> None:
         _log(f"PEER mpcasu processes: {'; '.join(peers)}")
     else:
         _log("PEER mpcasu processes: none")
+
+
+def _log_window_inventory() -> None:
+    """Log every top-level widget of this process (all visible windows)."""
+    from PySide6.QtWidgets import QMainWindow as _MainWindow
+    tops = QApplication.topLevelWidgets()
+    inventory = []
+    for widget in tops:
+        inventory.append(
+            f"{type(widget).__name__}:{widget.windowTitle()}:visible={widget.isVisible()}"
+        )
+    mains = [w for w in tops if isinstance(w, _MainWindow) and w.isVisible()]
+    _log(f"TOPS={'; '.join(inventory)} | visible QMainWindows={len(mains)}")
 
 
 def main() -> int:
@@ -257,6 +269,7 @@ def main() -> int:
 
     window.show()
     _log_peer_processes()
+    _log_window_inventory()
     _check_main_windows()
     # Periodic watchdog: if a second visible QMainWindow ever appears inside
     # this process, log the full inventory so the root cause is never lost.

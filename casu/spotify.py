@@ -266,7 +266,7 @@ def _spotdl_url_resolve(clean: str, *, timeout: float) -> str | None:
     binary = spotdl_binary()
     if not binary:
         return None
-    deadline = time.monotonic() + max(15.0, float(timeout))
+    deadline = time.monotonic() + max(8.0, min(15.0, float(timeout)))
     fd, temporary = tempfile.mkstemp(prefix="casu-spotify-", suffix=".url")
     os.close(fd)
     output = Path(temporary)
