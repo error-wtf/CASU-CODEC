@@ -797,12 +797,11 @@ class PlaylistPane(QFrame):
 
 
 class VisualizerWidget(QWidget):
-    """Web-style audio visualizer: dimmed cover + full-file overview + live window.
+    """Web-style audio visualizer: dimmed cover backdrop + spectrum bars + wave.
 
-    Renders a subtle full-file waveform overview, the realtime playback window
-    (casu.waveform window_peaks/live_spectrum) at the current position, embedded
-    cover art in the background, and a moving playhead. Smoothed with a fast
-    attack / slow decay so the animation does not stutter.
+    Renders exactly like the web player: bottom-up alternating bars plus the
+    oscilloscope line, with the cover only as a dim background. The backdrop
+    is cached (never rescaled per frame) so animation stays smooth.
     """
 
     def __init__(self, parent=None):
@@ -817,17 +816,19 @@ class VisualizerWidget(QWidget):
         self._overview: tuple[float, ...] = ()
         self._small = False
         self._cover = None
+        self._backdrop = None
+        self._backdrop_size = (0, 0)
         self._mode = "spectrum"
         self._position = 0.0
         self._duration = 0.0
         self._timer = QTimer(self)
-        self._timer.setInterval(33)  # ~30 FPS repaint
+        self._timer.setInterval(25)  # ~40 FPS repaint
         self._timer.timeout.connect(self.update)
         self._timer.start()
 
     @staticmethod
-    def _blend(old, new, rise: float = 0.75, fall: float = 0.40) -> tuple:
-        """Smooth frame blending: fast attack, moderate decay (low lag)."""
+    def _blend(old, new, rise: float = 0.9, fall: float = 0.75) -> tuple:
+        """Near-raw blend (like the web player): barely smooths, no lag."""
         old = list(old or ())
         new = list(new or ())
         if not old:
@@ -857,6 +858,8 @@ class VisualizerWidget(QWidget):
 
     def set_cover(self, pixmap):
         self._cover = pixmap
+        self._backdrop = None
+        self._backdrop_size = (0, 0)
         if pixmap is not None and self._mode != "off":
             self.setVisible(True)
         self.update()
@@ -881,7 +884,7 @@ class VisualizerWidget(QWidget):
 
     @staticmethod
     def _cap(old, new):
-        """Peak caps: rise instantly, decay fast enough not to feel laggy."""
+        """Peak caps: rise instantly, decay fast (no lag trail)."""
         old = list(old or ())
         new = list(new or ())
         if not old:
@@ -891,7 +894,7 @@ class VisualizerWidget(QWidget):
         for index in range(count):
             prev = old[index] if index < len(old) else 0.0
             value = new[index] if index < len(new) else 0.0
-            out.append(prev + (value - prev) * (1.0 if value >= prev else 0.12))
+            out.append(prev + (value - prev) * (1.0 if value >= prev else 0.25))
         return tuple(out)
 
     @staticmethod
@@ -977,17 +980,26 @@ class VisualizerWidget(QWidget):
 
         if not self._small:
             if self._cover is not None and not self._cover.isNull():
-                fill = self._cover.scaled(w, h, Qt.KeepAspectRatioByExpanding,
-                                          Qt.SmoothTransformation)
-                painter.save()
-                painter.setOpacity(0.20)
-                painter.drawPixmap((w - fill.width()) // 2,
-                                   (h - fill.height()) // 2, fill)
-                painter.restore()
-                shade = QLinearGradient(0, 0, 0, h)
-                shade.setColorAt(0.0, QColor(7, 9, 11, 110))
-                shade.setColorAt(1.0, QColor(7, 9, 11, 225))
-                painter.fillRect(QRectF(0, 0, w, h), QBrush(shade))
+                if (self._backdrop is None
+                        or self._backdrop_size != (w, h)):
+                    fill = self._cover.scaled(w, h,
+                                              Qt.KeepAspectRatioByExpanding,
+                                              Qt.SmoothTransformation)
+                    backdrop = QPixmap(w, h)
+                    backdrop.fill(Qt.transparent)
+                    bp = QPainter(backdrop)
+                    bp.setOpacity(0.20)
+                    bp.drawPixmap((w - fill.width()) // 2,
+                                  (h - fill.height()) // 2, fill)
+                    bp.setOpacity(1.0)
+                    shade = QLinearGradient(0, 0, 0, h)
+                    shade.setColorAt(0.0, QColor(7, 9, 11, 110))
+                    shade.setColorAt(1.0, QColor(7, 9, 11, 225))
+                    bp.fillRect(QRectF(0, 0, w, h), QBrush(shade))
+                    bp.end()
+                    self._backdrop = backdrop
+                    self._backdrop_size = (w, h)
+                painter.drawPixmap(0, 0, self._backdrop)
 
         # Web-player style, exactly: bottom-up bars first, then the
         # oscilloscope line on top, for every source.
@@ -1150,11 +1162,12 @@ class LibraryPage(QFrame):
     MODES = {"all": "All Tracks", "artists": "Artists", "albums": "Albums",
              "genres": "Genres", "favorites": "Favorites"}
 
-    def __init__(self, media_library, thumbnail_dir, parent=None):
+    def __init__(self, media_library, thumbnail_dir, settings_store=None, parent=None):
         super().__init__(parent)
         self.setObjectName("Page")
         self._media_library = media_library
         self._thumbnail_dir = thumbnail_dir
+        self._settings_store = settings_store
         self._tracks: list[Path] = []
         self._build()
 
@@ -1209,6 +1222,31 @@ class LibraryPage(QFrame):
         add_btn.clicked.connect(self._add_selected)
         bottom.addWidget(add_btn)
         layout.addLayout(bottom)
+
+        if self._settings_store is not None:
+            folder_section = QLabel("WATCHED FOLDERS")
+            folder_section.setObjectName("SidebarSection")
+            layout.addWidget(folder_section)
+            self._folders_widget = QListWidget()
+            self._folders_widget.setObjectName("QueueTree")
+            self._folders_widget.setMaximumHeight(110)
+            layout.addWidget(self._folders_widget)
+            folder_row = QHBoxLayout()
+            add_folder_btn = QPushButton("Add folder…")
+            add_folder_btn.setObjectName("IconButton")
+            add_folder_btn.clicked.connect(self._add_folder)
+            folder_row.addWidget(add_folder_btn)
+            remove_folder_btn = QPushButton("Remove selected")
+            remove_folder_btn.setObjectName("IconButton")
+            remove_folder_btn.clicked.connect(self._remove_folder)
+            folder_row.addWidget(remove_folder_btn)
+            scan_btn = QPushButton("Scan now")
+            scan_btn.setObjectName("IconButton")
+            scan_btn.clicked.connect(self._scan_folders)
+            folder_row.addWidget(scan_btn)
+            folder_row.addStretch()
+            layout.addLayout(folder_row)
+            self._load_folders()
 
     # --- data ---
 
@@ -1352,6 +1390,44 @@ class LibraryPage(QFrame):
     def _on_refresh(self):
         self.refreshRequested.emit()
         self._refresh()
+
+    # --- watched folders ---
+
+    def _load_folders(self):
+        self._folders_widget.blockSignals(True)
+        self._folders_widget.clear()
+        settings = self._settings_store.load()
+        for folder in settings.watched_folders:
+            self._folders_widget.addItem(str(folder))
+        self._folders_widget.blockSignals(False)
+
+    def _add_folder(self):
+        from PySide6.QtWidgets import QFileDialog
+        folder = QFileDialog.getExistingDirectory(self, "Add library folder")
+        if not folder:
+            return
+        settings = self._settings_store.load()
+        folders = list(settings.watched_folders)
+        if folder in folders:
+            return
+        folders.append(folder)
+        self._settings_store.save(replace(settings, watched_folders=folders))
+        self._load_folders()
+        self.refreshRequested.emit()
+
+    def _remove_folder(self):
+        row = self._folders_widget.currentRow()
+        if row < 0:
+            return
+        folder = self._folders_widget.item(row).text()
+        settings = self._settings_store.load()
+        folders = [f for f in settings.watched_folders if f != folder]
+        self._settings_store.save(replace(settings, watched_folders=folders))
+        self._load_folders()
+        self.refreshRequested.emit()
+
+    def _scan_folders(self):
+        self.refreshRequested.emit()
 
 
 class OptionsPage(QFrame):
@@ -2118,7 +2194,7 @@ class MainWindow(QMainWindow):
         self._viz_overview = ()
         self._viz_mode = "spectrum"
         self._viz_timer = QTimer(self)
-        self._viz_timer.setInterval(40)  # ~25 Hz window update
+        self._viz_timer.setInterval(30)  # ~33 Hz window update
         self._viz_timer.timeout.connect(self._tick_visualizer)
 
         config_dir = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "mpcasu"
@@ -2549,7 +2625,8 @@ class MainWindow(QMainWindow):
         self._web_player_tabs = WebPlayerTabs()
         self._center_stack.addWidget(self._web_player_tabs)
         self._pages: list = []
-        self._library_page = LibraryPage(self.media_library, self._thumbnail_dir, self)
+        self._library_page = LibraryPage(self.media_library, self._thumbnail_dir,
+                                         self.settings_store, self)
         self._library_page.addRequested.connect(lambda paths: self.add_files(paths))
         self._library_page.refreshRequested.connect(self.refresh_watched_folders)
         self._library_page.backRequested.connect(self._show_player_page)
@@ -3666,13 +3743,13 @@ class MainWindow(QMainWindow):
             self._viz_pcm,
             self._viz_rate,
             position,
-            points=180,
+            points=512,
         )
         bands = live_spectrum(
             self._viz_pcm,
             self._viz_rate,
             position,
-            bands=96,
+            bands=256,
         )
 
         self._visualizer.configure(
@@ -4082,20 +4159,21 @@ class MainWindow(QMainWindow):
                 buff += data
                 even = len(buff) - (len(buff) % 2)
                 payload, buff = buff[:even], buff[even:]
-                if len(payload) < 2048:
+                if len(payload) < 1024:
                     continue
                 try:
                     samples = (np.frombuffer(payload, dtype="<i2")
                                .astype(np.float32) / 32768.0)
-                    windowed = samples[:1024] * np.hanning(1024)
-                    spectrum = np.abs(np.fft.rfft(windowed))[1:97]
+                    window = samples[:1024] if len(samples) >= 1024 else samples
+                    windowed = window * np.hanning(len(window))
+                    spectrum = np.abs(np.fft.rfft(windowed))[1:257]
                     peak = float(spectrum.max()) if spectrum.size else 0.0
                     if peak <= 1e-6:
                         bands = tuple(0.0 for _ in spectrum)
                     else:
                         bands = tuple(
                             float(max(0.0, min(1.0, (value / peak) *
-                                               (0.30 + 0.70 * index / 96.0))))
+                                               (0.30 + 0.70 * index / 256.0))))
                             for index, value in enumerate(spectrum))
                     width = max(1, len(samples) // 128)
                     wave = tuple(float(samples[i])
