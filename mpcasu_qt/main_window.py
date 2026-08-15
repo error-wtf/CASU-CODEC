@@ -2344,6 +2344,8 @@ class MainWindow(QMainWindow):
 
         self._visualizer = VisualizerWidget(self._video_surface)
         self._viz_bridge = _ThreadBridge()
+        self._scan_bridge = _ThreadBridge()
+        self._scan_bridge.resultReady.connect(self._scan_done)
         self._viz_bridge.resultReady.connect(self._apply_viz)
 
         self._toast_label = QLabel(self._video_surface)
@@ -4552,14 +4554,15 @@ class MainWindow(QMainWindow):
                 scanned = self.media_library.scan(folders)
                 count = len(scanned)
                 error = ""
-            except (OSError, ValueError) as exc:
+            except Exception as exc:  # noqa: BLE001 - surface scan failures
                 count = -1
-                error = str(exc)
-            QTimer.singleShot(0, lambda: self._scan_done(count, error))
+                error = f"{type(exc).__name__}: {exc}"
+            self._scan_bridge.resultReady.emit((count, error))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _scan_done(self, count: int, error: str):
+    def _scan_done(self, payload):
+        count, error = payload
         if count >= 0:
             self.status(f"Library refreshed · {count} file(s) indexed")
             self.toast(f"Library refreshed · {count} file(s)")

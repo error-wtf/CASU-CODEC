@@ -214,30 +214,61 @@ class MediaLibrary:
         return tuple(matches)
 
     def scan(self, roots: Iterable[str | Path]) -> tuple[LibraryItem, ...]:
-        found = []
+        """Index all media files under *roots*, probing tags in parallel.
+
+        Subfolders are recursed into; only known media suffixes are indexed;
+        files that already carry metadata in the database are not re-probed.
+        """
+        import concurrent.futures
+
+        candidates: list[Path] = []
         for root in roots:
             base = Path(root).expanduser().resolve()
-            candidates = (value for value in base.rglob("*") if value.is_file()) if base.is_dir() else (base,)
-            for candidate in candidates:
+            sources = base.rglob("*") if base.is_dir() else (base,)
+            for candidate in sources:
+                if not candidate.is_file():
+                    continue
                 candidate = candidate.resolve()
-                if base.is_dir():
-                    try:
-                        candidate.relative_to(base)
-                    except ValueError:
-                        continue
                 if candidate == self.path or candidate.name in {
                     f"{self.path.name}-wal", f"{self.path.name}-shm"
                 }:
                     continue
                 if candidate.suffix.lower() not in MEDIA_EXTENSIONS:
                     continue
-                try:
-                    found.append(self._upsert(candidate))
-                    if len(found) >= MAX_LIBRARY_SCAN_FILES:
-                        self.connection.commit()
-                        return tuple(found)
-                except OSError:
-                    continue
+                candidates.append(candidate)
+
+        # Only probe files that are new or lack metadata (keeps re-scans fast).
+        to_probe: list[Path] = []
+        metas: dict[Path, dict] = {}
+        for candidate in candidates:
+            existing = self.get(candidate)
+            if existing is not None and existing.metadata:
+                metas[candidate] = dict(existing.metadata)
+            else:
+                to_probe.append(candidate)
+
+        def probe(path: Path):
+            try:
+                return metadata_for(path)
+            except Exception:  # noqa: BLE001 - metadata is best effort
+                return {}
+
+        if to_probe:
+            with concurrent.futures.ThreadPoolExecutor(
+                    max_workers=min(8, max(1, len(to_probe)))) as executor:
+                for candidate, meta in zip(to_probe,
+                                           executor.map(probe, to_probe)):
+                    metas[candidate] = meta or {}
+
+        found: list[LibraryItem] = []
+        for candidate in candidates:
+            try:
+                found.append(self._upsert(candidate,
+                                          metadata=metas.get(candidate) or {}))
+                if len(found) >= MAX_LIBRARY_SCAN_FILES:
+                    break
+            except OSError:
+                continue
         self.connection.commit()
         return tuple(found)
 
