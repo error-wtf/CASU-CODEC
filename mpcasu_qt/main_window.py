@@ -859,8 +859,10 @@ class VisualizerWidget(QWidget):
             self.setVisible(True)
         self.update()
 
-    def set_live(self, bands):
+    def set_live(self, bands, peaks=()):
         self._live = self._blend(self._live, bands)
+        if peaks:
+            self._peaks = self._blend(self._peaks, peaks)
         if self._live and self._mode != "off":
             self.setVisible(True)
         self.update()
@@ -3414,7 +3416,10 @@ class MainWindow(QMainWindow):
             return
 
         if payload[0] == "live":
-            self._visualizer.set_live(payload[1])
+            if len(payload) >= 3:
+                self._visualizer.set_live(payload[1], payload[2])
+            else:
+                self._visualizer.set_live(payload[1])
 
     def _tick_visualizer(self):
         if (
@@ -3800,7 +3805,11 @@ class MainWindow(QMainWindow):
                         float(max(0.0, min(1.0, (value / peak) *
                                            (0.35 + 0.65 * np.log10(index + 2) / np.log10(50)))))
                         for index, value in enumerate(spectrum))
-                bridge.resultReady.emit(("live", bands))
+                wave = np.abs(samples[:1024])
+                width = max(1, len(wave) // 32)
+                peaks = tuple(float(min(1.0, wave[i:i + width].max()))
+                              for i in range(0, len(wave), width))[:32]
+                bridge.resultReady.emit(("live", bands, peaks))
         import threading
         self._stream_viz_thread = threading.Thread(target=reader, daemon=True)
         self._stream_viz_thread.start()
