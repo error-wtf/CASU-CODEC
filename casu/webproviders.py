@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
+# SPDX-FileCopyrightText: 2026 Lino Casu
+"""Legal web-player integrations.
+
+These services (Spotify, Hearthis.at, Tidal, Netflix) only allow their DRM /
+authenticated audio/video to be played inside their own player with a normal
+account login. MPCASU integrates them by opening the official web player in a
+system Chromium browser at the relevant URL (home / search / item). No
+streams are scraped, downloaded or replayed.
+"""
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import urllib.parse
+
+WEB_PLAYERS: dict[str, dict] = {
+    "spotify": {
+        "label": "SPOTIFY",
+        "home": "https://open.spotify.com/",
+        "search": lambda q: "https://open.spotify.com/search/" + urllib.parse.quote(q),
+        "item": lambda url: url,
+        "icon": "♪",
+    },
+    "hearthis": {
+        "label": "HEARTHIS",
+        "home": "https://hearthis.at/",
+        "search": lambda q: "https://hearthis.at/search/?q=" + urllib.parse.quote(q),
+        "item": lambda url: url,
+        "icon": "↗",
+    },
+    "tidal": {
+        "label": "TIDAL",
+        "home": "https://tidal.com/",
+        "search": lambda q: "https://tidal.com/search?q=" + urllib.parse.quote(q),
+        "item": lambda url: url,
+        "icon": "▤",
+    },
+    "netflix": {
+        "label": "NETFLIX",
+        "home": "https://www.netflix.com/browse",
+        "search": lambda q: "https://www.netflix.com/search?q=" + urllib.parse.quote(q),
+        "item": lambda url: url,
+        "icon": "▣",
+    },
+}
+
+
+def chromium_binary() -> str | None:
+    candidates = (shutil.which("chromium-browser"),
+                  shutil.which("chromium"),
+                  shutil.which("google-chrome"),
+                  "/snap/bin/chromium")
+    return next((candidate for candidate in candidates if candidate
+                 and os.path.exists(candidate)), None)
+
+
+def web_player_url(provider: str, *, query: str = "", url: str = "") -> str:
+    """Return the web-player URL for a provider (home/search/item)."""
+    spec = WEB_PLAYERS.get(provider, WEB_PLAYERS["spotify"])
+    if url:
+        return str(url)
+    if query:
+        return str(spec["search"](query))
+    return str(spec["home"])
+
+
+def open_web_player(provider: str, *, query: str = "", url: str = "") -> bool:
+    """Open a provider's official web player in a system Chromium browser."""
+    binary = chromium_binary()
+    if not binary:
+        return False
+    target = web_player_url(provider, query=query, url=url)
+    try:
+        subprocess.Popen([binary, target], stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL)
+        return True
+    except OSError:
+        return False
