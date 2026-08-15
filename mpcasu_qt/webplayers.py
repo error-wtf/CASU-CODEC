@@ -18,15 +18,13 @@ except ImportError:
     QWebEngineView = None
     _HAVE_WEBENGINE = False
 
-from casu.webproviders import EXTERNAL_PROVIDERS, WEB_PLAYERS, web_player_url
+from casu.webproviders import WEB_PLAYERS, web_player_url
 
 BROWSE_URL = "https://duckduckgo.com/"
 
 
 class WebPlayerTabs(QWidget):
     """Tab widget with one embedded web player per provider."""
-
-    externalRequested = Signal(str, str, str)  # provider, query, url
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -84,12 +82,7 @@ class WebPlayerTabs(QWidget):
         if not text:
             return
         is_url = "://" in text and "." in text
-        query = "" if is_url else text
-        url = text if is_url else ""
-        if key in EXTERNAL_PROVIDERS:
-            self.externalRequested.emit(key, query, url)
-            return
-        self.open(key, query=query, url=url)
+        self.open(key, query=("" if is_url else text), url=(text if is_url else ""))
 
     def _submit_browse(self):
         text = self._entries["browse"].text().strip()
