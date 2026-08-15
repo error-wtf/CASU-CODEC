@@ -869,20 +869,18 @@ class VisualizerWidget(QWidget):
             scaled = self._cover.scaled(
                 width, height, Qt.KeepAspectRatioByExpanding,
                 Qt.SmoothTransformation)
-            painter.setOpacity(0.28)
+            painter.setOpacity(0.34)
             painter.drawPixmap((width - scaled.width()) // 2,
                                (height - scaled.height()) // 2, scaled)
             painter.setOpacity(1.0)
-            painter.fillRect(0, 0, width, height,
-                             QColor(7, 9, 11, 140))
 
-        if self._overview:
-            pen = QPen(QColor(PALETTE.text_faint), 1.0)
+        if self._peaks:
+            pen = QPen(QColor(PALETTE.text_faint), 1.2)
             painter.setPen(pen)
-            count = len(self._overview)
+            count = len(self._peaks)
             mid = height // 2
             previous = None
-            for index, value in enumerate(self._overview):
+            for index, value in enumerate(self._peaks):
                 x = int(index * width / max(1, count - 1))
                 amp = max(1, int(value * (height // 2 - 3)))
                 if previous is not None:
@@ -911,11 +909,6 @@ class VisualizerWidget(QWidget):
                 if previous is not None:
                     painter.drawLine(previous[0], previous[1], x, mid + amp)
                 previous = (x, mid - amp)
-            painter.setPen(QPen(QColor(PALETTE.text_muted), 1))
-            for index, value in enumerate(self._peaks):
-                x = int(index * width / max(1, count - 1))
-                amp = max(1, int(value * (height // 2 - 3)))
-                painter.drawLine(x, mid - amp, x, mid + amp)
         if self._duration > 0:
             cursor_x = int(min(1.0, self._position / self._duration) * width)
             painter.fillRect(cursor_x, 0, 2, height, QColor(PALETTE.text))
@@ -3349,16 +3342,15 @@ class MainWindow(QMainWindow):
         except Exception:  # noqa: BLE001 - visualizer is optional
             return
 
-        peaks = ()
+        # The animated waveform window is always computed so the background
+        # waveform scrolls with the playhead in every visualizer mode.
+        peaks = window_peaks(
+            self._viz_pcm,
+            self._viz_rate,
+            position,
+            points=240,
+        )
         bands = ()
-
-        if mode in ("waveform", "both"):
-            peaks = window_peaks(
-                self._viz_pcm,
-                self._viz_rate,
-                position,
-                points=240,
-            )
 
         if mode in ("spectrum", "both"):
             bands = live_spectrum(
@@ -3393,37 +3385,52 @@ class MainWindow(QMainWindow):
         """Return a cached cover image path for a local file or stream."""
         text = str(source)
         cache = self._cover_dir
-        key = hashlib.sha256(text.encode("utf-8")).hexdigest() + ".ppm"
+        key = hashlib.sha256(text.encode("utf-8")).hexdigest() + ".png"
         target = cache / key
         if target.is_file() and 0 < target.stat().st_size <= 4 * 1024 * 1024:
             return str(target)
+
         try:
             path = Path(text)
-            is_file = path.is_file()
         except (TypeError, ValueError):
-            is_file = False
-        if is_file:
+            path = None
+
+        native = False
+        if path is not None and path.is_file() and path.suffix.lower() in {".casu", ".mp5"}:
             try:
-                thumb = thumbnail_for(path, cache)
-                if thumb is not None:
-                    return str(thumb)
-            except Exception:  # noqa: BLE001 - cover is optional
-                return None
-            return None
-        # Network stream: probe one frame with a short timeout.
-        command = [
-            "ffmpeg", "-v", "error", "-ss", "1", "-i", text,
-            "-map", "0:v:0", "-frames:v", "1",
-            "-vf", "scale=480:480:force_original_aspect_ratio=increase,"
-                   "crop=480:480",
-            "-f", "image2", "-vcodec", "ppm", "-y", str(target),
-        ]
+                with path.open("rb") as handle:
+                    native = handle.read(8) == b"CASUNAT2"
+            except OSError:
+                native = False
+            if native:
+                try:
+                    thumb = thumbnail_for(path, cache)
+                    if thumb is not None:
+                        return str(thumb)
+                except Exception:  # noqa: BLE001 - cover is optional
+                    return None
+
+        # Embedded cover art / attached picture is the first video frame, so
+        # local files must not be seeked past it. Live streams get a small
+        # input seek to reach the first usable frame without buffering the
+        # whole feed (audio-only radios simply yield no cover).
         fd, temporary = tempfile.mkstemp(prefix=".cover-", dir=cache)
         os.close(fd)
         tmp = Path(temporary)
+        stream = text.startswith(("http://", "https://", "rtsp://", "rtmp://"))
+        command = ["ffmpeg", "-v", "error"]
+        if stream:
+            command += ["-ss", "1"]
+        command += [
+            "-i", text,
+            "-map", "0:v:0", "-frames:v", "1",
+            "-vf", "scale=480:480:force_original_aspect_ratio=increase,"
+                   "crop=480:480",
+            "-f", "image2", "-vcodec", "png", "-y", str(tmp),
+        ]
         try:
             result = subprocess.run(command, stdout=subprocess.DEVNULL,
-                                    stderr=subprocess.DEVNULL, timeout=25,
+                                    stderr=subprocess.DEVNULL, timeout=30,
                                     check=False)
             if result.returncode != 0 or not tmp.is_file() or tmp.stat().st_size <= 0:
                 return None

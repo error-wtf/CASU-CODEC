@@ -37,27 +37,64 @@ def _instance_id() -> str:
     return getpass.getuser().replace("/", "_")
 
 
-def _send_to_primary(server_name: str, paths) -> bool:
+def _config_dir() -> Path:
+    base = Path(os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config"))
+    config = base / "mpcasu"
+    config.mkdir(parents=True, exist_ok=True)
+    return config
+
+
+def _ensure_runtime_dir() -> None:
+    """Ensure a session runtime directory so audio/DBus services work.
+
+    libVLC's PulseAudio module and Qt session services discover their socket
+    via XDG_RUNTIME_DIR. A launch from a terminal or launcher that drops that
+    variable would silently lose audio; pin it to the user's real runtime
+    directory so every launch behaves identically.
+    """
+    if os.environ.get("XDG_RUNTIME_DIR"):
+        return
+    if hasattr(os, "getuid"):
+        candidate = f"/run/user/{os.getuid()}"
+        if os.path.isdir(candidate):
+            os.environ["XDG_RUNTIME_DIR"] = candidate
+
+
+def _try_send(name: str, payload: bytes) -> bool:
+    socket = QLocalSocket()
+    socket.connectToServer(name)
+    if socket.waitForConnected(100):
+        socket.write(payload)
+        socket.waitForBytesWritten(500)
+        socket.disconnectFromServer()
+        return True
+    socket.abort()
+    return False
+
+
+def _send_to_primary(server_name: str, paths, legacy_name: str | None = None) -> bool:
     payload = "\n".join(str(p) for p in paths).encode("utf-8")
 
-    # Primary may own the lock but still be starting its IPC server.
+    # The primary listens on an abstract socket. Try it, its plain form, and
+    # the legacy socket so a file passed to a second launch is always
+    # forwarded to the surviving instance.
+    candidates = [server_name]
+    if server_name.startswith("@"):
+        candidates.append(server_name[1:])
+    if legacy_name:
+        candidates.append(legacy_name)
+
     for _ in range(20):
-        socket = QLocalSocket()
-        socket.connectToServer(server_name)
-
-        if socket.waitForConnected(100):
-            socket.write(payload)
-            socket.waitForBytesWritten(500)
-            socket.disconnectFromServer()
-            return True
-
-        socket.abort()
+        for candidate in candidates:
+            if _try_send(candidate, payload):
+                return True
         time.sleep(0.05)
 
     return False
 
 
 def main() -> int:
+    _ensure_runtime_dir()
     app = QApplication(sys.argv)
     app.setApplicationName("MPCASU")
     app.setOrganizationName("Lino-Codec")
@@ -66,29 +103,31 @@ def main() -> int:
     paths = [Path(arg).expanduser() for arg in sys.argv[1:]]
 
     ident = _instance_id()
-    server_name = f"mpcasu-{ident}"
+    socket_path = str(Path(tempfile.gettempdir()) / f"mpcasu-{ident}.sock")
+    legacy_name = "mpcasu-single-instance"
 
-    runtime = (
-        QStandardPaths.writableLocation(QStandardPaths.RuntimeLocation)
-        or tempfile.gettempdir()
-    )
-
-    lock = QLockFile(str(Path(runtime) / f"{server_name}.lock"))
+    # Ownership lock lives in a deterministic per-user location so that two
+    # launches (desktop vs terminal, different XDG_RUNTIME_DIR) can never
+    # diverge into two primary instances and therefore two windows.
+    config = _config_dir()
+    lock = QLockFile(str(config / f"mpcasu-{ident}.lock"))
     lock.setStaleLockTime(30_000)
 
     if not lock.tryLock(0):
-        if _HAVE_NETWORK and _send_to_primary(server_name, paths):
+        if _HAVE_NETWORK and _send_to_primary(socket_path, paths, legacy_name):
             return 0
         print("MPCASU primary instance exists but IPC is unavailable",
               file=sys.stderr)
         return 2
 
-    # We own the lock, therefore removing a stale IPC socket is safe here.
+    # We own the lock, so removing any stale IPC socket file is safe here.
+    # The socket lives at a deterministic path (no XDG_RUNTIME_DIR dependency),
+    # which is what keeps every secondary process able to reach the primary.
     server = None
     if _HAVE_NETWORK:
-        QLocalServer.removeServer(server_name)
+        QLocalServer.removeServer(socket_path)
         server = QLocalServer(app)
-        if not server.listen(server_name):
+        if not server.listen(socket_path):
             print(f"MPCASU IPC failed: {server.errorString()}",
                   file=sys.stderr)
             lock.unlock()
