@@ -207,7 +207,7 @@ class Sidebar(QFrame):
                          "PLAYLISTS", "IPTV / EPG"]),
             ("SEARCH", ["YOUTUBE"]),
             ("CASU", ["CASU FILES"]),
-            ("WEB PLAYERS", ["SPOTIFY", "HEARTHIS", "TIDAL", "NETFLIX"]),
+            ("WEB PLAYERS", ["SPOTIFY", "HEARTHIS", "TIDAL", "NETFLIX", "BROWSE"]),
             ("SYSTEM", ["OPTIONS", "ABOUT"]),
         ]
         self.NAV_ICONS = {
@@ -222,6 +222,7 @@ class Sidebar(QFrame):
             "HEARTHIS": "↗",
             "TIDAL": "≋",
             "NETFLIX": "▣",
+            "BROWSE": "◎",
             "OPTIONS": "⚙",
             "ABOUT": "ⓘ",
         }
@@ -2504,7 +2505,7 @@ class MainWindow(QMainWindow):
             self._open_web_player("spotify")
             self._sidebar.set_active("SPOTIFY")
             return
-        if name in ("HEARTHIS", "TIDAL", "NETFLIX"):
+        if name in ("HEARTHIS", "TIDAL", "NETFLIX", "BROWSE"):
             self._open_web_player(name.lower())
             self._sidebar.set_active(name)
             return
@@ -3137,7 +3138,8 @@ class MainWindow(QMainWindow):
     def _open_web_player(self, provider: str, *, query: str = "", url: str = ""):
         from casu.webproviders import EXTERNAL_PROVIDERS, WEB_PLAYERS
         from casu.webproviders import open_web_player as launch_chromium
-        label = WEB_PLAYERS.get(provider, WEB_PLAYERS["spotify"])["label"]
+        label = ("BROWSE" if provider == "browse"
+                 else WEB_PLAYERS.get(provider, WEB_PLAYERS["spotify"])["label"])
         if provider in EXTERNAL_PROVIDERS:
             launched = launch_chromium(provider, query=query, url=url)
             if launched:

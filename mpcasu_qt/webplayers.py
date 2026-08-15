@@ -20,6 +20,8 @@ except ImportError:
 
 from casu.webproviders import EXTERNAL_PROVIDERS, WEB_PLAYERS, web_player_url
 
+BROWSE_URL = "https://duckduckgo.com/"
+
 
 class WebPlayerTabs(QWidget):
     """Tab widget with one embedded web player per provider."""
@@ -55,6 +57,22 @@ class WebPlayerTabs(QWidget):
             self._entries[key] = entry
             self._views[key] = view
             self._tabs.addTab(page, spec["label"])
+        # Browse tab: a general browser (QtWebEngine loads any site directly).
+        browse_page = QWidget()
+        browse_page.setStyleSheet("background: transparent;")
+        browse_layout = QVBoxLayout(browse_page)
+        browse_layout.setContentsMargins(6, 6, 6, 6)
+        browse_layout.setSpacing(6)
+        browse_entry = QLineEdit()
+        browse_entry.setObjectName("IconButton")
+        browse_entry.setPlaceholderText("Browse — URL oder DuckDuckGo-Suche…")
+        browse_entry.returnPressed.connect(self._submit_browse)
+        browse_layout.addWidget(browse_entry)
+        self._entries["browse"] = browse_entry
+        self._views["browse"] = QWebEngineView() if _HAVE_WEBENGINE else None
+        if self._views["browse"] is not None:
+            browse_layout.addWidget(self._views["browse"])
+        self._tabs.addTab(browse_page, "BROWSE")
         layout.addWidget(self._tabs)
 
     @property
@@ -73,9 +91,29 @@ class WebPlayerTabs(QWidget):
             return
         self.open(key, query=query, url=url)
 
+    def _submit_browse(self):
+        text = self._entries["browse"].text().strip()
+        if not text:
+            return
+        if "://" in text and "." in text:
+            target = text
+        else:
+            target = "https://duckduckgo.com/?q=" + text.replace(" ", "+")
+        view = self._views.get("browse")
+        if view is not None:
+            view.load(QUrl(target))
+
     def open(self, provider: str, *, query: str = "", url: str = ""):
         """Load a provider's web player at a search query or direct URL."""
         keys = list(WEB_PLAYERS)
+        if provider == "browse":
+            self._tabs.setCurrentIndex(self._tabs.count() - 1)
+            view = self._views.get("browse")
+            if view is not None:
+                target = url or (BROWSE_URL if not query
+                                 else "https://duckduckgo.com/?q=" + query.replace(" ", "+"))
+                view.load(QUrl(target))
+            return
         if provider not in self._views:
             provider = "spotify"
         self._tabs.setCurrentIndex(keys.index(provider))
