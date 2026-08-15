@@ -278,6 +278,7 @@ def main() -> int:
     guard_timer.timeout.connect(_check_main_windows)
     guard_timer.start()
     result = app.exec()
+    _log(f"app.exec returned {result}")
 
     if server is not None:
         server.close()
