@@ -1768,8 +1768,10 @@ class SourcesView(QFrame):
         self._searching = True
         self._list.clear()
         self._results = []
-        preset = "YouTube music preset" if self._mode == "spotify" else "YouTube"
-        self._status.setText(f"Searching {preset} via yt-dlp…")
+        if self._mode == "spotify":
+            self._status.setText("Searching Spotify via spotDL (open.spotify.com)…")
+        else:
+            self._status.setText("Searching YouTube via yt-dlp…")
         mode = self._mode
 
         def worker():
