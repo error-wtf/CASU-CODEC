@@ -854,20 +854,26 @@ class VisualizerWidget(QWidget):
         self._overview = tuple(overview or ())
         # The cover is always shown for audio, independently of the
         # visualization mode; the waves/bars are the toggleable part.
-        # Over video (small) the cover layer is skipped entirely.
-        visible = ((not self._small and self._cover is not None)
-                   or (mode != "off" and (
-                       self._wave or self._bands or self._overview or self._live)))
-        self.setVisible(bool(visible))
+        # Over video (small) the visualizer is never shown — only subtitles.
+        if self._small:
+            self.setVisible(False)
+        else:
+            visible = ((self._cover is not None)
+                       or (mode != "off" and (
+                           self._wave or self._bands or self._overview or self._live)))
+            self.setVisible(bool(visible))
         self.update()
 
     def set_mode(self, mode: str):
         """Toggle only the visualization layer, keeping cover and data."""
         self._mode = mode
-        visible = ((not self._small and self._cover is not None)
-                   or (mode != "off" and (
-                       self._wave or self._bands or self._overview or self._live)))
-        self.setVisible(bool(visible))
+        if self._small:
+            self.setVisible(False)
+        else:
+            visible = ((self._cover is not None)
+                       or (mode != "off" and (
+                           self._wave or self._bands or self._overview or self._live)))
+            self.setVisible(bool(visible))
         self.update()
 
     def set_position(self, position: float):
@@ -886,7 +892,7 @@ class VisualizerWidget(QWidget):
         self._caps = self._cap(self._caps, bands)
         if wave:
             self._wave = tuple(wave)
-        if self._live or (not self._small and self._cover):
+        if not self._small and (self._live or self._cover):
             self.setVisible(True)
         self.update()
 
@@ -2272,7 +2278,7 @@ class MainWindow(QMainWindow):
 
         self._poll_timer = QTimer(self)
         self._poll_timer.timeout.connect(self._poll)
-        self._poll_timer.start(500)
+        self._poll_timer.start(200)
 
         if initial:
             self.add_files(initial)
@@ -2706,6 +2712,15 @@ class MainWindow(QMainWindow):
         self._random = random.SystemRandom()
         self._playlist_pane.shuffle_btn.toggled.connect(self._toggle_shuffle)
         self._playlist_pane.repeat_btn.clicked.connect(self._cycle_repeat)
+        # Apply the persisted shuffle/repeat state to both control bars.
+        self._playlist_pane.shuffle_btn.setChecked(self._shuffle)
+        self._playlist_pane.shuffle_btn.setText("Shuffle on" if self._shuffle else "Shuffle off")
+        self._playlist_pane.repeat_btn.setText(f"Repeat {self._repeat_mode}")
+        if hasattr(self, "_repeat_btn"):
+            self._repeat_btn.setText("↻" if self._repeat_mode == "off" else
+                                     ("↻1" if self._repeat_mode == "one" else "↻∞"))
+            self._repeat_btn.setProperty("on", "true" if self._repeat_mode != "off" else "false")
+        self._playlist_pane.repeat_btn.clicked.connect(self._cycle_repeat)
         body.addWidget(self._playlist_pane)
 
         main_layout.addLayout(body)
@@ -2916,16 +2931,14 @@ class MainWindow(QMainWindow):
         self._do_seek(pos)
 
     def _do_seek(self, pos: float):
-        if not self.current:
-            return
-        if pos < 0:
+        if not self.backend or pos < 0:
             return
         try:
-            if self.backend:
-                self.controller.seek(pos)
-                self.controller.play()
-                self._paused = False
-                self._play_btn.setText("▶")
+            self.backend.seek(pos)
+            if not self._paused:
+                self.backend.play()
+            self._seek_slider.set_position(pos)
+            self._update_time_labels(pos)
         except (BackendError, CasuError, OSError) as exc:
             self.status(f"Cannot seek — {exc}")
 
@@ -3107,6 +3120,7 @@ class MainWindow(QMainWindow):
         settings = self.settings_store.load()
         self.settings_store.save(replace(settings, shuffle=checked))
         self._playlist_pane.shuffle_btn.setText("Shuffle on" if checked else "Shuffle off")
+        self._playlist_pane.shuffle_btn.setChecked(checked)
         if hasattr(self, "_shuffle_btn"):
             self._shuffle_btn.setProperty("on", "true" if checked else "false")
             self._shuffle_btn.style().unpolish(self._shuffle_btn)
@@ -5059,7 +5073,12 @@ class MainWindow(QMainWindow):
         self._visualizer.set_position(pos)
         if self._ab_a is not None and self._ab_b is not None and self.backend is not None:
             if pos >= self._ab_b - 0.05:
-                self.controller.seek(self._ab_a)
+                try:
+                    self.backend.seek(self._ab_a)
+                    if not self._paused:
+                        self.backend.play()
+                except (BackendError, CasuError):
+                    pass
         self._time_total.setText(format_duration(self.duration if self.duration > 0 else None))
 
     def _poll(self):
