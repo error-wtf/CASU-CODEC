@@ -22,7 +22,7 @@ except ImportError:
     QWebEnginePage = QWebEngineProfile = QWebEngineView = None
     _HAVE_WEBENGINE = False
 
-from casu.webproviders import WEB_PLAYERS, web_player_url
+from casu.webproviders import WEB_PLAYERS, spotify_embed_url, web_player_url
 
 BROWSE_URL = "https://duckduckgo.com/"
 
@@ -105,6 +105,8 @@ class WebPlayerTabs(QWidget):
         if not text:
             return
         is_url = "://" in text and "." in text
+        if key == "spotify" and is_url:
+            text = spotify_embed_url(text)
         self.open(key, query=("" if is_url else text), url=(text if is_url else ""))
 
     def _submit_browse(self):
