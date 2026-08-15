@@ -6,6 +6,8 @@
 #viz-canvas{position:absolute;inset:0;z-index:2;pointer-events:none;background:transparent}
 #viz-canvas[hidden]{display:none}
 .stage.video-mode #viz-canvas{display:none}
+.media-badges{z-index:5}
+.media-caption{z-index:6}
 .native-subtitle{position:absolute;left:8%;right:8%;bottom:92px;z-index:4;text-align:center;color:#fff;font-size:clamp(16px,2vw,28px);font-weight:700;text-shadow:0 2px 4px #000,0 0 8px #000;white-space:pre-line;pointer-events:none}
 #chapter-select{max-width:170px;background:#171a1f;color:#eee;border:1px solid #3a3e46;border-radius:5px;padding:7px}
 .transport select{max-width:130px;height:34px;border:1px solid #343940;border-radius:6px;background:#111418;color:#ddd}
