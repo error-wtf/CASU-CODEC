@@ -58,7 +58,7 @@ from casu.spotify import (SpotifyError, expand_spotify, fetch_spotify_metadata,
                           is_spotify_url, open_spotify_web, resolve_spotify_url,
                           search_spotify, spotify_kind, youtube_handoff_query)
 from casu.thumbnail import thumbnail_for
-from casu.waveform import decode_all_pcm, live_spectrum, window_wave
+from casu.waveform import decode_all_pcm, live_fft, window_wave
 from casu.recording import MediaRecorder, RecordingError
 
 from casu.native import NativeCasuError, read_native
@@ -969,20 +969,24 @@ class VisualizerWidget(QWidget):
         gap = 1.0
         bar_w = w / count
         painter.setPen(Qt.NoPen)
+        accent = QColor("#ff1e2d")
+        dim = QColor("#3a1015")
+        x = 0.0
         for index, value in enumerate(values):
             bar_h = max(0.0, min(1.0, value) * h * 0.7)
-            x = index * bar_w
-            color = QColor(PALETTE.accent if index % 2 == 0 else PALETTE.accent_dim)
             painter.fillRect(QRectF(x + gap, h - bar_h,
-                                    max(1.0, bar_w - 2 * gap), bar_h), color)
+                                    max(1.0, bar_w - 2 * gap), bar_h),
+                             accent if index % 2 == 0 else dim)
+            x += bar_w
         if caps:
             cap_values = self._caps if self._caps else values
             painter.setPen(QPen(QColor(255, 255, 255, 200), max(1.5, bar_w * 0.3)))
-            for index, value in enumerate(cap_values):
+            x = 0.0
+            for value in cap_values:
                 bar_h = max(0.0, min(1.0, value) * h * 0.7)
-                x = index * bar_w
                 painter.drawLine(QPointF(x, h - bar_h),
                                  QPointF(x + bar_w, h - bar_h))
+                x += bar_w
 
     def _paint_wave_line(self, painter, wave, w, h):
         """Oscilloscope line with the web player's exact formula.
@@ -3850,13 +3854,13 @@ class MainWindow(QMainWindow):
             self._viz_pcm,
             self._viz_rate,
             position,
-            points=1024,
+            points=2048,
         )
-        bands = live_spectrum(
+        bands = live_fft(
             self._viz_pcm,
             self._viz_rate,
             position,
-            bands=512,
+            bins=1024,
         )
 
         self._visualizer.configure(
@@ -4272,36 +4276,33 @@ class MainWindow(QMainWindow):
                 if not data:
                     break
                 buff += data
-                even = len(buff) - (len(buff) % 2)
-                payload, buff = buff[:even], buff[even:]
-                if len(payload) < 1024:
+                if len(buff) < 4096:
                     continue
                 # Throttle to a realtime cadence (~40 Hz): ffmpeg may decode
                 # a fast source faster than realtime, which would flood the
                 # UI thread and make the visualization lag.
                 now = _time.perf_counter()
                 if now - last_emit < 0.024:
-                    buff = payload + buff
                     _time.sleep(0.004)
                     continue
                 last_emit = now
                 try:
-                    samples = (np.frombuffer(payload, dtype="<i2")
+                    # Slide a 2048-sample window (like the web analyser's
+                    # fftSize) -> 1024 raw FFT bars.
+                    buff = buff[-4096:]
+                    samples = (np.frombuffer(buff, dtype="<i2")
                                .astype(np.float32) / 32768.0)
-                    window = samples[:1024] if len(samples) >= 1024 else samples
-                    windowed = window * np.hanning(len(window))
-                    spectrum = np.abs(np.fft.rfft(windowed))[1:513]
+                    windowed = samples * np.hanning(len(samples))
+                    spectrum = np.abs(np.fft.rfft(windowed))[1:1025]
                     peak = float(spectrum.max()) if spectrum.size else 0.0
                     if peak <= 1e-6:
                         bands = tuple(0.0 for _ in spectrum)
                     else:
-                        bands = tuple(
-                            float(max(0.0, min(1.0, (value / peak) *
-                                               (0.30 + 0.70 * index / 512.0))))
-                            for index, value in enumerate(spectrum))
-                    width = max(1, len(samples) // 128)
+                        bands = tuple(float(max(0.0, min(1.0, value / peak)))
+                                      for value in spectrum)
+                    width = max(1, len(samples) // 1024)
                     wave = tuple(float(samples[i])
-                                 for i in range(0, len(samples), width))[:128]
+                                 for i in range(0, len(samples), width))[:1024]
                     bridge.resultReady.emit(("live", bands, wave))
                 except Exception:  # noqa: BLE001 - stream viz is optional
                     continue
