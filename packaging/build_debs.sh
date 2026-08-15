@@ -84,6 +84,11 @@ install_player() {
   cat > "$stage/usr/bin/mpcasu" <<'EOF'
 #!/bin/sh
 export PYTHONDONTWRITEBYTECODE=1
+# The Qt player embeds libVLC via X11 (set_xwindow) and its VideoSurface uses
+# WA_NativeWindow. On a Wayland session Qt would otherwise create a second
+# top-level surface for that widget ("two windows"); force the X11 (Xwayland)
+# platform so there is exactly one window and libVLC video embeds correctly.
+export QT_QPA_PLATFORM=xcb
 export PYTHONPATH=/usr/share/casu-codec${PYTHONPATH:+:$PYTHONPATH}
 exec /usr/bin/python3 -m mpcasu_qt.app "$@"
 EOF
