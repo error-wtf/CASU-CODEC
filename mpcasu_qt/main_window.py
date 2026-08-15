@@ -180,6 +180,7 @@ class Sidebar(QFrame):
         if logo_path.is_file():
             logo = QLabel()
             logo.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            logo.setStyleSheet("background: transparent;")
             pixmap = QPixmap(str(logo_path))
             if not pixmap.isNull():
                 scaled = pixmap.scaledToWidth(140, Qt.SmoothTransformation)
