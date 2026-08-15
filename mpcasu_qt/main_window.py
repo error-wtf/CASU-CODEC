@@ -222,7 +222,7 @@ class Sidebar(QFrame):
 
         layout.addStretch()
 
-        version = QLabel("MPCASU 1.0.4")
+        version = QLabel("MPCASU 1.0.5")
         version.setObjectName("NowPlayingMeta")
         version.setContentsMargins(16, 8, 16, 8)
         version.setAlignment(Qt.AlignLeft | Qt.AlignBottom)
@@ -755,6 +755,7 @@ class VisualizerWidget(QWidget):
         self.hide()
         self._peaks: tuple[float, ...] = ()
         self._bands: tuple[float, ...] = ()
+        self._live: tuple[float, ...] | None = None
         self._mode = "spectrum"
         self._position = 0.0
         self._duration = 0.0
@@ -775,16 +776,27 @@ class VisualizerWidget(QWidget):
     def set_position(self, position: float):
         self._position = float(position or 0.0)
 
+    def set_live(self, bands):
+        self._live = tuple(bands)
+        if self._live and self._mode != "off":
+            self.setVisible(True)
+        self.update()
+
+    def clear_live(self):
+        self._live = None
+        self.update()
+
     def paintEvent(self, event):  # noqa: N802 - Qt naming
         if self._mode == "off":
             return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         width, height = self.width(), self.height()
-        if self._mode in ("spectrum", "both") and self._bands:
-            count = len(self._bands)
+        bands = self._live or self._bands
+        if self._mode in ("spectrum", "both") and bands:
+            count = len(bands)
             bar_w = max(2, width // max(1, count) - 2)
-            for index, value in enumerate(self._bands):
+            for index, value in enumerate(bands):
                 bar_h = max(2, int(value * (height - 6)))
                 x = index * (width // count)
                 color = QColor(PALETTE.accent) if index % 2 == 0 else QColor(PALETTE.accent_dim)
@@ -1460,7 +1472,7 @@ class AboutPage(QFrame):
         sub.setAlignment(Qt.AlignCenter)
         layout.addWidget(sub)
         layout.addSpacing(12)
-        info = QLabel("Version 1.0.4\nMedia Player for CASU & Legacy Media\nIn-process playback · No external player")
+        info = QLabel("Version 1.0.5\nMedia Player for CASU & Legacy Media\nIn-process playback · No external player")
         info.setObjectName("NowPlayingMeta")
         info.setAlignment(Qt.AlignCenter)
         layout.addWidget(info)
@@ -2063,6 +2075,24 @@ class MainWindow(QMainWindow):
         self._repeat_btn.setToolTip("Repeat off / all / one")
         second.addWidget(self._repeat_btn)
 
+        self._ab_btn = QPushButton("A–B")
+        self._ab_btn.setObjectName("IconButton")
+        self._ab_btn.clicked.connect(self.cycle_ab_loop)
+        self._ab_btn.setToolTip("A/B loop")
+        second.addWidget(self._ab_btn)
+
+        self._snapshot_btn = QPushButton("▧")
+        self._snapshot_btn.setObjectName("IconButton")
+        self._snapshot_btn.clicked.connect(self.save_snapshot)
+        self._snapshot_btn.setToolTip("Save current video frame")
+        second.addWidget(self._snapshot_btn)
+
+        self._record_btn = QPushButton("●")
+        self._record_btn.setObjectName("IconButton")
+        self._record_btn.clicked.connect(self.toggle_recording)
+        self._record_btn.setToolTip("Record stream / source")
+        second.addWidget(self._record_btn)
+
         self._rate_btn = QPushButton(f"{self._rate:g}×")
         self._rate_btn.setObjectName("IconButton")
         self._rate_btn.clicked.connect(self.cycle_rate)
@@ -2107,24 +2137,6 @@ class MainWindow(QMainWindow):
         self._seek_fwd_btn.clicked.connect(lambda: self.seek_by(10))
         self._seek_fwd_btn.setToolTip("Forward 10s")
         secondary.addWidget(self._seek_fwd_btn)
-
-        self._ab_btn = QPushButton("A–B")
-        self._ab_btn.setObjectName("IconButton")
-        self._ab_btn.clicked.connect(self.cycle_ab_loop)
-        self._ab_btn.setToolTip("A/B loop")
-        secondary.addWidget(self._ab_btn)
-
-        self._snapshot_btn = QPushButton("▧")
-        self._snapshot_btn.setObjectName("IconButton")
-        self._snapshot_btn.clicked.connect(self.save_snapshot)
-        self._snapshot_btn.setToolTip("Save current video frame")
-        secondary.addWidget(self._snapshot_btn)
-
-        self._record_btn = QPushButton("●")
-        self._record_btn.setObjectName("IconButton")
-        self._record_btn.clicked.connect(self.toggle_recording)
-        self._record_btn.setToolTip("Record stream / source")
-        secondary.addWidget(self._record_btn)
 
         self._audio_track_menu = QPushButton("Audio")
         self._audio_track_menu.setObjectName("IconButton")
@@ -2246,7 +2258,7 @@ class MainWindow(QMainWindow):
 
         status_bar = QStatusBar()
         status_bar.setObjectName("StatusBar")
-        self._status_left = QLabel("MPCASU 1.0.4")
+        self._status_left = QLabel("MPCASU 1.0.5")
         self._status_left.setObjectName("StatusText")
         self._status_left.setStyleSheet(f"color: {PALETTE.text_muted};")
         status_bar.addWidget(self._status_left)
@@ -2381,6 +2393,7 @@ class MainWindow(QMainWindow):
                 self._play_btn.setText("| |")
 
     def stop(self):
+        self._stop_stream_viz()
         if self.backend:
             self._persist_media_preferences()
             self.controller.stop()
@@ -2477,6 +2490,7 @@ class MainWindow(QMainWindow):
             self.status("Add a media file first.")
             return
         self.stop()
+        self._stop_stream_viz()
         self._end_handled = False
         self.current = path
         self._network_source = None
@@ -3016,6 +3030,33 @@ class MainWindow(QMainWindow):
             self._playlist_auto_hidden = False
         self._reposition_overlays()
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._clamp_to_screen()
+
+    def moveEvent(self, event):
+        super().moveEvent(event)
+        self._clamp_to_screen()
+
+    def _clamp_to_screen(self):
+        if self.isFullScreen() or getattr(self, "_clamping", False):
+            return
+        self._clamping = True
+        try:
+            avail = QGuiApplication.primaryScreen().availableGeometry()
+            geo = self.geometry()
+            width = min(geo.width(), avail.width())
+            height = min(geo.height(), avail.height())
+            if (width, height) != (geo.width(), geo.height()):
+                self.resize(width, height)
+                geo = self.geometry()
+            x = min(max(geo.x(), avail.x()), avail.x() + max(0, avail.width() - geo.width()))
+            y = min(max(geo.y(), avail.y()), avail.y() + max(0, avail.height() - geo.height()))
+            if (x, y) != (geo.x(), geo.y()):
+                self.move(x, y)
+        finally:
+            self._clamping = False
+
     def _filter_queue(self, text: str):
         self._playlist_pane.set_search(text)
 
@@ -3081,6 +3122,9 @@ class MainWindow(QMainWindow):
         threading.Thread(target=worker, daemon=True).start()
 
     def _apply_viz(self, payload):
+        if payload and payload[0] == "live":
+            self._visualizer.set_live(payload[1])
+            return
         mode, peaks, bands, duration = payload
         self._visualizer.configure(mode, peaks, bands, duration)
 
@@ -3260,6 +3304,56 @@ class MainWindow(QMainWindow):
             self.add_files(targets)
             event.acceptProposedAction()
 
+    def _start_stream_viz(self, source: str):
+        import shutil
+        import subprocess
+        if not shutil.which("ffmpeg"):
+            return
+        self._stop_stream_viz()
+        proc = subprocess.Popen(
+            ["ffmpeg", "-v", "quiet", "-i", source, "-map", "0:a:0",
+             "-ac", "1", "-ar", "22050", "-f", "s16le", "-"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        self._stream_viz_proc = proc
+        bridge = self._viz_bridge
+
+        def reader():
+            import numpy as np
+            while True:
+                try:
+                    data = proc.stdout.read(4410)
+                except (OSError, ValueError):
+                    break
+                if not data:
+                    break
+                samples = np.frombuffer(data, dtype="<i2").astype(np.float32) / 32768.0
+                if len(samples) < 1024:
+                    continue
+                windowed = samples[:1024] * np.hanning(1024)
+                spectrum = np.abs(np.fft.rfft(windowed))[1:49]
+                peak = float(spectrum.max()) if spectrum.size else 0.0
+                if peak <= 1e-6:
+                    bands = tuple(0.0 for _ in spectrum)
+                else:
+                    bands = tuple(
+                        float(max(0.0, min(1.0, (value / peak) *
+                                           (0.35 + 0.65 * np.log10(index + 2) / np.log10(50)))))
+                        for index, value in enumerate(spectrum))
+                bridge.resultReady.emit(("live", bands))
+        import threading
+        self._stream_viz_thread = threading.Thread(target=reader, daemon=True)
+        self._stream_viz_thread.start()
+
+    def _stop_stream_viz(self):
+        proc = getattr(self, "_stream_viz_proc", None)
+        if proc is not None:
+            try:
+                proc.kill()
+            except OSError:
+                pass
+            self._stream_viz_proc = None
+        self._visualizer.clear_live()
+
     def _epg_now_next(self) -> str:
         if self._epg_catalog is None and self._epg_guide is None:
             return "no EPG loaded"
@@ -3369,6 +3463,8 @@ class MainWindow(QMainWindow):
             self._video_surface.set_video_active(True)
             self._visualizer.configure("off", (), (), 0.0)
             self._network_source = source
+            if str(source).startswith(("http://", "https://")):
+                self._start_stream_viz(source)
         except (BackendError, OSError) as exc:
             self.controller.close()
             self.backend = None
