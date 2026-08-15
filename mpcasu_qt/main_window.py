@@ -825,7 +825,7 @@ class VisualizerWidget(QWidget):
         self._position = 0.0
         self._duration = 0.0
         self._timer = QTimer(self)
-        self._timer.setInterval(25)  # ~40 FPS repaint
+        self._timer.setInterval(16)  # ~60 FPS repaint
         self._timer.timeout.connect(self.update)
         self._timer.start()
 
@@ -904,7 +904,11 @@ class VisualizerWidget(QWidget):
         """Video mode: keep only the bottom bar, no cover backdrop or art."""
         self._small = bool(small)
         # Over video, repaint less aggressively to avoid flicker.
-        self._timer.setInterval(40 if small else 25)
+        self._timer.setInterval(33 if small else 16)
+        if small:
+            self.hide()
+        else:
+            self.set_mode(self._mode)
         self.update()
 
     @staticmethod
@@ -2243,7 +2247,7 @@ class MainWindow(QMainWindow):
         self._viz_overview = ()
         self._viz_mode = "spectrum"
         self._viz_timer = QTimer(self)
-        self._viz_timer.setInterval(25)  # ~40 Hz window update
+        self._viz_timer.setInterval(16)  # ~60 Hz window update
         self._viz_timer.timeout.connect(self._tick_visualizer)
 
         config_dir = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "mpcasu"
@@ -3846,13 +3850,13 @@ class MainWindow(QMainWindow):
             self._viz_pcm,
             self._viz_rate,
             position,
-            points=512,
+            points=1024,
         )
         bands = live_spectrum(
             self._viz_pcm,
             self._viz_rate,
             position,
-            bands=256,
+            bands=512,
         )
 
         self._visualizer.configure(
@@ -4286,14 +4290,14 @@ class MainWindow(QMainWindow):
                                .astype(np.float32) / 32768.0)
                     window = samples[:1024] if len(samples) >= 1024 else samples
                     windowed = window * np.hanning(len(window))
-                    spectrum = np.abs(np.fft.rfft(windowed))[1:257]
+                    spectrum = np.abs(np.fft.rfft(windowed))[1:513]
                     peak = float(spectrum.max()) if spectrum.size else 0.0
                     if peak <= 1e-6:
                         bands = tuple(0.0 for _ in spectrum)
                     else:
                         bands = tuple(
                             float(max(0.0, min(1.0, (value / peak) *
-                                               (0.30 + 0.70 * index / 256.0))))
+                                               (0.30 + 0.70 * index / 512.0))))
                             for index, value in enumerate(spectrum))
                     width = max(1, len(samples) // 128)
                     wave = tuple(float(samples[i])
