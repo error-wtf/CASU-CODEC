@@ -8,19 +8,38 @@ searches open in the matching tab; the user logs in with their normal account.
 """
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 from PySide6.QtCore import QUrl, Qt, Signal
 from PySide6.QtWidgets import QLineEdit, QTabWidget, QVBoxLayout, QWidget
 
 try:
+    from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
     from PySide6.QtWebEngineWidgets import QWebEngineView
     _HAVE_WEBENGINE = True
 except ImportError:
-    QWebEngineView = None
+    QWebEnginePage = QWebEngineProfile = QWebEngineView = None
     _HAVE_WEBENGINE = False
 
 from casu.webproviders import WEB_PLAYERS, web_player_url
 
 BROWSE_URL = "https://duckduckgo.com/"
+
+
+def _persistent_profile(parent) -> object | None:
+    """A persistent QtWebEngine profile so logins/cookies survive restarts."""
+    if not _HAVE_WEBENGINE:
+        return None
+    config = Path(os.environ.get("XDG_CONFIG_HOME",
+                                 str(Path.home() / ".config"))) / "mpcasu"
+    storage = config / "webengine"
+    storage.mkdir(parents=True, exist_ok=True)
+    profile = QWebEngineProfile("mpcasu", parent)
+    profile.setPersistentCookiesPolicy(QWebEngineProfile.ForcePersistentCookies)
+    profile.setPersistentStoragePath(str(storage))
+    profile.setHttpCacheType(QWebEngineProfile.DiskHttpCache)
+    return profile
 
 
 class WebPlayerTabs(QWidget):
@@ -36,6 +55,7 @@ class WebPlayerTabs(QWidget):
         self._tabs.setDocumentMode(True)
         self._views: dict[str, QWebEngineView] = {}
         self._entries: dict[str, QLineEdit] = {}
+        self._profile = _persistent_profile(self)
         for key, spec in WEB_PLAYERS.items():
             page = QWidget()
             page.setStyleSheet("background: transparent;")
@@ -49,6 +69,8 @@ class WebPlayerTabs(QWidget):
             page_layout.addWidget(entry)
             if _HAVE_WEBENGINE:
                 view = QWebEngineView()
+                if self._profile is not None:
+                    view.setPage(QWebEnginePage(self._profile, view))
                 page_layout.addWidget(view)
             else:
                 view = None
@@ -68,7 +90,8 @@ class WebPlayerTabs(QWidget):
         browse_layout.addWidget(browse_entry)
         self._entries["browse"] = browse_entry
         self._views["browse"] = QWebEngineView() if _HAVE_WEBENGINE else None
-        if self._views["browse"] is not None:
+        if self._views["browse"] is not None and self._profile is not None:
+            self._views["browse"].setPage(QWebEnginePage(self._profile, self._views["browse"]))
             browse_layout.addWidget(self._views["browse"])
         self._tabs.addTab(browse_page, "BROWSE")
         layout.addWidget(self._tabs)
