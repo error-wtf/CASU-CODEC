@@ -246,7 +246,7 @@ class Sidebar(QFrame):
 
         layout.addStretch()
 
-        version = QLabel("MPCASU 1.0.6")
+        version = QLabel("MPCASU 2.0.0")
         version.setObjectName("NowPlayingMeta")
         version.setContentsMargins(16, 8, 16, 8)
         version.setAlignment(Qt.AlignLeft | Qt.AlignBottom)
@@ -1829,7 +1829,7 @@ class AboutPage(QFrame):
         sub.setAlignment(Qt.AlignCenter)
         layout.addWidget(sub)
         layout.addSpacing(12)
-        info = QLabel("Version 1.0.6\nMedia Player for CASU & Legacy Media\nIn-process playback · No external player")
+        info = QLabel("Version 2.0.0\nMedia Player for CASU & Legacy Media\nIn-process playback · No external player")
         info.setObjectName("NowPlayingMeta")
         info.setAlignment(Qt.AlignCenter)
         layout.addWidget(info)
@@ -2661,7 +2661,7 @@ class MainWindow(QMainWindow):
 
         status_bar = QStatusBar()
         status_bar.setObjectName("StatusBar")
-        self._status_left = QLabel("MPCASU 1.0.6")
+        self._status_left = QLabel("MPCASU 2.0.0")
         self._status_left.setObjectName("StatusText")
         self._status_left.setStyleSheet(f"color: {PALETTE.text_muted};")
         status_bar.addWidget(self._status_left)
@@ -4537,11 +4537,13 @@ class MainWindow(QMainWindow):
         self.show_library_dialog()
 
     def refresh_watched_folders(self):
-        if not self._watched_folders:
+        folders = list(self.settings_store.load().watched_folders)
+        self._watched_folders = folders
+        if not folders:
             self.status("No watched folders configured")
             return
         try:
-            scanned = self.media_library.scan(self._watched_folders)
+            scanned = self.media_library.scan(folders)
             self.status(f"Library refreshed · {len(scanned)} file(s) seen")
         except (OSError, ValueError) as exc:
             self.status(f"Library refresh failed: {exc}")
