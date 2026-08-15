@@ -6,6 +6,10 @@
 #viz-canvas{position:absolute;inset:0;z-index:2;pointer-events:none;background:transparent}
 #viz-canvas[hidden]{display:none}
 .stage.video-mode #viz-canvas{display:none}
+#viz-cover{position:absolute;inset:0;z-index:1;display:grid;place-items:center;pointer-events:none;background:radial-gradient(circle at center,#1a0e12 0,#050608 70%)}
+#viz-cover[hidden]{display:none}
+#viz-cover img{width:min(44vh,44vw,min(480px,90%));aspect-ratio:1;object-fit:contain;border-radius:12px;border:1px solid #2a2f36;box-shadow:0 18px 60px #000b}
+.stage.video-mode #viz-cover{display:none}
 .media-badges{z-index:5}
 .media-caption{z-index:6}
 .native-subtitle{position:absolute;left:8%;right:8%;bottom:92px;z-index:4;text-align:center;color:#fff;font-size:clamp(16px,2vw,28px);font-weight:700;text-shadow:0 2px 4px #000,0 0 8px #000;white-space:pre-line;pointer-events:none}

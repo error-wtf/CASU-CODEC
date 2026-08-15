@@ -850,8 +850,10 @@ class VisualizerWidget(QWidget):
         self._bands = self._blend(self._bands, bands)
         self._caps = self._cap(self._caps, bands)
         self._overview = tuple(overview or ())
-        visible = mode != "off" and (
-            self._wave or self._bands or self._overview or self._live or self._cover)
+        # The cover is always shown for audio, independently of the
+        # visualization mode; the waves/bars are the toggleable part.
+        visible = (self._cover is not None) or (mode != "off" and (
+            self._wave or self._bands or self._overview or self._live))
         self.setVisible(bool(visible))
         self.update()
 
@@ -862,7 +864,7 @@ class VisualizerWidget(QWidget):
         self._cover = pixmap
         self._backdrop = None
         self._backdrop_size = (0, 0)
-        if pixmap is not None and self._mode != "off":
+        if pixmap is not None:
             self.setVisible(True)
         self.update()
 
@@ -871,7 +873,7 @@ class VisualizerWidget(QWidget):
         self._caps = self._cap(self._caps, bands)
         if wave:
             self._wave = self._blend(self._wave, wave)
-        if self._live and self._mode != "off":
+        if self._live or self._cover:
             self.setVisible(True)
         self.update()
 
@@ -914,6 +916,25 @@ class VisualizerWidget(QWidget):
             frac = pos - a
             out.append(max(0.0, min(1.0, values[a] * (1.0 - frac) + values[b] * frac)))
         return out
+
+    def _paint_cover_art(self, painter, cover, w, h):
+        """Square album art, fitted (never cropped), centered."""
+        size = int(min(w * 0.34, h * 0.5))
+        size = max(80, min(size, 360))
+        pix = cover.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        px = (w - pix.width()) // 2
+        py = (h - pix.height()) // 2
+        radius = 10.0
+        rect = QRectF(px, py, pix.width(), pix.height())
+        path = QPainterPath()
+        path.addRoundedRect(rect, radius, radius)
+        painter.save()
+        painter.setClipPath(path)
+        painter.drawPixmap(px, py, pix)
+        painter.restore()
+        painter.setPen(QPen(QColor(255, 255, 255, 36), 1.2))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawPath(path)
 
     def _paint_bottom_bars(self, painter, values, w, h, caps=True):
         """Bars exactly like the web player: bottom-anchored, alternating colors."""
@@ -964,8 +985,6 @@ class VisualizerWidget(QWidget):
         painter.restore()
 
     def paintEvent(self, event):  # noqa: N802 - Qt naming
-        if self._mode == "off":
-            return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setRenderHint(QPainter.SmoothPixmapTransform)
@@ -980,36 +999,38 @@ class VisualizerWidget(QWidget):
 
         bands = self._live if self._live else self._bands
 
-        if not self._small:
-            if self._cover is not None and not self._cover.isNull():
-                if (self._backdrop is None
-                        or self._backdrop_size != (w, h)):
-                    fill = self._cover.scaled(w, h,
-                                              Qt.KeepAspectRatioByExpanding,
-                                              Qt.SmoothTransformation)
-                    backdrop = QPixmap(w, h)
-                    backdrop.fill(Qt.transparent)
-                    bp = QPainter(backdrop)
-                    bp.setOpacity(0.20)
-                    bp.drawPixmap((w - fill.width()) // 2,
-                                  (h - fill.height()) // 2, fill)
-                    bp.setOpacity(1.0)
-                    shade = QLinearGradient(0, 0, 0, h)
-                    shade.setColorAt(0.0, QColor(7, 9, 11, 110))
-                    shade.setColorAt(1.0, QColor(7, 9, 11, 225))
-                    bp.fillRect(QRectF(0, 0, w, h), QBrush(shade))
-                    bp.end()
-                    self._backdrop = backdrop
-                    self._backdrop_size = (w, h)
-                painter.drawPixmap(0, 0, self._backdrop)
+        # Cover layer: dim full-bleed wash plus the square album art, always
+        # shown for audio (independent of the visualization toggle), and never
+        # cropped (KeepAspectRatio).
+        if not self._small and self._cover is not None and not self._cover.isNull():
+            if (self._backdrop is None
+                    or self._backdrop_size != (w, h)):
+                fill = self._cover.scaled(w, h,
+                                          Qt.KeepAspectRatioByExpanding,
+                                          Qt.SmoothTransformation)
+                backdrop = QPixmap(w, h)
+                backdrop.fill(Qt.transparent)
+                bp = QPainter(backdrop)
+                bp.setOpacity(0.20)
+                bp.drawPixmap((w - fill.width()) // 2,
+                              (h - fill.height()) // 2, fill)
+                bp.setOpacity(1.0)
+                shade = QLinearGradient(0, 0, 0, h)
+                shade.setColorAt(0.0, QColor(7, 9, 11, 110))
+                shade.setColorAt(1.0, QColor(7, 9, 11, 225))
+                bp.fillRect(QRectF(0, 0, w, h), QBrush(shade))
+                bp.end()
+                self._backdrop = backdrop
+                self._backdrop_size = (w, h)
+            painter.drawPixmap(0, 0, self._backdrop)
+            self._paint_cover_art(painter, self._cover, w, h)
 
-        # Web-player style, exactly: bottom-up bars first, then the
-        # oscilloscope line on top, for every source.
-        if bands:
-            self._paint_bottom_bars(painter, bands, w, h)
-
-        if self._wave:
-            self._paint_wave_line(painter, self._wave, w, h)
+        # Visualization layer: only when enabled, exactly like the web player.
+        if self._mode != "off":
+            if bands:
+                self._paint_bottom_bars(painter, bands, w, h)
+            if self._wave:
+                self._paint_wave_line(painter, self._wave, w, h)
 
         if self._duration > 0:
             play_x = int(min(1.0, self._position / self._duration) * w)
