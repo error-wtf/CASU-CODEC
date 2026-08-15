@@ -814,6 +814,7 @@ class VisualizerWidget(QWidget):
         self._live: tuple[float, ...] | None = None
         self._caps: tuple[float, ...] = ()
         self._overview: tuple[float, ...] = ()
+        self._small = False
         self._cover = None
         self._mode = "spectrum"
         self._position = 0.0
@@ -824,8 +825,8 @@ class VisualizerWidget(QWidget):
         self._timer.start()
 
     @staticmethod
-    def _blend(old, new, rise: float = 0.55, fall: float = 0.24) -> tuple:
-        """Smooth frame blending: fast attack, moderate decay (little lag)."""
+    def _blend(old, new, rise: float = 0.75, fall: float = 0.40) -> tuple:
+        """Smooth frame blending: fast attack, moderate decay (low lag)."""
         old = list(old or ())
         new = list(new or ())
         if not old:
@@ -872,9 +873,14 @@ class VisualizerWidget(QWidget):
         self._live = None
         self.update()
 
+    def set_small(self, small: bool):
+        """Video mode: keep only the bottom bar, no cover backdrop or art."""
+        self._small = bool(small)
+        self.update()
+
     @staticmethod
     def _cap(old, new):
-        """Slow-decay peak caps: rise instantly, fall slowly."""
+        """Peak caps: rise instantly, decay fast enough not to feel laggy."""
         old = list(old or ())
         new = list(new or ())
         if not old:
@@ -884,7 +890,7 @@ class VisualizerWidget(QWidget):
         for index in range(count):
             prev = old[index] if index < len(old) else 0.0
             value = new[index] if index < len(new) else 0.0
-            out.append(prev + (value - prev) * (1.0 if value >= prev else 0.05))
+            out.append(prev + (value - prev) * (1.0 if value >= prev else 0.12))
         return tuple(out)
 
     @staticmethod
@@ -943,25 +949,19 @@ class VisualizerWidget(QWidget):
         painter.restore()
 
     def _paint_bottom_bars(self, painter, values, w, y_top, y_bottom, caps=True):
-        """Rounded gradient bars anchored to the bottom edge of a band."""
+        """Bottom-up bars exactly like the web player (alternating red/dark)."""
         count = len(values)
         if count < 2:
             return
         gap = max(1.0, w * 0.004)
         bar_w = max(2.0, (w - gap * (count - 1)) / count)
         span = max(1.0, y_bottom - y_top)
-        grad = QLinearGradient(0, y_top, 0, y_bottom)
-        grad.setColorAt(0.0, QColor(PALETTE.accent_hot))
-        grad.setColorAt(0.7, QColor(PALETTE.accent_dim))
-        grad.setColorAt(1.0, QColor(12, 6, 8))
-        radius = min(bar_w / 2, 3.5)
+        painter.setPen(Qt.NoPen)
         x = 0.0
-        for value in values:
+        for index, value in enumerate(values):
             bar_h = max(1.5, value * span)
-            rect = QRectF(x, y_bottom - bar_h, bar_w, bar_h)
-            path = QPainterPath()
-            path.addRoundedRect(rect, radius, radius)
-            painter.fillPath(path, QBrush(grad))
+            color = QColor(PALETTE.accent if index % 2 == 0 else PALETTE.accent_dim)
+            painter.fillRect(QRectF(x, y_bottom - bar_h, bar_w, bar_h), color)
             x += bar_w + gap
         if caps:
             cap_values = self._caps if self._caps else values
@@ -973,52 +973,26 @@ class VisualizerWidget(QWidget):
                                  QPointF(x + bar_w, y_bottom - bar_h))
                 x += bar_w + gap
 
-    def _paint_cover_thumb(self, painter, cover, w, h):
-        size = max(64, min(int(w * 0.30), int(h * 0.46), 420))
-        x = (w - size) // 2
-        y = (h - size) // 2
-        pix = cover.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        px = x + (size - pix.width()) // 2
-        py = y + (size - pix.height()) // 2
-        radius = 12.0
-        shadow = QRectF(px + 3, py + 6, pix.width(), pix.height())
-        path_shadow = QPainterPath()
-        path_shadow.addRoundedRect(shadow, radius, radius)
-        painter.setPen(Qt.NoPen)
-        painter.fillPath(path_shadow, QColor(0, 0, 0, 110))
-        rect = QRectF(px, py, pix.width(), pix.height())
-        path = QPainterPath()
-        path.addRoundedRect(rect, radius, radius)
-        painter.save()
-        painter.setClipPath(path)
-        painter.drawPixmap(QRectF(px, py, pix.width(), pix.height()), pix)
-        painter.restore()
-        painter.setPen(QPen(QColor(255, 255, 255, 30), 1.2))
-        painter.setBrush(Qt.NoBrush)
-        painter.drawPath(path)
-
     def _paint_wave_line(self, painter, wave, w, h):
-        """Smooth oscilloscope line in the web player's style."""
+        """Oscilloscope line exactly like the web player (single red line)."""
         wave = list(wave or ())
         if len(wave) < 8 or h <= 0:
             return
         count = len(wave)
         mid = h / 2
-        amp = h * 0.42
+        amp = h * 0.5
         step = w / (count - 1)
         path = QPainterPath()
         for i, value in enumerate(wave):
             x = i * step
-            y = mid + max(-1.0, min(1.0, value)) * amp
+            y = mid + max(-1.0, min(1.0, value)) * amp * 0.5
             if i == 0:
                 path.moveTo(x, y)
             else:
                 path.lineTo(x, y)
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.setPen(QPen(QColor(255, 30, 45, 36), 7))
-        painter.drawPath(path)
-        painter.setPen(QPen(QColor(255, 30, 45, 140), 2.4))
+        painter.setPen(QPen(QColor(255, 30, 45, 136), 2.0))
         painter.drawPath(path)
         painter.restore()
 
@@ -1037,37 +1011,37 @@ class VisualizerWidget(QWidget):
         bg.setColorAt(1.0, QColor("#05070a"))
         painter.fillRect(QRectF(0, 0, w, h), QBrush(bg))
 
-        if self._cover is not None and not self._cover.isNull():
-            fill = self._cover.scaled(w, h, Qt.KeepAspectRatioByExpanding,
-                                      Qt.SmoothTransformation)
-            painter.save()
-            painter.setOpacity(0.20)
-            painter.drawPixmap((w - fill.width()) // 2,
-                               (h - fill.height()) // 2, fill)
-            painter.restore()
-            shade = QLinearGradient(0, 0, 0, h)
-            shade.setColorAt(0.0, QColor(7, 9, 11, 110))
-            shade.setColorAt(1.0, QColor(7, 9, 11, 225))
-            painter.fillRect(QRectF(0, 0, w, h), QBrush(shade))
-
         bands = self._live if self._live else self._bands
         large = h >= 240
 
-        if self._overview and self._mode in ("both", "waveform"):
-            self._paint_waveform_fill(painter, self._overview, w, h)
+        if not self._small:
+            if self._cover is not None and not self._cover.isNull():
+                fill = self._cover.scaled(w, h, Qt.KeepAspectRatioByExpanding,
+                                          Qt.SmoothTransformation)
+                painter.save()
+                painter.setOpacity(0.20)
+                painter.drawPixmap((w - fill.width()) // 2,
+                                   (h - fill.height()) // 2, fill)
+                painter.restore()
+                shade = QLinearGradient(0, 0, 0, h)
+                shade.setColorAt(0.0, QColor(7, 9, 11, 110))
+                shade.setColorAt(1.0, QColor(7, 9, 11, 225))
+                painter.fillRect(QRectF(0, 0, w, h), QBrush(shade))
 
-        if self._wave and self._mode in ("both", "waveform"):
+            if self._overview:
+                self._paint_waveform_fill(painter, self._overview, w, h)
+
+        # Web-player style: always draw the oscilloscope wave AND the
+        # bottom-up spectrum bars together, for every source.
+        if self._wave:
             self._paint_wave_line(painter, self._wave, w, h)
 
-        if bands and self._mode in ("spectrum", "both"):
+        if bands:
             if large:
                 self._paint_bottom_bars(painter, bands, w,
-                                        int(h * 0.54), int(h * 0.88))
+                                        int(h * 0.50), int(h * 0.88))
             else:
                 self._paint_bottom_bars(painter, bands, w, 2, h - 2)
-
-        if self._cover is not None and not self._cover.isNull() and large:
-            self._paint_cover_thumb(painter, self._cover, w, h)
 
         if self._duration > 0:
             play_x = int(min(1.0, self._position / self._duration) * w)
@@ -2783,8 +2757,9 @@ class MainWindow(QMainWindow):
         self._end_handled = False
         self.current = path
         self._network_source = None
-        self._now_playing_bar.set_now_playing(path.name)
-        self._set_caption(path.name, path)
+        display_title = self._display_title(path)
+        self._now_playing_bar.set_now_playing(display_title)
+        self._set_caption(display_title, path)
         selected_index = self.playlist_model.index_of(path)
         if selected_index is not None:
             self._playlist_pane.populate(list(self.playlist_model.items), selected_index)
@@ -3315,6 +3290,19 @@ class MainWindow(QMainWindow):
         self._toast_label.show()
         self._toast_timer.start(2600)
 
+    def _display_title(self, path) -> str:
+        """Tag info (title — artist) if available, otherwise the file name."""
+        try:
+            probe = ffprobe(Path(path))
+            tags = (probe.get("format", {}) or {}).get("tags") or {}
+            title = str(tags.get("title") or "").strip()
+            artist = str(tags.get("artist") or "").strip()
+            if title:
+                return f"{title} — {artist}" if artist else title
+        except Exception:  # noqa: BLE001 - tag lookup is best effort
+            pass
+        return Path(path).name
+
     def _set_caption(self, text: str, path=None):
         if not text:
             self._caption_label.hide()
@@ -3357,6 +3345,7 @@ class MainWindow(QMainWindow):
         else:
             self._visualizer.setGeometry(12, max(0, stage.height() - 108),
                                          max(0, stage.width() - 24), 96)
+        self._visualizer.set_small(not self._audio_stage)
         self._visualizer.raise_()
         self._caption_label.raise_()
         self._badges_label.raise_()
@@ -3537,6 +3526,7 @@ class MainWindow(QMainWindow):
 
             self._audio_stage = bool(has_audio) and not bool(has_video)
             self._video_surface.set_video_active(not self._audio_stage)
+            self._visualizer.set_small(not self._audio_stage)
             self._reposition_overlays()
             return
 
@@ -3573,15 +3563,12 @@ class MainWindow(QMainWindow):
             position,
             points=180,
         )
-        bands = ()
-
-        if mode in ("spectrum", "both"):
-            bands = live_spectrum(
-                self._viz_pcm,
-                self._viz_rate,
-                position,
-                bands=48,
-            )
+        bands = live_spectrum(
+            self._viz_pcm,
+            self._viz_rate,
+            position,
+            bands=48,
+        )
 
         self._visualizer.configure(
             mode,
@@ -3979,30 +3966,38 @@ class MainWindow(QMainWindow):
 
         def reader():
             import numpy as np
+            buff = b""
             while True:
                 try:
-                    data = proc.stdout.read(2205)
+                    data = proc.stdout.read(4096)
                 except (OSError, ValueError):
                     break
                 if not data:
                     break
-                samples = np.frombuffer(data, dtype="<i2").astype(np.float32) / 32768.0
-                if len(samples) < 512:
+                buff += data
+                even = len(buff) - (len(buff) % 2)
+                payload, buff = buff[:even], buff[even:]
+                if len(payload) < 2048:
                     continue
-                windowed = samples[:1024] * np.hanning(1024)
-                spectrum = np.abs(np.fft.rfft(windowed))[1:49]
-                peak = float(spectrum.max()) if spectrum.size else 0.0
-                if peak <= 1e-6:
-                    bands = tuple(0.0 for _ in spectrum)
-                else:
-                    bands = tuple(
-                        float(max(0.0, min(1.0, (value / peak) *
-                                           (0.35 + 0.65 * np.log10(index + 2) / np.log10(50)))))
-                        for index, value in enumerate(spectrum))
-                width = max(1, len(samples) // 128)
-                wave = tuple(float(samples[i])
-                             for i in range(0, len(samples), width))[:128]
-                bridge.resultReady.emit(("live", bands, wave))
+                try:
+                    samples = (np.frombuffer(payload, dtype="<i2")
+                               .astype(np.float32) / 32768.0)
+                    windowed = samples[:1024] * np.hanning(1024)
+                    spectrum = np.abs(np.fft.rfft(windowed))[1:49]
+                    peak = float(spectrum.max()) if spectrum.size else 0.0
+                    if peak <= 1e-6:
+                        bands = tuple(0.0 for _ in spectrum)
+                    else:
+                        bands = tuple(
+                            float(max(0.0, min(1.0, (value / peak) *
+                                               (0.30 + 0.70 * index / 48.0))))
+                            for index, value in enumerate(spectrum))
+                    width = max(1, len(samples) // 128)
+                    wave = tuple(float(samples[i])
+                                 for i in range(0, len(samples), width))[:128]
+                    bridge.resultReady.emit(("live", bands, wave))
+                except Exception:  # noqa: BLE001 - stream viz is optional
+                    continue
         import threading
         self._stream_viz_thread = threading.Thread(target=reader, daemon=True)
         self._stream_viz_thread.start()
