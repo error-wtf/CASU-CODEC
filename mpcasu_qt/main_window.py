@@ -817,6 +817,7 @@ class VisualizerWidget(QWidget):
         self._live: tuple[float, ...] | None = None
         self._caps: tuple[float, ...] = ()
         self._overview: tuple[float, ...] = ()
+        self._smoothed_bands: tuple[float, ...] = ()
         self._small = False
         self._cover = None
         self._backdrop = None
@@ -847,10 +848,10 @@ class VisualizerWidget(QWidget):
     def configure(self, mode: str, wave, bands, duration: float, overview=()):
         self._mode = mode
         self._duration = max(0.0, float(duration or 0.0))
-        # Exactly like the web player: raw bars and wave, no smoothing lag.
+        # The oscilloscope wave tracks the playhead directly (no smoothing
+        # lag); the spectrum bars use the analyser's 0.85 smoothing.
         self._wave = tuple(wave or ())
-        self._bands = tuple(bands or ())
-        self._caps = self._cap(self._caps, bands)
+        self._bands = self._smooth_bands(bands)
         self._overview = tuple(overview or ())
         # The cover is always shown for audio, independently of the
         # visualization mode; the waves/bars are the toggleable part.
@@ -888,8 +889,7 @@ class VisualizerWidget(QWidget):
         self.update()
 
     def set_live(self, bands, wave=()):
-        self._live = tuple(bands)
-        self._caps = self._cap(self._caps, bands)
+        self._live = self._smooth_bands(bands)
         if wave:
             self._wave = tuple(wave)
         if not self._small and (self._live or self._cover):
@@ -925,6 +925,22 @@ class VisualizerWidget(QWidget):
             value = new[index] if index < len(new) else 0.0
             out.append(prev + (value - prev) * (1.0 if value >= prev else 0.5))
         return tuple(out)
+
+    def _smooth_bands(self, new):
+        """Analyser smoothing exactly like the web player's
+        ``smoothingTimeConstant = 0.85`` (smoothed = .85*prev + .15*cur)."""
+        new = tuple(new or ())
+        if not self._smoothed_bands:
+            self._smoothed_bands = new
+            return new
+        old = list(self._smoothed_bands)
+        out = []
+        for index in range(max(len(old), len(new))):
+            prev = old[index] if index < len(old) else 0.0
+            value = new[index] if index < len(new) else 0.0
+            out.append(0.85 * prev + 0.15 * value)
+        self._smoothed_bands = tuple(out)
+        return self._smoothed_bands
 
     @staticmethod
     def _resample(values, count: int) -> list:
@@ -3816,13 +3832,14 @@ class MainWindow(QMainWindow):
             self._viz_pcm,
             self._viz_rate,
             position,
-            points=2048,
+            points=256,
         )
         bands = live_fft(
             self._viz_pcm,
             self._viz_rate,
             position,
-            bins=1024,
+            fft_size=256,
+            bins=128,
         )
 
         self._visualizer.configure(
@@ -4238,7 +4255,7 @@ class MainWindow(QMainWindow):
                 if not data:
                     break
                 buff += data
-                if len(buff) < 4096:
+                if len(buff) < 512:
                     continue
                 # Throttle to a realtime cadence (~40 Hz): ffmpeg may decode
                 # a fast source faster than realtime, which would flood the
@@ -4249,22 +4266,22 @@ class MainWindow(QMainWindow):
                     continue
                 last_emit = now
                 try:
-                    # Slide a 2048-sample window (like the web analyser's
-                    # fftSize) -> 1024 raw FFT bars.
-                    buff = buff[-4096:]
+                    # Slide a 256-sample window (like the web analyser's
+                    # fftSize=256) -> 128 raw FFT bars.
+                    buff = buff[-512:]
                     samples = (np.frombuffer(buff, dtype="<i2")
                                .astype(np.float32) / 32768.0)
                     windowed = samples * np.hanning(len(samples))
-                    spectrum = np.abs(np.fft.rfft(windowed))[1:1025]
+                    spectrum = np.abs(np.fft.rfft(windowed))[1:129]
                     peak = float(spectrum.max()) if spectrum.size else 0.0
                     if peak <= 1e-6:
                         bands = tuple(0.0 for _ in spectrum)
                     else:
                         bands = tuple(float(max(0.0, min(1.0, value / peak)))
                                       for value in spectrum)
-                    width = max(1, len(samples) // 1024)
+                    width = max(1, len(samples) // 256)
                     wave = tuple(float(samples[i])
-                                 for i in range(0, len(samples), width))[:1024]
+                                 for i in range(0, len(samples), width))[:256]
                     bridge.resultReady.emit(("live", bands, wave))
                 except Exception:  # noqa: BLE001 - stream viz is optional
                     continue
