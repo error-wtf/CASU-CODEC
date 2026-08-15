@@ -847,8 +847,10 @@ class VisualizerWidget(QWidget):
     def configure(self, mode: str, wave, bands, duration: float, overview=()):
         self._mode = mode
         self._duration = max(0.0, float(duration or 0.0))
-        self._wave = self._blend(self._wave, wave)
-        self._bands = self._blend(self._bands, bands)
+        # The oscilloscope wave tracks the playhead directly (no smoothing
+        # lag); only the spectrum bars are lightly blended.
+        self._wave = tuple(wave or ())
+        self._bands = self._blend(self._bands, bands, 0.95, 0.85)
         self._caps = self._cap(self._caps, bands)
         self._overview = tuple(overview or ())
         # The cover is always shown for audio, independently of the
@@ -881,10 +883,10 @@ class VisualizerWidget(QWidget):
         self.update()
 
     def set_live(self, bands, wave=()):
-        self._live = self._blend(self._live, bands)
+        self._live = self._blend(self._live, bands, 0.95, 0.85)
         self._caps = self._cap(self._caps, bands)
         if wave:
-            self._wave = self._blend(self._wave, wave)
+            self._wave = tuple(wave)
         if self._live or (not self._small and self._cover):
             self.setVisible(True)
         self.update()
@@ -4210,10 +4212,12 @@ class MainWindow(QMainWindow):
 
         def reader():
             import numpy as np
+            import time as _time
             buff = b""
+            last_emit = 0.0
             while True:
                 try:
-                    data = proc.stdout.read(4096)
+                    data = proc.stdout.read(1024)
                 except (OSError, ValueError):
                     break
                 if not data:
@@ -4223,6 +4227,15 @@ class MainWindow(QMainWindow):
                 payload, buff = buff[:even], buff[even:]
                 if len(payload) < 1024:
                     continue
+                # Throttle to a realtime cadence (~40 Hz): ffmpeg may decode
+                # a fast source faster than realtime, which would flood the
+                # UI thread and make the visualization lag.
+                now = _time.perf_counter()
+                if now - last_emit < 0.024:
+                    buff = payload + buff
+                    _time.sleep(0.004)
+                    continue
+                last_emit = now
                 try:
                     samples = (np.frombuffer(payload, dtype="<i2")
                                .astype(np.float32) / 32768.0)
