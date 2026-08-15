@@ -162,6 +162,55 @@ def detect_playlist_format(path: str | Path) -> str:
     return "unknown"
 
 
+def m3u_names(text: str) -> dict:
+    """Map stream/file URLs to their #EXTINF display names (best effort)."""
+    names: dict = {}
+    pending: str | None = None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("#EXTINF"):
+            comma = line.find(",")
+            pending = line[comma + 1:].strip() if comma >= 0 else None
+            continue
+        if line.startswith("#"):
+            continue
+        if pending:
+            names[line] = pending[:300]
+        pending = None
+    return names
+
+
+def pls_names(text: str) -> dict:
+    """Map FileN= entries to TitleN= display names (best effort)."""
+    files: dict = {}
+    titles: dict = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        mfile = re.match(r"^File(\d+)=(.*)$", line) if line else None
+        mtitle = re.match(r"^Title(\d+)=(.*)$", line) if line else None
+        if mfile:
+            files[int(mfile.group(1))] = mfile.group(2).strip()
+        elif mtitle:
+            titles[int(mtitle.group(1))] = mtitle.group(2).strip()[:300]
+    return {url: titles[idx] for idx, url in files.items() if idx in titles}
+
+
+def playlist_names(path: str | Path) -> dict:
+    """Display names for playlist entries, by extension (empty on failure)."""
+    try:
+        text = Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return {}
+    ext = Path(path).suffix.lower()
+    if ext in {".m3u", ".m3u8"}:
+        return m3u_names(text)
+    if ext == ".pls":
+        return pls_names(text)
+    return {}
+
+
 def _parse_m3u_text(text: str, base: Path | None = None) -> list:
     """Parse M3U playlist. Returns list of Path (local files) and str (stream URLs)."""
     lines = text.splitlines()

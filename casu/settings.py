@@ -26,6 +26,8 @@ class PlayerSettings:
     resume_playback: bool = True
     cache_limit_mib: int = 512
     recordings_dir: str = ""
+    record_split_minutes: int = 0
+    record_format: str = "mkv"
 
     def validated(self) -> "PlayerSettings":
         rate = float(self.rate)
@@ -50,12 +52,21 @@ class PlayerSettings:
         if recordings and ("\0" in recordings
                            or len(recordings.encode("utf-8")) > MAX_SETTING_TEXT_BYTES):
             recordings = ""
+        try:
+            split_minutes = int(self.record_split_minutes)
+        except (TypeError, ValueError):
+            split_minutes = 0
+        record_format = str(self.record_format or "mkv").lower()
+        if record_format not in {"mkv", "mp4", "ts", "webm", "ogg", "mp3", "flac", "wav"}:
+            record_format = "mkv"
         return PlayerSettings(max(0, min(200, int(self.volume))), bool(self.muted),
                               max(0.25, min(4.0, rate)), device, folders,
                               bool(self.ytdlp_consent), visualizer,
                               bool(self.resume_playback),
                               max(0, min(65536, cache_limit)),
-                              recordings)
+                              recordings,
+                              max(0, min(24 * 60, split_minutes)),
+                              record_format)
 
 
 class SettingsStore:
@@ -85,6 +96,8 @@ class SettingsStore:
                 settings.get("resume_playback", True),
                 settings.get("cache_limit_mib", 512),
                 settings.get("recordings_dir", ""),
+                settings.get("record_split_minutes", 0),
+                settings.get("record_format", "mkv"),
             ).validated()
         except (OSError, TypeError, ValueError, CasuError):
             return PlayerSettings()

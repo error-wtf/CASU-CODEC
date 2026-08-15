@@ -24,9 +24,10 @@ import subprocess
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 
 SPOTIFY_TRACK_RE = re.compile(
-    r"^(?:https?://)?(?:open\.)?spotify\.com/(track|album|playlist|episode)/([a-zA-Z0-9]{22})(?:\?.*)?$"
+    r"^(?:https?://)?(?:open\.)?spotify\.com/(track|album|playlist|episode|show|artist)/([a-zA-Z0-9]{22})(?:\?.*)?$"
 )
 
 SPOTIFY_PLAYBACK_SUPPORTED = False
@@ -90,6 +91,77 @@ def fetch_spotify_metadata(url: str, *, timeout: float = 15.0) -> SpotifyMetadat
 def youtube_handoff_query(metadata: SpotifyMetadata) -> str:
     """The honest handoff: search YouTube for the fetched human title."""
     return metadata.title
+
+
+@dataclass(frozen=True)
+class SpotifySearchResult:
+    title: str
+    artist: str
+    url: str
+    duration: float | None = None
+
+
+def search_spotify(query: str, *, limit: int = 12,
+                   timeout: float = 90.0) -> list[SpotifySearchResult]:
+    """Search Spotify via spotDL (metadata only, no audio downloads).
+
+    Uses ``spotdl save`` which writes small JSON metadata files into a
+    temporary directory; those are parsed into results carrying the real
+    Spotify track URLs.  Requires spotdl and a reachable Spotify API.
+    """
+    query = (query or "").strip()
+    if not query:
+        raise SpotifyError("search query must not be empty")
+    binary = spotdl_binary()
+    if not binary:
+        raise SpotifyError(
+            "spotDL is not installed — Spotify search needs spotdl "
+            "(e.g. python3 -m venv /opt/casu-spotdl && /opt/casu-spotdl/bin/pip "
+            "install spotdl); the YouTube view remains available as a separate "
+            "provider")
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="casu-spotify-") as tmp:
+        try:
+            proc = subprocess.run([binary, "save", query, "--output", tmp],
+                                  check=False, text=True,
+                                  stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE,
+                                  timeout=max(10.0, float(timeout)))
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise SpotifyError(f"spotDL search failed: {exc}") from exc
+        results: list[SpotifySearchResult] = []
+        for path in sorted(Path(tmp).glob("*.spotdl")):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if not isinstance(data, dict):
+                continue
+            url = str(data.get("url") or "")
+            if "spotify.com" not in url:
+                continue
+            artists = data.get("artists") or []
+            results.append(SpotifySearchResult(
+                title=str(data.get("name") or path.stem)[:300],
+                artist=", ".join(str(a) for a in artists)[:200] if isinstance(artists, list) else "",
+                url=url,
+                duration=float(data["duration"]) if isinstance(data.get("duration"), (int, float)) else None))
+            if len(results) >= max(1, min(int(limit), 25)):
+                break
+    if not results:
+        detail = (proc.stderr or proc.stdout).strip().splitlines()
+        raise SpotifyError(
+            f"spotDL found no Spotify results"
+            f"{': ' + detail[-1][:200] if detail else ''} — api.spotify.com may "
+            "be blocked on this network; use the YouTube view as a separate "
+            "provider")
+    return results
+    """Locate spotDL (system PATH first, then the product venv)."""
+    found = shutil.which("spotdl")
+    if found:
+        return found
+    venv = "/opt/casu-spotdl/bin/spotdl"
+    return venv if os.path.exists(venv) else None
 
 
 def spotdl_binary() -> str | None:

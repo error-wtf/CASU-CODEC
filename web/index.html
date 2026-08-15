@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#090b0d">
   <title>WEB CASU Player</title>
   <link rel="icon" type="image/png" href="../assets/web_casu_icon.png">
-  <link rel="stylesheet" href="styles.css?v=1.0.3">
+  <link rel="stylesheet" href="styles.css?v=1.0.4">
 </head>
 <body>
   <main class="app-shell" aria-label="MPCASU Web Player">
@@ -115,7 +115,7 @@
         <button id="consent-accept" type="button" class="primary">Accept and enable yt-dlp features</button>
       </div>
       <div class="epg-source"><input id="search-query" type="text" placeholder="Search term…" autocomplete="off"><button id="search-run" type="button">Search</button></div>
-      <label class="search-source">Source <select id="search-source"><option value="youtube">YouTube</option><option value="spotify">Spotify (music)</option></select></label>
+      <label class="search-source">Source <select id="search-source"><option value="youtube">YouTube (yt-dlp)</option><option value="spotify">Spotify (spotDL)</option></select></label>
       <div id="search-results" class="epg-guide"></div>
     </form>
   </dialog>
@@ -130,7 +130,7 @@
     </form>
   </dialog>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script src="casu-native.js?v=1.0.3" defer></script>
-  <script src="app.js?v=1.0.3" defer></script>
+  <script src="casu-native.js?v=1.0.4" defer></script>
+  <script src="app.js?v=1.0.4" defer></script>
 </body>
 </html>
