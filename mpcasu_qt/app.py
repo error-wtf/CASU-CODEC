@@ -243,6 +243,29 @@ def main() -> int:
 
     window = MainWindow(initial=paths)
 
+    def _clamp_window_to_screen() -> None:
+        """Keep the window fully on the visible screen.
+
+        A maximized/restored window wider or higher than the current screen
+        gets clipped at its top-left corner (the sidebar logo ends up cut
+        off-screen).  Bound it to the available geometry so nothing is ever
+        hidden outside the display.
+        """
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            return
+        available = screen.availableGeometry()
+        geometry = window.frameGeometry()
+        if geometry.width() <= available.width() and \
+                geometry.height() <= available.height() and \
+                available.contains(geometry.topLeft()) and \
+                available.contains(geometry.bottomRight()):
+            return
+        bounded = geometry
+        bounded.setSize(geometry.size().boundedTo(available.size()))
+        bounded.moveCenter(available.center())
+        window.setGeometry(bounded)
+
     if server is not None:
         def handle_connection():
             client = server.nextPendingConnection()
@@ -272,6 +295,11 @@ def main() -> int:
         server.newConnection.connect(handle_connection)
 
     window.show()
+    # The window manager may place a restored/maximized window partially
+    # off-screen (top-left corner, e.g. 1970x1077 at -25,-24), clipping the
+    # sidebar logo.  Re-check after the WM has settled and pull it fully onto
+    # the visible screen so nothing is ever cut off.
+    QTimer.singleShot(600, _clamp_window_to_screen)
     _log_peer_processes()
     _log_window_inventory()
     _check_main_windows()
