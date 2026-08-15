@@ -56,6 +56,23 @@ def chromium_binary() -> str | None:
                  and os.path.exists(candidate)), None)
 
 
+_PROVIDER_DOMAINS = {
+    "spotify": "spotify.com",
+    "hearthis": "hearthis.at",
+    "tidal": "tidal.com",
+    "netflix": "netflix.com",
+}
+
+
+def provider_for_url(url: str) -> str | None:
+    """Return the web-player provider a URL belongs to, or None."""
+    low = (url or "").lower()
+    for key, domain in _PROVIDER_DOMAINS.items():
+        if domain in low:
+            return key
+    return None
+
+
 def web_player_url(provider: str, *, query: str = "", url: str = "") -> str:
     """Return the web-player URL for a provider (home/search/item)."""
     spec = WEB_PLAYERS.get(provider, WEB_PLAYERS["spotify"])

@@ -2351,11 +2351,9 @@ class MainWindow(QMainWindow):
         self._center_stack = QStackedWidget()
         self._center_stack.addWidget(player_page)
         self._center_stack.addWidget(self._sources_view)
-        self._web_view = None
-        if _HAVE_WEBENGINE:
-            self._web_view = QWebEngineView()
-            self._web_view.setObjectName("WebView")
-            self._center_stack.addWidget(self._web_view)
+        from mpcasu_qt.webplayers import WebPlayerTabs
+        self._web_player_tabs = WebPlayerTabs()
+        self._center_stack.addWidget(self._web_player_tabs)
         self._pages: list = []
         self._library_page = LibraryPage(self.media_library, self._thumbnail_dir, self)
         self._library_page.addRequested.connect(lambda paths: self.add_files(paths))
@@ -3120,19 +3118,10 @@ class MainWindow(QMainWindow):
         self._back_btn.show()
 
     def _open_web_player(self, provider: str, *, query: str = "", url: str = ""):
-        from casu.webproviders import WEB_PLAYERS, web_player_url
+        from casu.webproviders import WEB_PLAYERS
         label = WEB_PLAYERS.get(provider, WEB_PLAYERS["spotify"])["label"]
-        target = web_player_url(provider, query=query, url=url)
-        if self._web_view is None:
-            from casu.webproviders import open_web_player
-            opened = open_web_player(provider, query=query, url=url)
-            if opened:
-                self.status(f"{label} Web Player geöffnet in Chromium")
-            else:
-                self.toast("Chromium fehlt — bitte chromium-browser installieren")
-            return
-        self._web_view.load(QUrl(target))
-        self._center_stack.setCurrentWidget(self._web_view)
+        self._web_player_tabs.open(provider, query=query, url=url)
+        self._center_stack.setCurrentWidget(self._web_player_tabs)
         self._topbar_title.setText(label)
         self._back_btn.show()
         self.status(f"{label} Web Player (eingebetteter Chromium) — dort mit deinem Account einloggen")
@@ -3884,6 +3873,11 @@ class MainWindow(QMainWindow):
     def _resolve_and_open_external_source(self, source: str, *,
                                           display_label: str | None = None):
         """Resolve web sources off the GUI thread, then hand a direct URL to libVLC."""
+        from casu.webproviders import provider_for_url
+        provider = provider_for_url(str(source))
+        if provider:
+            self._open_web_player(provider, url=str(source))
+            return
         if is_youtube_url(source):
             if not self.settings_store.load().ytdlp_consent:
                 self.show_sources("youtube")
@@ -3949,6 +3943,11 @@ class MainWindow(QMainWindow):
         self.toast(f"Could not resolve network source: {detail}")
 
     def _open_external_source(self, source: str, *, display_label: str | None = None):
+        from casu.webproviders import provider_for_url
+        provider = provider_for_url(str(source))
+        if provider:
+            self._open_web_player(provider, url=str(source))
+            return
         self._show_player_page()
         self.stop()
         self._end_handled = False
