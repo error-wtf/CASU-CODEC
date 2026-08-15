@@ -58,3 +58,4 @@ MPCASU_CASU_latest*.zip
 # Local CI copy (workflow is not part of the public repository)
 # ---------------------------------------------------------------------------
 .github/workflows/ci.yml
+dist/*.deb
