@@ -121,8 +121,10 @@ def search_spotify(query: str, *, limit: int = 12,
             "provider")
     import tempfile
     with tempfile.TemporaryDirectory(prefix="casu-spotify-") as tmp:
+        save_file = str(Path(tmp) / "results.spotdl")
         try:
-            proc = subprocess.run([binary, "save", query, "--output", tmp],
+            proc = subprocess.run([binary, "save", "--save-file", save_file,
+                                   query],
                                   check=False, text=True,
                                   stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE,
@@ -130,19 +132,23 @@ def search_spotify(query: str, *, limit: int = 12,
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise SpotifyError(f"spotDL search failed: {exc}") from exc
         results: list[SpotifySearchResult] = []
+        documents: list = []
         for path in sorted(Path(tmp).glob("*.spotdl")):
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 continue
-            if not isinstance(data, dict):
-                continue
+            if isinstance(data, list):
+                documents.extend(item for item in data if isinstance(item, dict))
+            elif isinstance(data, dict):
+                documents.append(data)
+        for data in documents:
             url = str(data.get("url") or "")
             if "spotify.com" not in url:
                 continue
             artists = data.get("artists") or []
             results.append(SpotifySearchResult(
-                title=str(data.get("name") or path.stem)[:300],
+                title=str(data.get("name") or data.get("title") or "unknown")[:300],
                 artist=", ".join(str(a) for a in artists)[:200] if isinstance(artists, list) else "",
                 url=url,
                 duration=float(data["duration"]) if isinstance(data.get("duration"), (int, float)) else None))
