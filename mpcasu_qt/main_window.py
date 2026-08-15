@@ -179,17 +179,23 @@ class Sidebar(QFrame):
         logo_path = Path(__file__).resolve().parent.parent / "assets" / "mpcasu_player_logo_header.png"
         self._logo_label = None
         if logo_path.is_file():
-            logo = QLabel()
-            logo.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            logo.setStyleSheet("background: transparent;")
             pixmap = QPixmap(str(logo_path))
             if not pixmap.isNull():
                 scaled = pixmap.scaledToWidth(140, Qt.SmoothTransformation)
+                header = QWidget()
+                header.setStyleSheet("background: transparent;")
+                header.setFixedHeight(scaled.height() + 24)
+                header_layout = QVBoxLayout(header)
+                header_layout.setContentsMargins(16, 14, 16, 0)
+                header_layout.setSpacing(0)
+                logo = QLabel()
+                logo.setStyleSheet("background: transparent;")
                 logo.setPixmap(scaled)
                 logo.setFixedSize(scaled.size())
-                layout.addWidget(logo)
+                header_layout.addWidget(logo, 0, Qt.AlignLeft | Qt.AlignTop)
+                layout.addWidget(header)
                 self._logo_label = logo
-        layout.addSpacing(16)
+        layout.addSpacing(14)
 
         nav_items = [
             ("LIBRARY", ["NOW PLAYING", "LIBRARY", "WEB & STREAMS",
