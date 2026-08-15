@@ -17,18 +17,26 @@ _TAG_KEYS = ("title", "artist", "album_artist", "album", "genre",
              "track", "date", "year", "comment")
 _LEADING_TRACK = re.compile(r"^(\d{1,3})\s*[-._)\s]+\s*(.+)$")
 _YEAR_END = re.compile(r"[(\[]?(\d{4})[)\]]?\s*$")
+_MEDIA_EXTENSIONS = frozenset({
+    ".mp3", ".mp4", ".m4a", ".m4v", ".mov", ".mkv", ".webm", ".flac",
+    ".wav", ".ogg", ".opus", ".aac", ".aiff", ".alac", ".wma", ".mpg",
+    ".mpeg", ".ts", ".m2ts", ".avi", ".casu", ".mp5",
+})
 
 
 def metadata_for(path: str | Path) -> dict:
     """Best-effort metadata dict for *path* (tags first, filename fallback).
 
     Returns a JSON-safe dict with ``title``, ``artist``, ``album``, ``genre``,
-    ``track``, ``year`` and ``duration`` when they can be determined.
+    ``track``, ``year`` and ``duration`` when they can be determined.  Non
+    media files are returned empty immediately (no probe).
     """
     source = Path(path).expanduser().resolve()
     result: dict = {}
+    if source.suffix.lower() not in _MEDIA_EXTENSIONS:
+        return result
     try:
-        probe = ffprobe(source)
+        probe = ffprobe(source, timeout_seconds=5.0)
         fmt = (probe.get("format") or {})
         tags = dict(fmt.get("tags") or {})
         for stream in probe.get("streams", []):

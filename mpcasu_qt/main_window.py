@@ -176,17 +176,19 @@ class Sidebar(QFrame):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        logo_path = Path(__file__).resolve().parent.parent / "assets" / "mpcasu_player_logo_header.png"
+        logo_path = Path(__file__).resolve().parent.parent / "assets" / "mpcasu_player_logo_cropped.png"
         self._logo_label = None
         if logo_path.is_file():
             pixmap = QPixmap(str(logo_path))
             if not pixmap.isNull():
-                scaled = pixmap.scaledToWidth(140, Qt.SmoothTransformation)
+                scaled = pixmap.scaledToWidth(150, Qt.SmoothTransformation)
                 header = QWidget()
                 header.setStyleSheet("background: transparent;")
-                header.setFixedHeight(scaled.height() + 24)
+                # The native window crops the very top edge of the client
+                # area, so keep the logo clearly below it.
+                header.setFixedHeight(scaled.height() + 68)
                 header_layout = QVBoxLayout(header)
-                header_layout.setContentsMargins(16, 14, 16, 0)
+                header_layout.setContentsMargins(16, 60, 16, 0)
                 header_layout.setSpacing(0)
                 logo = QLabel()
                 logo.setStyleSheet("background: transparent;")
@@ -4542,11 +4544,31 @@ class MainWindow(QMainWindow):
         if not folders:
             self.status("No watched folders configured")
             return
+        self.status(f"Scanning {len(folders)} folder(s) with all subfolders…")
+        self.toast("Scanning library folders…")
+
+        def worker():
+            try:
+                scanned = self.media_library.scan(folders)
+                count = len(scanned)
+                error = ""
+            except (OSError, ValueError) as exc:
+                count = -1
+                error = str(exc)
+            QTimer.singleShot(0, lambda: self._scan_done(count, error))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _scan_done(self, count: int, error: str):
+        if count >= 0:
+            self.status(f"Library refreshed · {count} file(s) indexed")
+            self.toast(f"Library refreshed · {count} file(s)")
+        else:
+            self.status(f"Library refresh failed: {error}")
         try:
-            scanned = self.media_library.scan(folders)
-            self.status(f"Library refreshed · {len(scanned)} file(s) seen")
-        except (OSError, ValueError) as exc:
-            self.status(f"Library refresh failed: {exc}")
+            self._library_page._refresh()
+        except Exception:  # noqa: BLE001 - page refresh is optional
+            pass
 
     def show_library_dialog(self):
         self._library_page._refresh()
