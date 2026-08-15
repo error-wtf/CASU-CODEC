@@ -288,7 +288,8 @@ class QueueTree(QTreeWidget):
         super().__init__(parent)
         self.setHeaderHidden(True)
         self.setColumnCount(2)
-        self.setColumnWidth(0, METRICS.playlist_width - 90)
+        self.setColumnWidth(0, METRICS.playlist_width - 110)
+        self.setColumnWidth(1, 104)
         self.setRootIsDecorated(True)
         self.setUniformRowHeights(True)
         self.setDragDropMode(QAbstractItemView.InternalMove)
@@ -857,6 +858,14 @@ class VisualizerWidget(QWidget):
         self.setVisible(bool(visible))
         self.update()
 
+    def set_mode(self, mode: str):
+        """Toggle only the visualization layer, keeping cover and data."""
+        self._mode = mode
+        visible = (self._cover is not None) or (mode != "off" and (
+            self._wave or self._bands or self._overview or self._live))
+        self.setVisible(bool(visible))
+        self.update()
+
     def set_position(self, position: float):
         self._position = float(position or 0.0)
 
@@ -884,6 +893,8 @@ class VisualizerWidget(QWidget):
     def set_small(self, small: bool):
         """Video mode: keep only the bottom bar, no cover backdrop or art."""
         self._small = bool(small)
+        # Over video, repaint less aggressively to avoid flicker.
+        self._timer.setInterval(40 if small else 25)
         self.update()
 
     @staticmethod
@@ -992,10 +1003,15 @@ class VisualizerWidget(QWidget):
         if w <= 0 or h <= 0:
             return
 
-        bg = QLinearGradient(0, 0, 0, h)
-        bg.setColorAt(0.0, QColor("#0c1015"))
-        bg.setColorAt(1.0, QColor("#05070a"))
-        painter.fillRect(QRectF(0, 0, w, h), QBrush(bg))
+        if self._small:
+            # Video mode: a translucent glass strip so the video stays
+            # visible behind the bars and nothing flickers over it.
+            painter.fillRect(QRectF(0, 0, w, h), QColor(8, 10, 12, 165))
+        else:
+            bg = QLinearGradient(0, 0, 0, h)
+            bg.setColorAt(0.0, QColor("#0c1015"))
+            bg.setColorAt(1.0, QColor("#05070a"))
+            painter.fillRect(QRectF(0, 0, w, h), QBrush(bg))
 
         bands = self._live if self._live else self._bands
 
@@ -2217,7 +2233,7 @@ class MainWindow(QMainWindow):
         self._viz_overview = ()
         self._viz_mode = "spectrum"
         self._viz_timer = QTimer(self)
-        self._viz_timer.setInterval(30)  # ~33 Hz window update
+        self._viz_timer.setInterval(25)  # ~40 Hz window update
         self._viz_timer.timeout.connect(self._tick_visualizer)
 
         config_dir = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "mpcasu"
@@ -4120,17 +4136,19 @@ class MainWindow(QMainWindow):
         if mode == "off":
             self._stop_stream_viz()
             self._viz_timer.stop()
-            self._viz_pcm = None
-            self._viz_rate = 0
-            self._visualizer.configure("off", (), (), 0.0)
+            self._visualizer.set_mode("off")
         elif self._network_source:
-            self._visualizer.configure(
-                mode, (), (), self.duration or 0.0)
+            self._visualizer.set_mode(mode)
             self._start_stream_viz(self._network_source)
         elif self.current is not None:
-            self._load_visualizer(self.current)
+            if self._viz_pcm is not None and self._viz_rate > 0:
+                # Already-decoded PCM is kept: toggling back on is instant.
+                self._visualizer.set_mode(mode)
+                self._viz_timer.start()
+            else:
+                self._load_visualizer(self.current)
         else:
-            self._visualizer.configure(mode, (), (), 0.0)
+            self._visualizer.set_mode(mode)
         self.toast(f"Visualizer: {mode}")
 
     def dragEnterEvent(self, event) -> None:

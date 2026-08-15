@@ -43,7 +43,7 @@ class DesignTokens:
     radius_panel: int = 10
     radius_control: int = 7
     sidebar_width: int = 240
-    right_panel_width: int = 310
+    right_panel_width: int = 370
     topbar_height: int = 72
     transport_height: int = 66
     play_button: int = 52
