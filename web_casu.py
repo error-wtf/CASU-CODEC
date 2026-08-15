@@ -504,10 +504,12 @@ class WebPlayerHandler(http.server.SimpleHTTPRequestHandler):
         url = str(request.get("url", "")).strip()
         if not url:
             raise WebPlayerError("resolve request needs a url")
+        title = str(request.get("title", "") or "").strip()
+        artist = str(request.get("artist", "") or "").strip()
         try:
             if is_spotify_url(url):
                 from casu.spotify import resolve_spotify_url
-                resolved = resolve_spotify_url(url)
+                resolved = resolve_spotify_url(url, title=title, artist=artist)
             elif is_youtube_url(url):
                 resolved = resolve_media_location(url)
             else:
