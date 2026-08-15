@@ -17,6 +17,7 @@ venv/
 # Backups, editor leftovers, temporary files (never publish)
 # ---------------------------------------------------------------------------
 *.bak
+*.bak*
 *.bak-*
 *.orig
 *.tmp

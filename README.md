@@ -149,6 +149,8 @@ counters, runtime and verification state (CSV/Markdown export).
 
 ## Web player
 
+**Live demo (GitHub Pages, static):** <https://error-wtf.github.io/CASU-CODEC/>
+
 ```bash
 web-casu                    # binds 127.0.0.1, opens the browser
 web-casu --port 8080        # custom port
@@ -165,6 +167,9 @@ CASUNAT2 key/tile/PCM decoding with track/subtitle/chapter selection,
 same-origin stream proxy so live streams feed the FFT visualizer, fullscreen,
 snapshot, Picture-in-Picture. Security: foreign Host/Origin rejected, CSP and
 restrictive headers.
+
+> The GitHub Pages version is the same front end without the local backend,
+> so streaming/search/proxy features need the installed `web-casu` server.
 
 ![MPCASU Web](docs/screenshots/web-casu.png)
 
