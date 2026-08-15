@@ -366,3 +366,36 @@ def resolve_spotify_url(url: str, *, timeout: float = 60.0,
         if not artist:
             artist = ""
     return _resolve_via_ytdlp(title, artist, timeout=timeout)
+
+
+def download_spotify_track(title: str, artist: str = "", *,
+                           timeout: float = 180.0) -> Path:
+    """Download the matched audio via yt-dlp to a temp file and return it.
+
+    YouTube's direct stream URLs return HTTP 403 to plain HTTP clients (and
+    to libVLC), so the local player cannot open them. yt-dlp's authenticated
+    ``ytsearch`` download works, so the Spotify track (title + artist) is
+    downloaded once to a temporary file that the player opens natively.
+    """
+    executable = shutil.which("yt-dlp")
+    if not executable:
+        raise SpotifyError("yt-dlp is not installed")
+    query = f"{title} {artist}".strip()
+    temp = Path(tempfile.gettempdir()) / (
+        f"casu-spotify-{os.getpid()}-{int(time.monotonic()*1000)}.m4a")
+    command = [
+        executable, "--no-warnings", "--no-playlist",
+        "-f", "bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio",
+        "-o", str(temp), f"ytsearch1:{query}",
+    ]
+    try:
+        proc = subprocess.run(command, check=False, stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL,
+                              timeout=max(60.0, float(timeout)))
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        temp.unlink(missing_ok=True)
+        raise SpotifyError(f"Spotify audio download failed: {exc}") from exc
+    if proc.returncode != 0 or not temp.is_file() or temp.stat().st_size <= 0:
+        temp.unlink(missing_ok=True)
+        raise SpotifyError("Spotify audio download failed")
+    return temp

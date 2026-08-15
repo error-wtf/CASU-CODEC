@@ -1914,6 +1914,7 @@ class MainWindow(QMainWindow):
         self._ab_a: float | None = None
         self._ab_b: float | None = None
         self._network_source: str | None = None
+        self._temp_media: Path | None = None
         self._epg_catalog = None
         self._epg_guide = None
         self._sidebar_rail = False
@@ -2538,6 +2539,12 @@ class MainWindow(QMainWindow):
         self._viz_rate = 0
         self._viz_overview = ()
         self._visualizer.set_cover(None)
+        if self._temp_media is not None:
+            try:
+                self._temp_media.unlink(missing_ok=True)
+            except OSError:
+                pass
+            self._temp_media = None
         self._viz_generation += 1
         self._audio_stage = False
         self._reposition_overlays()
@@ -3835,13 +3842,13 @@ class MainWindow(QMainWindow):
 
         def worker():
             try:
-                resolved = resolve_spotify_url(
-                    url, title=title, artist=artist)
+                from casu.spotify import download_spotify_track
+                local = download_spotify_track(title, artist)
             except (SpotifyError, OSError, ValueError) as exc:
                 self._resolve_bridge.errorReady.emit((generation, str(exc)))
                 return
             self._resolve_bridge.resultReady.emit(
-                (generation, resolved, display_label or url))
+                (generation, str(local), display_label or url))
         threading.Thread(target=worker, daemon=True).start()
 
     def _resolve_and_open_external_source(self, source: str, *,
@@ -3858,13 +3865,45 @@ class MainWindow(QMainWindow):
 
         def worker():
             try:
-                resolved = resolve_media_location(source)
+                if is_youtube_url(source):
+                    local = self._download_media(source)
+                    resolved = str(local)
+                else:
+                    resolved = resolve_media_location(source)
             except (LocationResolutionError, SpotifyError, OSError, ValueError) as exc:
                 self._resolve_bridge.errorReady.emit((generation, str(exc)))
                 return
             self._resolve_bridge.resultReady.emit(
                 (generation, resolved, display_label or source))
         threading.Thread(target=worker, daemon=True).start()
+
+    def _download_media(self, source: str, *, timeout: float = 240.0) -> Path:
+        """Download a YouTube/yt-dlp source to a temp file for local playback.
+
+        YouTube's direct stream URLs return HTTP 403 to plain HTTP clients
+        (and libVLC); yt-dlp's authenticated download works. The media is
+        downloaded once to a temporary file the player opens natively.
+        """
+        import subprocess
+        temp = Path(tempfile.gettempdir()) / (
+            f"casu-media-{os.getpid()}-{int(time.time()*1000)}.m4a")
+        command = [
+            "yt-dlp", "--no-warnings", "--no-playlist",
+            "-f", "bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio",
+            "-o", str(temp), str(source),
+        ]
+        try:
+            proc = subprocess.run(command, check=False,
+                                  stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL,
+                                  timeout=max(60.0, float(timeout)))
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            temp.unlink(missing_ok=True)
+            raise CasuError(f"Media download failed: {exc}") from exc
+        if proc.returncode != 0 or not temp.is_file() or temp.stat().st_size <= 0:
+            temp.unlink(missing_ok=True)
+            raise CasuError("Media download failed")
+        return temp
 
     def _on_resolve_ready(self, payload):
         generation, resolved, label = payload
@@ -3905,7 +3944,11 @@ class MainWindow(QMainWindow):
             capabilities = self.backend.capabilities()
             self.status(f"Playing network source · {capabilities.get('version', 'libVLC')} · timing owned by libVLC")
             self._video_surface.set_video_active(True)
-            self._network_source = source
+            if Path(str(source)).is_file():
+                self._network_source = None
+                self._temp_media = Path(str(source))
+            else:
+                self._network_source = source
             mode = str(self.settings_store.load().visualizer)
             self._viz_mode = mode
             self._viz_overview = ()
