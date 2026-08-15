@@ -17,12 +17,19 @@ from pathlib import Path
 
 from PySide6.QtCore import (
     QEasingCurve, QObject, QPropertyAnimation, QRect, Qt, QTimer, Signal, Slot,
-    QSize,
+    QSize, QUrl,
 )
 from PySide6.QtGui import (
     QAction, QColor, QFont, QIcon, QKeySequence, QPainter, QPen, QPixmap,
     QTextDocument, QImage, QLinearGradient, QBrush, QGuiApplication,
 )
+
+try:
+    from PySide6.QtWebEngineWidgets import QWebEngineView
+    _HAVE_WEBENGINE = True
+except ImportError:  # embedded browser view is optional
+    QWebEngineView = None
+    _HAVE_WEBENGINE = False
 from PySide6.QtWidgets import (
     QApplication, QAbstractItemView, QButtonGroup, QCheckBox, QComboBox, QDialog,
     QDialogButtonBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
@@ -1582,6 +1589,7 @@ class SourcesView(QFrame):
     sourceActivated = Signal(object)
     consentAccepted = Signal()
     closeRequested = Signal()
+    webPlayerRequested = Signal(str, str, str)  # provider, query, url
 
     def __init__(self, settings_store, parent=None):
         super().__init__(parent)
@@ -1700,15 +1708,10 @@ class SourcesView(QFrame):
         web = self.MODES[self._mode].get("web")
         if web:
             if is_spotify_url(text):
-                self._fetch_spotify_handoff(text)
-                return
-            from casu.webproviders import open_web_player
-            opened = open_web_player(web, query=text)
-            if opened:
-                self._status.setText(
-                    f"{self.MODES[self._mode]['title']} Web Player geöffnet in Chromium")
+                self.webPlayerRequested.emit(web, "", text)
             else:
-                self._status.setText("Chromium fehlt — bitte chromium-browser installieren")
+                self.webPlayerRequested.emit(web, text, "")
+            self._status.setText(f"{self.MODES[self._mode]['title']} wird im eingebetteten Browser geöffnet…")
             return
         if is_youtube_url(text) and "list=" in text:
             self._expand_youtube_playlist(text)
@@ -1760,12 +1763,7 @@ class SourcesView(QFrame):
         threading.Thread(target=worker, daemon=True).start()
 
     def _fetch_spotify_handoff(self, url: str):
-        from casu.webproviders import open_web_player
-        opened = open_web_player("spotify", url=url)
-        if opened:
-            self._status.setText("Spotify Web Player geöffnet (Chromium) — dort abspielen")
-        else:
-            self._status.setText("Chromium fehlt — bitte chromium-browser installieren")
+        self._open_web_player("spotify", url=url)
 
     def _run_search(self, query: str):
         if self._searching:
@@ -2346,12 +2344,18 @@ class MainWindow(QMainWindow):
         self._sources_view = SourcesView(self.settings_store)
         self._sources_view.sourceActivated.connect(self._on_source_activated)
         self._sources_view.closeRequested.connect(self._show_player_page)
+        self._sources_view.webPlayerRequested.connect(self._open_web_player)
         self._sources_view.consentAccepted.connect(
             lambda: self.status("yt-dlp consent saved — YouTube/Spotify enabled"))
 
         self._center_stack = QStackedWidget()
         self._center_stack.addWidget(player_page)
         self._center_stack.addWidget(self._sources_view)
+        self._web_view = None
+        if _HAVE_WEBENGINE:
+            self._web_view = QWebEngineView()
+            self._web_view.setObjectName("WebView")
+            self._center_stack.addWidget(self._web_view)
         self._pages: list = []
         self._library_page = LibraryPage(self.media_library, self._thumbnail_dir, self)
         self._library_page.addRequested.connect(lambda paths: self.add_files(paths))
@@ -3116,15 +3120,23 @@ class MainWindow(QMainWindow):
         self._back_btn.show()
 
     def _open_web_player(self, provider: str, *, query: str = "", url: str = ""):
-        from casu.webproviders import WEB_PLAYERS, open_web_player
-        opened = open_web_player(provider, query=query, url=url)
+        from casu.webproviders import WEB_PLAYERS, web_player_url
         label = WEB_PLAYERS.get(provider, WEB_PLAYERS["spotify"])["label"]
-        if opened:
-            self._show_player_page()
-            self.status(f"{label} Web Player geöffnet in Chromium — dort mit deinem Account einloggen")
-            self.toast(f"{label} im offiziellen Web Player geöffnet (Chromium)")
-        else:
-            self.toast("Chromium fehlt — bitte Chromium installieren (chromium-browser)")
+        target = web_player_url(provider, query=query, url=url)
+        if self._web_view is None:
+            from casu.webproviders import open_web_player
+            opened = open_web_player(provider, query=query, url=url)
+            if opened:
+                self.status(f"{label} Web Player geöffnet in Chromium")
+            else:
+                self.toast("Chromium fehlt — bitte chromium-browser installieren")
+            return
+        self._web_view.load(QUrl(target))
+        self._center_stack.setCurrentWidget(self._web_view)
+        self._topbar_title.setText(label)
+        self._back_btn.show()
+        self.status(f"{label} Web Player (eingebetteter Chromium) — dort mit deinem Account einloggen")
+        self.toast(f"{label} geöffnet im eingebetteten Browser")
 
     def _show_player_page(self):
         self._center_stack.setCurrentIndex(0)
@@ -3847,10 +3859,7 @@ class MainWindow(QMainWindow):
             self._resolve_and_open_external_source(payload)
             return
         if getattr(payload, "source", None) == "spotify" and is_spotify_url(payload.url):
-            self._resolve_spotify_playback(
-                payload.url, title=getattr(payload, "title", "") or "",
-                artist=getattr(payload, "uploader", "") or "",
-                display_label=getattr(payload, "title", "") or payload.url)
+            self._open_web_player("spotify", url=payload.url)
             return
         self._resolve_and_open_external_source(payload.url,
                                                display_label=payload.title)
