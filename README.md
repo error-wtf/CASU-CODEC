@@ -6,7 +6,7 @@ media player suite: a Qt desktop player, a local web player, a batch converter
 and a CLI. Everything installs system-wide via Debian packages and does not
 interfere with VLC, GStreamer or FFmpeg.
 
-> **Version:** `1.0.5` — see [RELEASE_GATE_STATUS.json](RELEASE_GATE_STATUS.json).
+> **Version:** `1.0.6` — see [RELEASE_GATE_STATUS.json](RELEASE_GATE_STATUS.json).
 > Gates 1–3 (source-resolution STRICT, CASUNAT2 native payload, integrity /
 > recovery / fuzzing) are **PASS**. Gates 4–6 (native player path, media
 > management / converter, product UI / release regression) are honestly
@@ -39,10 +39,10 @@ source file is **not** required for native playback.
 ./packaging/build_debs.sh          # builds into dist/ (or use shipped DEBs)
 cd dist
 sha256sum -c SHA256SUMS
-sudo dpkg -i casu-codec_1.0.5_all.deb \
-             casu-converter_1.0.5_all.deb \
-             mpcasu_1.0.5_all.deb \
-             web-casu_1.0.5_all.deb
+sudo dpkg -i casu-codec_1.0.6_all.deb \
+             casu-converter_1.0.6_all.deb \
+             mpcasu_1.0.6_all.deb \
+             web-casu_1.0.6_all.deb
 sudo apt-get -f install            # only if dependencies are missing
 ```
 

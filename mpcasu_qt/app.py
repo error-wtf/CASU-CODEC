@@ -19,7 +19,13 @@ if _project_root not in sys.path:
 from mpcasu_qt.main_window import MainWindow
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt
-from PySide6.QtNetwork import QLocalServer, QLocalSocket
+
+try:
+    from PySide6.QtNetwork import QLocalServer, QLocalSocket
+    _HAVE_NETWORK = True
+except ImportError:  # single-instance guard is optional
+    QLocalServer = QLocalSocket = None
+    _HAVE_NETWORK = False
 
 
 def main() -> int:
@@ -30,37 +36,40 @@ def main() -> int:
 
     paths = [Path(arg).expanduser() for arg in sys.argv[1:]]
 
-    socket = QLocalSocket(app)
-    socket.connectToServer("mpcasu-single-instance")
-    if socket.waitForConnected(300):
-        payload = "\n".join(str(p) for p in paths).encode("utf-8")
-        socket.write(payload)
-        socket.waitForBytesWritten(1000)
-        socket.disconnectFromServer()
-        return 0
+    server = None
+    window = None
+    if _HAVE_NETWORK:
+        socket = QLocalSocket(app)
+        socket.connectToServer("mpcasu-single-instance")
+        if socket.waitForConnected(300):
+            payload = "\n".join(str(p) for p in paths).encode("utf-8")
+            socket.write(payload)
+            socket.waitForBytesWritten(1000)
+            socket.disconnectFromServer()
+            return 0
 
-    server = QLocalServer(app)
-    QLocalServer.removeServer("mpcasu-single-instance")
-    server.listen("mpcasu-single-instance")
+        server = QLocalServer(app)
+        QLocalServer.removeServer("mpcasu-single-instance")
+        server.listen("mpcasu-single-instance")
 
     window = MainWindow(initial=paths)
 
-    def _on_connection():
-        client = server.nextPendingConnection()
-        if client is None:
-            return
-        client.readyRead.connect(lambda: _handle(client))
+    if server is not None:
+        def _handle(client):
+            data = bytes(client.readAll())
+            client.disconnectFromServer()
+            for line in data.decode("utf-8", "replace").splitlines():
+                if line.strip():
+                    window.add_files([line])
+            window.raise_()
+            window.activateWindow()
 
-    def _handle(client):
-        data = bytes(client.readAll())
-        client.disconnectFromServer()
-        for line in data.decode("utf-8", "replace").splitlines():
-            if line.strip():
-                window.add_files([line])
-        window.raise_()
-        window.activateWindow()
+        def _on_connection():
+            client = server.nextPendingConnection()
+            if client is not None:
+                client.readyRead.connect(lambda: _handle(client))
 
-    server.newConnection.connect(_on_connection)
+        server.newConnection.connect(_on_connection)
     window.show()
     return app.exec()
 
