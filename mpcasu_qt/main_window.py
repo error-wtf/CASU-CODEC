@@ -5041,12 +5041,7 @@ class MainWindow(QMainWindow):
             self.status("Playback error — " + (detail or "decoder or output failed"))
             self._diagnostics_bar.set_values(support="backend error; inspect media information/logs")
         elif state == PlaybackState.ENDED and not self._advancing and not self._end_handled:
-            self._end_handled = True
-            self._advancing = True
-            try:
-                self.play_next(automatic=True)
-            finally:
-                self._advancing = False
+            self._handle_ended()
 
     def _check_playback_start(self):
         if not self.backend or not self.current or self._paused:
@@ -5085,6 +5080,25 @@ class MainWindow(QMainWindow):
             pos = min(self.duration, self.backend.position())
             self._seek_slider.set_position(pos)
             self._update_time_labels(pos)
+            # Robust end-of-media detection: even if libVLC's event/state API
+            # is unavailable, reaching the end of the track must advance the
+            # queue / honour repeat and shuffle.
+            if (self.duration > 0 and pos >= self.duration - 0.25
+                    and not self._paused):
+                self._handle_ended()
+
+    def _handle_ended(self):
+        """Advance/loop after a track ends (guarded against double fire)."""
+        if self._advancing or self._end_handled or not self.backend:
+            return
+        if self._ab_a is not None and self._ab_b is not None:
+            return  # the A–B loop owns the end
+        self._end_handled = True
+        self._advancing = True
+        try:
+            self.play_next(automatic=True)
+        finally:
+            self._advancing = False
 
     def _update_time_labels(self, pos: float):
         self._time_current.setText(format_duration(pos))
@@ -5104,12 +5118,7 @@ class MainWindow(QMainWindow):
             self._sync_position()
             state = self.backend.state()
             if state == PlaybackState.ENDED and not self._advancing and not self._end_handled:
-                self._end_handled = True
-                self._advancing = True
-                try:
-                    self.play_next(automatic=True)
-                finally:
-                    self._advancing = False
+                self._handle_ended()
             elif state == PlaybackState.ERROR:
                 self.status("Playback error detected")
                 self._video_surface.set_video_active(False)
