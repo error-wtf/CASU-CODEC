@@ -138,6 +138,34 @@ def window_wave(pcm: np.ndarray, rate: int, position_s: float, *,
     return tuple(values[:points])
 
 
+def live_fft(pcm: np.ndarray, rate: int, position_s: float, *,
+             fft_size: int = 2048, bins: int = 1024) -> tuple[float, ...]:
+    """Raw FFT magnitudes exactly like the web player's getByteFrequencyData.
+
+    Returns ``bins`` linear frequency magnitudes in [0,1] from an FFT window
+    at *position_s*; the web player draws all ``frequencyBinCount`` (fft_size/2)
+    bins as its bars.
+    """
+    if pcm is None or rate <= 0 or bins < 8:
+        return ()
+    fft_size = max(64, min(len(pcm), fft_size))
+    centre = max(0, min(len(pcm) - 1, int(position_s * rate)))
+    half = fft_size // 2
+    start = max(0, centre - half)
+    end = min(len(pcm), start + fft_size)
+    chunk = pcm[start:end]
+    if len(chunk) < 64:
+        return ()
+    values = chunk - chunk.mean()
+    window = np.hanning(len(values))
+    magnitudes = np.abs(np.fft.rfft(values * window))
+    count = min(bins, len(magnitudes))
+    output = magnitudes[:count]
+    maximum = float(output.max()) if output.size else 0.0
+    return tuple(float(value / maximum) if maximum > 0 else 0.0
+                 for value in output)
+
+
 def live_spectrum(pcm: np.ndarray, rate: int, position_s: float, *,
                   fft_size: int = 2048, bands: int = 32) -> tuple[float, ...]:
     """Compute a short FFT on a PCM window at *position_s*.
