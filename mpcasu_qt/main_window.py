@@ -810,6 +810,7 @@ class VisualizerWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WA_OpaquePaintEvent, True)
         self.hide()
         self._peaks: tuple[float, ...] = ()
         self._wave: tuple[float, ...] = ()
@@ -853,16 +854,19 @@ class VisualizerWidget(QWidget):
         self._overview = tuple(overview or ())
         # The cover is always shown for audio, independently of the
         # visualization mode; the waves/bars are the toggleable part.
-        visible = (self._cover is not None) or (mode != "off" and (
-            self._wave or self._bands or self._overview or self._live))
+        # Over video (small) the cover layer is skipped entirely.
+        visible = ((not self._small and self._cover is not None)
+                   or (mode != "off" and (
+                       self._wave or self._bands or self._overview or self._live)))
         self.setVisible(bool(visible))
         self.update()
 
     def set_mode(self, mode: str):
         """Toggle only the visualization layer, keeping cover and data."""
         self._mode = mode
-        visible = (self._cover is not None) or (mode != "off" and (
-            self._wave or self._bands or self._overview or self._live))
+        visible = ((not self._small and self._cover is not None)
+                   or (mode != "off" and (
+                       self._wave or self._bands or self._overview or self._live)))
         self.setVisible(bool(visible))
         self.update()
 
@@ -873,7 +877,7 @@ class VisualizerWidget(QWidget):
         self._cover = pixmap
         self._backdrop = None
         self._backdrop_size = (0, 0)
-        if pixmap is not None:
+        if pixmap is not None and not self._small:
             self.setVisible(True)
         self.update()
 
@@ -882,7 +886,7 @@ class VisualizerWidget(QWidget):
         self._caps = self._cap(self._caps, bands)
         if wave:
             self._wave = self._blend(self._wave, wave)
-        if self._live or self._cover:
+        if self._live or (not self._small and self._cover):
             self.setVisible(True)
         self.update()
 
@@ -1004,9 +1008,9 @@ class VisualizerWidget(QWidget):
             return
 
         if self._small:
-            # Video mode: a translucent glass strip so the video stays
-            # visible behind the bars and nothing flickers over it.
-            painter.fillRect(QRectF(0, 0, w, h), QColor(8, 10, 12, 165))
+            # Video mode: a solid dark strip (opaque, no alpha compositing)
+            # so nothing flickers over the native video window.
+            painter.fillRect(QRectF(0, 0, w, h), QColor("#0a0c0f"))
         else:
             bg = QLinearGradient(0, 0, 0, h)
             bg.setColorAt(0.0, QColor("#0c1015"))
