@@ -982,14 +982,14 @@ class VisualizerWidget(QWidget):
     def _paint_wave_line(self, painter, wave, w, h):
         """Oscilloscope line with the web player's exact formula.
 
-        Web player: ``y = timeData/128*h*0.5 + h*0.25``; for signed samples
-        ``[-1,1]`` this is ``y = value*h*0.5 + h*0.75``.
+        Web player: ``x = i/fftSize*w`` and ``y = timeData/128*h*0.5 + h*0.25``;
+        for signed samples [-1,1] that is ``y = value*h*0.5 + h*0.75``.
         """
         wave = list(wave or ())
         if len(wave) < 8 or h <= 0:
             return
         count = len(wave)
-        step = w / (count - 1)
+        step = w / count
         path = QPainterPath()
         for i, value in enumerate(wave):
             x = i * step
