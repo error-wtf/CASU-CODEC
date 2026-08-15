@@ -847,10 +847,9 @@ class VisualizerWidget(QWidget):
     def configure(self, mode: str, wave, bands, duration: float, overview=()):
         self._mode = mode
         self._duration = max(0.0, float(duration or 0.0))
-        # The oscilloscope wave tracks the playhead directly (no smoothing
-        # lag); only the spectrum bars are lightly blended.
+        # Exactly like the web player: raw bars and wave, no smoothing lag.
         self._wave = tuple(wave or ())
-        self._bands = self._blend(self._bands, bands, 0.95, 0.85)
+        self._bands = tuple(bands or ())
         self._caps = self._cap(self._caps, bands)
         self._overview = tuple(overview or ())
         # The cover is always shown for audio, independently of the
@@ -883,7 +882,7 @@ class VisualizerWidget(QWidget):
         self.update()
 
     def set_live(self, bands, wave=()):
-        self._live = self._blend(self._live, bands, 0.95, 0.85)
+        self._live = tuple(bands)
         self._caps = self._cap(self._caps, bands)
         if wave:
             self._wave = tuple(wave)
@@ -904,7 +903,7 @@ class VisualizerWidget(QWidget):
 
     @staticmethod
     def _cap(old, new):
-        """Peak caps: rise instantly, decay fast (no lag trail)."""
+        """Peak caps: rise instantly, fast decay (minimal trail)."""
         old = list(old or ())
         new = list(new or ())
         if not old:
@@ -914,7 +913,7 @@ class VisualizerWidget(QWidget):
         for index in range(count):
             prev = old[index] if index < len(old) else 0.0
             value = new[index] if index < len(new) else 0.0
-            out.append(prev + (value - prev) * (1.0 if value >= prev else 0.25))
+            out.append(prev + (value - prev) * (1.0 if value >= prev else 0.5))
         return tuple(out)
 
     @staticmethod
