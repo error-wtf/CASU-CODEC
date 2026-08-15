@@ -4,7 +4,7 @@ from casu.library import MediaLibrary, PlaybackPreferences
 
 
 def test_media_library_scan_resume_favorites_and_playlists(tmp_path):
-    first = tmp_path / "a.any"; first.write_bytes(b"a")
+    first = tmp_path / "a.mp3"; first.write_bytes(b"a")
     second = tmp_path / "b.casu"; second.write_bytes(b"bb")
     with MediaLibrary(tmp_path / "library.sqlite3") as library:
         scanned = library.scan([first, second])

@@ -17,6 +17,14 @@ MAX_LIBRARY_METADATA_BYTES = 1024 * 1024
 MAX_LIBRARY_SCAN_FILES = 100_000
 MAX_PLAYLIST_NAME_BYTES = 255
 
+# Only these suffixes are indexed (skipping them keeps the scan fast and
+# avoids probing every non-media file in a watched folder).
+MEDIA_EXTENSIONS = frozenset({
+    ".mp3", ".mp4", ".m4a", ".m4v", ".mov", ".mkv", ".webm", ".flac",
+    ".wav", ".ogg", ".opus", ".aac", ".aiff", ".alac", ".wma", ".mpg",
+    ".mpeg", ".ts", ".m2ts", ".avi", ".casu", ".mp5",
+})
+
 
 @dataclass(frozen=True)
 class LibraryItem:
@@ -50,7 +58,7 @@ class MediaLibrary:
     def __init__(self, path: str | Path):
         self.path = Path(path).expanduser().resolve()
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.connection = sqlite3.connect(self.path)
+        self.connection = sqlite3.connect(self.path, check_same_thread=False)
         self.connection.row_factory = sqlite3.Row
         self.connection.execute("PRAGMA foreign_keys=ON")
         self.connection.execute("PRAGMA journal_mode=WAL")
@@ -220,6 +228,8 @@ class MediaLibrary:
                 if candidate == self.path or candidate.name in {
                     f"{self.path.name}-wal", f"{self.path.name}-shm"
                 }:
+                    continue
+                if candidate.suffix.lower() not in MEDIA_EXTENSIONS:
                     continue
                 try:
                     found.append(self._upsert(candidate))

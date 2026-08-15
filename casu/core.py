@@ -127,7 +127,7 @@ def run(command: list[str], *, capture: bool = False) -> subprocess.CompletedPro
         raise CasuError(detail) from exc
 
 
-def ffprobe(path: Path) -> dict[str, Any]:
+def ffprobe(path: Path, *, timeout_seconds: float = FFPROBE_TIMEOUT_SECONDS) -> dict[str, Any]:
     executable = require_tool("ffprobe")
     try:
         return run_json([
@@ -135,7 +135,7 @@ def ffprobe(path: Path) -> dict[str, Any]:
             "-show_chapters",
             "-of", "json", str(path),
         ], max_output_bytes=MAX_FFPROBE_JSON_BYTES,
-           timeout_seconds=FFPROBE_TIMEOUT_SECONDS)
+           timeout_seconds=timeout_seconds)
     except ProbeError as exc:
         raise CasuError(f"media probe failed: {exc}") from exc
 
