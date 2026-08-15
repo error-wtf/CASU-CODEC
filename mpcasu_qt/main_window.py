@@ -2334,6 +2334,12 @@ class MainWindow(QMainWindow):
         info_btn.clicked.connect(self.show_media_info)
         secondary.addWidget(info_btn)
 
+        rec_settings_btn = QPushButton("Rec-Settings")
+        rec_settings_btn.setObjectName("IconButton")
+        rec_settings_btn.setToolTip("Recording: Speicherort, Format, Splitting")
+        rec_settings_btn.clicked.connect(self._show_record_settings_dialog)
+        secondary.addWidget(rec_settings_btn)
+
         self._more_panel.hide()
         self._more_btn.toggled.connect(self._more_panel.setVisible)
         tc_layout.addWidget(self._more_panel)
@@ -3588,6 +3594,75 @@ class MainWindow(QMainWindow):
         root = Path(folder).expanduser() if folder else Path.home() / "Videos" / "MPCASU"
         root.mkdir(parents=True, exist_ok=True)
         return root
+
+    def _show_record_settings_dialog(self):
+        """Dialog für Aufnahme: Speicherort, Format, Splitting an/aus."""
+        settings = self.settings_store.load()
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Recording settings")
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(10)
+
+        folder_row = QHBoxLayout()
+        folder_row.addWidget(QLabel("Speicherort"))
+        folder_entry = QLineEdit(str(settings.recordings_dir or ""))
+        folder_entry.setObjectName("IconButton")
+        folder_row.addWidget(folder_entry, 1)
+        folder_btn = QPushButton("…")
+        folder_btn.setObjectName("IconButton")
+        folder_btn.clicked.connect(
+            lambda: folder_entry.setText(QFileDialog.getExistingDirectory(
+                dialog, "Aufnahmenordner",
+                str(Path(settings.recordings_dir).expanduser())
+                if settings.recordings_dir else str(Path.home() / "Videos"))))
+        folder_row.addWidget(folder_btn)
+        layout.addLayout(folder_row)
+
+        format_row = QHBoxLayout()
+        format_row.addWidget(QLabel("Format"))
+        format_combo = QComboBox()
+        format_combo.setObjectName("IconButton")
+        for fmt in ("mkv", "mp4", "ts", "webm", "ogg", "mp3", "flac", "wav"):
+            format_combo.addItem(fmt)
+        format_combo.setCurrentText(str(settings.record_format))
+        format_row.addWidget(format_combo)
+        format_row.addStretch()
+        layout.addLayout(format_row)
+
+        split_cb = QCheckBox("Aufzeichnung automatisch teilen")
+        split_cb.setChecked(int(settings.record_split_minutes) > 0)
+        layout.addWidget(split_cb)
+        split_row = QHBoxLayout()
+        split_row.addWidget(QLabel("Alle"))
+        split_spin = QSpinBox()
+        split_spin.setObjectName("IconButton")
+        split_spin.setRange(1, 24 * 60)
+        split_spin.setSuffix(" min")
+        split_spin.setValue(max(1, int(settings.record_split_minutes)))
+        split_spin.setEnabled(split_cb.isChecked())
+        split_cb.toggled.connect(split_spin.setEnabled)
+        split_row.addWidget(split_spin)
+        split_row.addStretch()
+        layout.addLayout(split_row)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec() != QDialog.Accepted:
+            return
+        updated = replace(
+            settings,
+            recordings_dir=folder_entry.text().strip(),
+            record_format=str(format_combo.currentText()),
+            record_split_minutes=split_spin.value() if split_cb.isChecked() else 0,
+        )
+        self.settings_store.save(updated)
+        self._record_split_minutes = updated.record_split_minutes
+        self._record_format = updated.record_format
+        self.toast("Recording settings gespeichert")
+        self.status("Recording: Speicherort/Format/Splitting gespeichert")
 
     def _recording_source(self) -> str:
         if getattr(self, "_network_source", None):
