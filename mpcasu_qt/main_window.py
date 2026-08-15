@@ -810,7 +810,6 @@ class VisualizerWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
-        self.setAttribute(Qt.WA_OpaquePaintEvent, True)
         self.hide()
         self._peaks: tuple[float, ...] = ()
         self._wave: tuple[float, ...] = ()
@@ -1008,9 +1007,9 @@ class VisualizerWidget(QWidget):
             return
 
         if self._small:
-            # Video mode: a solid dark strip (opaque, no alpha compositing)
-            # so nothing flickers over the native video window.
-            painter.fillRect(QRectF(0, 0, w, h), QColor("#0a0c0f"))
+            # Video mode: fully transparent — just the bars/wave over the
+            # video, no darkening.
+            pass
         else:
             bg = QLinearGradient(0, 0, 0, h)
             bg.setColorAt(0.0, QColor("#0c1015"))
@@ -2296,6 +2295,7 @@ class MainWindow(QMainWindow):
         body.addWidget(self._sidebar)
 
         player_page = QWidget()
+        self._player_page = player_page
         center_column = QVBoxLayout(player_page)
         center_column.setContentsMargins(0, 0, 0, 0)
         center_column.setSpacing(0)
@@ -2341,18 +2341,18 @@ class MainWindow(QMainWindow):
         self._video_surface.doubleClicked.connect(self.toggle_fullscreen)
         center_column.addWidget(self._video_surface, 1)
 
-        self._badges_label = QLabel(self._video_surface)
+        self._badges_label = QLabel(self._player_page)
         self._badges_label.setStyleSheet(
             "background-color: #090b0ddd; border: 1px solid #383d43; color: #f4f5f7;"
             " font-size: 11px; font-weight: 800; padding: 5px 8px;")
         self._badges_label.hide()
-        self._caption_label = QLabel(self._video_surface)
+        self._caption_label = QLabel(self._player_page)
         self._caption_label.setStyleSheet(
             "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 transparent,"
             " stop:1 #050607e8); color: #f4f5f7; font-size: 14px; font-weight: 700;"
             " padding: 40px 18px 12px 18px; border: none;")
         self._caption_label.hide()
-        self._empty_hint = QFrame(self._video_surface)
+        self._empty_hint = QFrame(self._player_page)
         self._empty_hint.setStyleSheet(
             "background: qradialgradient(cx:0.5, cy:0.5, radius:0.9, "
             "stop:0 #291014, stop:1 #0b0d10); border: none;")
@@ -2383,27 +2383,27 @@ class MainWindow(QMainWindow):
         eh_layout.addWidget(eh_meta)
         eh_layout.addStretch()
 
-        self._visualizer = VisualizerWidget(self._video_surface)
+        self._visualizer = VisualizerWidget(self._player_page)
         self._viz_bridge = _ThreadBridge()
         self._scan_bridge = _ThreadBridge()
         self._scan_bridge.resultReady.connect(self._scan_done)
         self._viz_bridge.resultReady.connect(self._apply_viz)
 
-        self._toast_label = QLabel(self._video_surface)
+        self._toast_label = QLabel(self._player_page)
         self._toast_label.setObjectName("Toast")
         self._toast_label.hide()
         self._toast_timer = QTimer(self)
         self._toast_timer.setSingleShot(True)
         self._toast_timer.timeout.connect(self._toast_label.hide)
 
-        self._drop_overlay = QLabel("DROP TO PLAY / ADD TO QUEUE", self._video_surface)
+        self._drop_overlay = QLabel("DROP TO PLAY / ADD TO QUEUE", self._player_page)
         self._drop_overlay.setAlignment(Qt.AlignCenter)
         self._drop_overlay.setStyleSheet(
             "background: #07090bcc; border: 2px solid #ff1e2d; border-radius: 10px;"
             " color: #ff1e2d; font-size: 16px; font-weight: 800;")
         self._drop_overlay.hide()
 
-        self._fs_overlay = QFrame(self._video_surface)
+        self._fs_overlay = QFrame(self._player_page)
         self._fs_overlay.setStyleSheet(
             "background: #07090bdd; border: 1px solid #252a30; border-radius: 8px;")
         fsl = QHBoxLayout(self._fs_overlay)
@@ -3366,6 +3366,7 @@ class MainWindow(QMainWindow):
         self._transport_container.hide()
         self._diagnostics_bar.hide()
         self.statusBar().hide()
+        self._fs_overlay.setGeometry(self._player_page.rect())
         self._fs_overlay.show()
         self._fs_hide_timer.start()
 
@@ -3510,8 +3511,8 @@ class MainWindow(QMainWindow):
         self._toast_label.setFixedWidth(width)
         self._toast_label.setWordWrap(True)
         self._toast_label.adjustSize()
-        x = max(16, (stage.width() - self._toast_label.width()) // 2)
-        y = max(8, stage.height() - self._toast_label.height() - 18)
+        x = stage.x() + max(16, (stage.width() - self._toast_label.width()) // 2)
+        y = stage.y() + max(8, stage.height() - self._toast_label.height() - 18)
         self._toast_label.move(x, y)
         self._toast_label.raise_()
         self._toast_label.show()
@@ -3560,20 +3561,24 @@ class MainWindow(QMainWindow):
 
     def _reposition_overlays(self):
         stage = self._video_surface
-        self._badges_label.move(16, 16)
-        self._caption_label.setGeometry(0, max(0, stage.height() - 72),
-                                         stage.width(), 72)
+        sx, sy = stage.x(), stage.y()
+        self._badges_label.move(sx + 16, sy + 16)
+        self._caption_label.setGeometry(sx, sy + max(0, stage.height() - 72),
+                                        stage.width(), 72)
         ew = min(480, max(200, stage.width() - 60))
         eh = min(300, max(140, stage.height() - 60))
-        self._empty_hint.setGeometry((stage.width() - ew) // 2,
-                                     (stage.height() - eh) // 2, ew, eh)
+        self._empty_hint.setGeometry((stage.width() - ew) // 2 + sx,
+                                     (stage.height() - eh) // 2 + sy, ew, eh)
         if self._audio_stage:
-            self._visualizer.setGeometry(0, 0, stage.width(), stage.height())
+            self._visualizer.setGeometry(sx, sy, stage.width(), stage.height())
+            self._visualizer.set_small(False)
+            visible = (self._visualizer._cover is not None
+                       or self._viz_mode != "off")
+            self._visualizer.setVisible(visible)
         else:
-            self._visualizer.setGeometry(12, max(0, stage.height() - 108),
-                                         max(0, stage.width() - 24), 96)
-        self._visualizer.set_small(not self._audio_stage)
-        self._visualizer.raise_()
+            # Videos: no visualization at all — subtitles are rendered by the
+            # backend instead, so nothing flickers over the video.
+            self._visualizer.hide()
         self._caption_label.raise_()
         self._badges_label.raise_()
         self._empty_hint.raise_()
@@ -3754,6 +3759,12 @@ class MainWindow(QMainWindow):
             self._audio_stage = bool(has_audio) and not bool(has_video)
             self._video_surface.set_video_active(not self._audio_stage)
             self._visualizer.set_small(not self._audio_stage)
+            if not self._audio_stage:
+                # Videos: no visualization, stop any stream visualizer.
+                self._stop_stream_viz()
+                self._viz_timer.stop()
+                self._viz_pcm = None
+                self._viz_rate = 0
             self._reposition_overlays()
             return
 
@@ -4130,6 +4141,9 @@ class MainWindow(QMainWindow):
             self.toast(f"Snapshot failed: {exc}")
 
     def toggle_visualizer(self) -> None:
+        if not self._audio_stage:
+            self.toast("Visualizer is for audio only (subtitles show for video)")
+            return
         settings = self.settings_store.load()
         mode = "off" if settings.visualizer != "off" else "spectrum"
         self.settings_store.save(replace(settings, visualizer=mode))
@@ -4157,6 +4171,7 @@ class MainWindow(QMainWindow):
 
     def dragEnterEvent(self, event) -> None:
         if event.mimeData().hasUrls():
+            self._drop_overlay.setGeometry(self._video_surface.geometry())
             self._drop_overlay.show()
             self._drop_overlay.raise_()
             event.acceptProposedAction()
