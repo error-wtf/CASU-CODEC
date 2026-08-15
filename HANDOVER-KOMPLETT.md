@@ -563,3 +563,22 @@ Screenshot docs/screenshots/mpcasu.png neu.
 
 Offen: Gates 4–6 PARTIAL; Spotify-Netz auf dieser Maschine blockiert (410/
 404) → ehrliche Fehler + Handoff; spotDL optional (venv /opt/casu-spotdl).
+
+### 12.2 NACHTRAG SESSION 9 — RELEASE 1.0.5
+
+**HEAD 1.0.5:** siehe `git log -1` · normaler Push · GitHub Release v1.0.5.
+
+- **Single-Instance-Guard** (QLocalServer): zweiter Start übergibt Dateien
+  an die laufende Instanz statt „Fenster im Fenster" zu erzeugen.
+- **Geometrie-Clamp** in show/move/resize: Fenster kann nie größer/verschoben
+  außerhalb des Screens landen (Click-Region-Offset damit ausgeschlossen).
+- **Live-Stream-Visualizer**: ffmpeg-Tap (s16le-Mono-Pipe) → echte FFT-Bands
+  im Visualizer-Overlay für HTTP(S)-Streams (Web-Parität); Stop bei
+  Stop/lokalem Play.
+- **Transport-Dichte wie Web**: A–B, Snapshot, Record in sichtbarer
+  Zweitzeile; ⋯ nur noch für Tracks/Sync/Frame/Info/Stop/±10.
+
+Verifikation installiert (1.0.5): acceptance_qt 16/16 OK, Tail 5/5,
+acceptance_web 16/16, 225 Tests, dpkg -V sauber.
+
+Offen bleibt: Gates 4–6 PARTIAL; Spotify-Netz hier blockiert; Tk nur Referenz.
