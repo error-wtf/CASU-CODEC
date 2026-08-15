@@ -114,13 +114,12 @@
   </dialog>
   <dialog id="search-dialog">
     <form method="dialog">
-      <header class="dialog-title"><div><h2>YouTube &amp; Spotify search</h2><p>Metadata search via yt-dlp (GNU GPL) · personal use only</p></div><div><button value="cancel" aria-label="Close">×</button></div></header>
+      <header class="dialog-title"><div><h2>YouTube search</h2><p>Metadata search via yt-dlp (GNU GPL) · personal use only</p></div><div><button value="cancel" aria-label="Close">×</button></div></header>
       <div id="consent-box" class="consent-box" hidden>
-        <p>Legal notice — YouTube/Spotify playback and search resolve stream URLs with yt-dlp (open source, GNU GPL). URLs are resolved temporarily, never stored or redistributed. Personal use only.</p>
+        <p>Legal notice — YouTube playback and search resolve stream URLs with yt-dlp (open source, GNU GPL). URLs are resolved temporarily, never stored or redistributed. Personal use only.</p>
         <button id="consent-accept" type="button" class="primary">Accept and enable yt-dlp features</button>
       </div>
       <div class="epg-source"><input id="search-query" type="text" placeholder="Search term…" autocomplete="off"><button id="search-run" type="button">Search</button></div>
-      <label class="search-source">Source <select id="search-source"><option value="youtube">YouTube (yt-dlp)</option><option value="spotify">Spotify (spotDL)</option></select></label>
       <div id="search-results" class="epg-guide"></div>
     </form>
   </dialog>
