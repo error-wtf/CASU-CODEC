@@ -2660,8 +2660,16 @@ class MainWindow(QMainWindow):
             self.status(f"Playback rate unavailable: {exc}")
 
     def play_selected(self):
-        path = self.selected_path()
-        if not path:
+        selected = self.selected_path()
+        if selected is None:
+            self.status("Add a media file first.")
+            return
+        text = str(selected)
+        if "://" in text or text.startswith(("spotify:", "ytdl:")):
+            self._play_network_source(text)
+            return
+        path = selected
+        if not Path(text).is_file():
             self.status("Add a media file first.")
             return
         self.stop()
@@ -4036,6 +4044,15 @@ class MainWindow(QMainWindow):
             return
         self.status(f"Could not resolve network source: {detail}")
         self.toast(f"Could not resolve network source: {detail}")
+
+    def _play_network_source(self, text: str):
+        from casu.webproviders import provider_for_url
+        if provider_for_url(text):
+            self._open_external_source(text)
+        elif is_youtube_url(text):
+            self._resolve_and_open_external_source(text)
+        else:
+            self._open_external_source(text)
 
     def _open_external_source(self, source: str, *, display_label: str | None = None):
         from casu.webproviders import provider_for_url
