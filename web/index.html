@@ -124,6 +124,17 @@
       <div id="search-results" class="epg-guide"></div>
     </form>
   </dialog>
+  <dialog id="webplayers-dialog" class="webplayers-dialog">
+    <form method="dialog">
+      <header class="dialog-title"><div><h2>WEB PLAYERS</h2><p>Offizielle Web-Player (Anmeldung im jeweiligen Dienst). Spotify/Hearthis verbieten Einbettung → öffnen in neuem Tab; Tidal/Netflix sind eingebettet.</p></div><div><button value="cancel" aria-label="Close">×</button></div></header>
+      <div class="webplayers-grid">
+        <section class="webplayer-card"><h3>♫ Spotify</h3><iframe data-wp="spotify" title="Spotify" allow="autoplay; encrypted-media"></iframe><button class="wp-open primary" data-wp="spotify" type="button">In neuem Tab öffnen</button></section>
+        <section class="webplayer-card"><h3>↗ Hearthis</h3><iframe data-wp="hearthis" title="Hearthis" allow="autoplay"></iframe><button class="wp-open primary" data-wp="hearthis" type="button">In neuem Tab öffnen</button></section>
+        <section class="webplayer-card"><h3>▤ Tidal</h3><iframe data-wp="tidal" title="Tidal" allow="autoplay; encrypted-media"></iframe><button class="wp-open primary" data-wp="tidal" type="button">In neuem Tab öffnen</button></section>
+        <section class="webplayer-card"><h3>▣ Netflix</h3><iframe data-wp="netflix" title="Netflix" allow="autoplay; encrypted-media"></iframe><button class="wp-open primary" data-wp="netflix" type="button">In neuem Tab öffnen</button></section>
+      </div>
+    </form>
+  </dialog>
   <dialog id="options-dialog">
     <form method="dialog">
       <header class="dialog-title"><div><h2>Options</h2><p>Playback, visualizer and legal settings</p></div><div><button value="cancel" aria-label="Close">×</button></div></header>
