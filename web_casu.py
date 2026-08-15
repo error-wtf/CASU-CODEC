@@ -464,7 +464,12 @@ class WebPlayerHandler(http.server.SimpleHTTPRequestHandler):
             self._json(400, {"error": str(exc)[:1000]})
 
     def _search(self, request: dict) -> None:
-        """YouTube/music search via yt-dlp; metadata only, no downloads."""
+        """YouTube search via yt-dlp; Spotify search via spotDL.
+
+        Spotify results carry real Spotify track URLs (played back through
+        the spotDL resolver); YouTube results stay YouTube.  Metadata only,
+        no downloads.
+        """
         query = str(request.get("query", "")).strip()
         source = str(request.get("source", "youtube")).lower()
         try:
@@ -473,9 +478,19 @@ class WebPlayerHandler(http.server.SimpleHTTPRequestHandler):
             limit = 12
         if not query:
             raise WebPlayerError("search query must not be empty")
-        engine = search_music if source == "spotify" else search_youtube
+        if source == "spotify":
+            from casu.spotify import SpotifyError, search_spotify
+            try:
+                found = search_spotify(query, limit=limit)
+            except SpotifyError as exc:
+                raise WebPlayerError(str(exc)) from exc
+            self._json(200, {"results": [
+                {"title": r.title, "url": r.url, "duration": r.duration,
+                 "uploader": r.artist or "Spotify", "source": "spotify"}
+                for r in found]})
+            return
         try:
-            results = engine(query, limit=limit)
+            results = search_youtube(query, limit=limit)
         except SearchError as exc:
             raise WebPlayerError(str(exc)) from exc
         self._json(200, {"results": [item.as_dict() for item in results]})

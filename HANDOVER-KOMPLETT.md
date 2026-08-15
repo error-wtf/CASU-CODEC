@@ -531,3 +531,35 @@ im Repo (spotdl-eigene Env-Konfiguration). YouTube bleibt yt-dlp.
   spotDL.
 - CASUNAT1/Legacy-Start birkaç Sekunden (Extraktion + libVLC).
 - 3M-Fuzz-Kampagne vor nächstem Minor-Release erneut laufen lassen.
+
+### 12.1 NACHTRAG SESSION 8 — RELEASE 1.0.4 (UX-Parität nach Review)
+
+**HEAD vor 1.0.4:** f639f39 · **HEAD 1.0.4:** siehe `git log -1` (Release-Commit
++ dieser Handover-Commit) · normaler Push · GitHub Release v1.0.4 mit DEBs.
+
+Umgesetzt (Review-getrieben, Zielbild „angenehmer Desktop-Player"):
+- Transport entrümpelt: Hauptzeile Prev·Play·Next+Volume+Fullscreen; zweite
+  Zeile Shuffle/Repeat/Speed/Viz; ⋯-Panel für Stop/±10/A–B/Snapshot/Record/
+  Tracks/Output/Chapters/Sync/Subtitle/Frame/Info; Duplikat-Fullscreen weg.
+- Video-Fullscreen: UI-Elemente aus, Overlay-Transport bei Mausbewegung,
+  Auto-Hide 2,5 s, Esc/Doppelklick-Toggle.
+- Responsiv: <1200 px Icon-Rail, <1000 px Playlist auto-hide, ☰/☷-Toggles;
+  Startgeometrie geklemmt + zentriert (Click-Region-Offset behoben).
+- Drag&Drop mit rotem „DROP TO PLAY / ADD TO QUEUE"-Overlay.
+- Queue: View-Filter (Web-Views), rekursive Suche inkl. Playlist-Kindern,
+  Rename persistent (_display_titles), echte Thumbnails asynchron
+  (thumbnail_for, Glyph-Placeholder), EXTINF-Namen in Kindern + Caption.
+- Options: Provider-Statusseite (libVLC/FFmpeg/yt-dlp/spotDL/Deno +
+  Install-Hinweis), Record-Optionen (Ordner, Split nach Zeit, Format);
+  Record rotiert Parts bei Split.
+- Spotify beide Player: Suche via `spotdl save` (Metadaten), Playback via
+  `spotdl url`; Fallback oEmbed + „Find on YouTube"; /show//artist erkannt;
+  Consent/Provider-Texte korrigiert (YouTube=yt-dlp, Spotify=spotDL).
+- LIVE-GUIDE-Card (now/next aus geladenem EPG), Empty-State-Hero wie Web.
+
+Verifikation installiert: 225 Tests; acceptance_qt (Xvfb) grün bis auf
+CASUNAT1-Timing-Flake unter Last (einzeln OK); acceptance_web 16/16;
+Screenshot docs/screenshots/mpcasu.png neu.
+
+Offen: Gates 4–6 PARTIAL; Spotify-Netz auf dieser Maschine blockiert (410/
+404) → ehrliche Fehler + Handoff; spotDL optional (venv /opt/casu-spotdl).
