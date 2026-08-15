@@ -28,6 +28,8 @@ class PlayerSettings:
     recordings_dir: str = ""
     record_split_minutes: int = 0
     record_format: str = "mkv"
+    shuffle: bool = False
+    repeat_mode: str = "off"
 
     def validated(self) -> "PlayerSettings":
         rate = float(self.rate)
@@ -59,6 +61,9 @@ class PlayerSettings:
         record_format = str(self.record_format or "mkv").lower()
         if record_format not in {"mkv", "mp4", "ts", "webm", "ogg", "mp3", "flac", "wav"}:
             record_format = "mkv"
+        repeat_mode = str(self.repeat_mode or "off")
+        if repeat_mode not in {"off", "all", "one"}:
+            repeat_mode = "off"
         return PlayerSettings(max(0, min(200, int(self.volume))), bool(self.muted),
                               max(0.25, min(4.0, rate)), device, folders,
                               bool(self.ytdlp_consent), visualizer,
@@ -66,7 +71,8 @@ class PlayerSettings:
                               max(0, min(65536, cache_limit)),
                               recordings,
                               max(0, min(24 * 60, split_minutes)),
-                              record_format)
+                              record_format,
+                              bool(self.shuffle), repeat_mode)
 
 
 class SettingsStore:
@@ -98,6 +104,8 @@ class SettingsStore:
                 settings.get("recordings_dir", ""),
                 settings.get("record_split_minutes", 0),
                 settings.get("record_format", "mkv"),
+                settings.get("shuffle", False),
+                settings.get("repeat_mode", "off"),
             ).validated()
         except (OSError, TypeError, ValueError, CasuError):
             return PlayerSettings()
