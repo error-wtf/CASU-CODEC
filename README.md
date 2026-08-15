@@ -65,11 +65,20 @@ mpcasu /path/to/video.mp4     # play a file
 mpcasu /path/to/file.casu     # play a CASU container
 ```
 
-The sidebar is organized into **MEDIA** (library, files, playlists),
-**SOURCES** (YouTube, Spotify, network streams — with an explicit legal-consent
-banner, search runs in a worker thread and results play in-app) and **SYSTEM**
-(settings, diagnostics). All feedback uses web-style toasts; there are no
+The sidebar is organized into **MEDIA** (now playing, local files, web & streams,
+playlists, IPTV), **SEARCH** (YouTube, Spotify), **CASU**, **WEB PLAYERS**
+(Hearthis, Tidal, Netflix) and **SYSTEM** (settings, diagnostics). YouTube and
+network streams resolve in a worker thread and play in-app. DRM-protected
+providers (Spotify, Tidal) open their **official web player in Chromium** with
+your normal account login (Widevine DRM); Hearthis.at and Netflix open embedded
+in the player via QtWebEngine. All feedback uses web-style toasts; there are no
 modal popups during playback.
+
+## Screenshots
+
+![Audio visualizer](mpcasu_screenshot_audio_visualizer.png)
+
+![Playlist queue](mpcasu_screenshot_playlist.png)
 
 **Shortcuts:**
 
