@@ -3,10 +3,13 @@
 """MPCASU Qt main window — full-featured media player UI."""
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
 import random
+import subprocess
+import tempfile
 import threading
 import time
 from dataclasses import replace
@@ -785,11 +788,12 @@ class PlaylistPane(QFrame):
 
 
 class VisualizerWidget(QWidget):
-    """Web-style audio visualizer overlay: red spectrum bars + waveform + cursor.
+    """Web-style audio visualizer: dimmed cover + full-file overview + live window.
 
-    Renders measured PCM peaks/spectrum (casu.waveform) for audio-only media,
-    mirroring the web player's canvas visualizer. Hidden while real video is
-    on screen or when the visualizer mode is "off".
+    Renders a subtle full-file waveform overview, the realtime playback window
+    (casu.waveform window_peaks/live_spectrum) at the current position, embedded
+    cover art in the background, and a moving playhead. Smoothed with a fast
+    attack / slow decay so the animation does not stutter.
     """
 
     def __init__(self, parent=None):
@@ -799,28 +803,53 @@ class VisualizerWidget(QWidget):
         self._peaks: tuple[float, ...] = ()
         self._bands: tuple[float, ...] = ()
         self._live: tuple[float, ...] | None = None
+        self._overview: tuple[float, ...] = ()
+        self._cover = None
         self._mode = "spectrum"
         self._position = 0.0
         self._duration = 0.0
         self._timer = QTimer(self)
-        self._timer.setInterval(66)
+        self._timer.setInterval(33)
         self._timer.timeout.connect(self.update)
         self._timer.start()
 
-    def configure(self, mode: str, peaks, bands, duration: float):
+    @staticmethod
+    def _blend(old, new, rise: float = 0.45, fall: float = 0.10) -> tuple:
+        """Smooth frame blending: fast attack, slow decay (no flicker)."""
+        old = list(old or ())
+        new = list(new or ())
+        if not old:
+            return tuple(new)
+        count = max(len(old), len(new))
+        out = []
+        for index in range(count):
+            prev = old[index] if index < len(old) else 0.0
+            value = new[index] if index < len(new) else 0.0
+            out.append(prev + (value - prev) * (rise if value >= prev else fall))
+        return tuple(out)
+
+    def configure(self, mode: str, peaks, bands, duration: float, overview=()):
         self._mode = mode
-        self._peaks = tuple(peaks or ())
-        self._bands = tuple(bands or ())
         self._duration = max(0.0, float(duration or 0.0))
-        visible = mode != "off" and (self._peaks or self._bands)
+        self._peaks = self._blend(self._peaks, peaks)
+        self._bands = self._blend(self._bands, bands)
+        self._overview = tuple(overview or ())
+        visible = mode != "off" and (
+            self._peaks or self._bands or self._overview or self._live or self._cover)
         self.setVisible(bool(visible))
         self.update()
 
     def set_position(self, position: float):
         self._position = float(position or 0.0)
 
+    def set_cover(self, pixmap):
+        self._cover = pixmap
+        if pixmap is not None and self._mode != "off":
+            self.setVisible(True)
+        self.update()
+
     def set_live(self, bands):
-        self._live = tuple(bands)
+        self._live = self._blend(self._live, bands)
         if self._live and self._mode != "off":
             self.setVisible(True)
         self.update()
@@ -835,6 +864,31 @@ class VisualizerWidget(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         width, height = self.width(), self.height()
+
+        if self._cover is not None and not self._cover.isNull():
+            scaled = self._cover.scaled(
+                width, height, Qt.KeepAspectRatioByExpanding,
+                Qt.SmoothTransformation)
+            painter.setOpacity(0.28)
+            painter.drawPixmap((width - scaled.width()) // 2,
+                               (height - scaled.height()) // 2, scaled)
+            painter.setOpacity(1.0)
+            painter.fillRect(0, 0, width, height,
+                             QColor(7, 9, 11, 140))
+
+        if self._overview:
+            pen = QPen(QColor(PALETTE.text_faint), 1.0)
+            painter.setPen(pen)
+            count = len(self._overview)
+            mid = height // 2
+            previous = None
+            for index, value in enumerate(self._overview):
+                x = int(index * width / max(1, count - 1))
+                amp = max(1, int(value * (height // 2 - 3)))
+                if previous is not None:
+                    painter.drawLine(previous[0], previous[1], x, mid + amp)
+                previous = (x, mid - amp)
+
         bands = self._live or self._bands
         if self._mode in ("spectrum", "both") and bands:
             count = len(bands)
@@ -1823,6 +1877,8 @@ class MainWindow(QMainWindow):
         self._viz_pcm = None
         self._viz_rate = 0
         self._viz_generation = 0
+        self._viz_overview = ()
+        self._viz_mode = "spectrum"
         self._viz_timer = QTimer(self)
         self._viz_timer.setInterval(50)  # 20 FPS
         self._viz_timer.timeout.connect(self._tick_visualizer)
@@ -1838,6 +1894,9 @@ class MainWindow(QMainWindow):
         self._rate = effective.rate
         self._audio_device = effective.audio_device
         self._watched_folders = list(effective.watched_folders)
+        self._viz_mode = str(effective.visualizer)
+        self._cover_dir = config_dir / "covers"
+        self._cover_dir.mkdir(parents=True, exist_ok=True)
         self.media_library = MediaLibrary(config_dir / "library.sqlite3")
         self._thumbnail_dir = config_dir / "thumbnails"
         self._thumbnail_dir.mkdir(parents=True, exist_ok=True)
@@ -2431,6 +2490,8 @@ class MainWindow(QMainWindow):
         self._viz_timer.stop()
         self._viz_pcm = None
         self._viz_rate = 0
+        self._viz_overview = ()
+        self._visualizer.set_cover(None)
         self._viz_generation += 1
         self._audio_stage = False
         self._reposition_overlays()
@@ -3186,6 +3247,7 @@ class MainWindow(QMainWindow):
 
     def _load_visualizer(self, path):
         mode = str(self.settings_store.load().visualizer)
+        self._viz_mode = mode
 
         self._viz_generation += 1
         generation = self._viz_generation
@@ -3193,6 +3255,8 @@ class MainWindow(QMainWindow):
         self._viz_timer.stop()
         self._viz_pcm = None
         self._viz_rate = 0
+        self._viz_overview = ()
+        self._visualizer.set_cover(None)
 
         if mode == "off" or path is None:
             self._visualizer.configure("off", (), (), 0.0)
@@ -3205,9 +3269,15 @@ class MainWindow(QMainWindow):
 
         def worker():
             pcm, rate, _channels = decode_all_pcm(source)
+            overview = self._overview_peaks(pcm)
+            cover = self._cover_for(source)
             self._viz_bridge.resultReady.emit(
-                ("pcm", generation, mode, pcm, rate)
+                ("pcm", generation, mode, pcm, rate, overview)
             )
+            if cover:
+                self._viz_bridge.resultReady.emit(
+                    ("cover", generation, cover)
+                )
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -3216,21 +3286,34 @@ class MainWindow(QMainWindow):
             return
 
         if payload[0] == "pcm":
-            _, generation, mode, pcm, rate = payload
+            _, generation, mode, pcm, rate, overview = payload
 
             if generation != self._viz_generation:
                 return
 
             self._viz_pcm = pcm
             self._viz_rate = rate
+            self._viz_overview = tuple(overview or ())
+            self._viz_mode = mode
 
             self._visualizer.configure(
-                mode, (), (), self.duration or 0.0
+                mode, (), (), self.duration or 0.0, self._viz_overview
             )
 
             if pcm is not None and rate > 0:
                 self._viz_timer.start()
 
+            return
+
+        if payload[0] == "cover":
+            _, generation, cover_path = payload
+
+            if generation != self._viz_generation:
+                return
+
+            pixmap = QPixmap(str(cover_path))
+            if not pixmap.isNull():
+                self._visualizer.set_cover(pixmap)
             return
 
         if payload[0] == "stage":
@@ -3256,7 +3339,7 @@ class MainWindow(QMainWindow):
         ):
             return
 
-        mode = str(self.settings_store.load().visualizer)
+        mode = self._viz_mode or "spectrum"
 
         if mode == "off":
             return
@@ -3290,7 +3373,66 @@ class MainWindow(QMainWindow):
             peaks,
             bands,
             self.duration or 0.0,
+            self._viz_overview,
         )
+
+    @staticmethod
+    def _overview_peaks(pcm, points: int = 480) -> tuple:
+        """Downsample the full decoded PCM into a static waveform overview."""
+        if pcm is None or getattr(pcm, "size", 0) == 0 or points < 16:
+            return ()
+        import numpy as np
+        values = np.abs(np.asarray(pcm, dtype=np.float32))
+        size = values.size
+        width = max(1, math.ceil(size / points))
+        groups = max(1, size // width)
+        pooled = values[:groups * width].reshape(groups, width).max(axis=1)
+        return tuple(float(min(1.0, float(value))) for value in pooled)
+
+    def _cover_for(self, source) -> str | None:
+        """Return a cached cover image path for a local file or stream."""
+        text = str(source)
+        cache = self._cover_dir
+        key = hashlib.sha256(text.encode("utf-8")).hexdigest() + ".ppm"
+        target = cache / key
+        if target.is_file() and 0 < target.stat().st_size <= 4 * 1024 * 1024:
+            return str(target)
+        try:
+            path = Path(text)
+            is_file = path.is_file()
+        except (TypeError, ValueError):
+            is_file = False
+        if is_file:
+            try:
+                thumb = thumbnail_for(path, cache)
+                if thumb is not None:
+                    return str(thumb)
+            except Exception:  # noqa: BLE001 - cover is optional
+                return None
+            return None
+        # Network stream: probe one frame with a short timeout.
+        command = [
+            "ffmpeg", "-v", "error", "-ss", "1", "-i", text,
+            "-map", "0:v:0", "-frames:v", "1",
+            "-vf", "scale=480:480:force_original_aspect_ratio=increase,"
+                   "crop=480:480",
+            "-f", "image2", "-vcodec", "ppm", "-y", str(target),
+        ]
+        fd, temporary = tempfile.mkstemp(prefix=".cover-", dir=cache)
+        os.close(fd)
+        tmp = Path(temporary)
+        try:
+            result = subprocess.run(command, stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL, timeout=25,
+                                    check=False)
+            if result.returncode != 0 or not tmp.is_file() or tmp.stat().st_size <= 0:
+                return None
+            os.replace(tmp, target)
+            return str(target)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        finally:
+            tmp.unlink(missing_ok=True)
 
     def _probe_stage(self, source):
         generation = self._viz_generation
@@ -3478,6 +3620,7 @@ class MainWindow(QMainWindow):
         settings = self.settings_store.load()
         mode = "off" if settings.visualizer != "off" else "spectrum"
         self.settings_store.save(replace(settings, visualizer=mode))
+        self._viz_mode = mode
         self._viz_btn.setProperty("on", "true" if mode != "off" else "false")
         self._viz_btn.style().unpolish(self._viz_btn)
         self._viz_btn.style().polish(self._viz_btn)
@@ -3681,6 +3824,9 @@ class MainWindow(QMainWindow):
             self._video_surface.set_video_active(True)
             self._network_source = source
             mode = str(self.settings_store.load().visualizer)
+            self._viz_mode = mode
+            self._viz_overview = ()
+            self._visualizer.set_cover(None)
             self._visualizer.configure(
                 mode,
                 (),
@@ -3690,6 +3836,16 @@ class MainWindow(QMainWindow):
             if mode != "off" and str(source).startswith(("http://", "https://")):
                 self._start_stream_viz(source)
             self._probe_stage(source)
+            generation = self._viz_generation
+            cover_source = str(source)
+
+            def cover_worker():
+                cover = self._cover_for(cover_source)
+                if cover:
+                    self._viz_bridge.resultReady.emit(
+                        ("cover", generation, cover))
+
+            threading.Thread(target=cover_worker, daemon=True).start()
         except (BackendError, OSError) as exc:
             self.controller.close()
             self.backend = None
