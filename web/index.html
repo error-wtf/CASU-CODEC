@@ -21,14 +21,8 @@
       <button class="nav" id="open-epg">◫ <span>Live TV & EPG</span></button>
       <p class="eyebrow">SEARCH</p>
       <button class="nav" id="open-search-youtube" data-view="youtube">▶ <span>YouTube</span></button>
-      <button class="nav" id="open-search-spotify" data-view="spotify">♫ <span>Spotify</span></button>
       <p class="eyebrow">CASU</p>
       <button class="nav" id="open-casu" data-view="casu">◆ <span>CASU Files</span></button>
-      <p class="eyebrow">WEB PLAYERS</p>
-      <button class="nav" data-web="spotify">♫ <span>Spotify</span></button>
-      <button class="nav" data-web="hearthis">↗ <span>Hearthis</span></button>
-      <button class="nav" data-web="tidal">▤ <span>Tidal</span></button>
-      <button class="nav" data-web="netflix">▣ <span>Netflix</span></button>
       <div class="sidebar-spacer"></div>
       <button class="nav" id="open-options">⚙ <span>Options</span></button>
       <button class="nav" id="clear-all">⌫ <span>Clear Library</span></button>
@@ -121,25 +115,6 @@
       </div>
       <div class="epg-source"><input id="search-query" type="text" placeholder="Search term…" autocomplete="off"><button id="search-run" type="button">Search</button></div>
       <div id="search-results" class="epg-guide"></div>
-    </form>
-  </dialog>
-  <dialog id="webplayers-dialog" class="webplayers-dialog">
-    <form method="dialog">
-      <header class="dialog-title"><div><h2>WEB PLAYERS</h2><p>Eingebettete Web-Player — Spotify/Hearthis/DuckDuckGo blockieren Iframes serverseitig (Sicherheitsrichtlinie), im lokalen MPCASU eingebettet nutzbar.</p></div><div><button value="cancel" aria-label="Close">×</button></div></header>
-      <div class="wp-tabs">
-        <button class="wp-tab active" data-tab="browse" type="button">◎ Browse</button>
-        <button class="wp-tab" data-tab="spotify" type="button">♫ Spotify</button>
-        <button class="wp-tab" data-tab="hearthis" type="button">↗ Hearthis</button>
-        <button class="wp-tab" data-tab="tidal" type="button">▤ Tidal</button>
-        <button class="wp-tab" data-tab="netflix" type="button">▣ Netflix</button>
-      </div>
-      <div class="wp-panels">
-        <div class="wp-panel active" data-panel="browse"><div class="wp-note">DuckDuckGo blockiert Einbettung. Im lokalen MPCASU eingebettet nutzbar.</div><div class="wp-urlrow"><input class="wp-url" data-wpurl="browse" placeholder="https://duckduckgo.com/"><button class="wp-go" data-wpgo="browse" type="button">▶</button></div><iframe data-wp="browse" title="Browse" allow="autoplay"></iframe></div>
-        <div class="wp-panel" data-panel="spotify"><div class="wp-note">Die komplette Spotify-Web-App blockiert Iframes — aber die <b>offiziellen Spotify-Embeds</b> funktionieren: Track-/Album-/Playlist-URL unten eingeben (automatisch in <code>…/embed/…</code> umgewandelt).</div><div class="wp-urlrow"><input class="wp-url" data-wpurl="spotify" placeholder="https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl" list="spotify-examples"><datalist id="spotify-examples"></datalist><button class="wp-go" data-wpgo="spotify" type="button">▶</button></div><iframe data-wp="spotify" title="Spotify" allow="autoplay; encrypted-media; clipboard-write; fullscreen; picture-in-picture" loading="lazy" src="https://open.spotify.com/embed/playlist/37i9dQZF1DXcBWIGoYBM5M"></iframe></div>
-        <div class="wp-panel" data-panel="hearthis"><div class="wp-note">Hearthis blockiert Einbettung der Seite. Im lokalen MPCASU eingebettet nutzbar.</div><div class="wp-urlrow"><input class="wp-url" data-wpurl="hearthis" placeholder="https://hearthis.at/…"><button class="wp-go" data-wpgo="hearthis" type="button">▶</button></div><iframe data-wp="hearthis" title="Hearthis" allow="autoplay"></iframe></div>
-        <div class="wp-panel" data-panel="tidal"><div class="wp-note">Tidal setzt keine Frame-Sperre — Seite oder Track-URL unten eingeben (Wiedergabe/DRM ungewiss).</div><div class="wp-urlrow"><input class="wp-url" data-wpurl="tidal" placeholder="https://tidal.com/browse/track/…"><button class="wp-go" data-wpgo="tidal" type="button">▶</button></div><iframe data-wp="tidal" title="Tidal" allow="autoplay; encrypted-media"></iframe></div>
-        <div class="wp-panel" data-panel="netflix"><div class="wp-note">Netflix setzt keine Frame-Sperre — Login im lokalen MPCASU ist sicherer; hier nur Anzeige.</div><div class="wp-urlrow"><input class="wp-url" data-wpurl="netflix" placeholder="https://www.netflix.com/"><button class="wp-go" data-wpgo="netflix" type="button">▶</button></div><iframe data-wp="netflix" title="Netflix" allow="autoplay; encrypted-media"></iframe></div>
-      </div>
     </form>
   </dialog>
   <dialog id="options-dialog">
