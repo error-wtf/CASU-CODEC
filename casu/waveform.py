@@ -115,21 +115,20 @@ def window_peaks(pcm: np.ndarray, rate: int, position_s: float, *,
 
 
 def window_wave(pcm: np.ndarray, rate: int, position_s: float, *,
-                window_s: float = 0.45, points: int = 180) -> tuple[float, ...]:
-    """Raw time-domain samples around *position_s*, downsampled.
+                window_s: float = 0.045, points: int = 2048) -> tuple[float, ...]:
+    """Raw time-domain samples ending at the playhead, downsampled.
 
     Mirrors the web player's oscilloscope waveform
-    (``AnalyserNode.getByteTimeDomainData``): a smooth signed line of the
-    actual signal instead of a peak envelope.  Returns values roughly in
-    [-1.0, 1.0].
+    (``AnalyserNode.getByteTimeDomainData``): the window is the most recent
+    ``window_s`` seconds up to the current position (the analyser's live
+    buffer), exactly like the web page.  Returns values roughly in [-1.0, 1.0].
     """
     if pcm is None or rate <= 0 or points < 8:
         return ()
     window_samples = max(64, int(rate * window_s))
     centre = max(0, min(len(pcm) - 1, int(position_s * rate)))
-    half = window_samples // 2
-    start = max(0, centre - half)
-    end = min(len(pcm), start + window_samples)
+    start = max(0, centre - window_samples)
+    end = centre
     if end - start < 32:
         return ()
     chunk = pcm[start:end]
@@ -150,9 +149,10 @@ def live_fft(pcm: np.ndarray, rate: int, position_s: float, *,
         return ()
     fft_size = max(64, min(len(pcm), fft_size))
     centre = max(0, min(len(pcm) - 1, int(position_s * rate)))
-    half = fft_size // 2
-    start = max(0, centre - half)
-    end = min(len(pcm), start + fft_size)
+    # The analyser's live buffer ends at the current moment (like the web
+    # player's AnalyserNode), it is not centred on the playhead.
+    start = max(0, centre - fft_size)
+    end = centre
     chunk = pcm[start:end]
     if len(chunk) < 64:
         return ()
