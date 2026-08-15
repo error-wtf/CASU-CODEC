@@ -1557,30 +1557,6 @@ class SourcesView(QFrame):
             "search": True,
             "web": False,
         },
-        "spotify": {
-            "title": "SPOTIFY",
-            "hint": "Search Spotify — opens the official Web Player (Chromium)",
-            "search": True,
-            "web": "spotify",
-        },
-        "hearthis": {
-            "title": "HEARTHIS",
-            "hint": "Search Hearthis.at — opens the official Web Player (Chromium)",
-            "search": True,
-            "web": "hearthis",
-        },
-        "tidal": {
-            "title": "TIDAL",
-            "hint": "Search Tidal — opens the official Web Player (Chromium)",
-            "search": True,
-            "web": "tidal",
-        },
-        "netflix": {
-            "title": "NETFLIX",
-            "hint": "Search Netflix — opens the official Web Player (Chromium)",
-            "search": True,
-            "web": "netflix",
-        },
         "url": {
             "title": "NETWORK STREAM",
             "hint": "HTTP(S), HLS, RTSP, RTP, UDP, FTP or SMB URL",
@@ -1670,20 +1646,10 @@ class SourcesView(QFrame):
         self._results = []
         self._searching = False
         self._go_btn.setText("Play / search" if spec["search"] else "Play")
-        # The yt-dlp consent gate only applies to YouTube; the other providers
-        # open their own official web players, so no consent is required.
+        # The yt-dlp consent gate only applies to YouTube search.
         self._consent_frame.setVisible(
             mode == "youtube" and not self._consent_given())
-        if mode == "spotify":
-            self._status.setText(
-                "Spotify — öffnet den offiziellen Web Player (Chromium) mit deinem Login")
-        elif mode == "hearthis":
-            self._status.setText("Hearthis.at — öffnet den offiziellen Web Player (Chromium)")
-        elif mode == "tidal":
-            self._status.setText("Tidal — öffnet den offiziellen Web Player (Chromium)")
-        elif mode == "netflix":
-            self._status.setText("Netflix — öffnet den offiziellen Web Player (Chromium)")
-        elif spec["search"]:
+        if spec["search"]:
             self._status.setText("Search uses yt-dlp (GNU GPL) · personal use only")
         else:
             self._status.setText("Opens directly in the internal libVLC backend — no external player")
@@ -1707,14 +1673,6 @@ class SourcesView(QFrame):
     def _open_typed(self):
         text = self._entry.text().strip()
         if not text:
-            return
-        web = self.MODES[self._mode].get("web")
-        if web:
-            if is_spotify_url(text):
-                self.webPlayerRequested.emit(web, "", text)
-            else:
-                self.webPlayerRequested.emit(web, text, "")
-            self._status.setText(f"{self.MODES[self._mode]['title']} wird im eingebetteten Browser geöffnet…")
             return
         if is_youtube_url(text) and "list=" in text:
             self._expand_youtube_playlist(text)
