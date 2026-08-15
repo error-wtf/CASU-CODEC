@@ -24,8 +24,7 @@ from casu.epg import EpgError, MAX_XMLTV_BYTES, fetch_document
 from casu.locations import (LocationResolutionError, is_youtube_url,
                             resolve_media_location)
 from casu.search import SearchError, search_music, search_youtube
-from casu.spotify import (SpotifyError, fetch_spotify_metadata, is_spotify_url,
-                          spotify_playback_notice)
+from casu.spotify import (SpotifyError, fetch_spotify_metadata, is_spotify_url)
 
 from casu.export import CasuExportError, export_casu
 

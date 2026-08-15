@@ -1,18 +1,12 @@
 # SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
 # SPDX-FileCopyrightText: 2026 Lino Casu
-"""Spotify provider — honest, metadata-only integration.
+"""Spotify provider via spotDL.
 
-Spotify streams are DRM/API-bound; yt-dlp has no Spotify extractor and this
-product never pretends otherwise.  The provider therefore offers:
-
-* URL recognition,
-* public metadata lookup via Spotify's oEmbed endpoint (no credentials),
-* an explicit, clearly labelled handoff to the YouTube provider
-  ("Find on YouTube") using the fetched title.
-
-What this module must NEVER do: search YouTube by opaque Spotify IDs, pass a
-Spotify URL to yt-dlp as if it were resolvable, or label YouTube results as
-Spotify streams.
+MPCASU never touches Spotify's DRM/API-bound streams directly.  Instead it
+uses spotDL, which reads Spotify metadata through the Spotify Web API and
+matches each track to an audio source at an open provider (usually YouTube).
+The playable audio is therefore a spotDL-matched external source, never a
+Spotify stream.  The UI always labels it that way.
 """
 from __future__ import annotations
 
@@ -24,13 +18,10 @@ import subprocess
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from pathlib import Path
 
 SPOTIFY_TRACK_RE = re.compile(
-    r"^(?:https?://)?(?:open\.)?spotify\.com/(track|album|playlist|episode|show|artist)/([a-zA-Z0-9]{22})(?:\?.*)?$"
+    r"^(?:https?://)?open\.spotify\.com/(track|album|playlist|episode|show|artist)/([a-zA-Z0-9]{22})(?:\?.*)?$"
 )
-
-SPOTIFY_PLAYBACK_SUPPORTED = False
 
 
 class SpotifyError(ValueError):
@@ -53,13 +44,6 @@ def spotify_id(url: str) -> str | None:
     return match.group(2) if match else None
 
 
-def spotify_playback_notice() -> str:
-    return ("Spotify playback is not supported directly (Spotify streams are "
-            "DRM/API-bound and yt-dlp has no Spotify extractor). Use "
-            "“Find on YouTube” to search the track title on YouTube instead — "
-            "the result is a YouTube stream, not a Spotify stream.")
-
-
 def fetch_spotify_metadata(url: str, *, timeout: float = 15.0) -> SpotifyMetadata:
     """Fetch public oEmbed metadata (title/kind) for a Spotify URL.
 
@@ -80,8 +64,7 @@ def fetch_spotify_metadata(url: str, *, timeout: float = 15.0) -> SpotifyMetadat
     except (OSError, ValueError) as exc:
         raise SpotifyError(
             f"Spotify metadata fetch failed: {exc} — open.spotify.com may be "
-            "blocked on this network; use the YouTube view's search with the "
-            "track title instead") from exc
+            "blocked on this network") from exc
     title = str(data.get("title") or "").strip()
     if not title:
         raise SpotifyError("Spotify returned no title for this URL")
@@ -89,7 +72,7 @@ def fetch_spotify_metadata(url: str, *, timeout: float = 15.0) -> SpotifyMetadat
 
 
 def youtube_handoff_query(metadata: SpotifyMetadata) -> str:
-    """The honest handoff: search YouTube for the fetched human title."""
+    """Search YouTube for the fetched human title (explicit handoff)."""
     return metadata.title
 
 
@@ -101,75 +84,6 @@ class SpotifySearchResult:
     duration: float | None = None
 
 
-def search_spotify(query: str, *, limit: int = 12,
-                   timeout: float = 90.0) -> list[SpotifySearchResult]:
-    """Search Spotify via spotDL (metadata only, no audio downloads).
-
-    Uses ``spotdl save`` which writes small JSON metadata files into a
-    temporary directory; those are parsed into results carrying the real
-    Spotify track URLs.  Requires spotdl and a reachable Spotify API.
-    """
-    query = (query or "").strip()
-    if not query:
-        raise SpotifyError("search query must not be empty")
-    binary = spotdl_binary()
-    if not binary:
-        raise SpotifyError(
-            "spotDL is not installed — Spotify search needs spotdl "
-            "(e.g. python3 -m venv /opt/casu-spotdl && /opt/casu-spotdl/bin/pip "
-            "install spotdl); the YouTube view remains available as a separate "
-            "provider")
-    import tempfile
-    with tempfile.TemporaryDirectory(prefix="casu-spotify-") as tmp:
-        save_file = str(Path(tmp) / "results.spotdl")
-        try:
-            proc = subprocess.run([binary, "save", "--save-file", save_file,
-                                   query],
-                                  check=False, text=True,
-                                  stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE,
-                                  timeout=max(10.0, float(timeout)))
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            raise SpotifyError(f"spotDL search failed: {exc}") from exc
-        results: list[SpotifySearchResult] = []
-        documents: list = []
-        for path in sorted(Path(tmp).glob("*.spotdl")):
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                continue
-            if isinstance(data, list):
-                documents.extend(item for item in data if isinstance(item, dict))
-            elif isinstance(data, dict):
-                documents.append(data)
-        for data in documents:
-            url = str(data.get("url") or "")
-            if "spotify.com" not in url:
-                continue
-            artists = data.get("artists") or []
-            results.append(SpotifySearchResult(
-                title=str(data.get("name") or data.get("title") or "unknown")[:300],
-                artist=", ".join(str(a) for a in artists)[:200] if isinstance(artists, list) else "",
-                url=url,
-                duration=float(data["duration"]) if isinstance(data.get("duration"), (int, float)) else None))
-            if len(results) >= max(1, min(int(limit), 25)):
-                break
-    if not results:
-        detail = (proc.stderr or proc.stdout).strip().splitlines()
-        raise SpotifyError(
-            f"spotDL found no Spotify results"
-            f"{': ' + detail[-1][:200] if detail else ''} — api.spotify.com may "
-            "be blocked on this network; use the YouTube view as a separate "
-            "provider")
-    return results
-    """Locate spotDL (system PATH first, then the product venv)."""
-    found = shutil.which("spotdl")
-    if found:
-        return found
-    venv = "/opt/casu-spotdl/bin/spotdl"
-    return venv if os.path.exists(venv) else None
-
-
 def spotdl_binary() -> str | None:
     """Locate spotDL (system PATH first, then the product venv)."""
     found = shutil.which("spotdl")
@@ -179,40 +93,212 @@ def spotdl_binary() -> str | None:
     return venv if os.path.exists(venv) else None
 
 
-def resolve_spotify_url(url: str, *, timeout: float = 60.0) -> str:
-    """Resolve a Spotify URL to a playable stream via spotDL.
+def spotify_kind(url: str) -> str | None:
+    """Return the resource kind (track/album/playlist/...) or None."""
+    match = SPOTIFY_TRACK_RE.match((url or "").strip())
+    return match.group(1) if match else None
 
-    spotDL is the legitimate Spotify provider: it reads Spotify metadata via
-    the Spotify Web API and matches the track on YouTube, returning a stream
-    URL without writing downloads to disk (``spotdl url``).  Credentials, if
-    desired, come only from spotdl's own environment/configuration
-    (SPOTIFY_CLIENT_ID/SPOTIFY_CLIENT_SECRET); nothing is embedded here.
 
-    Without spotdl, or on networks where api.spotify.com is unreachable, this
-    fails with a clear SpotifyError; the UI then offers the explicit
-    "Find on YouTube" handoff instead of pretending anything else.
-    """
-    if not is_spotify_url(url):
-        raise SpotifyError("Invalid Spotify URL")
+def _spotdl_save(query: str, *, timeout: float) -> list[SpotifySearchResult]:
+    """Run ``spotdl save QUERY --save-file -`` and parse the JSON song array."""
     binary = spotdl_binary()
+
     if not binary:
-        raise SpotifyError(
-            "spotDL is not installed — install it (e.g. python3 -m venv "
-            "/opt/casu-spotdl && /opt/casu-spotdl/bin/pip install spotdl) or "
-            "use the explicit “Find on YouTube” handoff in the Spotify view")
+        raise SpotifyError("spotDL is not installed")
+
     try:
-        proc = subprocess.run([binary, "url", url.strip()], check=False,
-                              text=True, stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE,
-                              timeout=max(10.0, float(timeout)))
+        proc = subprocess.run(
+            [
+                binary,
+                "save",
+                query,
+                "--save-file",
+                "-",
+            ],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=max(10.0, float(timeout)),
+        )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise SpotifyError(f"spotDL execution failed: {exc}") from exc
-    for line in reversed(proc.stdout.splitlines()):
-        candidate = line.strip()
-        if candidate.startswith(("http://", "https://")):
-            return candidate
-    detail = (proc.stderr or proc.stdout).strip().splitlines()
-    raise SpotifyError(
-        f"spotDL could not resolve this Spotify URL"
-        f"{': ' + detail[-1][:200] if detail else ''} — api.spotify.com may be "
-        "blocked on this network; use the “Find on YouTube” handoff instead")
+        raise SpotifyError(f"spotDL search failed: {exc}") from exc
+
+    if proc.returncode:
+        detail = proc.stderr.strip().splitlines()
+        raise SpotifyError(
+            detail[-1][:300] if detail
+            else "spotDL search failed"
+        )
+
+    try:
+        payload = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise SpotifyError(
+            "spotDL returned invalid JSON"
+        ) from exc
+
+    if isinstance(payload, dict):
+        payload = payload.get("songs", [])
+
+    if not isinstance(payload, list):
+        raise SpotifyError(
+            "spotDL returned an unexpected save document"
+        )
+
+    results = []
+
+    for data in payload:
+        if not isinstance(data, dict):
+            continue
+
+        url = str(
+            data.get("url")
+            or data.get("spotify_url")
+            or ""
+        ).strip()
+
+        if "spotify.com/" not in url:
+            continue
+
+        artists = data.get("artists") or data.get("artist") or []
+
+        if isinstance(artists, str):
+            artist = artists
+        elif isinstance(artists, list):
+            names = []
+            for value in artists:
+                if isinstance(value, dict):
+                    name = str(value.get("name") or "")
+                    if name:
+                        names.append(name)
+                elif value is not None:
+                    names.append(str(value))
+            artist = ", ".join(names)
+        else:
+            artist = ""
+
+        duration = data.get("duration")
+
+        try:
+            duration = float(duration) if duration is not None else None
+        except (TypeError, ValueError):
+            duration = None
+
+        results.append(
+            SpotifySearchResult(
+                title=str(
+                    data.get("name")
+                    or data.get("title")
+                    or "Spotify track"
+                )[:300],
+                artist=artist[:200],
+                url=url,
+                duration=duration,
+            )
+        )
+
+    return results
+
+
+def search_spotify(query: str, *, limit: int = 12,
+                   timeout: float = 90.0) -> list[SpotifySearchResult]:
+    """Search Spotify via spotDL (metadata only, no audio downloads).
+
+    Runs ``spotdl save QUERY --save-file -`` and parses the JSON song array
+    spotDL writes to stdout.  Returns results carrying the real Spotify track
+    URLs.  Requires spotDL and a reachable Spotify API.
+    """
+    query = (query or "").strip()
+
+    if not query:
+        raise SpotifyError("search query must not be empty")
+
+    results = _spotdl_save(query, timeout=timeout)
+
+    if not results:
+        raise SpotifyError("spotDL found no Spotify results")
+
+    return results[:max(1, min(int(limit), 25))]
+
+
+def expand_spotify(url: str, *, limit: int = 100,
+                   timeout: float = 120.0) -> list[SpotifySearchResult]:
+    """Expand a Spotify album/playlist (or single track) into its tracks.
+
+    Uses the same ``spotdl save <url> --save-file -`` interface, which returns
+    one song entry per track.  Artists, episodes and shows cannot be expanded
+    to a playable track list and raise SpotifyError.
+    """
+    clean = (url or "").strip()
+    kind = spotify_kind(clean)
+
+    if not kind:
+        raise SpotifyError("Invalid Spotify URL")
+
+    if kind not in ("track", "album", "playlist"):
+        raise SpotifyError(
+            f"Spotify {kind} cannot be expanded into tracks before playback")
+
+    results = _spotdl_save(clean, timeout=timeout)
+
+    if not results:
+        raise SpotifyError("spotDL found no Spotify results")
+
+    return results[:max(1, min(int(limit), 200))]
+
+
+def resolve_spotify_url(url: str, *, timeout: float = 60.0) -> str:
+    """Resolve a Spotify TRACK to a matched playable audio URL via spotDL.
+
+    Only single tracks are supported here.  Albums, playlists and artists must
+    be expanded into their individual tracks before playback; the UI queues
+    those individually instead of pretending a group is one song.
+    """
+    clean = (url or "").strip()
+    match = SPOTIFY_TRACK_RE.match(clean)
+
+    if not match:
+        raise SpotifyError("Invalid Spotify URL")
+
+    kind = match.group(1)
+
+    if kind != "track":
+        raise SpotifyError(
+            f"Spotify {kind} must be expanded into tracks before playback"
+        )
+
+    binary = spotdl_binary()
+
+    if not binary:
+        raise SpotifyError("spotDL is not installed")
+
+    try:
+        proc = subprocess.run(
+            [binary, "url", clean],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=max(10.0, float(timeout)),
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise SpotifyError(
+            f"spotDL execution failed: {exc}"
+        ) from exc
+
+    urls = [
+        line.strip()
+        for line in proc.stdout.splitlines()
+        if line.strip().startswith(("http://", "https://"))
+    ]
+
+    if proc.returncode or not urls:
+        detail = proc.stderr.strip().splitlines()
+        raise SpotifyError(
+            detail[-1][:300]
+            if detail
+            else "spotDL returned no playable URL"
+        )
+
+    return urls[0]

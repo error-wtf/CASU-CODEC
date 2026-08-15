@@ -4,10 +4,11 @@
 
 All search in this product runs against the YouTube index; the music variant
 is a convenience preset for music queries.  Results are always labelled with
-their real provider ("youtube") — never as Spotify.  Spotify remains a
-separate metadata-only provider (casu.spotify) with an explicit "Find on
-YouTube" handoff.  Results are metadata only — playback resolves each entry
-on demand and never writes downloads to disk.
+their real provider ("youtube") — never as Spotify.  Spotify search goes
+through spotDL (casu.spotify), which returns real Spotify track metadata and
+resolves each track to a matched playable audio source.  Results are metadata
+only — playback resolves each entry on demand and never writes downloads to
+disk.
 """
 from __future__ import annotations
 
@@ -109,3 +110,43 @@ def search_music(query: str, *, limit: int = 12,
     if not query:
         raise SearchError("search query must not be empty")
     return _to_results(_run_ytdlp_search(query, limit, timeout), "youtube", limit)
+
+
+def search_youtube_playlist(url: str, *, limit: int = 100,
+                            timeout: float = 60.0) -> list[SearchResult]:
+    """Expand a YouTube playlist URL into its individual videos.
+
+    Uses ``yt-dlp --flat-playlist --dump-json <url>`` (one JSON line per
+    video) so a playlist becomes a queue of playable entries.
+    """
+    url = (url or "").strip()
+    if not url:
+        raise SearchError("playlist URL must not be empty")
+    executable = shutil.which("yt-dlp")
+    if not executable:
+        raise SearchError("YouTube playlist expansion requires yt-dlp")
+    limit = max(1, min(int(limit), 200))
+    command = [executable, "--flat-playlist", "--no-warnings",
+               "--dump-json", "--socket-timeout", "15", url]
+    try:
+        proc = subprocess.run(command, check=False, text=True,
+                              capture_output=True,
+                              timeout=max(10.0, float(timeout)))
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise SearchError(f"YouTube playlist expansion failed: {exc}") from exc
+    entries: list[dict] = []
+    for line in proc.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(entry, dict):
+            entries.append(entry)
+    if not entries:
+        detail = proc.stderr.strip().splitlines()
+        raise SearchError(
+            detail[-1][:300] if detail else "playlist returned no videos")
+    return _to_results(entries, "youtube", limit)
