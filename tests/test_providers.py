@@ -27,7 +27,19 @@ SPOTIFY_URL = "https://open.spotify.com/track/0VjIjW4GlUZAMYB2vXMi3b"
 
 def _fake_spotdl(tmp_path, monkeypatch, stdout_text):
     script = tmp_path / "spotdl"
-    script.write_text(f"#!/bin/sh\ncat <<'EOF'\n{stdout_text}\nEOF\n")
+    script.write_text(
+        f"#!/bin/sh\n"
+        f"# write the JSON payload to --save-file <path> (or stdout fallback)\n"
+        f"out=\n"
+        f"while [ $# -gt 0 ]; do\n"
+        f"  if [ \"$1\" = --save-file ]; then shift; out=\"$1\"; fi\n"
+        f"  shift\n"
+        f"done\n"
+        f"if [ -n \"$out\" ]; then\n"
+        f"  printf '%s' '{stdout_text}' > \"$out\"\n"
+        f"else\n"
+        f"  cat <<'EOF'\n{stdout_text}\nEOF\n"
+        f"fi\n")
     script.chmod(0o755)
     monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ['PATH']}")
 
@@ -68,8 +80,8 @@ def test_spotify_search_uses_documented_save_interface(tmp_path, monkeypatch):
     script = tmp_path / "spotdl"
     script.write_text(
         f"#!/bin/sh\ntest \"$1\" = save || exit 99\n"
-        f"test \"$3\" = --save-file || exit 98\ntest \"$4\" = - || exit 97\n"
-        f"cat <<'EOF'\n{payload}\nEOF\n")
+        f"test \"$3\" = --save-file || exit 98\n"
+        f"printf '%s' '{payload}' > \"$4\"\n")
     script.chmod(0o755)
     monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ['PATH']}")
     results = search_spotify("The Weeknd Blinding Lights", limit=5)

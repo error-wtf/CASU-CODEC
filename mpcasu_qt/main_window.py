@@ -1565,9 +1565,12 @@ class SourcesView(QFrame):
         self._mode = "youtube"
         self._results: list = []
         self._searching = False
+        self._thumb_jobs = []
         self._bridge = _ThreadBridge()
         self._bridge.resultReady.connect(self._present_results)
         self._bridge.errorReady.connect(self._present_error)
+        self._thumb_bridge = _ThreadBridge()
+        self._thumb_bridge.resultReady.connect(self._apply_thumb)
         self._build()
 
     def _build(self):
@@ -1780,13 +1783,51 @@ class SourcesView(QFrame):
         self._searching = False
         self._results = list(found)
         self._list.clear()
-        for item in self._results:
+        self._thumb_jobs = []
+        for row, item in enumerate(self._results):
             duration = (f"{int(item.duration // 60)}:{int(item.duration % 60):02d}"
                         if item.duration else "live")
             tag = "FIND ON YOUTUBE" if item.source == "handoff" else item.source.upper()
-            self._list.addItem(
+            entry = QListWidgetItem(
                 f"[{tag}] {item.title}  ·  {item.uploader or 'unknown'}  ·  {duration}")
+            entry.setSizeHint(QSize(0, 52))
+            self._list.addItem(entry)
+            self._thumb_jobs.append((row, item))
+        if self._thumb_jobs:
+            self._load_thumbnails(list(self._thumb_jobs))
         self._status.setText(f"{len(self._results)} results — double-click or press Enter to play")
+
+    def _load_thumbnails(self, jobs):
+        bridge = self._thumb_bridge
+
+        def worker():
+            import urllib.request
+            for row, item in jobs:
+                url = str(item.thumbnail or "")
+                if not url.startswith("http"):
+                    continue
+                try:
+                    request = urllib.request.Request(
+                        url, headers={"User-Agent": "MPCASU/1.0"})
+                    data = urllib.request.urlopen(
+                        request, timeout=10).read(1024 * 1024)
+                    image = QImage()
+                    if image.loadFromData(data):
+                        bridge.resultReady.emit(("thumb", row, image.copy()))
+                except (OSError, ValueError):
+                    continue
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _apply_thumb(self, payload):
+        if not payload or payload[0] != "thumb":
+            return
+        _, row, image = payload
+        item = self._list.item(row)
+        if item is None:
+            return
+        pixmap = QPixmap.fromImage(image).scaled(
+            88, 50, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+        item.setIcon(QIcon(pixmap))
 
     def _present_error(self, detail):
         self._searching = False

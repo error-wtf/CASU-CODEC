@@ -32,6 +32,7 @@ class SearchResult:
     duration: float | None
     uploader: str
     source: str
+    thumbnail: str = ""
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -81,12 +82,19 @@ def _to_results(entries: list[dict], source: str, limit: int) -> list[SearchResu
             duration = float(duration) if duration is not None else None
         except (TypeError, ValueError):
             duration = None
+        thumbnail = str(entry.get("thumbnail") or "")
+        if not thumbnail:
+            video_id = str(entry.get("id") or "")
+            if video_id:
+                thumbnail = f"https://i.ytimg.com/vi/{video_id}/mqdefault.jpg"
         results.append(SearchResult(
             title=str(entry.get("title") or video_id or url)[:300],
             url=url,
             duration=duration,
             uploader=str(entry.get("uploader") or entry.get("channel") or "")[:200],
-            source=source))
+            source=source,
+            thumbnail=thumbnail[:500],
+        ))
         if len(results) >= limit:
             break
     if not results:
