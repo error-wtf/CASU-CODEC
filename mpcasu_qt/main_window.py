@@ -205,9 +205,9 @@ class Sidebar(QFrame):
         nav_items = [
             ("LIBRARY", ["NOW PLAYING", "LOCAL FILES", "WEB & STREAMS",
                          "PLAYLISTS", "IPTV / EPG"]),
-            ("SEARCH", ["YOUTUBE", "SPOTIFY"]),
+            ("SEARCH", ["YOUTUBE"]),
             ("CASU", ["CASU FILES"]),
-            ("WEB PLAYERS", ["HEARTHIS", "TIDAL", "NETFLIX"]),
+            ("WEB PLAYERS", ["SPOTIFY", "HEARTHIS", "TIDAL", "NETFLIX"]),
             ("SYSTEM", ["OPTIONS", "ABOUT"]),
         ]
         self.NAV_ICONS = {
