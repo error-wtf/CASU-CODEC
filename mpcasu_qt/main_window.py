@@ -2251,6 +2251,8 @@ class MainWindow(QMainWindow):
         self._rate = effective.rate
         self._audio_device = effective.audio_device
         self._watched_folders = list(effective.watched_folders)
+        self._shuffle = bool(effective.shuffle)
+        self._repeat_mode = str(effective.repeat_mode)
         self._viz_mode = str(effective.visualizer)
         self._cover_dir = config_dir / "covers"
         self._cover_dir.mkdir(parents=True, exist_ok=True)
@@ -2493,6 +2495,9 @@ class MainWindow(QMainWindow):
         self._repeat_btn.setObjectName("TransportButton")
         self._repeat_btn.clicked.connect(self._cycle_repeat)
         self._repeat_btn.setToolTip("Repeat off / all / one")
+        self._repeat_btn.setText("↻" if self._repeat_mode == "off" else
+                                 ("↻1" if self._repeat_mode == "one" else "↻∞"))
+        self._repeat_btn.setProperty("on", "true" if self._repeat_mode != "off" else "false")
         controls.addWidget(self._repeat_btn)
 
         self._ab_btn = QPushButton("A–B")
@@ -2913,7 +2918,7 @@ class MainWindow(QMainWindow):
     def _do_seek(self, pos: float):
         if not self.current:
             return
-        if pos < 0 or not self.duration or self.duration <= 0:
+        if pos < 0:
             return
         try:
             if self.backend:
@@ -3099,6 +3104,8 @@ class MainWindow(QMainWindow):
 
     def _toggle_shuffle(self, checked: bool) -> None:
         self._shuffle = checked
+        settings = self.settings_store.load()
+        self.settings_store.save(replace(settings, shuffle=checked))
         self._playlist_pane.shuffle_btn.setText("Shuffle on" if checked else "Shuffle off")
         if hasattr(self, "_shuffle_btn"):
             self._shuffle_btn.setProperty("on", "true" if checked else "false")
@@ -3110,6 +3117,8 @@ class MainWindow(QMainWindow):
     def _cycle_repeat(self) -> None:
         values = ("off", "all", "one")
         self._repeat_mode = values[(values.index(self._repeat_mode) + 1) % len(values)]
+        settings = self.settings_store.load()
+        self.settings_store.save(replace(settings, repeat_mode=self._repeat_mode))
         self._playlist_pane.repeat_btn.setText(f"Repeat {self._repeat_mode}")
         if hasattr(self, "_repeat_btn"):
             self._repeat_btn.setText("↻" if self._repeat_mode == "off" else
@@ -3122,7 +3131,16 @@ class MainWindow(QMainWindow):
     def play_next(self, automatic: bool = False):
         count = len(self.playlist_model)
         if automatic and self._repeat_mode == "one" and self.current and self.backend:
-            self.controller.seek(0.0)
+            # Replay the current track: reset the end guard, seek to 0 AND
+            # resume playback (seek alone on an ended media stays silent).
+            self._end_handled = False
+            try:
+                self.controller.play()
+                self.controller.seek(0.0)
+            except (BackendError, CasuError) as exc:
+                self.status(f"Repeat failed — {exc}")
+            self._paused = False
+            self._play_btn.setText("| |")
             return
         if not count:
             self.status("Playlist is empty")
