@@ -3149,14 +3149,26 @@ class MainWindow(QMainWindow):
             # resume playback (seek alone on an ended media stays silent).
             self._end_handled = False
             try:
-                self.controller.play()
-                self.controller.seek(0.0)
+                self.backend.play()
+                self.backend.seek(0.0)
             except (BackendError, CasuError) as exc:
                 self.status(f"Repeat failed — {exc}")
             self._paused = False
             self._play_btn.setText("| |")
             return
         if not count:
+            if automatic and self.current and self.backend:
+                # A single track outside the queue: loop it for every repeat
+                # mode (and shuffle has nothing else to pick from).
+                self._end_handled = False
+                try:
+                    self.backend.play()
+                    self.backend.seek(0.0)
+                except (BackendError, CasuError) as exc:
+                    self.status(f"Loop failed — {exc}")
+                self._paused = False
+                self._play_btn.setText("| |")
+                return
             self.status("Playlist is empty")
             return
         selected_index = self._selected_playlist_row()
