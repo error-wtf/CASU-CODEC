@@ -102,6 +102,44 @@ def _send_to_primary(server_name: str, paths, legacy_name: str | None = None) ->
     return False
 
 
+def _proc_starttime(pid: int) -> int | None:
+    """Return the process start time (field 22 of /proc/<pid>/stat)."""
+    try:
+        with open(f"/proc/{pid}/stat", "rb") as handle:
+            fields = handle.read().decode("utf-8", "replace").split()
+        return int(fields[21])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _older_mpcasu_peer() -> int | None:
+    """Return the PID of an older, live mpcasu_qt.app process, if any.
+
+    A new launch defers to a process that is already running (older start
+    time). A simultaneous twin never makes both processes exit: only the
+    newer one sees an older peer, so exactly one process may ever open a
+    window.
+    """
+    mine = _proc_starttime(os.getpid())
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit() or int(entry) == os.getpid():
+            continue
+        pid = int(entry)
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as handle:
+                cmd = handle.read().decode("utf-8", "replace")
+        except OSError:
+            continue
+        if "mpcasu_qt.app" not in cmd:
+            continue
+        if mine is None:
+            return pid
+        other = _proc_starttime(pid)
+        if other is not None and other < mine:
+            return pid
+    return None
+
+
 def _log_peer_processes() -> None:
     """Log every other mpcasu_qt process seen in /proc (cross-process guard)."""
     peers = []
@@ -134,6 +172,22 @@ def main() -> int:
     lock_path = str(Path(tempfile.gettempdir()) / f"mpcasu-{ident}.lock")
     socket_path = str(Path(tempfile.gettempdir()) / f"mpcasu-{ident}.sock")
     legacy_name = "mpcasu-single-instance"
+
+    # A running player is authoritative regardless of how it was started.
+    # If an older mpcasu_qt.app process exists, hand any files to it and exit,
+    # so a second native window can never appear — even against a stale or
+    # pre-fix instance that does not know our lock.
+    peer = _older_mpcasu_peer()
+    if peer is not None:
+        if _send_to_primary(socket_path, paths, legacy_name):
+            _log(f"secondary: forwarded to running player {peer}, exit 0")
+            return 0
+        _log(f"secondary: running player {peer} exists but IPC unavailable")
+        print(
+            f"An existing MPCASU player is already running (pid {peer}). "
+            "Close it and start again to open the player window.",
+            file=sys.stderr)
+        return 2
 
     # Ownership lock lives at a machine-wide, per-user path in /tmp. It is
     # independent of XDG_RUNTIME_DIR, HOME and XDG_CONFIG_HOME, so two launches

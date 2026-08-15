@@ -1634,10 +1634,17 @@ class SourcesView(QFrame):
         self._results = []
         self._searching = False
         self._go_btn.setText("Play / search" if spec["search"] else "Play")
-        self._consent_frame.setVisible(not self._consent_given())
-        self._status.setText(
-            "Search uses yt-dlp (GNU GPL) · personal use only" if spec["search"]
-            else "Opens directly in the internal libVLC backend — no external player")
+        # The yt-dlp consent gate only applies to YouTube; Spotify runs spotDL
+        # (open.spotify.com metadata), so it is never blocked by it.
+        self._consent_frame.setVisible(
+            mode == "youtube" and not self._consent_given())
+        if mode == "spotify":
+            self._status.setText(
+                "Spotify search via spotDL (open.spotify.com) · personal use only")
+        elif spec["search"]:
+            self._status.setText("Search uses yt-dlp (GNU GPL) · personal use only")
+        else:
+            self._status.setText("Opens directly in the internal libVLC backend — no external player")
         self._entry.setFocus()
 
     def _consent_given(self) -> bool:
@@ -1673,8 +1680,11 @@ class SourcesView(QFrame):
         is_url = text.startswith(("http://", "https://", "rtsp://", "rtmp://",
                                   "udp://", "rtp://", "ftp://", "smb://"))
         if not is_url and self.MODES[self._mode]["search"]:
+            if self._mode == "spotify":
+                self._run_search(text)
+                return
             if not self._consent_given():
-                self._status.setText("Accept the yt-dlp legal notice above to enable search")
+                self._status.setText("Accept the yt-dlp legal notice above to enable YouTube search")
                 return
             self._run_search(text)
             return
