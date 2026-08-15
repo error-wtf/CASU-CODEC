@@ -1740,26 +1740,17 @@ class SourcesView(QFrame):
         def worker():
             from casu.search import SearchResult
             try:
-                resolved = resolve_spotify_url(url)
-            except SpotifyError:
-                resolved = None
-            if resolved:
-                self._bridge.resultReady.emit([SearchResult(
-                    title="Spotify track · matched on YouTube by spotDL",
-                    url=resolved, duration=None,
-                    uploader="SPOTIFY via spotDL", source="spotify")])
-                return
-            try:
                 meta = fetch_spotify_metadata(url)
-            except SpotifyError as exc:
+                from casu.spotify import download_spotify_track
+                local = download_spotify_track(meta.title)
+            except (SpotifyError, OSError, ValueError) as exc:
                 self._bridge.errorReady.emit(str(exc))
             else:
                 self._bridge.resultReady.emit([SearchResult(
-                    title=youtube_handoff_query(meta),
-                    url="handoff:youtube",
-                    duration=None,
-                    uploader=f"Spotify {meta.kind} · original title",
-                    source="handoff")])
+                    title=f"Spotify · {meta.title}",
+                    url=str(local), duration=None,
+                    uploader="SPOTIFY via spotDL (matched audio)",
+                    source="spotify")])
         threading.Thread(target=worker, daemon=True).start()
 
     def _run_search(self, query: str):
