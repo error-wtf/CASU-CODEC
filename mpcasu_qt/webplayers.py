@@ -8,7 +8,7 @@ searches open in the matching tab; the user logs in with their normal account.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QUrl, Qt
+from PySide6.QtCore import QUrl, Qt, Signal
 from PySide6.QtWidgets import QLineEdit, QTabWidget, QVBoxLayout, QWidget
 
 try:
@@ -18,11 +18,13 @@ except ImportError:
     QWebEngineView = None
     _HAVE_WEBENGINE = False
 
-from casu.webproviders import WEB_PLAYERS, web_player_url
+from casu.webproviders import EXTERNAL_PROVIDERS, WEB_PLAYERS, web_player_url
 
 
 class WebPlayerTabs(QWidget):
     """Tab widget with one embedded web player per provider."""
+
+    externalRequested = Signal(str, str, str)  # provider, query, url
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -63,10 +65,13 @@ class WebPlayerTabs(QWidget):
         text = self._entries[key].text().strip()
         if not text:
             return
-        if "://" in text and "." in text:
-            self.open(key, url=text)
-        else:
-            self.open(key, query=text)
+        is_url = "://" in text and "." in text
+        query = "" if is_url else text
+        url = text if is_url else ""
+        if key in EXTERNAL_PROVIDERS:
+            self.externalRequested.emit(key, query, url)
+            return
+        self.open(key, query=query, url=url)
 
     def open(self, provider: str, *, query: str = "", url: str = ""):
         """Load a provider's web player at a search query or direct URL."""
