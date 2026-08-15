@@ -5064,6 +5064,12 @@ class MainWindow(QMainWindow):
 
     def _sync_position(self):
         if self.backend and not self._paused:
+            real = self.backend.duration()
+            if real > 0 and (not self.duration or abs(self.duration - real) > 0.5):
+                # The real duration may arrive asynchronously; keep the slider
+                # in sync so a click always maps to the correct time.
+                self.duration = real
+                self._seek_slider.set_duration(real)
             pos = min(self.duration, self.backend.position())
             self._seek_slider.set_position(pos)
             self._update_time_labels(pos)
