@@ -44,6 +44,15 @@ def _config_dir() -> Path:
     return config
 
 
+def _log(message: str) -> None:
+    try:
+        entry = f"{time.strftime('%Y-%m-%d %H:%M:%S')} {os.getpid()} {message}\n"
+        with (_config_dir() / "startup.log").open("a", encoding="utf-8") as handle:
+            handle.write(entry)
+    except OSError:
+        pass
+
+
 def _ensure_runtime_dir() -> None:
     """Ensure a session runtime directory so audio/DBus services work.
 
@@ -103,31 +112,41 @@ def main() -> int:
     paths = [Path(arg).expanduser() for arg in sys.argv[1:]]
 
     ident = _instance_id()
+    lock_path = str(Path(tempfile.gettempdir()) / f"mpcasu-{ident}.lock")
     socket_path = str(Path(tempfile.gettempdir()) / f"mpcasu-{ident}.sock")
     legacy_name = "mpcasu-single-instance"
 
-    # Ownership lock lives in a deterministic per-user location so that two
-    # launches (desktop vs terminal, different XDG_RUNTIME_DIR) can never
-    # diverge into two primary instances and therefore two windows.
-    config = _config_dir()
-    lock = QLockFile(str(config / f"mpcasu-{ident}.lock"))
+    # Ownership lock lives at a machine-wide, per-user path in /tmp. It is
+    # independent of XDG_RUNTIME_DIR, HOME and XDG_CONFIG_HOME, so two launches
+    # (desktop icon vs terminal vs different shells) can never resolve to
+    # different lock files and therefore can never become two primary
+    # instances / two windows.
+    lock = QLockFile(lock_path)
     lock.setStaleLockTime(30_000)
+
+    _log(f"start user={ident} home={Path.home()} xdg_runtime={os.environ.get('XDG_RUNTIME_DIR')}")
+    _log(f"lock={lock_path}")
 
     if not lock.tryLock(0):
         if _HAVE_NETWORK and _send_to_primary(socket_path, paths, legacy_name):
+            _log("secondary: forwarded to primary, exit 0")
             return 0
+        _log("secondary: primary exists but IPC unavailable, exit 2")
         print("MPCASU primary instance exists but IPC is unavailable",
               file=sys.stderr)
         return 2
 
+    _log("primary: lock acquired")
+
     # We own the lock, so removing any stale IPC socket file is safe here.
-    # The socket lives at a deterministic path (no XDG_RUNTIME_DIR dependency),
-    # which is what keeps every secondary process able to reach the primary.
+    # The socket lives at a deterministic path, which keeps every secondary
+    # process able to reach the primary.
     server = None
     if _HAVE_NETWORK:
         QLocalServer.removeServer(socket_path)
         server = QLocalServer(app)
         if not server.listen(socket_path):
+            _log(f"primary: IPC listen failed: {server.errorString()}")
             print(f"MPCASU IPC failed: {server.errorString()}",
                   file=sys.stderr)
             lock.unlock()
@@ -164,7 +183,13 @@ def main() -> int:
         server.newConnection.connect(handle_connection)
 
     window.show()
-    QTimer.singleShot(500, _check_main_windows)
+    _check_main_windows()
+    # Periodic watchdog: if a second visible QMainWindow ever appears inside
+    # this process, log the full inventory so the root cause is never lost.
+    guard_timer = QTimer(app)
+    guard_timer.setInterval(2000)
+    guard_timer.timeout.connect(_check_main_windows)
+    guard_timer.start()
     result = app.exec()
 
     if server is not None:
@@ -175,16 +200,24 @@ def main() -> int:
 
 def _check_main_windows() -> None:
     """Hard guard: exactly one visible QMainWindow may ever exist."""
+    from PySide6.QtWidgets import QMainWindow as _MainWindow
+    tops = QApplication.topLevelWidgets()
     mains = [
-        widget for widget in QApplication.topLevelWidgets()
-        if isinstance(widget, QMainWindow) and widget.isVisible()
+        widget for widget in tops
+        if isinstance(widget, _MainWindow) and widget.isVisible()
     ]
     if len(mains) != 1:
-        raise RuntimeError(
-            f"MPCASU BUG: {len(mains)} visible QMainWindows: "
-            + ", ".join(f"{type(w).__name__}:{w.windowTitle()}"
-                        for w in mains)
+        detail = ", ".join(
+            f"{type(w).__name__}:{w.windowTitle()}"
+            for w in tops
         )
+        _log(f"GUARD: {len(mains)} visible QMainWindows; tops={detail}")
+        if len(mains) > 1:
+            raise RuntimeError(
+                f"MPCASU BUG: {len(mains)} visible QMainWindows: "
+                + ", ".join(f"{type(w).__name__}:{w.windowTitle()}"
+                            for w in mains)
+            )
 
 
 if __name__ == "__main__":
