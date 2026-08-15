@@ -2362,7 +2362,6 @@ class MainWindow(QMainWindow):
         self._center_stack.addWidget(self._sources_view)
         from mpcasu_qt.webplayers import WebPlayerTabs
         self._web_player_tabs = WebPlayerTabs()
-        self._web_player_tabs.externalRequested.connect(self._open_web_player)
         self._center_stack.addWidget(self._web_player_tabs)
         self._pages: list = []
         self._library_page = LibraryPage(self.media_library, self._thumbnail_dir, self)
@@ -3136,24 +3135,14 @@ class MainWindow(QMainWindow):
         self._back_btn.show()
 
     def _open_web_player(self, provider: str, *, query: str = "", url: str = ""):
-        from casu.webproviders import EXTERNAL_PROVIDERS, WEB_PLAYERS
-        from casu.webproviders import open_web_player as launch_chromium
+        from casu.webproviders import WEB_PLAYERS
         label = ("BROWSE" if provider == "browse"
                  else WEB_PLAYERS.get(provider, WEB_PLAYERS["spotify"])["label"])
-        if provider in EXTERNAL_PROVIDERS:
-            launched = launch_chromium(provider, query=query, url=url)
-            if launched:
-                self._show_player_page()
-                self.status(f"{label} öffnet System-Chromium (Widevine-DRM) — dort mit deinem Account einloggen und abspielen")
-                self.toast(f"{label} im System-Chromium geöffnet (DRM-Wiedergabe)")
-            else:
-                self.toast("Chromium fehlt — bitte chromium-browser installieren")
-            return
         self._web_player_tabs.open(provider, query=query, url=url)
         self._center_stack.setCurrentWidget(self._web_player_tabs)
         self._topbar_title.setText(label)
         self._back_btn.show()
-        self.status(f"{label} Web Player (eingebetteter Chromium) — dort mit deinem Account einloggen")
+        self.status(f"{label} Web Player (eingebettet) — dort mit deinem Account einloggen")
         self.toast(f"{label} geöffnet im eingebetteten Browser")
 
     def _show_player_page(self):
