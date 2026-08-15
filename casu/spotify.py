@@ -261,12 +261,84 @@ def expand_spotify(url: str, *, limit: int = 100,
     return results[:max(1, min(int(limit), 200))]
 
 
-def resolve_spotify_url(url: str, *, timeout: float = 60.0) -> str:
-    """Resolve a Spotify TRACK to a matched playable audio URL via spotDL.
+def _spotdl_url_resolve(clean: str, *, timeout: float) -> str | None:
+    """Run ``spotdl url TRACK``; returns the first playable URL or None."""
+    binary = spotdl_binary()
+    if not binary:
+        return None
+    deadline = time.monotonic() + max(15.0, float(timeout))
+    fd, temporary = tempfile.mkstemp(prefix="casu-spotify-", suffix=".url")
+    os.close(fd)
+    output = Path(temporary)
+    proc = None
+    urls: list[str] = []
+    try:
+        with output.open("w", encoding="utf-8") as stream:
+            proc = subprocess.Popen(
+                [binary, "url", clean],
+                stdout=stream, stderr=subprocess.DEVNULL, text=True,
+            )
+        while time.monotonic() < deadline:
+            if proc.poll() is not None or output.stat().st_size > 4:
+                urls = [
+                    line.strip()
+                    for line in output.read_text(encoding="utf-8").splitlines()
+                    if line.strip().startswith(("http://", "https://"))
+                ]
+                if urls or proc.poll() is not None:
+                    break
+            time.sleep(0.4)
+    except OSError:
+        pass
+    finally:
+        if proc is not None and proc.poll() is None:
+            try:
+                proc.kill()
+            except OSError:
+                pass
+        try:
+            output.unlink()
+        except OSError:
+            pass
+    return urls[0] if urls else None
 
-    Only single tracks are supported here.  Albums, playlists and artists must
-    be expanded into their individual tracks before playback; the UI queues
-    those individually instead of pretending a group is one song.
+
+def _resolve_via_ytdlp(title: str, artist: str, *, timeout: float) -> str:
+    """Match a Spotify track on YouTube (spotDL's model) and return a URL."""
+    executable = shutil.which("yt-dlp")
+    if not executable:
+        raise SpotifyError("spotDL could not resolve and yt-dlp is not installed")
+    query = f"{title} {artist}".strip()
+    command = [
+        executable, "--no-warnings", "--no-playlist", "--get-url",
+        "--format", "bestaudio", f"ytsearch1:{query}",
+    ]
+    try:
+        proc = subprocess.run(command, check=False, text=True,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              timeout=max(20.0, float(timeout)))
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise SpotifyError(f"spotDL YouTube match failed: {exc}") from exc
+    urls = [
+        line.strip()
+        for line in proc.stdout.splitlines()
+        if line.strip().startswith(("http://", "https://"))
+    ]
+    if proc.returncode or not urls:
+        detail = proc.stderr.strip().splitlines()
+        raise SpotifyError(
+            detail[-1][:300] if detail else "spotDL returned no playable URL")
+    return urls[0]
+
+
+def resolve_spotify_url(url: str, *, timeout: float = 60.0,
+                        title: str = "", artist: str = "") -> str:
+    """Resolve a Spotify TRACK to a matched playable audio URL.
+
+    ``spotdl url`` is tried first. Some spotDL builds fail against the current
+    Spotify API (SpotipyFree KeyError), so the documented spotDL model is used
+    as a fallback: the track title (from the caller or Spotify oEmbed) is
+    matched on YouTube with yt-dlp and the matched audio URL is returned.
     """
     clean = (url or "").strip()
     match = SPOTIFY_TRACK_RE.match(clean)
@@ -281,37 +353,16 @@ def resolve_spotify_url(url: str, *, timeout: float = 60.0) -> str:
             f"Spotify {kind} must be expanded into tracks before playback"
         )
 
-    binary = spotdl_binary()
-
-    if not binary:
+    if not spotdl_binary():
         raise SpotifyError("spotDL is not installed")
 
-    try:
-        proc = subprocess.run(
-            [binary, "url", clean],
-            check=False,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=max(10.0, float(timeout)),
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise SpotifyError(
-            f"spotDL execution failed: {exc}"
-        ) from exc
+    direct = _spotdl_url_resolve(clean, timeout=timeout)
+    if direct:
+        return direct
 
-    urls = [
-        line.strip()
-        for line in proc.stdout.splitlines()
-        if line.strip().startswith(("http://", "https://"))
-    ]
-
-    if proc.returncode or not urls:
-        detail = proc.stderr.strip().splitlines()
-        raise SpotifyError(
-            detail[-1][:300]
-            if detail
-            else "spotDL returned no playable URL"
-        )
-
-    return urls[0]
+    if not title:
+        meta = fetch_spotify_metadata(clean, timeout=min(10.0, float(timeout)))
+        title = meta.title
+        if not artist:
+            artist = ""
+    return _resolve_via_ytdlp(title, artist, timeout=timeout)

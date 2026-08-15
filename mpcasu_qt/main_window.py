@@ -3805,9 +3805,32 @@ class MainWindow(QMainWindow):
     def _on_source_activated(self, payload):
         if isinstance(payload, str):
             self._resolve_and_open_external_source(payload)
-        else:
-            self._resolve_and_open_external_source(payload.url,
-                                                   display_label=payload.title)
+            return
+        if getattr(payload, "source", None) == "spotify" and is_spotify_url(payload.url):
+            self._resolve_spotify_playback(
+                payload.url, title=getattr(payload, "title", "") or "",
+                artist=getattr(payload, "uploader", "") or "",
+                display_label=getattr(payload, "title", "") or payload.url)
+            return
+        self._resolve_and_open_external_source(payload.url,
+                                               display_label=payload.title)
+
+    def _resolve_spotify_playback(self, url: str, *, title: str = "",
+                                  artist: str = "", display_label: str = ""):
+        self._resolve_generation += 1
+        generation = self._resolve_generation
+        self.status("Resolving Spotify track via spotDL…")
+
+        def worker():
+            try:
+                resolved = resolve_spotify_url(
+                    url, title=title, artist=artist)
+            except (SpotifyError, OSError, ValueError) as exc:
+                self._resolve_bridge.errorReady.emit((generation, str(exc)))
+                return
+            self._resolve_bridge.resultReady.emit(
+                (generation, resolved, display_label or url))
+        threading.Thread(target=worker, daemon=True).start()
 
     def _resolve_and_open_external_source(self, source: str, *,
                                           display_label: str | None = None):
