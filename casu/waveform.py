@@ -160,10 +160,14 @@ def live_spectrum(pcm: np.ndarray, rate: int, position_s: float, *,
     magnitudes = np.abs(np.fft.rfft(values * window))
     freqs = np.fft.rfftfreq(len(values), 1.0 / rate)
     edges = np.geomspace(20.0, min(rate / 2.0, 20_000.0), bands + 1)
+    indices = np.clip(np.searchsorted(freqs, edges, side="right") - 1,
+                      0, len(magnitudes) - 1)
     output = []
-    for low, high in zip(edges[:-1], edges[1:]):
-        selected = magnitudes[(freqs >= low) & (freqs < high)]
-        output.append(float(np.sqrt(np.mean(selected ** 2))) if selected.size else 0.0)
+    for band in range(bands):
+        low = indices[band]
+        high = indices[band + 1]
+        segment = magnitudes[low:high]
+        output.append(float(np.sqrt(np.mean(segment ** 2))) if segment.size else 0.0)
     maximum = max(output, default=0.0)
     return tuple(value / maximum if maximum > 0 else 0.0 for value in output)
 
