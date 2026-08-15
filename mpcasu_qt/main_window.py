@@ -16,12 +16,13 @@ from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import (
-    QEasingCurve, QObject, QPropertyAnimation, QRect, Qt, QTimer, Signal, Slot,
-    QSize, QUrl,
+    QEasingCurve, QObject, QPropertyAnimation, QRect, QRectF, QPointF, Qt, QTimer,
+    Signal, Slot, QSize, QUrl,
 )
 from PySide6.QtGui import (
     QAction, QColor, QFont, QIcon, QKeySequence, QPainter, QPen, QPixmap,
     QTextDocument, QImage, QLinearGradient, QBrush, QGuiApplication,
+    QPainterPath,
 )
 
 try:
@@ -174,27 +175,18 @@ class Sidebar(QFrame):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        brand = QLabel("MPCASU")
-        brand.setObjectName("BrandName")
-        brand.setFixedHeight(32)
-        brand.setContentsMargins(16, 16, 16, 0)
-        layout.addWidget(brand)
-
-        sub = QLabel("PLAYER")
-        sub.setObjectName("BrandSub")
-        sub.setFixedHeight(16)
-        sub.setContentsMargins(16, 0, 16, 12)
-        layout.addWidget(sub)
-
         logo_path = Path(__file__).resolve().parent.parent / "assets" / "mpcasu_player_logo_header.png"
+        self._logo_label = None
         if logo_path.is_file():
             logo = QLabel()
-            logo.setContentsMargins(16, 0, 16, 10)
+            logo.setContentsMargins(16, 14, 16, 10)
+            logo.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             pixmap = QPixmap(str(logo_path))
             if not pixmap.isNull():
-                logo.setPixmap(pixmap.scaledToWidth(150, Qt.SmoothTransformation))
-                logo.setFixedHeight(44)
+                logo.setPixmap(pixmap.scaledToWidth(140, Qt.SmoothTransformation))
+                logo.setMinimumHeight(0)
                 layout.addWidget(logo)
+                self._logo_label = logo
 
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)
@@ -227,7 +219,9 @@ class Sidebar(QFrame):
             "ABOUT": "ⓘ",
         }
         self._nav_buttons: list[QPushButton] = []
-        self._rail_hidden: list = [sub]
+        self._rail_hidden: list = []
+        if self._logo_label is not None:
+            self._rail_hidden.append(self._logo_label)
         self._nav_group = QButtonGroup(self)
         self._nav_group.setExclusive(True)
         for section_title, items in nav_items:
@@ -815,6 +809,7 @@ class VisualizerWidget(QWidget):
         self._peaks: tuple[float, ...] = ()
         self._bands: tuple[float, ...] = ()
         self._live: tuple[float, ...] | None = None
+        self._caps: tuple[float, ...] = ()
         self._overview: tuple[float, ...] = ()
         self._cover = None
         self._mode = "spectrum"
@@ -864,6 +859,7 @@ class VisualizerWidget(QWidget):
         self._live = self._blend(self._live, bands)
         if peaks:
             self._peaks = self._blend(self._peaks, peaks)
+            self._caps = self._cap(self._caps, peaks)
         if self._live and self._mode != "off":
             self.setVisible(True)
         self.update()
@@ -872,60 +868,190 @@ class VisualizerWidget(QWidget):
         self._live = None
         self.update()
 
+    @staticmethod
+    def _cap(old, new):
+        """Slow-decay peak caps: rise instantly, fall slowly."""
+        old = list(old or ())
+        new = list(new or ())
+        if not old:
+            return tuple(new)
+        count = max(len(old), len(new))
+        out = []
+        for index in range(count):
+            prev = old[index] if index < len(old) else 0.0
+            value = new[index] if index < len(new) else 0.0
+            out.append(prev + (value - prev) * (1.0 if value >= prev else 0.05))
+        return tuple(out)
+
+    @staticmethod
+    def _resample(values, count: int) -> list:
+        values = list(values or ())
+        if not values:
+            return [0.0] * count
+        if len(values) == count:
+            return [max(0.0, min(1.0, float(v))) for v in values]
+        out = []
+        for i in range(count):
+            pos = (i + 0.5) * len(values) / count
+            a = int(pos)
+            b = min(len(values) - 1, a + 1)
+            frac = pos - a
+            out.append(max(0.0, min(1.0, values[a] * (1.0 - frac) + values[b] * frac)))
+        return out
+
+    def _paint_waveform_fill(self, painter, peaks, w, h):
+        """Mirrored waveform fill: played portion in accent, rest dim."""
+        peaks = list(peaks or ())
+        if len(peaks) < 2 or h <= 0:
+            return
+        count = len(peaks)
+        mid = h / 2
+        max_h = h / 2 - 4
+        step = w / (count - 1)
+        top = QPainterPath()
+        top.moveTo(0.0, mid)
+        bottom = QPainterPath()
+        bottom.moveTo(0.0, mid)
+        for i, value in enumerate(peaks):
+            x = i * step
+            amp = max(0.0, min(max_h, value * max_h))
+            top.lineTo(x, mid - amp)
+            bottom.lineTo(x, mid + amp)
+        top.lineTo(w, mid)
+        top.closeSubpath()
+        bottom.lineTo(w, mid)
+        bottom.closeSubpath()
+        painter.save()
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(255, 255, 255, 16))
+        painter.drawPath(top)
+        painter.drawPath(bottom)
+        if self._duration > 0:
+            play_x = min(1.0, self._position / self._duration) * w
+            painter.setClipRect(QRectF(0.0, 0.0, play_x, h))
+            grad = QLinearGradient(0, 0, 0, h)
+            grad.setColorAt(0.0, QColor(PALETTE.accent_hot))
+            grad.setColorAt(0.6, QColor(PALETTE.accent_dim))
+            grad.setColorAt(1.0, QColor(10, 6, 8))
+            painter.setBrush(QBrush(grad))
+            painter.drawPath(top)
+            painter.drawPath(bottom)
+        painter.restore()
+
+    def _paint_bottom_bars(self, painter, values, w, y_top, y_bottom, caps=True):
+        """Rounded gradient bars anchored to the bottom edge of a band."""
+        count = len(values)
+        if count < 2:
+            return
+        gap = max(1.0, w * 0.004)
+        bar_w = max(2.0, (w - gap * (count - 1)) / count)
+        span = max(1.0, y_bottom - y_top)
+        grad = QLinearGradient(0, y_top, 0, y_bottom)
+        grad.setColorAt(0.0, QColor(PALETTE.accent_hot))
+        grad.setColorAt(0.7, QColor(PALETTE.accent_dim))
+        grad.setColorAt(1.0, QColor(12, 6, 8))
+        radius = min(bar_w / 2, 3.5)
+        x = 0.0
+        for value in values:
+            bar_h = max(1.5, value * span)
+            rect = QRectF(x, y_bottom - bar_h, bar_w, bar_h)
+            path = QPainterPath()
+            path.addRoundedRect(rect, radius, radius)
+            painter.fillPath(path, QBrush(grad))
+            x += bar_w + gap
+        if caps:
+            cap_values = self._caps if self._caps else values
+            painter.setPen(QPen(QColor(255, 255, 255, 200), max(1.5, bar_w * 0.3)))
+            x = 0.0
+            for value in cap_values:
+                bar_h = max(1.5, min(1.0, value) * span)
+                painter.drawLine(QPointF(x, y_bottom - bar_h),
+                                 QPointF(x + bar_w, y_bottom - bar_h))
+                x += bar_w + gap
+
+    def _paint_cover_thumb(self, painter, cover, w, h):
+        size = max(64, min(int(w * 0.30), int(h * 0.46), 420))
+        x = (w - size) // 2
+        y = (h - size) // 2
+        pix = cover.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        px = x + (size - pix.width()) // 2
+        py = y + (size - pix.height()) // 2
+        radius = 12.0
+        shadow = QRectF(px + 3, py + 6, pix.width(), pix.height())
+        path_shadow = QPainterPath()
+        path_shadow.addRoundedRect(shadow, radius, radius)
+        painter.setPen(Qt.NoPen)
+        painter.fillPath(path_shadow, QColor(0, 0, 0, 110))
+        rect = QRectF(px, py, pix.width(), pix.height())
+        path = QPainterPath()
+        path.addRoundedRect(rect, radius, radius)
+        painter.save()
+        painter.setClipPath(path)
+        painter.drawPixmap(QRectF(px, py, pix.width(), pix.height()), pix)
+        painter.restore()
+        painter.setPen(QPen(QColor(255, 255, 255, 30), 1.2))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawPath(path)
+
     def paintEvent(self, event):  # noqa: N802 - Qt naming
         if self._mode == "off":
             return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        width, height = self.width(), self.height()
+        painter.setRenderHint(QPainter.SmoothPixmapTransform)
+        w, h = self.width(), self.height()
+        if w <= 0 or h <= 0:
+            return
+
+        bg = QLinearGradient(0, 0, 0, h)
+        bg.setColorAt(0.0, QColor("#0c1015"))
+        bg.setColorAt(1.0, QColor("#05070a"))
+        painter.fillRect(QRectF(0, 0, w, h), QBrush(bg))
 
         if self._cover is not None and not self._cover.isNull():
-            scaled = self._cover.scaled(
-                width, height, Qt.KeepAspectRatio,
-                Qt.SmoothTransformation)
-            painter.setOpacity(0.34)
-            painter.drawPixmap((width - scaled.width()) // 2,
-                               (height - scaled.height()) // 2, scaled)
-            painter.setOpacity(1.0)
+            fill = self._cover.scaled(w, h, Qt.KeepAspectRatioByExpanding,
+                                      Qt.SmoothTransformation)
+            painter.save()
+            painter.setOpacity(0.20)
+            painter.drawPixmap((w - fill.width()) // 2,
+                               (h - fill.height()) // 2, fill)
+            painter.restore()
+            shade = QLinearGradient(0, 0, 0, h)
+            shade.setColorAt(0.0, QColor(7, 9, 11, 110))
+            shade.setColorAt(1.0, QColor(7, 9, 11, 225))
+            painter.fillRect(QRectF(0, 0, w, h), QBrush(shade))
 
-        if self._peaks:
-            pen = QPen(QColor(PALETTE.text_faint), 1.2)
-            painter.setPen(pen)
-            count = len(self._peaks)
-            mid = height // 2
-            previous = None
-            for index, value in enumerate(self._peaks):
-                x = int(index * width / max(1, count - 1))
-                amp = max(1, int(value * (height // 2 - 3)))
-                if previous is not None:
-                    painter.drawLine(previous[0], previous[1], x, mid + amp)
-                previous = (x, mid - amp)
+        bands = self._live if self._live else self._bands
+        large = h >= 240
 
-        bands = self._live or self._bands
-        if self._mode in ("spectrum", "both") and bands:
-            count = len(bands)
-            bar_w = max(2, width // max(1, count) - 2)
-            for index, value in enumerate(bands):
-                bar_h = max(2, int(value * (height - 6)))
-                x = index * (width // count)
-                color = QColor(PALETTE.accent) if index % 2 == 0 else QColor(PALETTE.accent_dim)
-                painter.fillRect(x, height - bar_h, bar_w, bar_h, color)
-        if self._mode in ("waveform", "both") and self._peaks:
-            pen = QPen(QColor(PALETTE.accent_hot), 1.5)
-            painter.setPen(pen)
-            count = len(self._peaks)
-            mid = height // 2
-            previous = None
-            for index, value in enumerate(self._peaks):
-                x = int(index * width / max(1, count - 1))
-                amp = max(1, int(value * (height // 2 - 3)))
-                point = (x, mid - amp)
-                if previous is not None:
-                    painter.drawLine(previous[0], previous[1], x, mid + amp)
-                previous = (x, mid - amp)
+        if self._mode in ("both", "waveform"):
+            self._paint_waveform_fill(painter,
+                                      self._overview or self._peaks, w, h)
+
+        if bands and self._mode in ("spectrum", "both"):
+            y_bottom = int(h * 0.86)
+            y_top = int(h * 0.50) if large else 2
+            if not large:
+                y_bottom = h - 2
+                y_top = 2
+            self._paint_bottom_bars(painter, bands, w, y_top, y_bottom)
+        elif self._mode == "waveform" and self._peaks:
+            y_bottom = int(h * 0.84)
+            y_top = int(h * 0.50)
+            if not large:
+                y_top = 2
+                y_bottom = h - 2
+            self._paint_bottom_bars(painter, self._resample(self._peaks, 96),
+                                    w, y_top, y_bottom)
+
+        if self._cover is not None and not self._cover.isNull() and large:
+            self._paint_cover_thumb(painter, self._cover, w, h)
+
         if self._duration > 0:
-            cursor_x = int(min(1.0, self._position / self._duration) * width)
-            painter.fillRect(cursor_x, 0, 2, height, QColor(PALETTE.text))
+            play_x = int(min(1.0, self._position / self._duration) * w)
+            painter.setPen(Qt.NoPen)
+            painter.fillRect(play_x - 1, 0, 3, h, QColor(255, 255, 255, 36))
+            painter.fillRect(play_x - 1, 0, 1, h, QColor(PALETTE.accent_hot))
         painter.end()
 
 
@@ -3292,15 +3418,21 @@ class MainWindow(QMainWindow):
             item.setText(0, self._playlist_pane._label_for(url))
 
     def _apply_settings(self, settings):
-        self._volume = settings.volume
-        self._muted = settings.muted
-        self._rate = settings.rate
+        self._volume = max(0, min(200, int(settings.volume)))
+        self._muted = bool(settings.muted)
+        self._rate = float(settings.rate)
         self._watched_folders = list(settings.watched_folders)
         self._viz_mode = str(settings.visualizer)
         self._record_format = str(settings.record_format)
         self._record_split_minutes = int(settings.record_split_minutes)
         self._volume_slider.setValue(self._volume)
-        self._rate_btn.setText(f"{self._rate:g}×")
+        self._apply_backend_settings()
+        self._apply_playback_rate()
+        self._mute_btn.setText("×" if self._muted else "♪")
+        if self._viz_mode == "off":
+            self._visualizer.configure("off", (), (), 0.0)
+        elif self.current is not None:
+            self._load_visualizer(self.current)
         self.toast("Settings saved")
         self.status("Settings updated")
 
