@@ -102,6 +102,25 @@ def _send_to_primary(server_name: str, paths, legacy_name: str | None = None) ->
     return False
 
 
+def _log_peer_processes() -> None:
+    """Log every other mpcasu_qt process seen in /proc (cross-process guard)."""
+    peers = []
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit():
+            continue
+        try:
+            with open(f"/proc/{entry}/cmdline", "rb") as handle:
+                cmd = handle.read().decode("utf-8", "replace")
+        except OSError:
+            continue
+        if "mpcasu_qt.app" in cmd and int(entry) != os.getpid():
+            peers.append(f"{entry}:{cmd[:80]!r}")
+    if peers:
+        _log(f"PEER mpcasu processes: {'; '.join(peers)}")
+    else:
+        _log("PEER mpcasu processes: none")
+
+
 def main() -> int:
     _ensure_runtime_dir()
     app = QApplication(sys.argv)
@@ -183,6 +202,7 @@ def main() -> int:
         server.newConnection.connect(handle_connection)
 
     window.show()
+    _log_peer_processes()
     _check_main_windows()
     # Periodic watchdog: if a second visible QMainWindow ever appears inside
     # this process, log the full inventory so the root cause is never lost.
