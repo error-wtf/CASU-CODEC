@@ -252,6 +252,46 @@ QLineEdit {{
 }}
 QLineEdit:focus {{ border-color: {p.accent}; }}
 
+/* ---------- All list/table popups & menus (dark, readable) ---------- */
+QAbstractItemView {{
+    background-color: {p.sidebar};
+    alternate-background-color: {p.surface};
+    color: {p.text};
+    selection-background-color: {p.accent_dim};
+    selection-color: {p.text};
+    border: none;
+    outline: none;
+}}
+QMenu {{
+    background-color: {p.sidebar};
+    border: 1px solid {p.border_strong};
+    border-radius: 6px;
+    color: {p.text};
+    padding: 4px;
+}}
+QMenu::item {{
+    padding: 6px 22px;
+    border-radius: 4px;
+    color: {p.text};
+}}
+QMenu::item:selected {{
+    background-color: {p.accent_dim};
+    color: {p.text};
+}}
+QMenu::item:disabled {{ color: {p.text_faint}; }}
+QMenu::separator {{
+    height: 1px;
+    background: {p.border};
+    margin: 4px 8px;
+}}
+QToolTip {{
+    background-color: {p.sidebar};
+    color: {p.text};
+    border: 1px solid {p.border_strong};
+    padding: 4px 8px;
+    border-radius: 4px;
+}}
+
 /* ---------- Selects & number boxes (dark, readable popup) ---------- */
 QComboBox {{
     background-color: {p.input_bg};
