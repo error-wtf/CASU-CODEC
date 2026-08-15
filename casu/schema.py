@@ -16,7 +16,7 @@ MAX_METADATA_KEYS = 256
 MAX_TEXT_LENGTH = 4096
 MAX_SEGMENT_PRIORITY = 1_000_000
 SEGMENT_LIFECYCLES = frozenset({"CREATE", "UPDATE", "HOLD", "MOVE", "REPLACE", "INVALIDATE", "RELEASE"})
-SUPPORTED_CASU_VERSIONS = frozenset({"1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.3", "1.0.4", "1.0.5", "1.0.6", "1.0.0rc1", "1.0.0rc2", "1.0.0rc3", "1.0.0rc4", "1.0.0rc5", "1.0.0rc6", "1.0.0rc7", "1.0.0rc8", "1.0.0rc9"})
+SUPPORTED_CASU_VERSIONS = frozenset({"1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.3", "1.0.4", "1.0.5", "1.0.6", "2.0.0", "1.0.0rc1", "1.0.0rc2", "1.0.0rc3", "1.0.0rc4", "1.0.0rc5", "1.0.0rc6", "1.0.0rc7", "1.0.0rc8", "1.0.0rc9"})
 MAX_SEEK_ENTRIES = 2_000_000
 
 
