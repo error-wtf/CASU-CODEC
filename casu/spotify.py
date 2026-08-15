@@ -15,9 +15,12 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
+import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 
 SPOTIFY_TRACK_RE = re.compile(
     r"^(?:https?://)?open\.spotify\.com/(track|album|playlist|episode|show|artist)/([a-zA-Z0-9]{22})(?:\?.*)?$"
@@ -100,43 +103,53 @@ def spotify_kind(url: str) -> str | None:
 
 
 def _spotdl_save(query: str, *, timeout: float) -> list[SpotifySearchResult]:
-    """Run ``spotdl save QUERY --save-file -`` and parse the JSON song array."""
+    """Run ``spotdl save QUERY --save-file FILE`` and parse the JSON songs.
+
+    This spotDL version flushes the JSON to a named save file reliably, then
+    hangs on shutdown (a curl_cffi callback bug) instead of exiting. The save
+    file is therefore polled until it parses as JSON and the process is killed
+    once the data is available or the deadline passes.
+    """
     binary = spotdl_binary()
 
     if not binary:
         raise SpotifyError("spotDL is not installed")
 
+    deadline = time.monotonic() + max(30.0, float(timeout))
+    fd, temporary = tempfile.mkstemp(prefix="casu-spotify-", suffix=".spotdl")
+    os.close(fd)
+    output = Path(temporary)
+    proc = None
     try:
-        proc = subprocess.run(
-            [
-                binary,
-                "save",
-                query,
-                "--save-file",
-                "-",
-            ],
-            check=False,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=max(10.0, float(timeout)),
+        proc = subprocess.Popen(
+            [binary, "save", query, "--save-file", str(output)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True,
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
+        payload = None
+        while time.monotonic() < deadline:
+            if proc.poll() is not None or output.stat().st_size > 4:
+                try:
+                    payload = json.loads(output.read_text(encoding="utf-8"))
+                    break
+                except (json.JSONDecodeError, OSError, ValueError):
+                    pass
+            time.sleep(0.4)
+        if payload is None and proc.poll() is not None and proc.returncode:
+            raise SpotifyError("spotDL search failed")
+        if payload is None:
+            raise SpotifyError("spotDL search timed out")
+    except OSError as exc:
         raise SpotifyError(f"spotDL search failed: {exc}") from exc
-
-    if proc.returncode:
-        detail = proc.stderr.strip().splitlines()
-        raise SpotifyError(
-            detail[-1][:300] if detail
-            else "spotDL search failed"
-        )
-
-    try:
-        payload = json.loads(proc.stdout)
-    except json.JSONDecodeError as exc:
-        raise SpotifyError(
-            "spotDL returned invalid JSON"
-        ) from exc
+    finally:
+        if proc is not None and proc.poll() is None:
+            try:
+                proc.kill()
+            except OSError:
+                pass
+        try:
+            output.unlink()
+        except OSError:
+            pass
 
     if isinstance(payload, dict):
         payload = payload.get("songs", [])
