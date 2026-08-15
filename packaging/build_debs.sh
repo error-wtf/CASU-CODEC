@@ -117,7 +117,7 @@ install_qtplayer() {
 
 make_pkg casu-codec "CASU Codec for All Segmented Units" "python3 (>= 3.10), python3-numpy, python3-av (>= 14), ffmpeg" install_codec
 make_pkg casu-converter "CASU full graphical audio video and CASU converter" "casu-codec (= $version), python3-tk" install_converter
-make_pkg mpcasu "MPCASU CASU and legacy media player (Qt, official red/black design)" "casu-codec (= $version), python3-pyside6.qtcore, python3-pyside6.qtgui, python3-pyside6.qtwidgets, python3-pyside6.qtnetwork, libvlc5, vlc-plugin-base, vlc-plugin-video-output, libpulse0, libass9, yt-dlp" install_player
+make_pkg mpcasu "MPCASU CASU and legacy media player (Qt, official red/black design)" "casu-codec (= $version), python3-pyside6.qtcore, python3-pyside6.qtgui, python3-pyside6.qtwidgets, python3-pyside6.qtnetwork, python3-pyside6.qtwebenginewidgets, libvlc5, vlc-plugin-base, vlc-plugin-video-output, libpulse0, libass9, yt-dlp" install_player
 make_pkg web-casu "MPCASU local web media player" "casu-codec (= $version), python3 (>= 3.10)" install_webplayer
 cd "$out"
 sha256sum ./*.deb | sed 's# \./# #' > SHA256SUMS

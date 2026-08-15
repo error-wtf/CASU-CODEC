@@ -173,6 +173,10 @@ def _log_window_inventory() -> None:
 
 def main() -> int:
     _ensure_runtime_dir()
+    if hasattr(os, "getuid") and os.getuid() == 0:
+        flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
+        if "--no-sandbox" not in flags:
+            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (flags + " --no-sandbox").strip()
     app = QApplication(sys.argv)
     app.setApplicationName("MPCASU")
     app.setOrganizationName("Lino-Codec")
