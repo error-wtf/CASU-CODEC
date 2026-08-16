@@ -14,6 +14,7 @@ import tempfile
 import threading
 import time
 from dataclasses import replace
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from PySide6.QtCore import (
@@ -1845,6 +1846,114 @@ class AboutPage(QFrame):
         note.setAlignment(Qt.AlignCenter)
         note.setWordWrap(True)
         layout.addWidget(note)
+class _YtStreamer:
+    """Streams a YouTube URL through yt-dlp into a local HTTP stream.
+
+    The embedded browser engine cannot fetch googlevideo URLs directly
+    (the CDN answers HTTP 403), so yt-dlp fetches the media and mpcasu
+    serves it locally over 127.0.0.1 where the engine plays it fine.
+    """
+
+    def __init__(self):
+        self._buffer = bytearray()
+        self._done = threading.Event()
+        self._cond = threading.Condition()
+        self._proc = None
+        self._server = None
+        self.port = 0
+
+    def start(self, url: str) -> str:
+        self.stop()
+        with self._cond:
+            self._buffer.clear()
+            self._done.clear()
+        self._server = ThreadingHTTPServer(("127.0.0.1", 0), self._make_handler())
+        self.port = self._server.server_address[1]
+        threading.Thread(target=self._server.serve_forever, daemon=True).start()
+        fmt = ("best[ext=mp4][vcodec^=avc][acodec^=mp4a][height<=720]/"
+               "best[ext=mp4][vcodec^=avc][acodec!=none]/"
+               "best[protocol^=http][vcodec!=none][acodec!=none]")
+        try:
+            self._proc = subprocess.Popen(
+                ["yt-dlp", "--no-playlist", "--no-warnings", "--no-progress",
+                 "-f", fmt, "-o", "-", url],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        except OSError as exc:
+            raise RuntimeError(f"yt-dlp start failed: {exc}") from exc
+        threading.Thread(target=self._pump, daemon=True).start()
+        return f"http://127.0.0.1:{self.port}/video.mp4"
+
+    def _pump(self):
+        try:
+            while self._proc and self._proc.stdout:
+                chunk = self._proc.stdout.read(262144)
+                if not chunk:
+                    break
+                with self._cond:
+                    self._buffer.extend(chunk)
+                    self._cond.notify_all()
+        except Exception:  # noqa: BLE001 - stream cleanup only
+            pass
+        finally:
+            with self._cond:
+                self._done.set()
+                self._cond.notify_all()
+
+    def _wait_data(self, pos: int) -> bytes:
+        with self._cond:
+            while pos >= len(self._buffer) and not self._done.is_set():
+                self._cond.wait(timeout=0.5)
+            if pos < len(self._buffer):
+                end = min(pos + 262144, len(self._buffer))
+                return bytes(self._buffer[pos:end])
+            return b""
+
+    def _make_handler(self):
+        streamer = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                try:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "video/mp4")
+                    self.end_headers()
+                    pos = 0
+                    while True:
+                        chunk = streamer._wait_data(pos)
+                        if not chunk:
+                            break
+                        try:
+                            self.wfile.write(chunk)
+                            self.wfile.flush()
+                        except Exception:  # noqa: BLE001 - client went away
+                            return
+                        pos += len(chunk)
+                except Exception:  # noqa: BLE001 - client went away
+                    pass
+
+            def log_message(self, *args):
+                pass
+
+        return Handler
+
+    def stop(self):
+        proc, self._proc = self._proc, None
+        if proc is not None:
+            try:
+                proc.terminate()
+            except Exception:  # noqa: BLE001 - already gone
+                pass
+        server, self._server = self._server, None
+        if server is not None:
+            try:
+                server.shutdown()
+            except Exception:  # noqa: BLE001 - already gone
+                pass
+        with self._cond:
+            self._done.set()
+            self._cond.notify_all()
+
+
 class _ThreadBridge(QObject):
     """Marshals worker-thread results onto the Qt event loop (no popups)."""
 
@@ -2310,10 +2419,18 @@ class MainWindow(QMainWindow):
         center_column.addWidget(self._video_surface, 1)
 
         self._youtube_view = None
+        self._yt_stream = _YtStreamer()
         if _HAVE_WEBENGINE:
             try:
                 from PySide6.QtWebEngineWidgets import QWebEngineView
+                from PySide6.QtWebEngineCore import QWebEnginePage
+
+                class _YtPage(QWebEnginePage):
+                    def javaScriptConsoleMessage(self, level, message, line, source):
+                        print(f"[yt-js] {message}", flush=True)
+
                 self._youtube_view = QWebEngineView(self._player_page)
+                self._youtube_view.setPage(_YtPage(self._youtube_view))
                 self._youtube_view.setStyleSheet("background: #000;")
                 self._youtube_view.hide()
             except Exception:  # noqa: BLE001 - web engine is optional
@@ -3534,31 +3651,15 @@ class MainWindow(QMainWindow):
             "</script></body></html>"
         ).replace("__URL__", safe)
         view = self._youtube_view
-        view._yt_source = url
-        view._yt_label = label
-        view._yt_reresolves = getattr(view, "_yt_reresolves", 0)
 
-        def on_js(_level, msg, _line, _src):
-            print(f"[yt-js] {msg}", flush=True)
-            text = str(msg)
-            if "final" in text and getattr(self, "_youtube_view", None) is not None:
-                v = self._youtube_view
-                src = getattr(v, "_yt_source", "")
-                if src and getattr(v, "_yt_reresolves", 0) < 2:
-                    v._yt_reresolves = v._yt_reresolves + 1
-                    print(f"[yt] re-resolve #{v._yt_reresolves}", flush=True)
-                    self._play_youtube(src, label=getattr(v, "_yt_label", ""))
-
-        try:
-            view.page().javaScriptConsoleMessage.connect(on_js)
-        except Exception:  # noqa: BLE001 - diagnostics are optional
-            pass
         view.setHtml(html, QUrl("https://www.youtube.com/"))
-        self.status(f"Streaming {label} · yt-dlp direct URL")
+        self.status(f"Streaming {label} · yt-dlp")
 
     def _hide_web_video(self):
         if getattr(self, "_youtube_view", None) is not None:
             self._youtube_view.hide()
+        if getattr(self, "_yt_stream", None) is not None:
+            self._yt_stream.stop()
         if getattr(self, "_video_surface", None) is not None:
             self._video_surface.set_video_active(
                 bool(getattr(self, "backend", None)))
@@ -4444,41 +4545,26 @@ class MainWindow(QMainWindow):
         self._play_youtube(url, label=label or url)
 
     def _play_youtube(self, url: str, *, label: str = ""):
-        """Stream a YouTube URL like web-casu: resolve via yt-dlp, play in a
-        browser <video> inside NOW PLAYING (stream, no download).
+        """Stream a YouTube URL through yt-dlp into a local HTTP stream and
+        play it in a browser <video> inside NOW PLAYING (stream, no download).
 
-        libVLC 3.x cannot extract YouTube (lua error), so the browser engine is
-        used. The visualizer is switched off so it does not cover the video.
+        The embedded browser engine cannot fetch googlevideo URLs directly
+        (the CDN answers HTTP 403), so yt-dlp fetches the media and mpcasu
+        serves it locally over 127.0.0.1. The visualizer is switched off so
+        it does not cover the video.
         """
-        import subprocess as _sp
         self._show_player_page()
-        self.status("Resolving YouTube stream (yt-dlp)…")
-        print(f"[yt] resolve start: {url[:70]}", flush=True)
-        self._resolve_generation += 1
-        generation = self._resolve_generation
-
-        def worker():
-            try:
-                fmt = ("best[ext=mp4][vcodec^=avc][acodec^=mp4a][height<=720]/"
-                       "best[ext=mp4][vcodec^=avc][acodec!=none]/"
-                       "best[protocol^=http][vcodec!=none][acodec!=none]")
-                proc = _sp.run(
-                    ["yt-dlp", "--no-playlist", "--no-warnings", "--get-url",
-                     "-f", fmt, url],
-                    capture_output=True, text=True, timeout=30)
-                out = (proc.stdout or "").strip()
-                direct = out.splitlines()[0] if proc.returncode == 0 and out else ""
-                if not direct:
-                    raise CasuError("yt-dlp lieferte keine Stream-URL")
-                print(f"[yt] resolved OK: {direct[:70]}", flush=True)
-            except Exception as exc:  # noqa: BLE001 - surfaced to the UI
-                print(f"[yt] resolve FAILED: {exc}", flush=True)
-                self._resolve_bridge.errorReady.emit((generation, str(exc)))
-                return
-            self._resolve_bridge.resultReady.emit(
-                (generation, ("youtube_stream", direct), label or url))
-
-        threading.Thread(target=worker, daemon=True).start()
+        self.status("Streaming YouTube (yt-dlp)…")
+        print(f"[yt] stream start: {url[:70]}", flush=True)
+        try:
+            local = self._yt_stream.start(url)
+        except Exception as exc:  # noqa: BLE001 - surfaced to the UI
+            print(f"[yt] stream FAILED: {exc}", flush=True)
+            self.status(f"YouTube streaming failed: {exc}")
+            self.toast("YouTube streaming failed")
+            return
+        print(f"[yt] local stream: {local}", flush=True)
+        self._open_web_video(local, title=label)
 
     def _tag_queue_title(self, url: str):
         """Fetch the YouTube title in the background and update queue + NOW PLAYING."""
@@ -4607,9 +4693,6 @@ class MainWindow(QMainWindow):
     def _on_resolve_ready(self, payload):
         generation, resolved, label = payload
         if generation != self._resolve_generation:
-            return
-        if isinstance(resolved, tuple) and resolved and resolved[0] == "youtube_stream":
-            self._open_web_video(resolved[1], title=label)
             return
         self._open_external_source(resolved, display_label=label)
 
@@ -5169,6 +5252,8 @@ class MainWindow(QMainWindow):
             pass
 
     def closeEvent(self, event):
+        if getattr(self, "_yt_stream", None) is not None:
+            self._yt_stream.stop()
         resume_position = self.backend.position() if self.backend else self._seek_slider._position
         self._persist_media_preferences()
         try:
