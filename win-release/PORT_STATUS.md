@@ -2,8 +2,8 @@
 
 | Field | Value |
 |-------|-------|
-| Current phase | ANALYSIS COMPLETE — per-tool port roadmaps done (roadmap/tools/*, roadmap/libraries/*, EXECUTION_PLAN) |
-| Current execution step | STEP 001 (pending) — WP-REL-001 toolchain |
+| Current phase | ANALYSIS COMPLETE — per-tool roadmaps + shared-lib roadmaps + **Master-Gesamtfahrplan + Run-Checklist + Navigation + Reference-Lookup** done |
+| Current execution step | STEP-001 (pending) — WP-REL-001 toolchain (mingw64 + hello-exe + Wine) |
 | Reference tree modified | NO (only AGENTS.md freeze doc + win-release/ added) |
 | Baseline | HEAD `36df249`, 400 tests PASS |
 | Pure Web Release | published (SHA in baseline) |
