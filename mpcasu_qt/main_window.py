@@ -2278,6 +2278,16 @@ class MainWindow(QMainWindow):
         self._video_surface.doubleClicked.connect(self.toggle_fullscreen)
         center_column.addWidget(self._video_surface, 1)
 
+        self._youtube_view = None
+        if _HAVE_WEBENGINE:
+            try:
+                from PySide6.QtWebEngineWidgets import QWebEngineView
+                self._youtube_view = QWebEngineView(self._player_page)
+                self._youtube_view.setStyleSheet("background: #000;")
+                self._youtube_view.hide()
+            except Exception:  # noqa: BLE001 - web engine is optional
+                self._youtube_view = None
+
         self._badges_label = QLabel(self._player_page)
         self._badges_label.setStyleSheet(
             "background-color: #090b0ddd; border: 1px solid #383d43; color: #f4f5f7;"
@@ -2810,6 +2820,7 @@ class MainWindow(QMainWindow):
                 self._play_btn.setText("| |")
 
     def stop(self):
+        self._hide_web_video()
         self._stop_stream_viz()
         self._viz_timer.stop()
         self._viz_pcm = None
@@ -3437,18 +3448,44 @@ class MainWindow(QMainWindow):
             self._close_queue_drawer()
 
     def _open_web_video(self, direct_url: str, *, title: str = ""):
-        """Stream a yt-dlp-resolved direct URL in the embedded browser <video>.
+        """Stream a yt-dlp-resolved direct URL inside the NOW PLAYING view.
 
         Mirrors web-casu: the browser engine (QtWebEngine) satisfies the HTTP
         session YouTube requires, so no full download is needed and playback
-        starts immediately with video+audio.
+        starts immediately with video+audio — in the main player page.
         """
         label = title or "YouTube"
-        self._web_player_tabs.play_video(direct_url, title)
-        self._center_stack.setCurrentWidget(self._web_player_tabs)
+        self._show_player_page()
         self._topbar_title.setText(label)
         self._back_btn.show()
-        self.status(f"Streaming {label} · yt-dlp direct URL (eingebettet)")
+        self._hide_web_video()
+        self._video_surface.set_video_active(False)
+        if self._youtube_view is None:
+            self.status("YouTube streaming requires the QtWebEngine module")
+            self.toast("YouTube streaming unavailable (no QtWebEngine)")
+            return
+        self.stop()
+        safe = direct_url.replace("&", "&amp;").replace("'", "&#39;")
+        html = (
+            "<!doctype html><html><head><meta charset='utf-8'>"
+            "<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}"
+            "video{width:100vw;height:100vh;background:#000;outline:none}</style>"
+            "</head><body><video src='__URL__' autoplay controls playsinline "
+            "style='width:100vw;height:100vh'></video></body></html>"
+        ).replace("__URL__", safe)
+        self._youtube_view.setHtml(html, QUrl("https://www.youtube.com/"))
+        self._youtube_view.setGeometry(self._video_surface.geometry())
+        self._youtube_view.show()
+        self._youtube_view.raise_()
+        self.status(f"Streaming {label} · yt-dlp direct URL")
+        self.toast(f"Streaming {label}")
+
+    def _hide_web_video(self):
+        if self._youtube_view is not None:
+            self._youtube_view.hide()
+        if getattr(self, "_video_surface", None) is not None:
+            self._video_surface.set_video_active(
+                bool(getattr(self, "backend", None)))
 
     def _toggle_queue_pane(self):
         if self.width() < 1100:
@@ -3558,6 +3595,9 @@ class MainWindow(QMainWindow):
         eh = min(300, max(140, stage.height() - 60))
         self._empty_hint.setGeometry((stage.width() - ew) // 2 + sx,
                                      (stage.height() - eh) // 2 + sy, ew, eh)
+        if self._youtube_view is not None and not self._youtube_view.isHidden():
+            self._youtube_view.setGeometry(sx, sy, stage.width(), stage.height())
+            self._youtube_view.raise_()
         if self._audio_stage:
             self._visualizer.setGeometry(sx, sy, stage.width(), stage.height())
             self._visualizer.set_small(False)
