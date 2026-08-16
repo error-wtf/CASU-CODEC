@@ -2,8 +2,8 @@
 
 | Field | Value |
 |-------|-------|
-| Current phase | **VORBEREITUNG FINAL** — Gesamtsystem + Start-Datei fertig (`START_HIER.md`); Beschaffungsliste (`PREREQUISITES.md`). Neuer Portierungs-Run startet mit SCHRITT 0 + STEP-001. |
-| Current execution step | SCHRITT 0 (Prerequisites) + STEP-001 (WP-REL-001 toolchain: mingw64 + hello-exe + Wine) |
+| Current phase | **VORBEREITUNG FINAL + TOOLCHAIN-VERIFIZIERT** — Gesamtsystem + Start-Datei (`START_HIER.md`), Prerequisites (`PREREQUISITES.md`), CMake-Toolchain + minimales Build-Skelett bewiesen (PE32+ exe unter Wine, casu_core.a cross-builds). Referenz-Baseline grün (99 passed). |
+| Current execution step | SCHRITT 0 (Prerequisites beschaffen) + STEP-001 (WP-REL-001: mingw64 + hello-exe + Wine — Toolchain ist bereits verifiziert, es fehlt nur noch der offizielle WP-Abschluss mit Logging) |
 | Reference tree modified | NO (only AGENTS.md freeze doc + win-release/ added) |
 | Baseline | HEAD `36df249`, 400 tests PASS |
 | Pure Web Release | published (SHA in baseline) |
