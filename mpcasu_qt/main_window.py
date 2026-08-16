@@ -2220,6 +2220,8 @@ class MainWindow(QMainWindow):
         self._resolve_bridge = _ThreadBridge()
         self._resolve_bridge.resultReady.connect(self._on_resolve_ready)
         self._resolve_bridge.errorReady.connect(self._on_resolve_failed)
+        self._title_bridge = _ThreadBridge()
+        self._title_bridge.resultReady.connect(self._apply_queue_title)
 
         self._build_ui()
         self._restore_session()
@@ -4344,25 +4346,33 @@ class MainWindow(QMainWindow):
         self._open_external_source(url, display_label=label or url)
 
     def _tag_queue_title(self, url: str):
-        """Fetch the YouTube title in the background and tag the queue entry."""
+        """Fetch the YouTube title in the background and update queue + NOW PLAYING."""
 
         def worker():
             try:
                 import subprocess as _sp
                 proc = _sp.run(
-                    ["yt-dlp", "--no-warnings", "--no-playlist", "--get-title", url],
-                    capture_output=True, text=True, timeout=20)
+                    ["yt-dlp", "--no-warnings", "--no-playlist", "--skip-download",
+                     "--print", "%(title)s", url],
+                    capture_output=True, text=True, timeout=25)
                 title = (proc.stdout or "").strip()
                 if not title or proc.returncode != 0:
                     return
-                pane = self._playlist_pane
-                from PySide6.QtCore import QTimer
-                QTimer.singleShot(0, lambda: (pane._display_titles.__setitem__(url, title),
-                                              self._render_playlist()))
+                self._title_bridge.resultReady.emit((url, title))
             except Exception:  # noqa: BLE001 - titles are cosmetic
                 return
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _apply_queue_title(self, payload):
+        url, title = payload
+        pane = self._playlist_pane
+        pane._display_titles[url] = title
+        self._render_playlist()
+        if str(getattr(self, "_network_source", "") or "") == url:
+            self._now_playing_bar.set_now_playing(title)
+            self._set_caption(title)
+            self._topbar_title.setText(title)
 
     def _resolve_spotify_playback(self, url: str, *, title: str = "",
                                   artist: str = "", display_label: str = ""):
@@ -4475,10 +4485,12 @@ class MainWindow(QMainWindow):
 
     def _play_network_source(self, text: str):
         from casu.webproviders import provider_for_url
-        if provider_for_url(text):
-            self._open_web_player(provider_for_url(text), url=str(text))
+        provider = provider_for_url(text)
+        if provider:
+            self._open_web_player(provider, url=str(text))
         else:
-            self._open_external_source(text)
+            label = self._playlist_pane._display_titles.get(text, "")
+            self._open_external_source(text, display_label=label or text)
 
     def _open_external_source(self, source: str, *, display_label: str | None = None):
         from casu.webproviders import provider_for_url
