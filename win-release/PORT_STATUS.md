@@ -2,8 +2,8 @@
 
 | Field | Value |
 |-------|-------|
-| Current phase | READ-ONLY ANALYSIS (research + roadmap complete) |
-| Current execution step | STEP 001 (pending) — WP-BUILD-001 toolchain |
+| Current phase | ANALYSIS COMPLETE — per-tool port roadmaps done (roadmap/tools/*, roadmap/libraries/*, EXECUTION_PLAN) |
+| Current execution step | STEP 001 (pending) — WP-REL-001 toolchain |
 | Reference tree modified | NO (only AGENTS.md freeze doc + win-release/ added) |
 | Baseline | HEAD `36df249`, 400 tests PASS |
 | Pure Web Release | published (SHA in baseline) |
@@ -26,8 +26,9 @@
 
 ## Next steps
 
-1. Commit/push analysis (this commit).
+1. Commit/push per-tool roadmaps (this commit).
 2. Set up build environment: verify/install `mingw-w64`, `cmake`, `ninja`,
-   `wine`; obtain Qt6 (MinGW) + libVLC Windows binaries.
-3. Execute STEP 001: WP-BUILD-001 toolchain + hello-Windows-exe + Wine run.
-4. Continue down the execution plan feature by feature.
+   `wine`; obtain Qt6 (MinGW) + libVLC Windows binaries + ffmpeg/yt-dlp.exe.
+3. Execute STEP 001: WP-REL-001 toolchain + hello-Windows-exe + Wine run.
+4. Work the EXECUTION_PLAN phase by phase (Foundation → core libs → apps →
+   packaging), one WP at a time, VERIFIED gates only.
