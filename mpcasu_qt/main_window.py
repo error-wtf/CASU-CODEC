@@ -4408,9 +4408,24 @@ class MainWindow(QMainWindow):
         self._play_youtube(url, label=label or url)
 
     def _play_youtube(self, url: str, *, label: str = ""):
-        """Stream a YouTube URL natively with libVLC (raw URL) — the path that
-        plays for hand-entered URLs. Queue and title are handled by the caller."""
-        self._open_external_source(url, display_label=label or url)
+        """Stream a YouTube URL like web-casu: resolve via yt-dlp, play in a
+        browser <video> inside NOW PLAYING (stream, no download)."""
+        from casu.locations import resolve_media_location
+        self._show_player_page()
+        self.status("Resolving YouTube stream (yt-dlp)…")
+        self._resolve_generation += 1
+        generation = self._resolve_generation
+
+        def worker():
+            try:
+                direct = resolve_media_location(url)
+            except (LocationResolutionError, OSError, ValueError) as exc:
+                self._resolve_bridge.errorReady.emit((generation, str(exc)))
+                return
+            self._resolve_bridge.resultReady.emit(
+                (generation, ("youtube_stream", direct), label or url))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _tag_queue_title(self, url: str):
         """Fetch the YouTube title in the background and update queue + NOW PLAYING."""
@@ -4540,6 +4555,9 @@ class MainWindow(QMainWindow):
     def _on_resolve_ready(self, payload):
         generation, resolved, label = payload
         if generation != self._resolve_generation:
+            return
+        if isinstance(resolved, tuple) and resolved and resolved[0] == "youtube_stream":
+            self._open_web_video(resolved[1], title=label)
             return
         self._open_external_source(resolved, display_label=label)
 
