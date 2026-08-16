@@ -1,0 +1,8 @@
+SESSION START — 2026-08-16
+Working tree: /home/error/Codec-Casu (READ ONLY reference)
+HEAD: 36df249ed90089e35137a798fda87cbfb43fafa8
+Branch: main
+git diff --check: clean (except intended AGENTS.md + win-release additions)
+Test state: 400 passed, 12 skipped (QT_QPA_PLATFORM=offscreen)
+Pure Web Release: MPCASU-PURE-WEB-2.0.0.zip published (sha256 64143894217b34d23571535848210c0ad871a19a5d8730d7782234966fa2e754)
+Write area: win-release/ ONLY
