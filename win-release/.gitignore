@@ -1,0 +1,10 @@
+# Build artifacts (never commit)
+build-*/
+*.exe
+*.dll
+*.a
+*.lib
+*.o
+*.obj
+.wine-test/
+third_party/
