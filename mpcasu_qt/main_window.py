@@ -14,12 +14,11 @@ import tempfile
 import threading
 import time
 from dataclasses import replace
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from PySide6.QtCore import (
     QEasingCurve, QObject, QPropertyAnimation, QRect, QRectF, QPointF, Qt, QTimer,
-    Signal, Slot, QSize, QUrl, QLineF,
+    Signal, Slot, QSize, QLineF,
 )
 from PySide6.QtGui import (
     QAction, QColor, QFont, QIcon, QKeySequence, QPainter, QPen, QPixmap,
@@ -27,12 +26,6 @@ from PySide6.QtGui import (
     QPainterPath, QPolygonF,
 )
 
-try:
-    from PySide6.QtWebEngineWidgets import QWebEngineView
-    _HAVE_WEBENGINE = True
-except ImportError:  # embedded browser view is optional
-    QWebEngineView = None
-    _HAVE_WEBENGINE = False
 from PySide6.QtWidgets import (
     QApplication, QAbstractItemView, QButtonGroup, QCheckBox, QComboBox, QDialog,
     QDialogButtonBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
@@ -74,6 +67,7 @@ from mpcasu_playback import PlaybackController
 
 from mpcasu_qt.theme import PALETTE, METRICS, format_duration, stylesheet
 from mpcasu_qt.videoframe import QtVideoSurfaceSink, VideoSurface
+from mpcasu_qt.youtube_proxy import YouTubeMediaProxy, YouTubeProxyError
 
 MEDIA_EXTENSIONS = {".mp4", ".mp3", ".mkv", ".m4v", ".mov", ".flac", ".wav", ".ogg", ".webm", ".m4a", ".aac", ".opus", ".aiff", ".alac", ".casu"}
 
@@ -138,7 +132,7 @@ class ChapterTimeline(QSlider):
 
 
 class NowPlayingBar(QFrame):
-    """Top bar showing current media metadata."""
+    """Top bar: fixed NOW PLAYING heading plus the current media metadata."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -147,9 +141,16 @@ class NowPlayingBar(QFrame):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(16, 10, 16, 10)
 
-        self.title_label = QLabel("NOW PLAYING · NO MEDIA SELECTED")
+        meta_box = QVBoxLayout()
+        meta_box.setContentsMargins(0, 0, 0, 0)
+        meta_box.setSpacing(1)
+        self.title_label = QLabel("NOW PLAYING")
         self.title_label.setObjectName("BreadcrumbLabel")
-        layout.addWidget(self.title_label)
+        meta_box.addWidget(self.title_label)
+        self.media_title_label = QLabel("")
+        self.media_title_label.setObjectName("NowPlayingMeta")
+        meta_box.addWidget(self.media_title_label)
+        layout.addLayout(meta_box)
 
         layout.addStretch()
 
@@ -158,7 +159,13 @@ class NowPlayingBar(QFrame):
         layout.addWidget(self.diagnostics_label)
 
     def set_now_playing(self, text: str):
-        self.title_label.setText(text.upper() if text else "NOW PLAYING · NO MEDIA SELECTED")
+        """Show the media title without replacing the fixed NOW PLAYING heading."""
+        if text:
+            self.media_title_label.setText(str(text))
+            self.media_title_label.show()
+        else:
+            self.media_title_label.setText("")
+            self.media_title_label.hide()
 
     def set_diagnostics_text(self, text: str):
         self.diagnostics_label.setText(text)
@@ -1846,129 +1853,12 @@ class AboutPage(QFrame):
         note.setAlignment(Qt.AlignCenter)
         note.setWordWrap(True)
         layout.addWidget(note)
-class _YtStreamer:
-    """Streams a YouTube URL through yt-dlp into a local HTTP stream.
-
-    The embedded browser engine cannot fetch googlevideo URLs directly
-    (the CDN answers HTTP 403), so yt-dlp fetches the media and mpcasu
-    serves it locally over 127.0.0.1 where the engine plays it fine.
-    """
-
-    def __init__(self):
-        self._buffer = bytearray()
-        self._done = threading.Event()
-        self._cond = threading.Condition()
-        self._proc = None
-        self._server = None
-        self.port = 0
-
-    def start(self, url: str, *, client: str = "android") -> str:
-        self.stop()
-        with self._cond:
-            self._buffer.clear()
-            self._done.clear()
-        self._server = ThreadingHTTPServer(("127.0.0.1", 0), self._make_handler())
-        self.port = self._server.server_address[1]
-        threading.Thread(target=self._server.serve_forever, daemon=True).start()
-        fmt = ("best[ext=mp4][vcodec^=avc][acodec^=mp4a][height<=720]/"
-               "best[ext=mp4][vcodec^=avc][acodec!=none]/"
-               "best[protocol^=http][vcodec!=none][acodec!=none]")
-        try:
-            self._proc = subprocess.Popen(
-                ["yt-dlp", "--no-playlist", "--no-warnings", "--no-progress",
-                 "--socket-timeout", "15",
-                 "--retries", "8", "--fragment-retries", "8",
-                 "--retry-sleep", "1",
-                 "--extractor-args", f"youtube:player_client={client}",
-                 "-f", fmt, "-o", "-", url],
-                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-        except OSError as exc:
-            raise RuntimeError(f"yt-dlp start failed: {exc}") from exc
-        threading.Thread(target=self._pump, daemon=True).start()
-        return f"http://127.0.0.1:{self.port}/video.mp4"
-
-    def _pump(self):
-        try:
-            while self._proc and self._proc.stdout:
-                chunk = self._proc.stdout.read(262144)
-                if not chunk:
-                    break
-                with self._cond:
-                    self._buffer.extend(chunk)
-                    self._cond.notify_all()
-        except Exception:  # noqa: BLE001 - stream cleanup only
-            pass
-        finally:
-            with self._cond:
-                self._done.set()
-                self._cond.notify_all()
-
-    def _wait_data(self, pos: int) -> bytes:
-        with self._cond:
-            while pos >= len(self._buffer) and not self._done.is_set():
-                self._cond.wait(timeout=0.5)
-            if pos < len(self._buffer):
-                end = min(pos + 262144, len(self._buffer))
-                return bytes(self._buffer[pos:end])
-            return b""
-
-    def _make_handler(self):
-        streamer = self
-
-        class Handler(BaseHTTPRequestHandler):
-            def do_GET(self):
-                try:
-                    self.send_response(200)
-                    self.send_header("Content-Type", "video/mp4")
-                    self.end_headers()
-                    pos = 0
-                    while True:
-                        chunk = streamer._wait_data(pos)
-                        if not chunk:
-                            break
-                        try:
-                            self.wfile.write(chunk)
-                            self.wfile.flush()
-                        except Exception:  # noqa: BLE001 - client went away
-                            return
-                        pos += len(chunk)
-                except Exception:  # noqa: BLE001 - client went away
-                    pass
-
-            def log_message(self, *args):
-                pass
-
-        return Handler
-
-    def stop(self):
-        proc, self._proc = self._proc, None
-        if proc is not None:
-            try:
-                proc.terminate()
-            except Exception:  # noqa: BLE001 - already gone
-                pass
-        server, self._server = self._server, None
-        if server is not None:
-            try:
-                server.shutdown()
-            except Exception:  # noqa: BLE001 - already gone
-                pass
-        with self._cond:
-            self._done.set()
-            self._cond.notify_all()
-
-
 class _ThreadBridge(QObject):
     """Marshals worker-thread results onto the Qt event loop (no popups)."""
 
     resultReady = Signal(object)
     errorReady = Signal(object)
 
-
-class _StreamRetryBridge(QObject):
-    """Requests a fresh yt-dlp stream when the previous one died."""
-
-    retryReady = Signal(str, str)
 
 
 class SourcesView(QFrame):
@@ -2428,33 +2318,7 @@ class MainWindow(QMainWindow):
         self._video_surface.doubleClicked.connect(self.toggle_fullscreen)
         center_column.addWidget(self._video_surface, 1)
 
-        self._youtube_view = None
-        self._yt_stream = _YtStreamer()
-        self._yt_retry_bridge = _StreamRetryBridge()
-        self._yt_retry_bridge.retryReady.connect(self._on_yt_retry)
-        self._yt_restarts = 0
-        self._yt_last_url = ""
-        self._yt_last_label = ""
-        if _HAVE_WEBENGINE:
-            try:
-                from PySide6.QtWebEngineWidgets import QWebEngineView
-                from PySide6.QtWebEngineCore import QWebEnginePage
-
-                class _YtPage(QWebEnginePage):
-                    consoleMsg = Signal(str)
-
-                    def javaScriptConsoleMessage(self, level, message, line, source):
-                        print(f"[yt-js] {message}", flush=True)
-                        self.consoleMsg.emit(str(message))
-
-                self._youtube_view = QWebEngineView(self._player_page)
-                self._youtube_view.setPage(_YtPage(self._youtube_view))
-                self._youtube_view.setStyleSheet("background: #000;")
-                self._youtube_view.hide()
-                self._youtube_view.page().consoleMsg.connect(self._on_yt_js)
-            except Exception:  # noqa: BLE001 - web engine is optional
-                self._youtube_view = None
-
+        self._yt_stream = YouTubeMediaProxy()
         self._badges_label = QLabel(self._player_page)
         self._badges_label.setStyleSheet(
             "background-color: #090b0ddd; border: 1px solid #383d43; color: #f4f5f7;"
@@ -2986,8 +2850,9 @@ class MainWindow(QMainWindow):
                 self.status("Paused — source timing is preserved")
                 self._play_btn.setText("| |")
 
-    def stop(self):
-        self._hide_web_video()
+    def stop(self, *, stop_youtube: bool = True):
+        if stop_youtube:
+            self._stop_yt_transport()
         self._stop_stream_viz()
         self._viz_timer.stop()
         self._viz_pcm = None
@@ -3113,14 +2978,21 @@ class MainWindow(QMainWindow):
         self._network_source = None
         display_title = self._display_title(path)
         self._now_playing_bar.set_now_playing(display_title)
-        self._set_caption(display_title, path)
+        self._audio_stage = path.suffix.lower() in AUDIO_EXTENSIONS
+        if self._audio_stage:
+            self._set_caption(display_title, path)
+        else:
+            # Videos: libVLC owns the native VideoSurface exclusively, so no
+            # Qt caption/badge/empty-hint overlays over the picture.
+            self._caption_label.hide()
+            self._badges_label.hide()
+            self._empty_hint.hide()
         selected_index = self.playlist_model.index_of(path)
         if selected_index is not None:
             self._playlist_pane.populate(list(self.playlist_model.items), selected_index)
 
         sidecar = path if path.suffix.lower() == ".casu" else path.with_suffix(path.suffix + ".casu")
         self._load_visual_state(sidecar if sidecar.exists() else path)
-        self._audio_stage = path.suffix.lower() in AUDIO_EXTENSIONS
         self._load_visualizer(path)
         self._probe_stage(path)
 
@@ -3615,81 +3487,14 @@ class MainWindow(QMainWindow):
         if self._queue_drawer:
             self._playlist_pane.setVisible(True)
 
-    def _open_web_video(self, direct_url: str, *, title: str = "", embed: bool = False):
-        """Play a video inside NOW PLAYING via the browser engine.
+    def _stop_yt_transport(self):
+        """Stop the YouTube loopback transport owned by the previous session.
 
-        Two modes, mirroring web-casu:
-        - stream: a yt-dlp-resolved direct URL plays in a <video> element
-          (streaming, no download).
-        - embed: the YouTube iframe player page (web-casu fallback when the
-          direct stream cannot play).
+        Only called on real stops/source switches — never right after a new
+        proxy was started for the source that is about to be opened.
         """
-        label = title or "YouTube"
-        self._show_player_page()
-        self._now_playing_bar.set_now_playing(label)
-        self._set_caption(label)
-        self._back_btn.show()
-        if self._youtube_view is None:
-            print("[yt] OVERLAY: keine QtWebEngine", flush=True)
-            self.status("YouTube streaming requires the QtWebEngine module")
-            self.toast("YouTube streaming unavailable (no QtWebEngine)")
-            return
-        # Video mode: hide the visualizer so it does not cover the video
-        # (web-casu sets "video-mode" for the same reason).
-        self._audio_stage = False
-        self._video_surface.set_video_active(True)
-        self._visualizer.setVisible(False)
-        self._reposition_overlays()
-        stage = self._video_surface
-        self._youtube_view.setGeometry(stage.geometry())
-        self._youtube_view.show()
-        self._youtube_view.raise_()
-        print(f"[yt] OVERLAY sichtbar, URL: {direct_url[:70]}", flush=True)
-        safe = direct_url.replace("&", "&amp;").replace("'", "&#39;")
-        html = (
-            "<!doctype html><html><head><meta charset='utf-8'>"
-            "<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}"
-            "video{width:100vw;height:100vh;background:#000;outline:none}</style>"
-            "</head><body><video src='__URL__' autoplay muted playsinline controls "
-            "style='width:100vw;height:100vh'></video>"
-            "<script>"
-            "var v=document.querySelector('video');"
-            "function log(m){try{console.log('[yt] '+m);document.title='[yt] '+m}catch(e){}}"
-            "var attempts=0;"
-            "v.addEventListener('loadedmetadata',function(){log('metadata w'+v.videoWidth+'x'+v.videoHeight+' d'+Math.round(v.duration))});"
-            "v.addEventListener('playing',function(){log('playing w'+v.videoWidth+'x'+v.videoHeight)});"
-            "v.addEventListener('error',function(){attempts++;var c=v.error?v.error.code:'-';"
-            "if(attempts<=5){log('error '+c+' retry '+attempts);"
-            "setTimeout(function(){v.load();v.play().catch(function(){})},2500*attempts)}"
-            "else{log('error '+c+' final')}});"
-            "v.addEventListener('stalled',function(){log('stalled')});"
-            "v.addEventListener('waiting',function(){log('waiting')});"
-            "v.addEventListener('canplay',function(){log('canplay')});"
-            "function tryPlay(){v.play().then(function(){log('play() ok')}).catch(function(e){log('play() fail '+e.name);v.muted=true;v.play().catch(function(e2){log('muted play() fail '+e2.name)})})}"
-            "v.addEventListener('loadedmetadata',tryPlay);"
-            "v.addEventListener('canplay',tryPlay);"
-            "document.addEventListener('click',tryPlay);"
-            "</script></body></html>"
-        ).replace("__URL__", safe)
-        view = self._youtube_view
-
-        if embed:
-            print(f"[yt] EMBED-Fallback: {direct_url[:70]}", flush=True)
-            view.load(QUrl(direct_url))
-            self.status(f"{label} · YouTube-Player")
-            return
-
-        view.setHtml(html, QUrl("https://www.youtube.com/"))
-        self.status(f"Streaming {label} · yt-dlp")
-
-    def _hide_web_video(self):
-        if getattr(self, "_youtube_view", None) is not None:
-            self._youtube_view.hide()
         if getattr(self, "_yt_stream", None) is not None:
             self._yt_stream.stop()
-        if getattr(self, "_video_surface", None) is not None:
-            self._video_surface.set_video_active(
-                bool(getattr(self, "backend", None)))
 
     def _toggle_queue_pane(self):
         if self.width() < 1100:
@@ -3799,21 +3604,21 @@ class MainWindow(QMainWindow):
         eh = min(300, max(140, stage.height() - 60))
         self._empty_hint.setGeometry((stage.width() - ew) // 2 + sx,
                                      (stage.height() - eh) // 2 + sy, ew, eh)
-        if self._youtube_view is not None and not self._youtube_view.isHidden():
-            self._youtube_view.setGeometry(sx, sy, stage.width(), stage.height())
-            self._youtube_view.raise_()
         if self._audio_stage:
             self._visualizer.setGeometry(sx, sy, stage.width(), stage.height())
             self._visualizer.set_small(False)
             visible = (self._visualizer._cover is not None
                        or self._viz_mode != "off")
             self._visualizer.setVisible(visible)
+            # Audio mode: Qt owns the surface, caption and badges are allowed.
+            self._caption_label.raise_()
+            self._badges_label.raise_()
         else:
-            # Videos: no visualization at all — subtitles are rendered by the
-            # backend instead, so nothing flickers over the video.
+            # Videos: libVLC owns the native VideoSurface exclusively. Qt must
+            # not paint caption/badges over it or the picture flickers.
             self._visualizer.hide()
-        self._caption_label.raise_()
-        self._badges_label.raise_()
+            self._caption_label.hide()
+            self._badges_label.hide()
         self._empty_hint.raise_()
 
     def resizeEvent(self, event):
@@ -4558,9 +4363,8 @@ class MainWindow(QMainWindow):
     def _queue_and_play(self, url: str, *, label: str = ""):
         """Add a YouTube source to the queue (with a display tag) and play it.
 
-        Playback streams the YouTube source via libVLC (fast, no download);
-        if VLC's built-in YouTube extractor fails, playback falls back to a
-        temporary download so the queued video always starts.
+        Playback streams via the shared yt-dlp resolver + loopback transport
+        into the normal libVLC pipeline (no download, no browser).
         """
         if label:
             self._playlist_pane._display_titles[url] = label
@@ -4571,89 +4375,34 @@ class MainWindow(QMainWindow):
             pass
         self._play_youtube(url, label=label or url)
 
-    def _play_youtube(self, url: str, *, label: str = "", _restart: bool = False):
-        """Stream a YouTube URL through yt-dlp into a local HTTP stream and
-        play it in a browser <video> inside NOW PLAYING (stream, no download).
+    def _play_youtube(self, url: str, *, label: str = ""):
+        """Resolve YouTube with the shared web-casu resolver and stream via libVLC.
 
-        The embedded browser engine cannot fetch googlevideo URLs directly
-        (the CDN answers HTTP 403), so yt-dlp fetches the media and mpcasu
-        serves it locally over 127.0.0.1. The visualizer is switched off so
-        it does not cover the video. A dead first stream is retried
-        automatically with a fresh yt-dlp process (up to two retries).
+        Exactly one resolver exists (casu.locations.resolve_media_location);
+        the loopback proxy is transport only. The proxy is started on the GUI
+        thread AFTER the previous session is fully stopped, so playback
+        cleanup can never destroy it before libVLC opens it.
         """
-        if not _restart:
-            self._yt_restarts = 0
-        self._yt_mode = "stream"
-        self._yt_last_url = url
-        self._yt_last_label = label
-        clients = ["android", "android_vr", "ios"]
-        client = clients[self._yt_restarts % len(clients)]
+        self.stop()
         self._show_player_page()
-        self.status("Streaming YouTube (yt-dlp)…")
-        print(f"[yt] stream start ({client}): {url[:70]}", flush=True)
-        try:
-            local = self._yt_stream.start(url, client=client)
-        except Exception as exc:  # noqa: BLE001 - surfaced to the UI
-            print(f"[yt] stream FAILED: {exc}", flush=True)
-            self.status(f"YouTube streaming failed: {exc}")
-            self.toast("YouTube streaming failed")
-            return
-        print(f"[yt] local stream: {local}", flush=True)
-        self._open_web_video(local, title=label)
-        threading.Thread(
-            target=self._yt_waiter, args=(url, label), daemon=True).start()
+        self.status("Resolving YouTube stream (yt-dlp)…")
+        self._now_playing_bar.set_now_playing(label or "YouTube")
+        self._yt_source_url = url
+        self._resolve_generation += 1
+        generation = self._resolve_generation
 
-    def _yt_waiter(self, url: str, label: str):
-        """Watch the fresh stream: if yt-dlp dies before delivering any data,
-        request an automatic restart on the Qt event loop."""
-        stream = self._yt_stream
-        with stream._cond:
-            deadline = time.time() + 12
-            while (time.time() < deadline and not stream._buffer
-                   and not stream._done.is_set()):
-                stream._cond.wait(timeout=0.5)
-        if not stream._buffer and stream._proc is None:
-            print("[yt] erster Datenblock fehlt -> Neustart", flush=True)
-            self._yt_retry_bridge.retryReady.emit(url, label)
-
-    def _on_yt_retry(self, url: str, label: str):
-        if self._yt_restarts >= 2:
-            if self._yt_browser_fallback():
+        def worker():
+            try:
+                resolved = resolve_media_location(url)
+            except (LocationResolutionError, OSError, ValueError) as exc:
+                self._resolve_bridge.errorReady.emit((generation, str(exc)))
                 return
-            self.status("YouTube stream failed (3 Versuche)")
-            return
-        self._yt_restarts += 1
-        print(f"[yt] Neustart #{self._yt_restarts} (Client-Wechsel)", flush=True)
-        self._play_youtube(url, label=label, _restart=True)
+            self._resolve_bridge.resultReady.emit(
+                (generation, ("youtube_proxy", resolved, url), label or url)
+            )
 
-    def _yt_browser_fallback(self) -> bool:
-        """Last resort: the user's real browser can play YouTube reliably
-        (web-casu proof), so hand the video over there."""
-        import webbrowser
-        url = self._yt_last_url
-        if not url:
-            return False
-        self._yt_mode = "embed"
-        self._hide_web_video()
-        self.status("YouTube im Browser geöffnet")
-        self.toast("YouTube stream blocked by the CDN — opening in your browser")
-        webbrowser.open(url)
-        return True
+        threading.Thread(target=worker, daemon=True).start()
 
-    def _on_yt_js(self, text: str):
-        if getattr(self, "_yt_mode", "stream") != "stream":
-            return
-        if ("error" in text or "final" in text) and self._yt_last_url:
-            if self._yt_restarts >= 2:
-                if self._yt_browser_fallback():
-                    return
-                self.status("YouTube video konnte nicht abgespielt werden")
-                return
-            self._yt_restarts += 1
-            print(f"[yt] JS-Video-Fehler -> Neustart #{self._yt_restarts}: {text[:50]}",
-                  flush=True)
-            self._play_youtube(self._yt_last_url,
-                               label=self._yt_last_label, _restart=True)
 
     def _tag_queue_title(self, url: str):
         """Fetch the YouTube title in the background and update queue + NOW PLAYING."""
@@ -4679,7 +4428,8 @@ class MainWindow(QMainWindow):
         pane = self._playlist_pane
         pane._display_titles[url] = title
         self._render_playlist()
-        if str(getattr(self, "_network_source", "") or "") == url:
+        if (str(getattr(self, "_network_source", "") or "") == url
+                or url == getattr(self, "_yt_source_url", "")):
             self._now_playing_bar.set_now_playing(title)
             self._set_caption(title)
 
@@ -4713,18 +4463,17 @@ class MainWindow(QMainWindow):
                 self.show_sources("youtube")
                 self.status("YouTube playback requires yt-dlp consent — accept in the view above")
                 return
+            # Same streaming path as every YouTube source: shared resolver +
+            # loopback transport + libVLC. Never a download, never a browser.
+            self._play_youtube(source, label=display_label or source)
+            return
         self._resolve_generation += 1
         generation = self._resolve_generation
-        self.status("Downloading YouTube video…" if is_youtube_url(source)
-                    else "Resolving network media…")
+        self.status("Resolving network media…")
 
         def worker():
             try:
-                if is_youtube_url(source):
-                    local = self._download_media(source)
-                    resolved = str(local)
-                else:
-                    resolved = resolve_media_location(source)
+                resolved = resolve_media_location(source)
             except (LocationResolutionError, SpotifyError, OSError,
                     ValueError, CasuError) as exc:
                 self._resolve_bridge.errorReady.emit((generation, str(exc)))
@@ -4733,55 +4482,28 @@ class MainWindow(QMainWindow):
                 (generation, resolved, display_label or source))
         threading.Thread(target=worker, daemon=True).start()
 
-    def _download_media(self, source: str, *, timeout: float = 120.0) -> Path:
-        """Download a YouTube/yt-dlp source to a temp file for local playback.
-
-        YouTube's direct stream URLs return HTTP 403 to plain HTTP clients
-        (and libVLC); yt-dlp's authenticated download works. Video is preferred
-        (≤720p for a quick start); if the CDN refuses the video merge (HTTP 403,
-        intermittent), playback falls back to the reliable bestaudio stream so
-        a YouTube source always starts instead of stalling.
-        """
-        import subprocess
-        temp = Path(tempfile.gettempdir()) / (
-            f"casu-media-{os.getpid()}-{int(time.time()*1000)}.mp4")
-        last_err = "Media download failed"
-        stages = [
-            ("video", ["-f", ("bestvideo[ext=mp4][vcodec^=avc][height<=720]"
-                              "+bestaudio[ext=m4a]/bestvideo[ext=mp4]"
-                              "+bestaudio[ext=m4a]")], 3),
-            ("audio", ["-f", "bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio"], 2),
-        ]
-        for label, extra, attempts in stages:
-            for attempt in range(attempts):
-                command = [
-                    "yt-dlp", "--no-warnings", "--no-playlist",
-                    "--retries", "4", "--fragment-retries", "4",
-                    *extra, "--merge-output-format", "mp4",
-                    "-o", str(temp), str(source),
-                ]
-                try:
-                    proc = subprocess.run(
-                        command, check=False,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.PIPE,
-                        timeout=min(25.0, max(12.0, float(timeout) / 6)))
-                except (OSError, subprocess.TimeoutExpired) as exc:
-                    last_err = f"Media download failed: {exc}"
-                    break
-                if proc.returncode == 0 and temp.is_file() and temp.stat().st_size > 0:
-                    return temp
-                detail = (proc.stderr or b"").decode("utf-8", "replace")
-                last_err = f"Media download failed ({label}): {detail.strip().splitlines()[-1][:100]}"
-                if temp.exists():
-                    temp.unlink(missing_ok=True)
-                if attempt < attempts - 1:
-                    time.sleep(2)
-        raise CasuError(last_err)
-
     def _on_resolve_ready(self, payload):
         generation, resolved, label = payload
         if generation != self._resolve_generation:
+            return
+        if isinstance(resolved, tuple) and resolved and resolved[0] == "youtube_proxy":
+            _, direct_url, source_url = resolved
+            # Transport only: the loopback media URL goes into the normal
+            # LibVLCBackend/PlaybackController pipeline. The previous session
+            # (and its proxy) was already stopped in _play_youtube; the NEW
+            # proxy is started here and must survive until the source stops.
+            self.stop()
+            try:
+                media_url = self._yt_stream.start(
+                    direct_url,
+                    refresh=lambda u=source_url: resolve_media_location(u),
+                )
+            except (YouTubeProxyError, OSError, ValueError) as exc:
+                self.status(f"YouTube stream unavailable: {exc}")
+                self.toast(f"YouTube stream unavailable: {exc}")
+                return
+            self._open_external_source(
+                media_url, display_label=label, youtube=True, preserve_proxy=True)
             return
         self._open_external_source(resolved, display_label=label)
 
@@ -4804,19 +4526,32 @@ class MainWindow(QMainWindow):
             return
         self._open_external_source(text)
 
-    def _open_external_source(self, source: str, *, display_label: str | None = None):
+    def _open_external_source(self, source: str, *, display_label: str | None = None,
+                             youtube: bool = False, preserve_proxy: bool = False):
         from casu.webproviders import provider_for_url
         provider = provider_for_url(str(source))
         if provider:
             self._open_web_player(provider, url=str(source))
             return
         self._show_player_page()
-        self.stop()
+        if preserve_proxy:
+            # The loopback transport for THIS source is already running and
+            # must survive the teardown of the previous session.
+            self.stop(stop_youtube=False)
+        else:
+            self.stop()
         self._end_handled = False
         self.current = None
         visible_source = display_media_source(display_label or source)
         self._now_playing_bar.set_now_playing(visible_source)
-        self._set_caption(visible_source)
+        if youtube:
+            # Videos: libVLC owns the native VideoSurface exclusively; no Qt
+            # caption/badge/empty-hint overlays over the picture.
+            self._caption_label.hide()
+            self._badges_label.hide()
+            self._empty_hint.hide()
+        else:
+            self._set_caption(visible_source)
         try:
             self.backend = LibVLCBackend(self._video_surface.handle)
             self.backend.on_event = self._backend_event
@@ -4850,15 +4585,19 @@ class MainWindow(QMainWindow):
                 (),
                 self.duration or 0.0,
             )
-            if is_youtube_url(str(source)):
-                # Video mode (like web-casu "video-mode"): the visualizer must
-                # not cover the YouTube video.
+            if youtube or is_youtube_url(str(source)):
+                # Video mode: the visualizer must not cover the video and no
+                # Qt overlay may paint over the native libVLC surface.
                 self._audio_stage = False
                 self._visualizer.setVisible(False)
                 self._reposition_overlays()
             elif mode != "off" and str(source).startswith(("http://", "https://")):
                 self._start_stream_viz(source)
-            self._probe_stage(source)
+            if not youtube:
+                # YouTube is always video; probing the loopback URL while
+                # libVLC streams can misclassify the stage and flip Qt
+                # overlays over the native video surface.
+                self._probe_stage(source)
             generation = self._viz_generation
             cover_source = str(source)
 

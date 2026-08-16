@@ -161,6 +161,7 @@ class LibVLCBackend:
         self._event_callbacks: list[tuple[int, Any]] = []
         self._event_api = False
         self.on_event = None
+        self._last_error_detail = ""
         self._install("libvlc_media_new_path", ctypes.c_void_p, [ctypes.c_void_p, ctypes.c_char_p])
         self._subtitle_option_api = self._optional_install("libvlc_media_add_option", None, [ctypes.c_void_p, ctypes.c_char_p])
         self._install("libvlc_media_player_new_from_media", ctypes.c_void_p, [ctypes.c_void_p])
@@ -378,6 +379,8 @@ class LibVLCBackend:
             self.media = self.libvlc_media_new_path(self.instance, os_path(local))
         if not self.media:
             self._state = PlaybackState.ERROR
+            self._last_error_detail = (
+                f"libVLC could not create the media object for {display_media_source(source)}")
             raise BackendError(
                 f"libVLC could not open {display_media_source(source)}")
         # Some VLC 3 builds let the persisted user preference override the
@@ -598,6 +601,7 @@ class LibVLCBackend:
         if getattr(self, "_player_state_api", False) and self.player:
             player_state = int(self.libvlc_media_player_get_state(self.player))
             if player_state == 7:
+                self._note_error()
                 self._state = PlaybackState.ERROR
             elif player_state == 6 and self._state is not PlaybackState.ERROR:
                 self._state = PlaybackState.ENDED
@@ -606,6 +610,7 @@ class LibVLCBackend:
             # deliberately left to the requested controller state.
             media_state = int(self.libvlc_media_get_state(self.media))
             if media_state == 7:
+                self._note_error()
                 self._state = PlaybackState.ERROR
             elif media_state == 6 and self._state is not PlaybackState.ERROR:
                 self._state = PlaybackState.ENDED
@@ -619,8 +624,32 @@ class LibVLCBackend:
             # VLC 3 can report Ended rather than EncounteredError when an
             # access module (for example HTTP 404) never opened any stream.
             # Zero-time EOF with no playable track is not successful EOF.
+            self._note_error()
             self._state = PlaybackState.ERROR
         return self._state
+
+    def _note_error(self) -> None:
+        """Record a short libVLC diagnostic the first time an error state hits."""
+        if self._state is PlaybackState.ERROR:
+            return
+        try:
+            duration = self.duration()
+            position = self.position()
+            audio = self.audio_track_count()
+            video = self.video_track_count()
+        except Exception:
+            # Partial-init/stub backends may lack optional track APIs.
+            duration = position = audio = video = 0.0
+        media_state = self.media_state_code()
+        self._last_error_detail = (
+            f"libVLC access/demux failed · media_state={media_state} "
+            f"duration={duration:.1f}s position={position:.1f}s "
+            f"audio_tracks={audio} video_tracks={video}")
+
+    def last_error(self) -> str:
+        """Short diagnostic for the last libVLC error transition."""
+        detail = getattr(self, "_last_error_detail", "")
+        return detail or "libVLC reported an access/demux failure"
 
     def media_state_code(self) -> int | None:
         """Return the raw libVLC media state when that API exists."""
