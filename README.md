@@ -150,6 +150,12 @@ counters, runtime and verification state (CSV/Markdown export).
 ## Web player
 
 **Live demo (GitHub Pages, static):** <https://error-wtf.github.io/CASU-CODEC/>
+**Because Github blocks funktions here the Pure Web Based Version**: <https://error.wtf/web-casu/>
+
+```bash
+Because Web-Version is only Demo - use Release Installation Versions for full functionality.
+```
+
 
 ```bash
 web-casu                    # binds 127.0.0.1, opens the browser
