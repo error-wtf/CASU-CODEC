@@ -3496,7 +3496,12 @@ class MainWindow(QMainWindow):
             self.status("YouTube streaming requires the QtWebEngine module")
             self.toast("YouTube streaming unavailable (no QtWebEngine)")
             return
-        self._video_surface.set_video_active(False)
+        # Video mode: hide the visualizer so it does not cover the video
+        # (web-casu sets "video-mode" for the same reason).
+        self._audio_stage = False
+        self._video_surface.set_video_active(True)
+        self._visualizer.setVisible(False)
+        self._reposition_overlays()
         stage = self._video_surface
         self._youtube_view.setGeometry(stage.geometry())
         self._youtube_view.show()
@@ -4442,8 +4447,8 @@ class MainWindow(QMainWindow):
         """Stream a YouTube URL like web-casu: resolve via yt-dlp, play in a
         browser <video> inside NOW PLAYING (stream, no download).
 
-        The resolved format is forced to h264+AAC in MP4 so QtWebEngine can
-        decode it (VP9/AV1 yields MEDIA_ERR_SRC_NOT_SUPPORTED on many builds).
+        libVLC 3.x cannot extract YouTube (lua error), so the browser engine is
+        used. The visualizer is switched off so it does not cover the video.
         """
         import subprocess as _sp
         self._show_player_page()
@@ -4673,7 +4678,13 @@ class MainWindow(QMainWindow):
                 (),
                 self.duration or 0.0,
             )
-            if mode != "off" and str(source).startswith(("http://", "https://")):
+            if is_youtube_url(str(source)):
+                # Video mode (like web-casu "video-mode"): the visualizer must
+                # not cover the YouTube video.
+                self._audio_stage = False
+                self._visualizer.setVisible(False)
+                self._reposition_overlays()
+            elif mode != "off" and str(source).startswith(("http://", "https://")):
                 self._start_stream_viz(source)
             self._probe_stage(source)
             generation = self._viz_generation
