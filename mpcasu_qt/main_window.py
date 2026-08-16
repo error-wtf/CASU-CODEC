@@ -4333,8 +4333,9 @@ class MainWindow(QMainWindow):
     def _queue_and_play(self, url: str, *, label: str = ""):
         """Add a YouTube source to the queue (with a display tag) and play it.
 
-        Playback hands the raw URL to libVLC, which streams the YouTube source
-        directly (no full download) — the same path hand-entered URLs use.
+        Playback streams the YouTube source via libVLC (fast, no download);
+        if VLC's built-in YouTube extractor fails, playback falls back to a
+        temporary download so the queued video always starts.
         """
         if label:
             self._playlist_pane._display_titles[url] = label
@@ -4343,7 +4344,30 @@ class MainWindow(QMainWindow):
             self._render_playlist()
         except Exception:  # noqa: BLE001 - queue must never block playback
             pass
+        self._play_youtube(url, label=label or url)
+
+    def _play_youtube(self, url: str, *, label: str = ""):
+        """Stream a YouTube URL with libVLC; fall back to a temp download."""
+        from PySide6.QtCore import QTimer
+        gen = getattr(self, "_yt_generation", 0) + 1
+        self._yt_generation = gen
         self._open_external_source(url, display_label=label or url)
+
+        def check():
+            if getattr(self, "_yt_generation", 0) != gen:
+                return
+            backend = getattr(self, "backend", None)
+            if backend is None:
+                return
+            try:
+                if backend.state().name in ("PLAYING", "PAUSED"):
+                    return
+            except Exception:  # noqa: BLE001 - state probe is best effort
+                pass
+            self.status("YouTube-Stream nicht startbar — lade temporär…")
+            self._resolve_and_open_external_source(url, display_label=label or url)
+
+        QTimer.singleShot(8000, check)
 
     def _tag_queue_title(self, url: str):
         """Fetch the YouTube title in the background and update queue + NOW PLAYING."""
@@ -4488,9 +4512,12 @@ class MainWindow(QMainWindow):
         provider = provider_for_url(text)
         if provider:
             self._open_web_player(provider, url=str(text))
-        else:
+            return
+        if is_youtube_url(text):
             label = self._playlist_pane._display_titles.get(text, "")
-            self._open_external_source(text, display_label=label or text)
+            self._play_youtube(text, label=label or text)
+            return
+        self._open_external_source(text)
 
     def _open_external_source(self, source: str, *, display_label: str | None = None):
         from casu.webproviders import provider_for_url
