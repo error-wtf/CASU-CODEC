@@ -8,6 +8,7 @@ import http.server
 import json
 import os
 import secrets
+import shutil
 import signal
 import subprocess
 import sys
@@ -446,6 +447,14 @@ class WebPlayerHandler(http.server.SimpleHTTPRequestHandler):
                     raise WebPlayerError("resolve request must be a JSON object")
                 self._resolve(request)
                 return
+            elif self.path == "/api/youtube-title":
+                if length <= 0 or length > 64 * 1024:
+                    raise WebPlayerError("title request size is invalid")
+                request = json.loads(self.rfile.read(length))
+                if not isinstance(request, dict):
+                    raise WebPlayerError("title request must be a JSON object")
+                self._youtube_title(request)
+                return
             elif self.path == "/api/spotify-metadata":
                 if length <= 0 or length > 64 * 1024:
                     raise WebPlayerError("metadata request size is invalid")
@@ -517,6 +526,29 @@ class WebPlayerHandler(http.server.SimpleHTTPRequestHandler):
         except (LocationResolutionError, SpotifyError) as exc:
             raise WebPlayerError(str(exc)) from exc
         self._json(200, {"url": resolved})
+
+    def _youtube_title(self, request: dict) -> None:
+        """Return the YouTube video title (and uploader) for a URL via yt-dlp."""
+        import subprocess
+        url = str(request.get("url", "")).strip()
+        if not url or not is_youtube_url(url):
+            raise WebPlayerError("title request needs a YouTube url")
+        executable = shutil.which("yt-dlp")
+        if not executable:
+            raise WebPlayerError("yt-dlp is unavailable")
+        try:
+            proc = subprocess.run(
+                [executable, "--no-playlist", "--no-warnings", "--skip-download",
+                 "--print", "%(title)s", "--print", "%(uploader)s", url],
+                capture_output=True, text=True, timeout=25)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise WebPlayerError(f"title lookup failed: {exc}") from exc
+        lines = [line.strip() for line in (proc.stdout or "").splitlines() if line.strip()]
+        if proc.returncode != 0 or not lines:
+            raise WebPlayerError("title lookup returned no result")
+        title = lines[0]
+        uploader = lines[1] if len(lines) > 1 else ""
+        self._json(200, {"title": title, "uploader": uploader})
 
     def _spotify_metadata(self, request: dict) -> None:
         """Honest Spotify provider: public oEmbed title for the handoff."""
