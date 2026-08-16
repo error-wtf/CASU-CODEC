@@ -2049,7 +2049,7 @@ class SourcesView(QFrame):
             entry.setSizeHint(QSize(0, 52))
             self._list.addItem(entry)
             self._thumb_jobs.append((row, item))
-        if self._thumb_jobs:
+        if self._thumb_jobs and self._mode != "youtube":
             self._load_thumbnails(list(self._thumb_jobs))
         self._status.setText(f"{len(self._results)} results — double-click or press Enter to play")
 
@@ -4350,7 +4350,7 @@ class MainWindow(QMainWindow):
             f"casu-media-{os.getpid()}-{int(time.time()*1000)}.mp4")
         command = [
             "yt-dlp", "--no-warnings", "--no-playlist",
-            "-f", ("best[ext=mp4][vcodec!=none][acodec!=none]/"
+            "-f", ("bestvideo[ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]/"
                    "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio"),
             "--merge-output-format", "mp4",
             "-o", str(temp), str(source),
