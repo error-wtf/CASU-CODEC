@@ -3488,7 +3488,6 @@ class MainWindow(QMainWindow):
         """
         label = title or "YouTube"
         self._show_player_page()
-        self._topbar_title.setText(label)
         self._now_playing_bar.set_now_playing(label)
         self._set_caption(label)
         self._back_btn.show()
@@ -4441,19 +4440,33 @@ class MainWindow(QMainWindow):
 
     def _play_youtube(self, url: str, *, label: str = ""):
         """Stream a YouTube URL like web-casu: resolve via yt-dlp, play in a
-        browser <video> inside NOW PLAYING (stream, no download)."""
-        from casu.locations import resolve_media_location
-        print(f"[yt] resolve start: {url[:70]}", flush=True)
+        browser <video> inside NOW PLAYING (stream, no download).
+
+        The resolved format is forced to h264+AAC in MP4 so QtWebEngine can
+        decode it (VP9/AV1 yields MEDIA_ERR_SRC_NOT_SUPPORTED on many builds).
+        """
+        import subprocess as _sp
         self._show_player_page()
         self.status("Resolving YouTube stream (yt-dlp)…")
+        print(f"[yt] resolve start: {url[:70]}", flush=True)
         self._resolve_generation += 1
         generation = self._resolve_generation
 
         def worker():
             try:
-                direct = resolve_media_location(url)
+                fmt = ("best[ext=mp4][vcodec^=avc][acodec^=mp4a][height<=720]/"
+                       "best[ext=mp4][vcodec^=avc][acodec!=none]/"
+                       "best[protocol^=http][vcodec!=none][acodec!=none]")
+                proc = _sp.run(
+                    ["yt-dlp", "--no-playlist", "--no-warnings", "--get-url",
+                     "-f", fmt, url],
+                    capture_output=True, text=True, timeout=30)
+                out = (proc.stdout or "").strip()
+                direct = out.splitlines()[0] if proc.returncode == 0 and out else ""
+                if not direct:
+                    raise CasuError("yt-dlp lieferte keine Stream-URL")
                 print(f"[yt] resolved OK: {direct[:70]}", flush=True)
-            except (LocationResolutionError, OSError, ValueError) as exc:
+            except Exception as exc:  # noqa: BLE001 - surfaced to the UI
                 print(f"[yt] resolve FAILED: {exc}", flush=True)
                 self._resolve_bridge.errorReady.emit((generation, str(exc)))
                 return
@@ -4489,7 +4502,6 @@ class MainWindow(QMainWindow):
         if str(getattr(self, "_network_source", "") or "") == url:
             self._now_playing_bar.set_now_playing(title)
             self._set_caption(title)
-            self._topbar_title.setText(title)
 
     def _resolve_spotify_playback(self, url: str, *, title: str = "",
                                   artist: str = "", display_label: str = ""):
