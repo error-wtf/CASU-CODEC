@@ -4331,7 +4331,8 @@ class MainWindow(QMainWindow):
                     resolved = str(local)
                 else:
                     resolved = resolve_media_location(source)
-            except (LocationResolutionError, SpotifyError, OSError, ValueError) as exc:
+            except (LocationResolutionError, SpotifyError, OSError,
+                    ValueError, CasuError) as exc:
                 self._resolve_bridge.errorReady.emit((generation, str(exc)))
                 return
             self._resolve_bridge.resultReady.emit(
