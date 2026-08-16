@@ -4292,9 +4292,6 @@ class MainWindow(QMainWindow):
 
     def _on_source_activated(self, payload):
         if isinstance(payload, str):
-            if is_youtube_url(payload):
-                self._queue_and_play(payload)
-                return
             self._resolve_and_open_external_source(payload)
             return
         if getattr(payload, "source", None) == "spotify" and is_spotify_url(payload.url):
@@ -4366,51 +4363,50 @@ class MainWindow(QMainWindow):
                 (generation, resolved, display_label or source))
         threading.Thread(target=worker, daemon=True).start()
 
-    def _download_media(self, source: str, *, timeout: float = 240.0) -> Path:
-        """Download a YouTube/yt-dlp source to a temp video file for local playback.
+    def _download_media(self, source: str, *, timeout: float = 120.0) -> Path:
+        """Download a YouTube/yt-dlp source to a temp file for local playback.
 
         YouTube's direct stream URLs return HTTP 403 to plain HTTP clients
-        (and libVLC); yt-dlp's authenticated download works. The media is
-        downloaded once to a temporary file (video+audio) the player opens natively.
-        YouTube CDN nodes intermittently refuse a client (HTTP 403); retry and
-        surface the real yt-dlp message instead of a generic failure.
+        (and libVLC); yt-dlp's authenticated download works. Video is preferred
+        (≤720p for a quick start); if the CDN refuses the video merge (HTTP 403,
+        intermittent), playback falls back to the reliable bestaudio stream so
+        a YouTube source always starts instead of stalling.
         """
         import subprocess
         temp = Path(tempfile.gettempdir()) / (
             f"casu-media-{os.getpid()}-{int(time.time()*1000)}.mp4")
-        strategies = [
-            "bestvideo[ext=mp4][vcodec^=avc][height<=720]+bestaudio[ext=m4a]",
-            "bestvideo[ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]",
-            "bestvideo[ext=mp4]+bestaudio[ext=m4a]",
-            "bestvideo+bestaudio",
-            "bestaudio",
-        ]
         last_err = "Media download failed"
-        for fmt in strategies:
-            command = [
-                "yt-dlp", "--no-warnings", "--no-playlist",
-                "--retries", "3", "--fragment-retries", "3",
-                "-f", fmt, "--merge-output-format", "mp4",
-                "-o", str(temp), str(source),
-            ]
-            for attempt in range(2):
+        stages = [
+            ("video", ["-f", ("bestvideo[ext=mp4][vcodec^=avc][height<=720]"
+                              "+bestaudio[ext=m4a]/bestvideo[ext=mp4]"
+                              "+bestaudio[ext=m4a]")], 2),
+            ("audio", ["-f", "bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio"], 1),
+        ]
+        for label, extra, attempts in stages:
+            for attempt in range(attempts):
+                command = [
+                    "yt-dlp", "--no-warnings", "--no-playlist",
+                    "--retries", "2", "--fragment-retries", "2",
+                    *extra, "--merge-output-format", "mp4",
+                    "-o", str(temp), str(source),
+                ]
                 try:
                     proc = subprocess.run(
                         command, check=False,
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.PIPE,
-                        timeout=max(60.0, float(timeout)))
+                        timeout=min(30.0, max(15.0, float(timeout) / 4)))
                 except (OSError, subprocess.TimeoutExpired) as exc:
                     last_err = f"Media download failed: {exc}"
                     break
                 if proc.returncode == 0 and temp.is_file() and temp.stat().st_size > 0:
                     return temp
                 detail = (proc.stderr or b"").decode("utf-8", "replace")
-                last_err = f"Media download failed: {detail.strip().splitlines()[-1][:120]}"
+                last_err = f"Media download failed ({label}): {detail.strip().splitlines()[-1][:100]}"
                 if temp.exists():
                     temp.unlink(missing_ok=True)
                 if attempt == 0:
-                    time.sleep(2)
+                    time.sleep(1)
         raise CasuError(last_err)
 
     def _on_resolve_ready(self, payload):
