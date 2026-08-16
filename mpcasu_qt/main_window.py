@@ -3493,6 +3493,7 @@ class MainWindow(QMainWindow):
         self._set_caption(label)
         self._back_btn.show()
         if self._youtube_view is None:
+            print("[yt] OVERLAY: keine QtWebEngine", flush=True)
             self.status("YouTube streaming requires the QtWebEngine module")
             self.toast("YouTube streaming unavailable (no QtWebEngine)")
             return
@@ -3501,6 +3502,7 @@ class MainWindow(QMainWindow):
         self._youtube_view.setGeometry(stage.geometry())
         self._youtube_view.show()
         self._youtube_view.raise_()
+        print(f"[yt] OVERLAY sichtbar, URL: {direct_url[:70]}", flush=True)
         safe = direct_url.replace("&", "&amp;").replace("'", "&#39;")
         html = (
             "<!doctype html><html><head><meta charset='utf-8'>"
@@ -3510,14 +3512,44 @@ class MainWindow(QMainWindow):
             "style='width:100vw;height:100vh'></video>"
             "<script>"
             "var v=document.querySelector('video');"
-            "function tryPlay(){v.play().then(function(){}).catch(function(){"
-            "v.muted=true;v.play().catch(function(){})})}"
+            "function log(m){try{console.log('[yt] '+m);document.title='[yt] '+m}catch(e){}}"
+            "var attempts=0;"
+            "v.addEventListener('loadedmetadata',function(){log('metadata w'+v.videoWidth+'x'+v.videoHeight+' d'+Math.round(v.duration))});"
+            "v.addEventListener('playing',function(){log('playing w'+v.videoWidth+'x'+v.videoHeight)});"
+            "v.addEventListener('error',function(){attempts++;var c=v.error?v.error.code:'-';"
+            "if(attempts<=5){log('error '+c+' retry '+attempts);"
+            "setTimeout(function(){v.load();v.play().catch(function(){})},2500*attempts)}"
+            "else{log('error '+c+' final')}});"
+            "v.addEventListener('stalled',function(){log('stalled')});"
+            "v.addEventListener('waiting',function(){log('waiting')});"
+            "v.addEventListener('canplay',function(){log('canplay')});"
+            "function tryPlay(){v.play().then(function(){log('play() ok')}).catch(function(e){log('play() fail '+e.name);v.muted=true;v.play().catch(function(e2){log('muted play() fail '+e2.name)})})}"
             "v.addEventListener('loadedmetadata',tryPlay);"
             "v.addEventListener('canplay',tryPlay);"
             "document.addEventListener('click',tryPlay);"
             "</script></body></html>"
         ).replace("__URL__", safe)
-        self._youtube_view.setHtml(html, QUrl("https://www.youtube.com/"))
+        view = self._youtube_view
+        view._yt_source = url
+        view._yt_label = label
+        view._yt_reresolves = getattr(view, "_yt_reresolves", 0)
+
+        def on_js(_level, msg, _line, _src):
+            print(f"[yt-js] {msg}", flush=True)
+            text = str(msg)
+            if "final" in text and getattr(self, "_youtube_view", None) is not None:
+                v = self._youtube_view
+                src = getattr(v, "_yt_source", "")
+                if src and getattr(v, "_yt_reresolves", 0) < 2:
+                    v._yt_reresolves = v._yt_reresolves + 1
+                    print(f"[yt] re-resolve #{v._yt_reresolves}", flush=True)
+                    self._play_youtube(src, label=getattr(v, "_yt_label", ""))
+
+        try:
+            view.page().javaScriptConsoleMessage.connect(on_js)
+        except Exception:  # noqa: BLE001 - diagnostics are optional
+            pass
+        view.setHtml(html, QUrl("https://www.youtube.com/"))
         self.status(f"Streaming {label} · yt-dlp direct URL")
 
     def _hide_web_video(self):
@@ -4411,6 +4443,7 @@ class MainWindow(QMainWindow):
         """Stream a YouTube URL like web-casu: resolve via yt-dlp, play in a
         browser <video> inside NOW PLAYING (stream, no download)."""
         from casu.locations import resolve_media_location
+        print(f"[yt] resolve start: {url[:70]}", flush=True)
         self._show_player_page()
         self.status("Resolving YouTube stream (yt-dlp)…")
         self._resolve_generation += 1
@@ -4419,7 +4452,9 @@ class MainWindow(QMainWindow):
         def worker():
             try:
                 direct = resolve_media_location(url)
+                print(f"[yt] resolved OK: {direct[:70]}", flush=True)
             except (LocationResolutionError, OSError, ValueError) as exc:
+                print(f"[yt] resolve FAILED: {exc}", flush=True)
                 self._resolve_bridge.errorReady.emit((generation, str(exc)))
                 return
             self._resolve_bridge.resultReady.emit(
