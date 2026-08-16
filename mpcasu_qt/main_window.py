@@ -1862,7 +1862,7 @@ class _YtStreamer:
         self._server = None
         self.port = 0
 
-    def start(self, url: str) -> str:
+    def start(self, url: str, *, client: str = "android") -> str:
         self.stop()
         with self._cond:
             self._buffer.clear()
@@ -1878,7 +1878,9 @@ class _YtStreamer:
                 ["yt-dlp", "--no-playlist", "--no-warnings", "--no-progress",
                  "--socket-timeout", "15",
                  "--retries", "8", "--fragment-retries", "8",
-                 "--retry-sleep", "1", "-f", fmt, "-o", "-", url],
+                 "--retry-sleep", "1",
+                 "--extractor-args", f"youtube:player_client={client}",
+                 "-f", fmt, "-o", "-", url],
                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         except OSError as exc:
             raise RuntimeError(f"yt-dlp start failed: {exc}") from exc
@@ -4584,11 +4586,13 @@ class MainWindow(QMainWindow):
         self._yt_mode = "stream"
         self._yt_last_url = url
         self._yt_last_label = label
+        clients = ["android", "android_vr", "ios"]
+        client = clients[self._yt_restarts % len(clients)]
         self._show_player_page()
         self.status("Streaming YouTube (yt-dlp)…")
-        print(f"[yt] stream start: {url[:70]}", flush=True)
+        print(f"[yt] stream start ({client}): {url[:70]}", flush=True)
         try:
-            local = self._yt_stream.start(url)
+            local = self._yt_stream.start(url, client=client)
         except Exception as exc:  # noqa: BLE001 - surfaced to the UI
             print(f"[yt] stream FAILED: {exc}", flush=True)
             self.status(f"YouTube streaming failed: {exc}")
@@ -4614,24 +4618,26 @@ class MainWindow(QMainWindow):
 
     def _on_yt_retry(self, url: str, label: str):
         if self._yt_restarts >= 2:
-            if self._yt_embed_fallback():
+            if self._yt_browser_fallback():
                 return
             self.status("YouTube stream failed (3 Versuche)")
             return
         self._yt_restarts += 1
-        print(f"[yt] Neustart #{self._yt_restarts}", flush=True)
+        print(f"[yt] Neustart #{self._yt_restarts} (Client-Wechsel)", flush=True)
         self._play_youtube(url, label=label, _restart=True)
 
-    def _yt_embed_fallback(self) -> bool:
-        """Last resort, mirroring web-casu: play the YouTube iframe player."""
+    def _yt_browser_fallback(self) -> bool:
+        """Last resort: the user's real browser can play YouTube reliably
+        (web-casu proof), so hand the video over there."""
+        import webbrowser
         url = self._yt_last_url
-        match = re.search(r"(?:v=|youtu\.be/|embed/)([A-Za-z0-9_-]{11})", url)
-        if not match:
+        if not url:
             return False
         self._yt_mode = "embed"
-        embed = (f"https://www.youtube-nocookie.com/embed/{match.group(1)}"
-                 "?autoplay=1&enablejsapi=1&playsinline=1")
-        self._open_web_video(embed, title=self._yt_last_label or url, embed=True)
+        self._hide_web_video()
+        self.status("YouTube im Browser geöffnet")
+        self.toast("YouTube stream blocked by the CDN — opening in your browser")
+        webbrowser.open(url)
         return True
 
     def _on_yt_js(self, text: str):
@@ -4639,7 +4645,7 @@ class MainWindow(QMainWindow):
             return
         if ("error" in text or "final" in text) and self._yt_last_url:
             if self._yt_restarts >= 2:
-                if self._yt_embed_fallback():
+                if self._yt_browser_fallback():
                     return
                 self.status("YouTube video konnte nicht abgespielt werden")
                 return
