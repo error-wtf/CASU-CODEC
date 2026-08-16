@@ -397,6 +397,7 @@ class PlaylistPane(QFrame):
         self._collapsed: set = set()
         self._all_paths: list = []
         self._display_titles: dict = {}
+        self._tag_titles: dict = {}
         self._search = ""
         self._thumb_bridge = _ThreadBridge()
         self._thumb_bridge.resultReady.connect(self._apply_thumb)
@@ -679,7 +680,27 @@ class PlaylistPane(QFrame):
         display = self._display_titles.get(text, "")
         if display:
             return display
-        return (Path(text).name if not text.startswith(("http://", "https://")) else text)
+        if text.startswith(("http://", "https://", "rtsp://", "rtmp://",
+                            "udp://", "rtp://", "spotify:", "ytdl:")):
+            return text
+        cached = self._tag_titles.get(text)
+        if cached is None:
+            cached = self._tag_titles[text] = self._read_tag_title(Path(text))
+        return cached or Path(text).name
+
+    @staticmethod
+    def _read_tag_title(path) -> str:
+        """Return "title — artist" from media tags, else an empty string."""
+        try:
+            from casu.tags import metadata_for
+            tags = metadata_for(path)
+            title = str(tags.get("title") or "").strip()
+            artist = str(tags.get("artist") or "").strip()
+            if title:
+                return f"{title} — {artist}" if artist else title
+        except Exception:  # noqa: BLE001 - tags are best effort
+            return ""
+        return ""
 
     @staticmethod
     def _child_badge(entry) -> str:
@@ -4292,6 +4313,10 @@ class MainWindow(QMainWindow):
 
     def _on_source_activated(self, payload):
         if isinstance(payload, str):
+            if is_youtube_url(payload):
+                self._queue_and_play(payload)
+                self._tag_queue_title(payload)
+                return
             self._resolve_and_open_external_source(payload)
             return
         if getattr(payload, "source", None) == "spotify" and is_spotify_url(payload.url):
@@ -4304,14 +4329,40 @@ class MainWindow(QMainWindow):
                                                display_label=payload.title)
 
     def _queue_and_play(self, url: str, *, label: str = ""):
-        """Add a YouTube source to the queue and play it in NOW PLAYING."""
+        """Add a YouTube source to the queue (with a display tag) and play it.
+
+        Playback hands the raw URL to libVLC, which streams the YouTube source
+        directly (no full download) — the same path hand-entered URLs use.
+        """
+        if label:
+            self._playlist_pane._display_titles[url] = label
         try:
             self.playlist_model.add((url,))
             self._render_playlist()
         except Exception:  # noqa: BLE001 - queue must never block playback
             pass
-        self._resolve_and_open_external_source(url,
-                                               display_label=label or url)
+        self._open_external_source(url, display_label=label or url)
+
+    def _tag_queue_title(self, url: str):
+        """Fetch the YouTube title in the background and tag the queue entry."""
+
+        def worker():
+            try:
+                import subprocess as _sp
+                proc = _sp.run(
+                    ["yt-dlp", "--no-warnings", "--no-playlist", "--get-title", url],
+                    capture_output=True, text=True, timeout=20)
+                title = (proc.stdout or "").strip()
+                if not title or proc.returncode != 0:
+                    return
+                pane = self._playlist_pane
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(0, lambda: (pane._display_titles.__setitem__(url, title),
+                                              self._render_playlist()))
+            except Exception:  # noqa: BLE001 - titles are cosmetic
+                return
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _resolve_spotify_playback(self, url: str, *, title: str = "",
                                   artist: str = "", display_label: str = ""):
@@ -4425,9 +4476,7 @@ class MainWindow(QMainWindow):
     def _play_network_source(self, text: str):
         from casu.webproviders import provider_for_url
         if provider_for_url(text):
-            self._open_external_source(text)
-        elif is_youtube_url(text):
-            self._resolve_and_open_external_source(text)
+            self._open_web_player(provider_for_url(text), url=str(text))
         else:
             self._open_external_source(text)
 
