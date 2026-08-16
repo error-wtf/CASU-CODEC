@@ -2278,16 +2278,6 @@ class MainWindow(QMainWindow):
         self._video_surface.doubleClicked.connect(self.toggle_fullscreen)
         center_column.addWidget(self._video_surface, 1)
 
-        self._youtube_view = None
-        if _HAVE_WEBENGINE:
-            try:
-                from PySide6.QtWebEngineWidgets import QWebEngineView
-                self._youtube_view = QWebEngineView(self._player_page)
-                self._youtube_view.setStyleSheet("background: #000;")
-                self._youtube_view.hide()
-            except Exception:  # noqa: BLE001 - web engine is optional
-                self._youtube_view = None
-
         self._badges_label = QLabel(self._player_page)
         self._badges_label.setStyleSheet(
             "background-color: #090b0ddd; border: 1px solid #383d43; color: #f4f5f7;"
@@ -3448,41 +3438,10 @@ class MainWindow(QMainWindow):
             self._close_queue_drawer()
 
     def _open_web_video(self, direct_url: str, *, title: str = ""):
-        """Stream a yt-dlp-resolved direct URL inside the NOW PLAYING view.
-
-        Mirrors web-casu: the browser engine (QtWebEngine) satisfies the HTTP
-        session YouTube requires, so no full download is needed and playback
-        starts immediately with video+audio — in the main player page.
-        """
-        label = title or "YouTube"
-        self._show_player_page()
-        self._topbar_title.setText(label)
-        self._back_btn.show()
-        self._hide_web_video()
-        self._video_surface.set_video_active(False)
-        if self._youtube_view is None:
-            self.status("YouTube streaming requires the QtWebEngine module")
-            self.toast("YouTube streaming unavailable (no QtWebEngine)")
-            return
-        self.stop()
-        safe = direct_url.replace("&", "&amp;").replace("'", "&#39;")
-        html = (
-            "<!doctype html><html><head><meta charset='utf-8'>"
-            "<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}"
-            "video{width:100vw;height:100vh;background:#000;outline:none}</style>"
-            "</head><body><video src='__URL__' autoplay controls playsinline "
-            "style='width:100vw;height:100vh'></video></body></html>"
-        ).replace("__URL__", safe)
-        self._youtube_view.setHtml(html, QUrl("https://www.youtube.com/"))
-        self._youtube_view.setGeometry(self._video_surface.geometry())
-        self._youtube_view.show()
-        self._youtube_view.raise_()
-        self.status(f"Streaming {label} · yt-dlp direct URL")
-        self.toast(f"Streaming {label}")
+        # Unused: YouTube is queued and played by the normal libVLC backend.
+        del direct_url, title
 
     def _hide_web_video(self):
-        if self._youtube_view is not None:
-            self._youtube_view.hide()
         if getattr(self, "_video_surface", None) is not None:
             self._video_surface.set_video_active(
                 bool(getattr(self, "backend", None)))
@@ -3595,9 +3554,6 @@ class MainWindow(QMainWindow):
         eh = min(300, max(140, stage.height() - 60))
         self._empty_hint.setGeometry((stage.width() - ew) // 2 + sx,
                                      (stage.height() - eh) // 2 + sy, ew, eh)
-        if self._youtube_view is not None and not self._youtube_view.isHidden():
-            self._youtube_view.setGeometry(sx, sy, stage.width(), stage.height())
-            self._youtube_view.raise_()
         if self._audio_stage:
             self._visualizer.setGeometry(sx, sy, stage.width(), stage.height())
             self._visualizer.set_small(False)
@@ -4336,13 +4292,29 @@ class MainWindow(QMainWindow):
 
     def _on_source_activated(self, payload):
         if isinstance(payload, str):
+            if is_youtube_url(payload):
+                self._queue_and_play(payload)
+                return
             self._resolve_and_open_external_source(payload)
             return
         if getattr(payload, "source", None) == "spotify" and is_spotify_url(payload.url):
             self._open_web_player("spotify", url=payload.url)
             return
+        if is_youtube_url(payload.url):
+            self._queue_and_play(payload.url, label=payload.title)
+            return
         self._resolve_and_open_external_source(payload.url,
                                                display_label=payload.title)
+
+    def _queue_and_play(self, url: str, *, label: str = ""):
+        """Add a YouTube source to the queue and play it in NOW PLAYING."""
+        try:
+            self.playlist_model.add((url,))
+            self._render_playlist()
+        except Exception:  # noqa: BLE001 - queue must never block playback
+            pass
+        self._resolve_and_open_external_source(url,
+                                               display_label=label or url)
 
     def _resolve_spotify_playback(self, url: str, *, title: str = "",
                                   artist: str = "", display_label: str = ""):
@@ -4376,14 +4348,14 @@ class MainWindow(QMainWindow):
                 return
         self._resolve_generation += 1
         generation = self._resolve_generation
-        self.status("Resolving YouTube stream (yt-dlp)…" if is_youtube_url(source)
+        self.status("Downloading YouTube video…" if is_youtube_url(source)
                     else "Resolving network media…")
 
         def worker():
             try:
                 if is_youtube_url(source):
-                    direct = resolve_media_location(source)
-                    resolved = ("youtube_stream", direct)
+                    local = self._download_media(source)
+                    resolved = str(local)
                 else:
                     resolved = resolve_media_location(source)
             except (LocationResolutionError, SpotifyError, OSError,
@@ -4407,6 +4379,7 @@ class MainWindow(QMainWindow):
         temp = Path(tempfile.gettempdir()) / (
             f"casu-media-{os.getpid()}-{int(time.time()*1000)}.mp4")
         strategies = [
+            "bestvideo[ext=mp4][vcodec^=avc][height<=720]+bestaudio[ext=m4a]",
             "bestvideo[ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]",
             "bestvideo[ext=mp4]+bestaudio[ext=m4a]",
             "bestvideo+bestaudio",
@@ -4443,9 +4416,6 @@ class MainWindow(QMainWindow):
     def _on_resolve_ready(self, payload):
         generation, resolved, label = payload
         if generation != self._resolve_generation:
-            return
-        if isinstance(resolved, tuple) and resolved and resolved[0] == "youtube_stream":
-            self._open_web_video(resolved[1], title=label)
             return
         self._open_external_source(resolved, display_label=label)
 
