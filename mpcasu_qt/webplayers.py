@@ -142,6 +142,31 @@ class WebPlayerTabs(QWidget):
         if view is not None:
             view.load(QUrl(target))
 
+    def play_video(self, url: str, title: str = "") -> bool:
+        """Stream a direct media URL in an embedded <video> element (yt-dlp).
+
+        Mirrors the web-casu player: the resolved googlevideo URL is played by
+        the browser engine, which handles the HTTP session YouTube requires
+        (plain HTTP clients such as libVLC get HTTP 403).
+        """
+        view = self._views.get("browse")
+        if view is None:
+            return False
+        safe = url.replace("&", "&amp;").replace("'", "&#39;")
+        html = (
+            "<!doctype html><html><head><meta charset='utf-8'>"
+            "<style>html,body{margin:0;height:100%;background:#000}"
+            "video{width:100vw;height:100vh;background:#000;outline:none}</style>"
+            "</head><body><video src='__URL__' autoplay controls playsinline "
+            "style='width:100vw;height:100vh'></video></body></html>"
+        ).replace("__URL__", safe)
+        view.setHtml(html, QUrl("https://www.youtube.com/"))
+        parent = view.parentWidget()
+        idx = self._tabs.indexOf(parent)
+        if idx >= 0:
+            self._tabs.setCurrentIndex(idx)
+        return True
+
     def focus_entry(self, provider: str):
         if provider in self._entries:
             self._entries[provider].setFocus()

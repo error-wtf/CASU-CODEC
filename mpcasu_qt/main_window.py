@@ -3436,6 +3436,20 @@ class MainWindow(QMainWindow):
         if self._queue_drawer:
             self._close_queue_drawer()
 
+    def _open_web_video(self, direct_url: str, *, title: str = ""):
+        """Stream a yt-dlp-resolved direct URL in the embedded browser <video>.
+
+        Mirrors web-casu: the browser engine (QtWebEngine) satisfies the HTTP
+        session YouTube requires, so no full download is needed and playback
+        starts immediately with video+audio.
+        """
+        label = title or "YouTube"
+        self._web_player_tabs.play_video(direct_url, title)
+        self._center_stack.setCurrentWidget(self._web_player_tabs)
+        self._topbar_title.setText(label)
+        self._back_btn.show()
+        self.status(f"Streaming {label} · yt-dlp direct URL (eingebettet)")
+
     def _toggle_queue_pane(self):
         if self.width() < 1100:
             if self._queue_drawer:
@@ -4322,13 +4336,14 @@ class MainWindow(QMainWindow):
                 return
         self._resolve_generation += 1
         generation = self._resolve_generation
-        self.status("Resolving network media…")
+        self.status("Resolving YouTube stream (yt-dlp)…" if is_youtube_url(source)
+                    else "Resolving network media…")
 
         def worker():
             try:
                 if is_youtube_url(source):
-                    local = self._download_media(source)
-                    resolved = str(local)
+                    direct = resolve_media_location(source)
+                    resolved = ("youtube_stream", direct)
                 else:
                     resolved = resolve_media_location(source)
             except (LocationResolutionError, SpotifyError, OSError,
@@ -4388,6 +4403,9 @@ class MainWindow(QMainWindow):
     def _on_resolve_ready(self, payload):
         generation, resolved, label = payload
         if generation != self._resolve_generation:
+            return
+        if isinstance(resolved, tuple) and resolved and resolved[0] == "youtube_stream":
+            self._open_web_video(resolved[1], title=label)
             return
         self._open_external_source(resolved, display_label=label)
 
