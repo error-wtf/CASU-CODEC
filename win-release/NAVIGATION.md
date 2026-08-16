@@ -3,13 +3,18 @@
 Zweck: Beim Portieren nie suchen müssen — dieses Dokument sagt, WO welche
 Information steht. Pfade relativ zu `win-release/`.
 
-## 1. Status / Übersicht
+## 0. START (für neue Portierungs-Session)
+| Datei | Inhalt |
+|-------|--------|
+| `START_HIER.md` | **Start-Prompt** für die neue Session (in neue Session kopieren) |
+| `PREREQUISITES.md` | was vor dem Portieren beschafft werden muss (SCHRITT 0) |
 | Datei | Inhalt | Wann lesen |
 |-------|--------|-----------|
 | `PORT_STATUS.md` | aktueller Fortschritt, aktueller Schritt | Start jeder Sitzung |
 | `WINDOWS_PORT_BASELINE.md` | eingefrorener Referenzstand (SHA, Tests, Komponenten) | einmalig, Kontext |
 | `README_WINDOWS.md` | Zielarchitektur + Toolchain | Kontext |
 | `research/PROMPT_REQUIREMENTS_LEDGER.md` | verbindliche Anforderungen (REQ-IDs, harte Regeln) | bei jeder Abweichung |
+| `PREREQUISITES.md` | was vor dem Portieren beschafft werden muss (fehlende Windows-Runtime) | **SCHRITT 0** der neuen Session |
 
 ## 2. Referenz verstehen (research/)
 | Datei | Kerninhalt | Schlüsselwörter |
