@@ -14,3 +14,5 @@ Aktuell:
   (Qt6-MinGW, libVLC-Windows, ffmpeg/ffprobe/yt-dlp.exe) müssen beschafft
   werden, bevor Paketierung/Playback-Wine-Tests möglich. Kein
   Implementierungs-Blocker für die C++-Core-Arbeit.
+  → Details + Bezugsquellen: `win-release/PREREQUISITES.md`.
+  → In der neuen Session als SCHRITT 0 abarbeiten.
