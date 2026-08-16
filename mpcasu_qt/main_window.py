@@ -1961,6 +1961,12 @@ class _ThreadBridge(QObject):
     errorReady = Signal(object)
 
 
+class _StreamRetryBridge(QObject):
+    """Requests a fresh yt-dlp stream when the previous one died."""
+
+    retryReady = Signal(str, str)
+
+
 class SourcesView(QFrame):
     """In-window view for YouTube/Spotify search and network stream URLs.
 
@@ -2420,19 +2426,28 @@ class MainWindow(QMainWindow):
 
         self._youtube_view = None
         self._yt_stream = _YtStreamer()
+        self._yt_retry_bridge = _StreamRetryBridge()
+        self._yt_retry_bridge.retryReady.connect(self._on_yt_retry)
+        self._yt_restarts = 0
+        self._yt_last_url = ""
+        self._yt_last_label = ""
         if _HAVE_WEBENGINE:
             try:
                 from PySide6.QtWebEngineWidgets import QWebEngineView
                 from PySide6.QtWebEngineCore import QWebEnginePage
 
                 class _YtPage(QWebEnginePage):
+                    consoleMsg = Signal(str)
+
                     def javaScriptConsoleMessage(self, level, message, line, source):
                         print(f"[yt-js] {message}", flush=True)
+                        self.consoleMsg.emit(str(message))
 
                 self._youtube_view = QWebEngineView(self._player_page)
                 self._youtube_view.setPage(_YtPage(self._youtube_view))
                 self._youtube_view.setStyleSheet("background: #000;")
                 self._youtube_view.hide()
+                self._youtube_view.page().consoleMsg.connect(self._on_yt_js)
             except Exception:  # noqa: BLE001 - web engine is optional
                 self._youtube_view = None
 
@@ -4544,15 +4559,20 @@ class MainWindow(QMainWindow):
             pass
         self._play_youtube(url, label=label or url)
 
-    def _play_youtube(self, url: str, *, label: str = ""):
+    def _play_youtube(self, url: str, *, label: str = "", _restart: bool = False):
         """Stream a YouTube URL through yt-dlp into a local HTTP stream and
         play it in a browser <video> inside NOW PLAYING (stream, no download).
 
         The embedded browser engine cannot fetch googlevideo URLs directly
         (the CDN answers HTTP 403), so yt-dlp fetches the media and mpcasu
         serves it locally over 127.0.0.1. The visualizer is switched off so
-        it does not cover the video.
+        it does not cover the video. A dead first stream is retried
+        automatically with a fresh yt-dlp process (up to two retries).
         """
+        if not _restart:
+            self._yt_restarts = 0
+        self._yt_last_url = url
+        self._yt_last_label = label
         self._show_player_page()
         self.status("Streaming YouTube (yt-dlp)…")
         print(f"[yt] stream start: {url[:70]}", flush=True)
@@ -4565,6 +4585,40 @@ class MainWindow(QMainWindow):
             return
         print(f"[yt] local stream: {local}", flush=True)
         self._open_web_video(local, title=label)
+        threading.Thread(
+            target=self._yt_waiter, args=(url, label), daemon=True).start()
+
+    def _yt_waiter(self, url: str, label: str):
+        """Watch the fresh stream: if yt-dlp dies before delivering any data,
+        request an automatic restart on the Qt event loop."""
+        stream = self._yt_stream
+        with stream._cond:
+            deadline = time.time() + 12
+            while (time.time() < deadline and not stream._buffer
+                   and not stream._done.is_set()):
+                stream._cond.wait(timeout=0.5)
+        if not stream._buffer and stream._proc is None:
+            print("[yt] erster Datenblock fehlt -> Neustart", flush=True)
+            self._yt_retry_bridge.retryReady.emit(url, label)
+
+    def _on_yt_retry(self, url: str, label: str):
+        if self._yt_restarts >= 2:
+            self.status("YouTube stream failed (3 Versuche)")
+            return
+        self._yt_restarts += 1
+        print(f"[yt] Neustart #{self._yt_restarts}", flush=True)
+        self._play_youtube(url, label=label, _restart=True)
+
+    def _on_yt_js(self, text: str):
+        if ("error" in text or "final" in text) and self._yt_last_url:
+            if self._yt_restarts >= 2:
+                self.status("YouTube video konnte nicht abgespielt werden")
+                return
+            self._yt_restarts += 1
+            print(f"[yt] JS-Video-Fehler -> Neustart #{self._yt_restarts}: {text[:50]}",
+                  flush=True)
+            self._play_youtube(self._yt_last_url,
+                               label=self._yt_last_label, _restart=True)
 
     def _tag_queue_title(self, url: str):
         """Fetch the YouTube title in the background and update queue + NOW PLAYING."""
