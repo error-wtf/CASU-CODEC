@@ -3469,7 +3469,7 @@ class MainWindow(QMainWindow):
             self._close_queue_drawer()
 
     def _open_web_video(self, direct_url: str, *, title: str = ""):
-        # Unused: YouTube is queued and played by the normal libVLC backend.
+        # Unused: YouTube is streamed by libVLC directly (raw URL).
         del direct_url, title
 
     def _hide_web_video(self):
@@ -4355,27 +4355,8 @@ class MainWindow(QMainWindow):
         self._play_youtube(url, label=label or url)
 
     def _play_youtube(self, url: str, *, label: str = ""):
-        """Stream a YouTube URL with libVLC; fall back to a temp download."""
-        from PySide6.QtCore import QTimer
-        gen = getattr(self, "_yt_generation", 0) + 1
-        self._yt_generation = gen
+        """Stream a YouTube URL with libVLC directly (no download)."""
         self._open_external_source(url, display_label=label or url)
-
-        def check():
-            if getattr(self, "_yt_generation", 0) != gen:
-                return
-            backend = getattr(self, "backend", None)
-            if backend is None:
-                return
-            try:
-                if backend.state().name in ("PLAYING", "PAUSED"):
-                    return
-            except Exception:  # noqa: BLE001 - state probe is best effort
-                pass
-            self.status("YouTube-Stream nicht startbar — lade temporär…")
-            self._resolve_and_open_external_source(url, display_label=label or url)
-
-        QTimer.singleShot(8000, check)
 
     def _tag_queue_title(self, url: str):
         """Fetch the YouTube title in the background and update queue + NOW PLAYING."""
