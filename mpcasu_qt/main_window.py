@@ -4345,29 +4345,45 @@ class MainWindow(QMainWindow):
         YouTube's direct stream URLs return HTTP 403 to plain HTTP clients
         (and libVLC); yt-dlp's authenticated download works. The media is
         downloaded once to a temporary file (video+audio) the player opens natively.
+        YouTube CDN nodes intermittently refuse a client (HTTP 403); retry and
+        surface the real yt-dlp message instead of a generic failure.
         """
         import subprocess
         temp = Path(tempfile.gettempdir()) / (
             f"casu-media-{os.getpid()}-{int(time.time()*1000)}.mp4")
-        command = [
-            "yt-dlp", "--no-warnings", "--no-playlist",
-            "-f", ("bestvideo[ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]/"
-                   "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio"),
-            "--merge-output-format", "mp4",
-            "-o", str(temp), str(source),
+        strategies = [
+            "bestvideo[ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]",
+            "bestvideo[ext=mp4]+bestaudio[ext=m4a]",
+            "bestvideo+bestaudio",
+            "bestaudio",
         ]
-        try:
-            proc = subprocess.run(command, check=False,
-                                  stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL,
-                                  timeout=max(60.0, float(timeout)))
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            temp.unlink(missing_ok=True)
-            raise CasuError(f"Media download failed: {exc}") from exc
-        if proc.returncode != 0 or not temp.is_file() or temp.stat().st_size <= 0:
-            temp.unlink(missing_ok=True)
-            raise CasuError("Media download failed")
-        return temp
+        last_err = "Media download failed"
+        for fmt in strategies:
+            command = [
+                "yt-dlp", "--no-warnings", "--no-playlist",
+                "--retries", "3", "--fragment-retries", "3",
+                "-f", fmt, "--merge-output-format", "mp4",
+                "-o", str(temp), str(source),
+            ]
+            for attempt in range(2):
+                try:
+                    proc = subprocess.run(
+                        command, check=False,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.PIPE,
+                        timeout=max(60.0, float(timeout)))
+                except (OSError, subprocess.TimeoutExpired) as exc:
+                    last_err = f"Media download failed: {exc}"
+                    break
+                if proc.returncode == 0 and temp.is_file() and temp.stat().st_size > 0:
+                    return temp
+                detail = (proc.stderr or b"").decode("utf-8", "replace")
+                last_err = f"Media download failed: {detail.strip().splitlines()[-1][:120]}"
+                if temp.exists():
+                    temp.unlink(missing_ok=True)
+                if attempt == 0:
+                    time.sleep(2)
+        raise CasuError(last_err)
 
     def _on_resolve_ready(self, payload):
         generation, resolved, label = payload
