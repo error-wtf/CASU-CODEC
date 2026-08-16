@@ -4355,8 +4355,46 @@ class MainWindow(QMainWindow):
         self._play_youtube(url, label=label or url)
 
     def _play_youtube(self, url: str, *, label: str = ""):
-        """Stream a YouTube URL with libVLC directly (no download)."""
+        """Play a YouTube URL: try libVLC stream first; if VLC 3.x cannot
+        extract/stream it (TLS or lua extractor failure), fall back to a
+        temporary download via yt-dlp so the video always starts."""
+        from PySide6.QtCore import QTimer
+        gen = getattr(self, "_yt_generation", 0) + 1
+        self._yt_generation = gen
         self._open_external_source(url, display_label=label or url)
+
+        def check_fast():
+            if getattr(self, "_yt_generation", 0) != gen:
+                return
+            backend = getattr(self, "backend", None)
+            if backend is None:
+                return
+            try:
+                if backend.state().name in ("PLAYING", "PAUSED", "LOADING"):
+                    QTimer.singleShot(5000, check_slow)
+                    return
+            except Exception:  # noqa: BLE001 - state probe is best effort
+                pass
+            self._yt_fallback(url, label)
+
+        def check_slow():
+            if getattr(self, "_yt_generation", 0) != gen:
+                return
+            backend = getattr(self, "backend", None)
+            if backend is None:
+                return
+            try:
+                if backend.state().name in ("PLAYING", "PAUSED"):
+                    return
+            except Exception:  # noqa: BLE001
+                pass
+            self._yt_fallback(url, label)
+
+        QTimer.singleShot(2500, check_fast)
+
+    def _yt_fallback(self, url: str, label: str):
+        self.status("VLC-Stream nicht verfügbar — lade über yt-dlp…")
+        self._resolve_and_open_external_source(url, display_label=label or url)
 
     def _tag_queue_title(self, url: str):
         """Fetch the YouTube title in the background and update queue + NOW PLAYING."""
