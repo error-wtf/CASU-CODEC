@@ -3465,8 +3465,9 @@ class MainWindow(QMainWindow):
         self._center_stack.setCurrentIndex(0)
         self._topbar_title.setText("NOW PLAYING")
         self._back_btn.hide()
+        self._playlist_pane.show()
         if self._queue_drawer:
-            self._close_queue_drawer()
+            self._playlist_pane.setVisible(True)
 
     def _open_web_video(self, direct_url: str, *, title: str = ""):
         # Unused: YouTube is streamed by libVLC directly (raw URL).
