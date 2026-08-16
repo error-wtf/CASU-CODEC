@@ -4339,18 +4339,20 @@ class MainWindow(QMainWindow):
         threading.Thread(target=worker, daemon=True).start()
 
     def _download_media(self, source: str, *, timeout: float = 240.0) -> Path:
-        """Download a YouTube/yt-dlp source to a temp file for local playback.
+        """Download a YouTube/yt-dlp source to a temp video file for local playback.
 
         YouTube's direct stream URLs return HTTP 403 to plain HTTP clients
         (and libVLC); yt-dlp's authenticated download works. The media is
-        downloaded once to a temporary file the player opens natively.
+        downloaded once to a temporary file (video+audio) the player opens natively.
         """
         import subprocess
         temp = Path(tempfile.gettempdir()) / (
-            f"casu-media-{os.getpid()}-{int(time.time()*1000)}.m4a")
+            f"casu-media-{os.getpid()}-{int(time.time()*1000)}.mp4")
         command = [
             "yt-dlp", "--no-warnings", "--no-playlist",
-            "-f", "bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio",
+            "-f", ("best[ext=mp4][vcodec!=none][acodec!=none]/"
+                   "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio"),
+            "--merge-output-format", "mp4",
             "-o", str(temp), str(source),
         ]
         try:
