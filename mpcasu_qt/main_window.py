@@ -1876,7 +1876,9 @@ class _YtStreamer:
         try:
             self._proc = subprocess.Popen(
                 ["yt-dlp", "--no-playlist", "--no-warnings", "--no-progress",
-                 "-f", fmt, "-o", "-", url],
+                 "--socket-timeout", "15",
+                 "--retries", "8", "--fragment-retries", "8",
+                 "--retry-sleep", "1", "-f", fmt, "-o", "-", url],
                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         except OSError as exc:
             raise RuntimeError(f"yt-dlp start failed: {exc}") from exc
@@ -3611,12 +3613,14 @@ class MainWindow(QMainWindow):
         if self._queue_drawer:
             self._playlist_pane.setVisible(True)
 
-    def _open_web_video(self, direct_url: str, *, title: str = ""):
-        """Stream a yt-dlp-resolved URL in a browser <video> inside NOW PLAYING.
+    def _open_web_video(self, direct_url: str, *, title: str = "", embed: bool = False):
+        """Play a video inside NOW PLAYING via the browser engine.
 
-        Mirrors web-casu exactly: yt-dlp resolves the source to a direct stream
-        URL, and the browser engine (QtWebEngine) plays it in a <video> element
-        — streaming, no download, inside the NOW PLAYING view.
+        Two modes, mirroring web-casu:
+        - stream: a yt-dlp-resolved direct URL plays in a <video> element
+          (streaming, no download).
+        - embed: the YouTube iframe player page (web-casu fallback when the
+          direct stream cannot play).
         """
         label = title or "YouTube"
         self._show_player_page()
@@ -3666,6 +3670,12 @@ class MainWindow(QMainWindow):
             "</script></body></html>"
         ).replace("__URL__", safe)
         view = self._youtube_view
+
+        if embed:
+            print(f"[yt] EMBED-Fallback: {direct_url[:70]}", flush=True)
+            view.load(QUrl(direct_url))
+            self.status(f"{label} · YouTube-Player")
+            return
 
         view.setHtml(html, QUrl("https://www.youtube.com/"))
         self.status(f"Streaming {label} · yt-dlp")
@@ -4571,6 +4581,7 @@ class MainWindow(QMainWindow):
         """
         if not _restart:
             self._yt_restarts = 0
+        self._yt_mode = "stream"
         self._yt_last_url = url
         self._yt_last_label = label
         self._show_player_page()
@@ -4603,15 +4614,33 @@ class MainWindow(QMainWindow):
 
     def _on_yt_retry(self, url: str, label: str):
         if self._yt_restarts >= 2:
+            if self._yt_embed_fallback():
+                return
             self.status("YouTube stream failed (3 Versuche)")
             return
         self._yt_restarts += 1
         print(f"[yt] Neustart #{self._yt_restarts}", flush=True)
         self._play_youtube(url, label=label, _restart=True)
 
+    def _yt_embed_fallback(self) -> bool:
+        """Last resort, mirroring web-casu: play the YouTube iframe player."""
+        url = self._yt_last_url
+        match = re.search(r"(?:v=|youtu\.be/|embed/)([A-Za-z0-9_-]{11})", url)
+        if not match:
+            return False
+        self._yt_mode = "embed"
+        embed = (f"https://www.youtube-nocookie.com/embed/{match.group(1)}"
+                 "?autoplay=1&enablejsapi=1&playsinline=1")
+        self._open_web_video(embed, title=self._yt_last_label or url, embed=True)
+        return True
+
     def _on_yt_js(self, text: str):
+        if getattr(self, "_yt_mode", "stream") != "stream":
+            return
         if ("error" in text or "final" in text) and self._yt_last_url:
             if self._yt_restarts >= 2:
+                if self._yt_embed_fallback():
+                    return
                 self.status("YouTube video konnte nicht abgespielt werden")
                 return
             self._yt_restarts += 1
