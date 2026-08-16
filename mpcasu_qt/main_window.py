@@ -741,6 +741,14 @@ class PlaylistPane(QFrame):
     def _on_item_clicked(self, item, _column):
         if item.parent() is None and self._is_playlist(item.data(0, Qt.UserRole) or ""):
             item.setExpanded(not item.isExpanded())
+            return
+        if item.parent() is None:
+            row = self.tree.indexOfTopLevelItem(item)
+            if row >= 0:
+                self.playRequested.emit(row)
+            return
+        if item.data(0, Qt.UserRole):
+            self.childPlayRequested.emit(str(item.data(0, Qt.UserRole)))
 
     def _on_expanded(self, item):
         self._collapsed.discard(item.data(0, Qt.UserRole))
