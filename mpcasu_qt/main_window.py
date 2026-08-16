@@ -2309,6 +2309,16 @@ class MainWindow(QMainWindow):
         self._video_surface.doubleClicked.connect(self.toggle_fullscreen)
         center_column.addWidget(self._video_surface, 1)
 
+        self._youtube_view = None
+        if _HAVE_WEBENGINE:
+            try:
+                from PySide6.QtWebEngineWidgets import QWebEngineView
+                self._youtube_view = QWebEngineView(self._player_page)
+                self._youtube_view.setStyleSheet("background: #000;")
+                self._youtube_view.hide()
+            except Exception:  # noqa: BLE001 - web engine is optional
+                self._youtube_view = None
+
         self._badges_label = QLabel(self._player_page)
         self._badges_label.setStyleSheet(
             "background-color: #090b0ddd; border: 1px solid #383d43; color: #f4f5f7;"
@@ -3470,10 +3480,49 @@ class MainWindow(QMainWindow):
             self._playlist_pane.setVisible(True)
 
     def _open_web_video(self, direct_url: str, *, title: str = ""):
-        # Unused: YouTube is streamed by libVLC directly (raw URL).
-        del direct_url, title
+        """Stream a yt-dlp-resolved URL in a browser <video> inside NOW PLAYING.
+
+        Mirrors web-casu exactly: yt-dlp resolves the source to a direct stream
+        URL, and the browser engine (QtWebEngine) plays it in a <video> element
+        — streaming, no download, inside the NOW PLAYING view.
+        """
+        label = title or "YouTube"
+        self._show_player_page()
+        self._topbar_title.setText(label)
+        self._now_playing_bar.set_now_playing(label)
+        self._set_caption(label)
+        self._back_btn.show()
+        if self._youtube_view is None:
+            self.status("YouTube streaming requires the QtWebEngine module")
+            self.toast("YouTube streaming unavailable (no QtWebEngine)")
+            return
+        self._video_surface.set_video_active(False)
+        stage = self._video_surface
+        self._youtube_view.setGeometry(stage.geometry())
+        self._youtube_view.show()
+        self._youtube_view.raise_()
+        safe = direct_url.replace("&", "&amp;").replace("'", "&#39;")
+        html = (
+            "<!doctype html><html><head><meta charset='utf-8'>"
+            "<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}"
+            "video{width:100vw;height:100vh;background:#000;outline:none}</style>"
+            "</head><body><video src='__URL__' autoplay muted playsinline controls "
+            "style='width:100vw;height:100vh'></video>"
+            "<script>"
+            "var v=document.querySelector('video');"
+            "function tryPlay(){v.play().then(function(){}).catch(function(){"
+            "v.muted=true;v.play().catch(function(){})})}"
+            "v.addEventListener('loadedmetadata',tryPlay);"
+            "v.addEventListener('canplay',tryPlay);"
+            "document.addEventListener('click',tryPlay);"
+            "</script></body></html>"
+        ).replace("__URL__", safe)
+        self._youtube_view.setHtml(html, QUrl("https://www.youtube.com/"))
+        self.status(f"Streaming {label} · yt-dlp direct URL")
 
     def _hide_web_video(self):
+        if getattr(self, "_youtube_view", None) is not None:
+            self._youtube_view.hide()
         if getattr(self, "_video_surface", None) is not None:
             self._video_surface.set_video_active(
                 bool(getattr(self, "backend", None)))
@@ -3586,6 +3635,9 @@ class MainWindow(QMainWindow):
         eh = min(300, max(140, stage.height() - 60))
         self._empty_hint.setGeometry((stage.width() - ew) // 2 + sx,
                                      (stage.height() - eh) // 2 + sy, ew, eh)
+        if self._youtube_view is not None and not self._youtube_view.isHidden():
+            self._youtube_view.setGeometry(sx, sy, stage.width(), stage.height())
+            self._youtube_view.raise_()
         if self._audio_stage:
             self._visualizer.setGeometry(sx, sy, stage.width(), stage.height())
             self._visualizer.set_small(False)
@@ -4356,46 +4408,24 @@ class MainWindow(QMainWindow):
         self._play_youtube(url, label=label or url)
 
     def _play_youtube(self, url: str, *, label: str = ""):
-        """Play a YouTube URL: try libVLC stream first; if VLC 3.x cannot
-        extract/stream it (TLS or lua extractor failure), fall back to a
-        temporary download via yt-dlp so the video always starts."""
-        from PySide6.QtCore import QTimer
-        gen = getattr(self, "_yt_generation", 0) + 1
-        self._yt_generation = gen
-        self._open_external_source(url, display_label=label or url)
+        """Stream a YouTube URL like web-casu: resolve via yt-dlp, play in a
+        browser <video> inside NOW PLAYING (stream, no download)."""
+        from casu.locations import resolve_media_location
+        self._show_player_page()
+        self.status("Resolving YouTube stream (yt-dlp)…")
+        self._resolve_generation += 1
+        generation = self._resolve_generation
 
-        def check_fast():
-            if getattr(self, "_yt_generation", 0) != gen:
-                return
-            backend = getattr(self, "backend", None)
-            if backend is None:
-                return
+        def worker():
             try:
-                if backend.state().name in ("PLAYING", "PAUSED", "LOADING"):
-                    QTimer.singleShot(5000, check_slow)
-                    return
-            except Exception:  # noqa: BLE001 - state probe is best effort
-                pass
-            self._yt_fallback(url, label)
-
-        def check_slow():
-            if getattr(self, "_yt_generation", 0) != gen:
+                direct = resolve_media_location(url)
+            except (LocationResolutionError, OSError, ValueError) as exc:
+                self._resolve_bridge.errorReady.emit((generation, str(exc)))
                 return
-            backend = getattr(self, "backend", None)
-            if backend is None:
-                return
-            try:
-                if backend.state().name in ("PLAYING", "PAUSED"):
-                    return
-            except Exception:  # noqa: BLE001
-                pass
-            self._yt_fallback(url, label)
+            self._resolve_bridge.resultReady.emit(
+                (generation, ("youtube_stream", direct), label or url))
 
-        QTimer.singleShot(2500, check_fast)
-
-    def _yt_fallback(self, url: str, label: str):
-        self.status("VLC-Stream nicht verfügbar — lade über yt-dlp…")
-        self._resolve_and_open_external_source(url, display_label=label or url)
+        threading.Thread(target=worker, daemon=True).start()
 
     def _tag_queue_title(self, url: str):
         """Fetch the YouTube title in the background and update queue + NOW PLAYING."""
@@ -4492,14 +4522,14 @@ class MainWindow(QMainWindow):
         stages = [
             ("video", ["-f", ("bestvideo[ext=mp4][vcodec^=avc][height<=720]"
                               "+bestaudio[ext=m4a]/bestvideo[ext=mp4]"
-                              "+bestaudio[ext=m4a]")], 2),
-            ("audio", ["-f", "bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio"], 1),
+                              "+bestaudio[ext=m4a]")], 3),
+            ("audio", ["-f", "bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio"], 2),
         ]
         for label, extra, attempts in stages:
             for attempt in range(attempts):
                 command = [
                     "yt-dlp", "--no-warnings", "--no-playlist",
-                    "--retries", "2", "--fragment-retries", "2",
+                    "--retries", "4", "--fragment-retries", "4",
                     *extra, "--merge-output-format", "mp4",
                     "-o", str(temp), str(source),
                 ]
@@ -4508,7 +4538,7 @@ class MainWindow(QMainWindow):
                         command, check=False,
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.PIPE,
-                        timeout=min(30.0, max(15.0, float(timeout) / 4)))
+                        timeout=min(25.0, max(12.0, float(timeout) / 6)))
                 except (OSError, subprocess.TimeoutExpired) as exc:
                     last_err = f"Media download failed: {exc}"
                     break
@@ -4518,13 +4548,16 @@ class MainWindow(QMainWindow):
                 last_err = f"Media download failed ({label}): {detail.strip().splitlines()[-1][:100]}"
                 if temp.exists():
                     temp.unlink(missing_ok=True)
-                if attempt == 0:
-                    time.sleep(1)
+                if attempt < attempts - 1:
+                    time.sleep(2)
         raise CasuError(last_err)
 
     def _on_resolve_ready(self, payload):
         generation, resolved, label = payload
         if generation != self._resolve_generation:
+            return
+        if isinstance(resolved, tuple) and resolved and resolved[0] == "youtube_stream":
+            self._open_web_video(resolved[1], title=label)
             return
         self._open_external_source(resolved, display_label=label)
 
