@@ -46,7 +46,8 @@ from casu.filetypes import (CASUNAT1 as LOCAL_CASUNAT1,
                             CASU_SIDECAR as LOCAL_CASU_SIDECAR,
                             CASUMP5 as LOCAL_MP5,
                             MAX_SIDECAR_BYTES, detect_casu_kind)
-from casu.playlist import (MAX_PLAYLIST_FILE_BYTES, PlaylistError,
+from casu.playlist import (MAX_PLAYLIST_FILE_BYTES, PLAYLIST_SUFFIXES,
+                           PlaylistError,
                            PlaylistModel, detect_entry_type, detect_media_type,
                            detect_playlist_format,
                            load_playlist_file, save_playlist_file)
@@ -1612,14 +1613,32 @@ class MPCASUPlayer(tk.Tk):
         channels[:] = list(self._stream_catalog.channels); refresh_channels()
 
     def add_files(self, paths: list[Path]):
+        # A media file already covered by a playlist in the selection must not
+        # be added a second time as a top-level row (Choose files double-load).
+        playlists: list[Path] = []
+        plain: list[Path] = []
+        for value in paths:
+            path = value.expanduser().resolve()
+            if path.is_file() and path.suffix.lower() in PLAYLIST_SUFFIXES:
+                playlists.append(path)
+            elif path.is_file():
+                plain.append(path)
+        covered: set[str] = set()
+        for playlist in playlists:
+            try:
+                loaded = load_playlist_file(playlist)
+                covered.update(str(item) for item in loaded.items)
+            except (PlaylistError, OSError, ValueError):
+                pass
         added: list[Path] = []
-        for path in paths:
-            if path.is_file():
-                try:
-                    if self.playlist_model.add((path,), existing_only=True):
-                        added.append(path.expanduser().resolve())
-                except PlaylistError as exc:
-                    self.status.set(str(exc)); break
+        for path in playlists + plain:
+            if path in added or str(path) in covered:
+                continue
+            try:
+                if self.playlist_model.add((path,), existing_only=True):
+                    added.append(path)
+            except PlaylistError as exc:
+                self.status.set(str(exc)); break
         try:
             self.media_library.upsert_many(added)
         except (OSError, ValueError):
@@ -2248,11 +2267,14 @@ class MPCASUPlayer(tk.Tk):
 
     def save_playlist(self):
         target = filedialog.asksaveasfilename(
-            defaultextension=".json",
+            defaultextension=".m3u",
             filetypes=[("M3U playlist", "*.m3u"), ("PLS playlist", "*.pls"),
-                       ("MPCASU JSON", "*.json"), ("All files", "*.*")])
+                       ("XSPF playlist", "*.xspf"), ("MPCASU JSON", "*.json"),
+                       ("All files", "*.*")])
         if not target:
             return
+        if not Path(target).suffix:
+            target = target + ".m3u"
         try:
             save_playlist_file(target, self.playlist_model)
             self.status.set(f"Playlist saved · {Path(target).name}")
@@ -2261,8 +2283,11 @@ class MPCASUPlayer(tk.Tk):
 
     def load_playlist(self):
         source = filedialog.askopenfilename(
-            filetypes=[("Playlists", "*.m3u *.m3u8 *.pls *.json"),
+            filetypes=[("Playlists", "*.m3u *.m3u8 *.pls *.json *.wpl *.xspf "
+                                     "*.jspf *.asx *.wmx *.wvx *.rmp *.ram"),
                        ("M3U", "*.m3u *.m3u8"), ("PLS", "*.pls"),
+                       ("XSPF", "*.xspf"), ("WPL", "*.wpl"),
+                       ("ASX", "*.asx *.wmx *.wvx"), ("RealMedia", "*.rmp *.ram"),
                        ("JSON", "*.json"), ("All files", "*.*")])
         if not source:
             return

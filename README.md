@@ -6,13 +6,27 @@ media player suite: a Qt desktop player, a local web player, a batch converter
 and a CLI. Everything installs system-wide via Debian packages and does not
 interfere with VLC, GStreamer or FFmpeg.
 
-> **Version:** `2.0.0` — see [RELEASE_GATE_STATUS.json](RELEASE_GATE_STATUS.json).
+> **Version:** `3.0.0` — see [RELEASE_GATE_STATUS.json](RELEASE_GATE_STATUS.json).
 > Gates 1–3 (source-resolution STRICT, CASUNAT2 native payload, integrity /
 > recovery / fuzzing) are **PASS**. Gates 4–6 (native player path, media
 > management / converter, product UI / release regression) are honestly
 > documented as **PARTIAL**: their full regression matrices were gathered on
 > the Tk reference player; the Qt player that ships as `mpcasu` since 1.0.0
 > passes its own backend and smoke suites but has not re-run every matrix.
+>
+> **3.0.0 highlights:** native, format-aware playlist support across every
+> player. Local-file playlists (M3U/M3U8, PLS, WPL, XSPF, JSPF, ASX/WMX/WVX
+> and RealMedia RMP/RAM) now resolve relative and URL-encoded paths against
+> the playlist directory, keep per-entry titles, and play back immediately —
+> in the Qt desktop player, the local `web-casu` web player and the static
+> Pure Web player.
+>
+> 3.0.0 also fixes the freeze/hang (a runaway visualizer repaint loop, now
+> throttled), the "double load" when choosing a playlist together with its
+> media files, adds Shift/Ctrl multi-select queue editing, a format-aware
+> save-playlist dialog, hang-free in-process file dialogs, and runs on both
+> **Wayland and X11** (the launcher now picks the platform from the session
+> instead of forcing one).
 
 ---
 
@@ -39,10 +53,10 @@ source file is **not** required for native playback.
 ./packaging/build_debs.sh          # builds into dist/ (or use shipped DEBs)
 cd dist
 sha256sum -c SHA256SUMS
-sudo dpkg -i casu-codec_2.0.0_all.deb \
-             casu-converter_2.0.0_all.deb \
-             mpcasu_2.0.0_all.deb \
-             web-casu_2.0.0_all.deb
+sudo dpkg -i casu-codec_3.0.0_all.deb \
+             casu-converter_3.0.0_all.deb \
+             mpcasu_3.0.0_all.deb \
+             web-casu_3.0.0_all.deb
 sudo apt-get -f install            # only if dependencies are missing
 ```
 
@@ -111,8 +125,11 @@ The playback route is selected automatically by content inspection:
   standalone playback
 - All other audio/video/streams → libVLC in-process
 
-Features: playlists (M3U/M3U8/PLS/JSON) as expandable groups with format
-badges, drag-and-drop reorder, context menu and load/save; shuffle and repeat
+Features: playlists (**M3U/M3U8, PLS, WPL, XSPF, JSPF, ASX/WMX/WVX, RMP/RAM and
+JSON**) as expandable groups with format badges, relative + URL-encoded path
+resolution, per-entry titles, drag-and-drop reorder, **Shift/Ctrl multi-select
+editing** (remove / play many at once), context menu and a **format-aware
+save dialog** (M3U/PLS/XSPF/JSON with automatic extension); shuffle and repeat
 (off/all/one); session restore; EPG (Extended-M3U/XMLTV) with now/next;
 YouTube resolution behind the yt-dlp consent gate (personal use only,
 URLs never stored or redistributed); track/chapter/subtitle selection;
@@ -167,7 +184,12 @@ web-casu --check            # verify assets and exit
 
 Views (Now Playing / Web & Streams / Playlists / IPTV / YouTube / CASU) filter
 the queue; playlists load as expandable groups and the queue can be saved as
-an M3U download. Features: drag-and-drop, adaptive FFmpeg fallback for
+an M3U download. Playlist support is native and format-aware: **M3U/M3U8,
+PLS, WPL, XSPF, JSPF, ASX/WMX/WVX and RMP/RAM** (plus MPCASU JSON). Relative
+paths are resolved against the playlist directory, `file://` and URL-encoded
+paths are decoded, and locally-selected media referenced by a playlist are
+matched by name — so a playlist dropped together with its media files plays
+back immediately. Features: drag-and-drop, adaptive FFmpeg fallback for
 browser-unsupported formats, YouTube iframe, M3U/PLS/XMLTV with searchable
 EPG, SRT/WebVTT subtitles, sidecar/CASUNAT1 SHA-256 verification, native
 CASUNAT2 key/tile/PCM decoding with track/subtitle/chapter selection,

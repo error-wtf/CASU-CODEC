@@ -4,7 +4,7 @@
 set -euo pipefail
 export SOURCE_DATE_EPOCH=0
 root=$(cd "$(dirname "$0")/.." && pwd)
-version=2.0.0
+version=3.0.0
 out="$root/dist"
 rm -rf "$out"; mkdir -p "$out"
 
@@ -84,11 +84,23 @@ install_player() {
   cat > "$stage/usr/bin/mpcasu" <<'EOF'
 #!/bin/sh
 export PYTHONDONTWRITEBYTECODE=1
+# Platform selection so the player runs on BOTH X11 and Wayland.
+#
 # The Qt player embeds libVLC via X11 (set_xwindow) and its VideoSurface uses
-# WA_NativeWindow. On a Wayland session Qt would otherwise create a second
-# top-level surface for that widget ("two windows"); force the X11 (Xwayland)
-# platform so there is exactly one window and libVLC video embeds correctly.
-export QT_QPA_PLATFORM=xcb
+# WA_NativeWindow, which needs an X11 window id. On a Wayland session that
+# embedding is only possible through XWayland. Instead of blindly forcing one
+# platform (which hangs on the other), pick based on what the session offers:
+#   - DISPLAY set (X11, or Wayland + XWayland)  -> use xcb so video embeds
+#   - only Wayland (no XWayland)                -> use wayland (audio still
+#     plays; native CASU video is Qt-rendered and fully supported)
+# Never force a platform that is not present, otherwise the player hangs.
+if [ -z "${QT_QPA_PLATFORM:-}" ]; then
+  if [ -n "${DISPLAY:-}" ]; then
+    export QT_QPA_PLATFORM=xcb
+  else
+    export QT_QPA_PLATFORM=wayland
+  fi
+fi
 export PYTHONPATH=/usr/share/casu-codec${PYTHONPATH:+:$PYTHONPATH}
 exec /usr/bin/python3 -m mpcasu_qt.app "$@"
 EOF

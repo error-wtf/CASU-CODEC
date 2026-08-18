@@ -1,0 +1,49 @@
+#EXTM3U
+#EXTINF:-1,ERRORCOMPANY - LIVE
+https://securestreams5.autopo.st:1860/error
+#EXTINF:-1,ERRORCOMPANY - ZELLO TELEFON LINE
+https://securestreams5.autopo.st:1860/TELEFON
+#EXTINF:-1,UNDERGROUND BASS
+https://listen.undergroundbass.com:8804/stream
+#EXTINF:-1,BASSDRIVE
+https://ice.bassdrive.net/stream
+#EXTINF:-1,DLF
+https://st01.sslstream.dlf.de/dlf/01/128/mp3/stream.mp3
+#EXTINF:-1,NDR INFO
+https://icecast.ndr.de/ndr/ndr1niedersachsen/lueneburg/mp3/128/stream.mp3
+#EXTINF:-1,HR INFO
+https://dispatcher.rndfnk.com/hr/hrinfo/live/mp3/high
+#EXTINF:-1,RADIO RUESSELSHEIM
+https://streaming.radio-r.net/radio-r
+#EXTINF:-1,FSK
+https://streaming.fueralle.org/fsk.mp3
+#EXTINF:-1,RADIO X
+https://stream.radiox.de:8443/live
+#EXTINF:-1,QUERFUNK
+https://mp3.querfunk.de/qfhi
+#EXTINF:-1,LOCAL HEROES - LUENEBURG RADIO
+https://stream.laut.fm/local_heroes
+#EXTINF:-1,RADIO DREYECKLAND
+https://stream.rdl.de/rdl
+#EXTINF:-1,radioeins vom rbb live hren - www.radioeins.de
+https://www.radioeins.de/livemp3
+#EXTINF:-1,Byte.FM Webradio - www.byte.fm
+https://bytefm.cast.addradio.de/bytefm/main/mid/stream
+#EXTINF:-1,HR3
+https://dispatcher.rndfnk.com/hr/hr3/live/mp3/high
+#EXTINF:-1,SWR 3
+https://liveradio.swr.de/sw282p3/swr3/play.mp3
+#EXTINF:-1,DELTA
+https://streams.deltaradio.de/delta-live/mp3-192/mediaplayer
+#EXTINF:-1,1LIVE
+https://wdr-1live-live.icecast.wdr.de/wdr/1live/live/mp3/128/stream.mp3
+#EXTINF:-1,FRITZ
+https://dispatcher.rndfnk.com/rbb/fritz/live/mp3/mid
+#EXTINF:-1,SOMA
+https://ice1.somafm.com/groovesalad-128-mp3
+#EXTINF:-1,BHR E.V.
+https://stream.laut.fm/inklusion
+#EXTINF:-1,CHILL RADIO | BAR RADIO
+http://radio.streemlion.com:1960/stream
+#EXTINF:-1,VATICAN RADIO (Radio Vaticana - Italiano)
+https://radio.vaticannews.va/stream-it
