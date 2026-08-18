@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "product_version": "2.0.0",
-  "release_status": "RELEASE_2_0_0",
+  "product_version": "3.0.0",
+  "release_status": "RELEASE_3_0_0",
   "updated": "2026-08-14",
   "gates": [
     {

@@ -4,14 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#090b0d">
-  <title>WEB CASU Player</title>
-  <link rel="icon" type="image/png" href="../assets/web_casu_icon.png">
-  <link rel="stylesheet" href="styles.css?v=3.0.0-web1">
+  <meta name="referrer" content="no-referrer">
+  <title>WEB CASU Player — Pure Web</title>
+  <link rel="icon" type="image/png" href="assets/web_casu_icon.png">
+  <link rel="stylesheet" href="styles.css?v=3.0.0-pure1">
 </head>
 <body>
   <main class="app-shell" aria-label="MPCASU Web Player">
     <aside class="sidebar">
-      <img class="brand" src="../assets/mpcasu_player_logo_header.png" alt="MPCASU Player">
+      <img class="brand" src="assets/mpcasu_player_logo_header.png" alt="MPCASU Player">
       <p class="eyebrow">LIBRARY</p>
       <button class="nav active" data-view="now">▶ <span>Now Playing</span></button>
       <button class="nav" id="open-url" data-view="streams">◎ <span>Web & Streams</span></button>
@@ -19,13 +20,13 @@
       <button class="nav" id="open-iptv" data-view="iptv">📡 <span>IPTV</span></button>
       <button class="nav" id="open-epg">◫ <span>Live TV & EPG</span></button>
       <p class="eyebrow">SEARCH</p>
-      <button class="nav" id="open-search-youtube" data-view="youtube">▶ <span>YouTube</span></button>
+      <button class="nav" id="open-search-youtube">▶ <span>YouTube</span></button>
       <p class="eyebrow">CASU</p>
       <button class="nav" id="open-casu" data-view="casu">◆ <span>CASU Files</span></button>
       <div class="sidebar-spacer"></div>
       <button class="nav" id="open-options">⚙ <span>Options</span></button>
       <button class="nav" id="clear-all">⌫ <span>Clear Library</span></button>
-      <p class="build">MPCASU WEB · RC</p>
+      <p class="build">MPCASU WEB · PURE</p>
     </aside>
 
     <section class="workspace">
@@ -41,15 +42,15 @@
         <div id="viz-cover" hidden><img id="viz-cover-img" alt=""></div>
         <canvas id="viz-canvas" width="1280" height="720" hidden></canvas>
         <div id="native-subtitle" class="native-subtitle" hidden></div>
-        <iframe id="youtube" title="YouTube player" allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen hidden></iframe>
+        <iframe id="youtube" title="YouTube player" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen hidden></iframe>
         <div class="empty-state" id="empty-state">
-          <img src="../assets/web_casu_icon.png" alt="" aria-hidden="true">
+          <img src="assets/web_casu_icon.png" alt="" aria-hidden="true">
           <h1>Drop media here</h1>
           <p>Audio, video, CASU sidecars, CASUNAT1, playlists and direct streams — use “Choose files” in the playlist panel</p>
         </div>
         <div class="media-badges"><span id="format-badge">MPCASU</span><span id="integrity-badge">READY</span></div>
         <div class="media-caption">
-          <div><h2 id="title">No media selected</h2><p id="meta">CASU · LEGACY · WEB</p></div>
+          <div><h2 id="title">No media selected</h2><p id="meta">CASU · LEGACY · WEB · PURE</p></div>
           <time id="clock">00:00 / 00:00</time>
         </div>
       </section>
@@ -94,7 +95,7 @@
   <dialog id="url-dialog">
     <form method="dialog">
       <h2>Open web media</h2>
-      <p>Direct network audio/video, HLS, or a YouTube URL.</p>
+      <p>Direct network audio/video, HLS (m3u8) or a YouTube URL.</p>
       <input id="url-value" type="url" required placeholder="https://…">
       <div><button value="cancel">Cancel</button><button id="url-confirm" class="primary" value="default">Open</button></div>
     </form>
@@ -108,27 +109,24 @@
   </dialog>
   <dialog id="search-dialog">
     <form method="dialog">
-      <header class="dialog-title"><div><h2>YouTube search</h2><p>Metadata search via yt-dlp (GNU GPL) · personal use only</p></div><div><button value="cancel" aria-label="Close">×</button></div></header>
-      <div id="consent-box" class="consent-box" hidden>
-        <p>Legal notice — YouTube playback and search resolve stream URLs with yt-dlp (open source, GNU GPL). URLs are resolved temporarily, never stored or redistributed. Personal use only.</p>
-        <button id="consent-accept" type="button" class="primary">Accept and enable yt-dlp features</button>
-      </div>
-      <div class="epg-source"><input id="search-query" type="text" placeholder="Search term…" autocomplete="off"><button id="search-run" type="button">Search</button></div>
+      <header class="dialog-title"><div><h2>YouTube</h2><p id="search-mode-note">Play a YouTube link by URL — no backend needed</p></div><div><button value="cancel" aria-label="Close">×</button></div></header>
+      <div class="epg-source"><input id="search-query" type="text" placeholder="Paste a YouTube URL…" autocomplete="off"><button id="search-run" type="button">Open</button></div>
       <div id="search-results" class="epg-guide"></div>
     </form>
   </dialog>
   <dialog id="options-dialog">
     <form method="dialog">
-      <header class="dialog-title"><div><h2>Options</h2><p>Playback, visualizer and legal settings</p></div><div><button value="cancel" aria-label="Close">×</button></div></header>
+      <header class="dialog-title"><div><h2>Options</h2><p>Playback and visualizer settings</p></div><div><button value="cancel" aria-label="Close">×</button></div></header>
       <label class="search-source">Volume <input id="opt-volume" type="range" min="0" max="200" value="100"></label>
-      <label class="search-source"><input id="opt-resume" type="checkbox" checked> Resume playback on startup</label>
+      <label class="search-source"><input id="opt-resume" type="checkbox" checked> Resume playlist on startup</label>
       <label class="search-source"><input id="opt-viz" type="checkbox" checked> Audio visualizer (spectrum / waveform)</label>
-      <label class="search-source"><input id="opt-consent" type="checkbox"> yt-dlp consent (YouTube/Spotify, personal use only)</label>
-      <div class="epg-source"><button id="opt-cache" type="button">Cache note</button><button id="opt-apply" type="button" class="primary">Apply</button></div>
+      <div class="epg-source"><button id="opt-apply" type="button" class="primary">Apply</button></div>
     </form>
   </dialog>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script src="casu-native.js?v=3.0.0-web1" defer></script>
-  <script src="app.js?v=3.0.0-web1" defer></script>
+  <script src="config.js?v=3.0.0-pure1"></script>
+  <script src="libs/hls.min.js?v=3.0.0-pure1"></script>
+  <script src="casu-native.js?v=3.0.0-pure1"></script>
+  <script src="app.js?v=3.0.0-pure1"></script>
 </body>
 </html>

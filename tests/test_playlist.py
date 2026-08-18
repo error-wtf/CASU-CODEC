@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from casu.playlist import (PlaylistError, PlaylistModel, load_playlist_file,
+from casu.playlist import (PlaylistError, PlaylistModel, detect_playlist_format,
+                           load_playlist_file, playlist_names,
                            save_playlist_file)
 
 
@@ -52,3 +53,132 @@ def test_playlist_file_read_is_bounded(tmp_path, monkeypatch):
     monkeypatch.setattr(playlist, "MAX_PLAYLIST_FILE_BYTES", 8)
     with pytest.raises(PlaylistError, match="safety limit"):
         load_playlist_file(target)
+
+
+def test_plain_m3u_without_header_is_detected(tmp_path):
+    media = tmp_path / "track.mp3"; media.write_bytes(b"audio")
+    source = tmp_path / "plain.m3u"
+    source.write_text(f"{media.name}\n{tmp_path / 'other.mp3'}\n", encoding="utf-8")
+    assert detect_playlist_format(source) == "m3u"
+    loaded = load_playlist_file(source)
+    assert media.resolve() in loaded.items
+    assert len(loaded) == 2
+
+
+def test_m3u_relative_and_url_encoded_paths_resolve(tmp_path):
+    sub = tmp_path / "my folder"; sub.mkdir()
+    media = sub / "track a.mp3"; media.write_bytes(b"audio")
+    source = tmp_path / "list.m3u"
+    source.write_text("#EXTM3U\n#EXTINF:42,The Title\nmy%20folder/track%20a.mp3\n", encoding="utf-8")
+    loaded = load_playlist_file(source)
+    assert loaded.items == (media.resolve(),)
+    names = playlist_names(source)
+    assert names[str(media.resolve())] == "The Title"
+
+
+def test_pls_relative_paths_and_titles(tmp_path):
+    media = tmp_path / "song.flac"; media.write_bytes(b"audio")
+    source = tmp_path / "list.pls"
+    source.write_text("[playlist]\nNumberOfEntries=1\nFile1=song.flac\nTitle1=My Song\n"
+                      "Length1=-1\nVersion=2\n", encoding="utf-8")
+    assert detect_playlist_format(source) == "pls"
+    loaded = load_playlist_file(source)
+    assert loaded.items == (media.resolve(),)
+    assert playlist_names(source)[str(media.resolve())] == "My Song"
+
+
+def test_xspf_playlist(tmp_path):
+    media = tmp_path / "clip.mp4"; media.write_bytes(b"video")
+    source = tmp_path / "list.xspf"
+    source.write_text(
+        '<?xml version="1.0"?>\n'
+        '<playlist version="1" xmlns="http://xspf.org/ns/0/">\n'
+        "  <trackList>\n"
+        "    <track><location>clip.mp4</location><title>Clip One</title></track>\n"
+        '    <track><location>http://example.com/radio</location><title>Radio</title></track>\n'
+        "  </trackList>\n"
+        "</playlist>\n", encoding="utf-8")
+    assert detect_playlist_format(source) == "xspf"
+    loaded = load_playlist_file(source)
+    assert loaded.items == (media.resolve(), "http://example.com/radio")
+    names = playlist_names(source)
+    assert names[str(media.resolve())] == "Clip One"
+    assert names["http://example.com/radio"] == "Radio"
+
+
+def test_wpl_playlist(tmp_path):
+    media = tmp_path / "song.wma"; media.write_bytes(b"audio")
+    source = tmp_path / "list.wpl"
+    source.write_text(
+        '<?wpl version="1.0"?>\n<smil><head></head><body><seq>\n'
+        '<media src="song.wma"/>\n'
+        '<media src="http://example.com/stream"/>\n'
+        "</seq></body></smil>\n", encoding="utf-8")
+    assert detect_playlist_format(source) == "wpl"
+    assert load_playlist_file(source).items == (media.resolve(), "http://example.com/stream")
+
+
+def test_asx_playlist_case_insensitive(tmp_path):
+    media = tmp_path / "show.wmv"; media.write_bytes(b"video")
+    source = tmp_path / "list.asx"
+    source.write_text(
+        '<ASX version="3.0">\n'
+        '<ENTRY><TITLE>Cool Show</TITLE><REF HREF="show.wmv"/></ENTRY>\n'
+        '<ENTRY><REF HREF="http://example.com/live"/></ENTRY>\n'
+        "</ASX>\n", encoding="utf-8")
+    assert detect_playlist_format(source) == "asx"
+    loaded = load_playlist_file(source)
+    assert loaded.items == (media.resolve(), "http://example.com/live")
+    assert playlist_names(source).get(str(media.resolve())) == "Cool Show"
+
+
+def test_jspf_playlist(tmp_path):
+    media = tmp_path / "track.ogg"; media.write_bytes(b"audio")
+    source = tmp_path / "list.jspf"
+    source.write_text(
+        '{"playlist":{"title":"Mix","track":['
+        '{"location":"track.ogg","title":"Ogg Track"},'
+        '{"location":"http://example.com/radio"}]}}', encoding="utf-8")
+    assert detect_playlist_format(source) == "jspf"
+    loaded = load_playlist_file(source)
+    assert loaded.items == (media.resolve(), "http://example.com/radio")
+    assert playlist_names(source)[str(media.resolve())] == "Ogg Track"
+
+
+def test_rmp_ram_playlist(tmp_path):
+    media = tmp_path / "show.rm"; media.write_bytes(b"audio")
+    ram = tmp_path / "list.ram"
+    ram.write_text("show.rm\nhttp://example.com/radio.ra\n", encoding="utf-8")
+    assert detect_playlist_format(ram) == "rmp"
+    assert load_playlist_file(ram).items == (media.resolve(), "http://example.com/radio.ra")
+    rmp = tmp_path / "list.rmp"
+    rmp.write_text(
+        '<Smil><Seq><Entry><Ref Href="show.rm"/></Entry></Seq></Smil>\n',
+        encoding="utf-8")
+    assert detect_playlist_format(rmp) == "rmp"
+    assert load_playlist_file(rmp).items == (media.resolve(),)
+
+
+def test_file_url_and_xspf_save_roundtrip(tmp_path):
+    media = tmp_path / "file one.mp3"; media.write_bytes(b"audio")
+    source = tmp_path / "urls.m3u"
+    source.write_text(f"file://{media}\n", encoding="utf-8")
+    loaded = load_playlist_file(source)
+    assert loaded.items == (media.resolve(),)
+    target = tmp_path / "saved.xspf"
+    save_playlist_file(target, loaded)
+    assert load_playlist_file(target).items == (media.resolve(),)
+
+
+def test_unknown_playlist_format_raises(tmp_path):
+    source = tmp_path / "list.txt"
+    source.write_text("   \n\t\n  \n", encoding="utf-8")
+    with pytest.raises(PlaylistError, match="unknown playlist format"):
+        load_playlist_file(source)
+
+
+def test_malformed_xml_playlist_raises(tmp_path):
+    source = tmp_path / "list.xspf"
+    source.write_text("<playlist><trackList><track><location></trackList>", encoding="utf-8")
+    with pytest.raises(PlaylistError, match="malformed"):
+        load_playlist_file(source)
