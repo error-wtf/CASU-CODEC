@@ -182,3 +182,94 @@ def test_malformed_xml_playlist_raises(tmp_path):
     source.write_text("<playlist><trackList><track><location></trackList>", encoding="utf-8")
     with pytest.raises(PlaylistError, match="malformed"):
         load_playlist_file(source)
+
+
+def test_merge_into_existing_playlist_appends_and_deduplicates(tmp_path):
+    """Merge (append) new media/URLs into an existing playlist without dupes."""
+    a = tmp_path / "a.mp3"; a.write_bytes(b"a")
+    b = tmp_path / "b.mp3"; b.write_bytes(b"b")
+    playlist = tmp_path / "mylist.m3u"
+    save_playlist_file(playlist, PlaylistModel((a,)))
+
+    # Merge b (new) and a (already present -> skipped) into the playlist.
+    model = load_playlist_file(playlist)
+    before = len(model.items)
+    model.add((b, a))
+    assert len(model.items) == before + 1  # only b added, a deduplicated
+    save_playlist_file(playlist, model)
+
+    restored = load_playlist_file(playlist)
+    assert restored.items == (a.resolve(), b.resolve())
+
+
+def test_merge_creates_new_playlist_from_selection(tmp_path):
+    """Creating a fresh playlist from selected media/URLs persists them."""
+    media = tmp_path / "track.mp4"; media.write_bytes(b"video")
+    url = "https://example.com/live/stream.m3u8"
+    model = PlaylistModel()
+    model.add((media, url))
+    target = tmp_path / "newlist.m3u"
+    save_playlist_file(target, model)
+    restored = load_playlist_file(target)
+    assert str(restored.items[0]) == str(media.resolve())
+    assert str(restored.items[1]) == url
+
+
+def test_merge_mixed_playlist_and_urls_keeps_order(tmp_path):
+    """A mixed queue (playlist entries + standalone URL) persists in order."""
+    a = tmp_path / "a.flac"; a.write_bytes(b"flac")
+    url1 = "https://example.com/one.m3u8"
+    url2 = "https://example.com/two.m3u8"
+    model = PlaylistModel()
+    model.add((a, url1, url2))
+    target = tmp_path / "mixed.m3u"
+    save_playlist_file(target, model)
+    restored = load_playlist_file(target)
+    items = [str(i) for i in restored.items]
+    assert items[0] == str(a.resolve())
+    assert items[1] == url1
+    assert items[2] == url2
+
+
+def test_merge_handles_missing_files_and_bad_urls_without_crash(tmp_path):
+    """Fehlerbehandlung: kaputte/leere Playlists und fehlende Dateien dürfen
+    beim Merge/Playlist-Play keinen Absturz verursachen (fehlertolerant)."""
+    import casu.playlist as playlist
+
+    # Leere Playlist: load gibt leeres Model, kein Fehler.
+    empty = tmp_path / "empty.m3u"
+    empty.write_text("#EXTM3U\n", encoding="utf-8")
+    assert len(load_playlist_file(empty).items) == 0
+
+    # Kaputte Playlist (ungültiges XML) -> PlaylistError (kein Crash).
+    bad = tmp_path / "bad.xspf"
+    bad.write_text("<playlist><trackList>", encoding="utf-8")
+    with pytest.raises(PlaylistError):
+        load_playlist_file(bad)
+
+    # Fehlende Datei im PlaylistModel -> existing_only überspringt sie.
+    model = PlaylistModel()
+    model.add((tmp_path / "missing.mp4",), existing_only=True)
+    assert model.items == ()
+
+
+def test_playlist_play_queue_roundtrip_dedups_and_orders(tmp_path):
+    """Kernlogik von _play_playlist_full: Playlist in Queue + dedupliziert +
+    Reihenfolge erhalten, sodass play_next durchspielt."""
+    a = tmp_path / "a.mp3"; a.write_bytes(b"a")
+    b = tmp_path / "b.mp3"; b.write_bytes(b"b")
+    playlist = tmp_path / "tracks.m3u"
+    save_playlist_file(playlist, PlaylistModel((a, b)))
+
+    # Simuliere _play_playlist_full: alle Einträge in die Queue.
+    model = PlaylistModel()
+    loaded = load_playlist_file(playlist)
+    model.add(loaded.items)
+    assert len(model.items) == 2
+    assert model.items == (a.resolve(), b.resolve())
+    # Erneut adden (idempotent, keine Duplikate).
+    model.add(loaded.items)
+    assert len(model.items) == 2
+    # Reihenfolge erhalten -> index_of(a)==0, index_of(b)==1 (play_next von a -> b).
+    assert model.index_of(a) == 0
+    assert model.index_of(b) == 1

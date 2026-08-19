@@ -140,6 +140,8 @@ private:
     void load_playlist_file();
     void save_playlist_file();
     void playlist_double_clicked();
+    void playlist_context_menu(const QPoint& pos);
+    void merge_selection_into_playlist();
 
     // pages
     void on_library_play();

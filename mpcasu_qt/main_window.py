@@ -355,6 +355,9 @@ class PlaylistPane(QFrame):
     addRequested = Signal()
     urlRequested = Signal()
     renameRequested = Signal(int)
+    # mergeRequested: emit the selected top-level rows (media/URLs) so the
+    # main window can offer to merge/append them into a playlist.
+    mergeRequested = Signal(list)
 
     PLAYLIST_SUFFIXES = {".m3u", ".m3u8", ".pls", ".json", ".wpl", ".xspf",
                          ".jspf", ".asx", ".wmx", ".wvx", ".rmp", ".ram"}
@@ -849,6 +852,12 @@ class PlaylistPane(QFrame):
             count = len(top_rows)
             label = f"Play" if count <= 1 else f"Play ({count} items)"
             menu.addAction(label, lambda: self.playRequested.emit(top_rows[0]))
+            # Merge/append the selected media/URLs into a playlist (create a
+            # new one or extend an existing one). Works with single or
+            # multi-selection.
+            merge_label = "Save selection to playlist…" if count <= 1 else \
+                          f"Save {count} items to playlist…"
+            menu.addAction(merge_label, lambda: self.mergeRequested.emit(list(top_rows)))
             if count == 1:
                 single = self.tree.topLevelItem(row)
                 if single.childCount() or self._is_playlist(str(single.data(0, Qt.UserRole))):
@@ -2719,6 +2728,7 @@ class MainWindow(QMainWindow):
         self._playlist_pane.playRequested.connect(self._play_playlist_row)
         self._playlist_pane.removeRequested.connect(self._on_playlist_remove)
         self._playlist_pane.moveRequested.connect(self._on_playlist_move)
+        self._playlist_pane.mergeRequested.connect(self._on_playlist_merge)
         self._playlist_pane.orderChanged.connect(self._apply_queue_order)
         self._playlist_pane.childPlayRequested.connect(self._on_queue_child_play)
         self._playlist_pane.saveRequested.connect(self.save_playlist)
@@ -3284,7 +3294,12 @@ class MainWindow(QMainWindow):
 
     def _current_playlist_context(self):
         """If the current item is a child of a playlist group, return
-        (playlist_path, entries, child_index); otherwise None."""
+        (playlist_path, entries, child_index); otherwise None.
+
+        Works whether or not the playlist group is expanded in the UI: the
+        entries are loaded from the playlist file directly, so a collapsed
+        playlist still plays through in order.
+        """
         if self.current is None:
             return None
         current = str(self.current)
@@ -3296,15 +3311,17 @@ class MainWindow(QMainWindow):
                 continue
             if Path(playlist_path).suffix.lower() not in PlaylistPane.PLAYLIST_SUFFIXES:
                 continue
-            if not top.isExpanded():
+            # Load the playlist entries once (bounded) and check membership
+            # against the current track — independent of the UI expand state.
+            try:
+                entries = list(self._playlist_entries(Path(playlist_path)))
+            except Exception:
+                entries = []
+            if not entries:
                 continue
-            for c in range(top.childCount()):
-                child = top.child(c)
-                if str(child.data(0, Qt.UserRole) or "") == current:
-                    entries = self._playlist_entries(Path(playlist_path))
-                    for i, entry in enumerate(entries):
-                        if str(entry) == current:
-                            return (Path(playlist_path), entries, i)
+            for i, entry in enumerate(entries):
+                if str(entry) == current:
+                    return (Path(playlist_path), entries, i)
         return None
 
     def _play_entry(self, playlist: Path, entry):
@@ -4798,30 +4815,47 @@ class MainWindow(QMainWindow):
 
     def _play_playlist_row(self, row: int):
         self._playlist_pane.select_row(row)
-        # If the selected row is a playlist group, "Play" must start from the
-        # FIRST track of the playlist (its first child), not try to play the
-        # playlist file itself as media.
+        # If the selected row is a playlist group, "Play" starts the FULL
+        # playlist (all its tracks queued, then played in order) — not just the
+        # first track. This makes "Play" on a collapsed playlist work and lets
+        # the queue continue through every entry automatically.
         try:
             item = self.playlist_model.item(row)
         except PlaylistError:
             self.play_selected()
             return
         if not isinstance(item, str) and item.suffix.lower() in PlaylistPane.PLAYLIST_SUFFIXES:
-            entries = self._playlist_entries(item)
-            if not entries:
-                self.toast("Playlist is empty")
-                return
-            first = entries[0]
-            if isinstance(first, str):
-                self._play_playlist_entry(first)
-                return
-            # Start from the FIRST track of the playlist. The file may not be
-            # a top-level queue row (it is covered by the playlist group), so
-            # play it directly and highlight it inside the group.
-            self._playlist_pane.select_child(item, first)
-            self.play_selected(first)
+            self._play_playlist_full(item)
             return
         self.play_selected()
+
+    def _play_playlist_full(self, playlist: Path):
+        """Queue the whole playlist and start playback from its first track.
+
+        Idempotent: entries already present in the queue are not duplicated.
+        After this, play_next(automatic=True) advances through every playlist
+        entry, so the playlist plays through even when collapsed.
+        """
+        try:
+            loaded = load_playlist_file(playlist)
+        except (PlaylistError, OSError, ValueError) as exc:
+            self.toast(f"Could not read playlist: {exc}")
+            return
+        entries = list(loaded.items)
+        if not entries:
+            self.toast("Playlist is empty")
+            return
+        # Queue every entry (add() deduplicates, so already-queued media stays
+        # and the playlist plays through without duplicating rows).
+        self.playlist_model.add(entries)
+        self._render_playlist()
+        # Start from the first entry of this playlist.
+        first = entries[0]
+        if isinstance(first, str):
+            self._play_playlist_entry(first)
+        else:
+            self._playlist_pane.select_child(playlist, first)
+            self.play_selected(first)
 
     def _playlist_entries(self, playlist: Path) -> list:
         try:
@@ -4873,6 +4907,103 @@ class MainWindow(QMainWindow):
             self.status(str(exc))
             return
         self._render_playlist(target)
+
+    def _on_playlist_merge(self, rows: list):
+        """Merge/append selected queue rows (media files / URLs) into a playlist.
+
+        - Single or multi-selection is supported (mark several items, then
+          'Save N items to playlist…').
+        - Choose an existing playlist to extend (merge) or create a new one.
+        - The selected entries are appended to the playlist and saved.
+        """
+        from PySide6.QtWidgets import QInputDialog, QMessageBox
+        if not rows:
+            return
+        # Resolve the selected rows into media/URL entries.
+        entries: list[str] = []
+        for row in rows:
+            try:
+                item = self.playlist_model.item(row)
+            except PlaylistError:
+                continue
+            text = str(item)
+            # A playlist group itself is not a playable entry for merging; skip
+            # it so we only merge media/URLs.
+            if self._playlist_pane._is_playlist(text):
+                continue
+            entries.append(text)
+        if not entries:
+            self.toast("Nothing to merge: no playable media/URL selected.")
+            return
+
+        # Collect existing playlists already in the queue (their .m3u/.pls/...
+        # files), so the user can extend one of them.
+        playlists: list[Path] = []
+        for idx in range(len(self.playlist_model)):
+            try:
+                item = self.playlist_model.item(idx)
+            except PlaylistError:
+                continue
+            if not isinstance(item, str) and item.suffix.lower() in PlaylistPane.PLAYLIST_SUFFIXES:
+                playlists.append(item)
+
+        choices = ["<Create new playlist>"] + [str(p) for p in playlists]
+        if len(choices) == 1:
+            target_name, ok = QInputDialog.getText(
+                self, "New playlist", "Playlist name (e.g. mylist.m3u):")
+            if not ok or not target_name.strip():
+                return
+            target = self._resolve_playlist_target(target_name.strip())
+        else:
+            choice, ok = QInputDialog.getItem(
+                self, "Merge into playlist",
+                "Choose a playlist to append the selected items to, or create a new one:",
+                choices, 0, False)
+            if not ok:
+                return
+            if choice == "<Create new playlist>":
+                target_name, ok2 = QInputDialog.getText(
+                    self, "New playlist", "Playlist name (e.g. mylist.m3u):")
+                if not ok2 or not target_name.strip():
+                    return
+                target = self._resolve_playlist_target(target_name.strip())
+            else:
+                target = Path(choice)
+
+        # Merge: load existing, append new entries (deduplicated), save.
+        try:
+            model = load_playlist_file(target)
+        except (PlaylistError, OSError, ValueError):
+            model = PlaylistModel()
+        added = 0
+        for entry in entries:
+            before = len(model.items)
+            model.add((entry,))
+            if len(model.items) > before:
+                added += 1
+        try:
+            save_playlist_file(target, model)
+        except (PlaylistError, OSError) as exc:
+            self.toast(f"Could not save playlist: {exc}")
+            return
+        self.toast(f"Added {added} item(s) to {target.name}")
+        self.status(f"Playlist updated · {target.name}")
+        # Refresh the playlist group in the queue if it is already present.
+        self._render_playlist()
+
+    def _resolve_playlist_target(self, name: str) -> Path:
+        """Ensure the playlist name has a supported extension and resolve it
+        relative to a sensible location (home dir)."""
+        from pathlib import Path as _P
+        name = name.strip()
+        if not name:
+            raise ValueError("empty playlist name")
+        p = _P(name).expanduser()
+        if not p.suffix or p.suffix.lower() not in PlaylistPane.PLAYLIST_SUFFIXES:
+            p = p.with_suffix(".m3u")
+        if not p.is_absolute():
+            p = _P.home() / p
+        return p
 
     def remove_selected(self):
         selected = self._selected_playlist_row()

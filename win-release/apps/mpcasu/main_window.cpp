@@ -416,8 +416,12 @@ void MainWindow::build_playlist_pane() {
     layout->addLayout(buttons);
 
     playlist_view_ = new QListWidget(pane);
+    playlist_view_->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    playlist_view_->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(playlist_view_, &QListWidget::itemDoubleClicked, this,
             &MainWindow::playlist_double_clicked);
+    connect(playlist_view_, &QListWidget::customContextMenuRequested, this,
+            &MainWindow::playlist_context_menu);
     layout->addWidget(playlist_view_, 1);
 
     auto* tools = new QHBoxLayout();
@@ -1116,6 +1120,95 @@ void MainWindow::save_playlist_file() {
 void MainWindow::playlist_double_clicked() {
     int row = playlist_view_->currentRow();
     if (row >= 0) play_queue_index(row, false);
+}
+
+void MainWindow::playlist_context_menu(const QPoint& pos) {
+    QMenu menu(this);
+    const QList<QListWidgetItem*> sel = playlist_view_->selectedItems();
+    if (!sel.isEmpty()) {
+        const int count = sel.size();
+        QString label = count == 1 ? QStringLiteral("Play") :
+                                     QStringLiteral("Play (%1 items)").arg(count);
+        menu.addAction(label, this, [this, sel] {
+            int row = playlist_view_->row(sel.first());
+            if (row >= 0) play_queue_index(row, false);
+        });
+        QString merge_label = count == 1
+            ? QStringLiteral("Save selection to playlist…")
+            : QStringLiteral("Save %1 items to playlist…").arg(count);
+        menu.addAction(merge_label, this, &MainWindow::merge_selection_into_playlist);
+        menu.addSeparator();
+        menu.addAction(QStringLiteral("Remove selected"), this, [this, sel] {
+            QList<int> rows;
+            for (auto* it : sel) rows.append(playlist_view_->row(it));
+            std::sort(rows.begin(), rows.end(), std::greater<int>());
+            for (int r : rows) playlist_.remove(r);
+            refresh_playlist();
+        });
+    }
+    menu.exec(playlist_view_->viewport()->mapToGlobal(pos));
+}
+
+void MainWindow::merge_selection_into_playlist() {
+    const QList<QListWidgetItem*> sel = playlist_view_->selectedItems();
+    if (sel.isEmpty()) { status(QStringLiteral("Select items to save to a playlist first.")); return; }
+
+    // Collect the selected media paths / URLs (deduplicated).
+    QStringList entries;
+    for (auto* it : sel) {
+        const QString path = it->data(Qt::UserRole).toString();
+        if (!path.isEmpty() && !entries.contains(path)) entries.append(path);
+    }
+    if (entries.isEmpty()) { status(QStringLiteral("Nothing to merge: no playable item selected.")); return; }
+
+    // Choose target: extend an existing playlist (last used) or create a new one.
+    QString target = app_settings_.last_playlist;
+    if (!target.isEmpty() && QFileInfo::exists(target)) {
+        QMessageBox box(this);
+        box.setWindowTitle(QStringLiteral("Merge into playlist"));
+        box.setText(QStringLiteral("Append %1 item(s) to the existing playlist\n%2 ?")
+                        .arg(entries.size()).arg(QFileInfo(target).fileName()));
+        QPushButton* yes = box.addButton(QStringLiteral("Merge"), QMessageBox::AcceptRole);
+        box.addButton(QStringLiteral("New playlist…"), QMessageBox::ActionRole);
+        box.addButton(QMessageBox::Cancel);
+        box.exec();
+        if (box.clickedButton() == yes) {
+            // fall through to merge into `target`
+        } else if (box.clickedButton()->text() == QStringLiteral("New playlist…")) {
+            target = QFileDialog::getSaveFileName(this, QStringLiteral("New playlist"),
+                                                  QDir::homePath() + "/queue.m3u",
+                                                  QStringLiteral("M3U (*.m3u);;PLS (*.pls)"));
+            if (target.isEmpty()) return;
+        } else {
+            return;  // cancel
+        }
+    } else {
+        target = QFileDialog::getSaveFileName(this, QStringLiteral("Save playlist"),
+                                              QDir::homePath() + "/queue.m3u",
+                                              QStringLiteral("M3U (*.m3u);;PLS (*.pls)"));
+        if (target.isEmpty()) return;
+    }
+
+    // Merge: load existing playlist (if any), append selected entries (dedup),
+    // then save back in the original format.
+    PlaylistModel merged;
+    std::string err;
+    if (QFileInfo::exists(target)) {
+        err = PlaylistModel::load_file(target, &merged);
+        if (!err.empty()) { status(QStringLiteral("Could not read playlist: %1").arg(QString::fromStdString(err))); return; }
+    }
+    int added = 0;
+    for (const QString& entry : entries) {
+        if (merged.index_of(entry) < 0) { merged.add(entry); ++added; }
+    }
+    err = target.toLower().endsWith(".pls")
+              ? PlaylistModel::save_pls(target, merged)
+              : PlaylistModel::save_m3u(target, merged);
+    if (!err.empty()) { status(QStringLiteral("Could not save playlist: %1").arg(QString::fromStdString(err))); return; }
+    app_settings_.last_playlist = target;
+    settings_->save(app_settings_);
+    status(QStringLiteral("Added %1 item(s) to %2").arg(added).arg(QFileInfo(target).fileName()));
+    toast(QStringLiteral("Playlist updated · %1").arg(QFileInfo(target).fileName()));
 }
 
 void MainWindow::refresh_playlist() {
