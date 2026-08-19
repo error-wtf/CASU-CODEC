@@ -114,6 +114,12 @@ if [ -z "${QT_QPA_PLATFORM:-}" ]; then
   fi
 fi
 export PYTHONPATH=/usr/share/casu-codec${PYTHONPATH:+:$PYTHONPATH}
+# Root/container environments cannot use the Chromium sandbox (QtWebEngine).
+if [ "$(id -u)" = "0" ]; then
+  export QTWEBENGINE_DISABLE_SANDBOX=1
+fi
+# Always run the INSTALLED package, regardless of the current directory.
+cd /
 exec /usr/bin/python3 -m mpcasu_qt.app "$@"
 EOF
   chmod 0755 "$stage/usr/bin/mpcasu"
