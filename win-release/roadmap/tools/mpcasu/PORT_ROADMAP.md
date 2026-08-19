@@ -145,9 +145,20 @@ M-PCASU-6 — WEB PROVIDERS / INPUT / SHUTDOWN
 ================================================================
 
 ## WP-MPCASU-050 Spotify + web providers (via yt-dlp/HTTP)
-- REFERENCE: casu/spotify.py, webproviders.py. Provider tabs optional
-  (QtWebEngine or external browser) — documented, not silently dropped.
-- STATUS: NOT_STARTED.
+- REFERENCE: casu/spotify.py, webproviders.py.
+- Implementiert (2026-08-18): `apps/mpcasu/web_player_tabs.{hpp,cpp}` — exakte
+  Portierung von mpcasu_qt/webplayers.py mit eingebettetem QtWebEngine
+  (Chromium) für Spotify/Hearthis/Tidal/Netflix/BROWSE, persistentes Profil,
+  URL/Suchfeld. `src/network/casu/web/webproviders.{hpp,cpp}` (WEB_PLAYERS,
+  spotify_embed_url, web_player_url, provider_for_url, is_external_provider).
+  `main_window`-Routing: Provider-URL → eingebetteter Browser (open_web_player);
+  YouTube bleibt yt-dlp → Loopback → libVLC (kein Browser-Tab).
+- QtWebEngine existiert nur für MSVC: `find_package(Qt6 WebEngineWidgets)` +
+  `CASU_HAVE_WEBENGINE`. MinGW baut Stub (kein QtWebEngine); MSVC-Build
+  (scripts/build-msvc.bat + CMakePresets.json) aktiviert den echten eingebetteten
+  Chromium. QtWebEngine-Codepfad mit Stub-Headers syntaxgeprüft.
+- STATUS: IMPLEMENTING (Codepfad verifiziert kompiliert; nativer
+  MSVC/QtWebEngine-Endbuild auf Windows ausstehend).
 
 ## WP-MPCASU-051 Input map (shortcuts/mouse/drag-drop/fullscreen)
 - REFERENCE: main_window key/mouse handlers, input-map.

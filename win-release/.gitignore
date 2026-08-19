@@ -8,3 +8,6 @@ build-*/
 *.obj
 .wine-test/
 third_party/
+dist/
+test-results/
+aqtinstall.log

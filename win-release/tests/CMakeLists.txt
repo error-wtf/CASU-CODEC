@@ -1,0 +1,223 @@
+# Shared Wine test harness setup: every test exe that links Qt gets the
+# needed Qt6/MinGW DLLs staged next to it so Wine can load them.
+set(CASU_QT_BIN_DIR "${CASU_THIRD_PARTY}/qt/6.8.3/mingw_64/bin")
+find_package(Qt6 REQUIRED COMPONENTS Core Network Widgets Gui)
+
+function(casu_stage_qt_test_dlls target)
+  if(CMAKE_CROSSCOMPILING)
+    add_custom_command(TARGET ${target} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_RUNTIME_DLLS:${target}>
+        $<TARGET_FILE_DIR:${target}>
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CASU_QT_BIN_DIR}/libgcc_s_seh-1.dll"
+        "${CASU_QT_BIN_DIR}/libstdc++-6.dll"
+        "${CASU_QT_BIN_DIR}/libwinpthread-1.dll"
+        "${CASU_QT_BIN_DIR}/libssl-3-x64.dll"
+        "${CASU_QT_BIN_DIR}/libcrypto-3-x64.dll"
+        $<TARGET_FILE_DIR:${target}>
+      COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CASU_QT_BIN_DIR}/../plugins/tls"
+        "$<TARGET_FILE_DIR:${target}>/tls"
+      COMMAND_EXPAND_LISTS)
+  endif()
+endfunction()
+
+# casu_core unit tests (cross-compiled; run under Wine via the shared harness).
+add_executable(casu_core_test casu_core_test.cpp)
+target_link_libraries(casu_core_test PRIVATE casu_core)
+target_compile_features(casu_core_test PRIVATE cxx_std_20)
+
+# casu_codec unit tests (Phase B2).
+add_executable(casu_codec_test casu_codec_test.cpp)
+target_link_libraries(casu_codec_test PRIVATE casu_codec)
+target_compile_features(casu_codec_test PRIVATE cxx_std_20)
+casu_stage_qt_test_dlls(casu_codec_test)
+
+# casu_media unit tests (Phase B2).
+add_executable(casu_media_test casu_media_test.cpp)
+target_link_libraries(casu_media_test PRIVATE casu_media)
+target_compile_features(casu_media_test PRIVATE cxx_std_20)
+casu_stage_qt_test_dlls(casu_media_test)
+
+# casu_network unit tests (Phase B3).
+add_executable(casu_network_test casu_network_test.cpp)
+target_link_libraries(casu_network_test PRIVATE casu_network)
+target_compile_features(casu_network_test PRIVATE cxx_std_20)
+casu_stage_qt_test_dlls(casu_network_test)
+
+# casu_playback unit tests (M-PCASU-020): CppPlaybackController transitions
+# with a scripted mock backend (no libVLC instance created; the mock keeps
+# casu_playback's libVLC object files out of the link).
+add_executable(casu_playback_test casu_playback_test.cpp)
+target_link_libraries(casu_playback_test PRIVATE casu_playback)
+target_compile_features(casu_playback_test PRIVATE cxx_std_20)
+
+# casu_playback live libVLC test: opens+plays a real media file through
+# LibVLCBackend under Wine and asserts the backend reaches PLAYING and the
+# clock advances. This is the core "player kernel works" gate.
+add_executable(casu_playback_vlc_test vlc_probe.cpp)
+target_link_libraries(casu_playback_vlc_test PRIVATE casu_playback)
+target_compile_features(casu_playback_vlc_test PRIVATE cxx_std_20)
+if(CMAKE_CROSSCOMPILING)
+  # Stage libVLC + plugins next to the test exe so libvlc_new succeeds under
+  # Wine (libvlc_new returns NULL without a resolvable VLC_PLUGIN_PATH).
+  add_custom_command(TARGET casu_playback_vlc_test POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${CASU_THIRD_PARTY}/vlc/libvlc.dll"
+      "${CASU_THIRD_PARTY}/vlc/libvlccore.dll"
+      $<TARGET_FILE_DIR:casu_playback_vlc_test>
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+      "${CASU_THIRD_PARTY}/vlc/plugins"
+      "$<TARGET_FILE_DIR:casu_playback_vlc_test>/plugins"
+    COMMAND_EXPAND_LISTS)
+endif()
+
+# MPCASU GUI smoke test: launches MPCASU.exe --smoke under Wine and asserts
+# the window appears and the app exits cleanly (no missing DLL).
+add_executable(mpcasu_smoke_test mpcasu_smoke_test.cpp)
+target_link_libraries(mpcasu_smoke_test PRIVATE Qt6::Core)
+target_compile_features(mpcasu_smoke_test PRIVATE cxx_std_20)
+casu_stage_qt_test_dlls(mpcasu_smoke_test)
+
+# YouTube loopback transport test (WP-MPCASU-041): starts the app's
+# YoutubeProxy in local-file mode and verifies Range/206 byte serving offline.
+add_executable(casu_playback_youtube_test casu_playback_youtube_test.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../apps/mpcasu/youtube_proxy.cpp)
+target_include_directories(casu_playback_youtube_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../apps/mpcasu)
+target_link_libraries(casu_playback_youtube_test PRIVATE
+  casu_playback casu_network Qt6::Core Qt6::Network)
+target_compile_features(casu_playback_youtube_test PRIVATE cxx_std_20)
+casu_stage_qt_test_dlls(casu_playback_youtube_test)
+
+# YouTube REAL-NETWORK gate (STEP-032): resolve a live video via the bundled
+# yt-dlp.exe, proxy the CDN stream through the loopback transport, and verify
+# Range/206 byte-exact relay against a direct CDN fetch. Skips (exit 0) when
+# the network/yt-dlp is unavailable so the regular suite stays green; the gate
+# evidence is the "LIVE PASS" line in the log.
+set(CASU_YT_TEST_URL "https://www.youtube.com/watch?v=aqz-KE-bpKQ")
+add_executable(casu_playback_youtube_live_test casu_playback_youtube_live_test.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../apps/mpcasu/youtube_proxy.cpp)
+target_include_directories(casu_playback_youtube_live_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../apps/mpcasu)
+target_link_libraries(casu_playback_youtube_live_test PRIVATE
+  casu_playback casu_network Qt6::Core Qt6::Network)
+target_compile_features(casu_playback_youtube_live_test PRIVATE cxx_std_20)
+casu_stage_qt_test_dlls(casu_playback_youtube_live_test)
+if(CMAKE_CROSSCOMPILING)
+  add_custom_command(TARGET casu_playback_youtube_live_test POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/tools/yt-dlp.exe"
+      $<TARGET_FILE_DIR:casu_playback_youtube_live_test>
+    COMMAND_EXPAND_LISTS)
+endif()
+
+# casu_webapi unit tests (Phase B5).
+add_executable(casu_webapi_test casu_webapi_test.cpp)
+target_link_libraries(casu_webapi_test PRIVATE casu_webapi)
+target_compile_features(casu_webapi_test PRIVATE cxx_std_20)
+casu_stage_qt_test_dlls(casu_webapi_test)
+
+# casu_web_backend integration test (Phase C4): in-process server on
+# 127.0.0.1:8497 with the deployed frontend as static root.
+add_executable(casu_web_backend_test casu_web_backend_test.cpp)
+target_link_libraries(casu_web_backend_test PRIVATE
+    casu_webapi casu_network casu_core Qt6::Network Qt6::Core)
+target_compile_features(casu_web_backend_test PRIVATE cxx_std_20)
+casu_stage_qt_test_dlls(casu_web_backend_test)
+if(CMAKE_CROSSCOMPILING)
+  add_custom_command(TARGET casu_web_backend_test POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+      "${CMAKE_CURRENT_SOURCE_DIR}/../apps/web-backend/web"
+      "$<TARGET_FILE_DIR:casu_web_backend_test>/site/web"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+      "${CMAKE_CURRENT_SOURCE_DIR}/../apps/web-backend/assets"
+      "$<TARGET_FILE_DIR:casu_web_backend_test>/site/assets"
+    COMMAND_EXPAND_LISTS)
+endif()
+
+# casu-cli subcommand tests (Phase C1). Runs the cross-built casu.exe against
+# the shared fixtures; the app target lives in apps/casu-cli.
+add_executable(casu_cli_test casu_cli_test.cpp)
+target_link_libraries(casu_cli_test PRIVATE casu_codec)
+target_compile_features(casu_cli_test PRIVATE cxx_std_20)
+casu_stage_qt_test_dlls(casu_cli_test)
+
+# CASU-Converter conversion-engine test (non-GUI): ffmpeg arg structure via
+# casu::codec + real small conversions (media<->CASU) under Wine.
+set(CONVERTER_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../apps/converter")
+add_executable(casu_converter_engine_test casu_converter_engine_test.cpp
+    "${CONVERTER_SRC_DIR}/engine.cpp"
+    "${CONVERTER_SRC_DIR}/manifest.cpp")
+target_include_directories(casu_converter_engine_test PRIVATE "${CONVERTER_SRC_DIR}")
+target_link_libraries(casu_converter_engine_test PRIVATE casu_media casu_codec casu_core)
+target_compile_features(casu_converter_engine_test PRIVATE cxx_std_20)
+casu_stage_qt_test_dlls(casu_converter_engine_test)
+
+# CASU-Converter GUI smoke test: starts CASU-Converter.exe (--smoke-test) under
+# xvfb/wine and verifies a clean start with the window shown.
+add_executable(casu_converter_test casu_converter_test.cpp)
+target_link_libraries(casu_converter_test PRIVATE casu_codec)
+target_compile_features(casu_converter_test PRIVATE cxx_std_20)
+casu_stage_qt_test_dlls(casu_converter_test)
+
+if(CMAKE_CROSSCOMPILING)
+  # Cross-compiled: execute through the wine harness (scripts/wine-run.sh).
+  set(WINE_RUN "${CMAKE_CURRENT_LIST_DIR}/../scripts/wine-run.sh")
+  add_test(NAME casu_core_test COMMAND bash "${WINE_RUN}" "$<TARGET_FILE:casu_core_test>")
+  add_test(NAME casu_codec_test COMMAND bash "${WINE_RUN}" "$<TARGET_FILE:casu_codec_test>")
+  add_test(NAME casu_media_test COMMAND bash "${WINE_RUN}" "$<TARGET_FILE:casu_media_test>")
+  add_test(NAME casu_network_test COMMAND bash "${WINE_RUN}" "$<TARGET_FILE:casu_network_test>")
+  add_test(NAME casu_webapi_test COMMAND bash "${WINE_RUN}" "$<TARGET_FILE:casu_webapi_test>")
+  add_test(NAME casu_playback_test COMMAND bash "${WINE_RUN}" "$<TARGET_FILE:casu_playback_test>")
+  add_test(NAME casu_playback_vlc_test COMMAND bash "${WINE_RUN}"
+    "$<TARGET_FILE:casu_playback_vlc_test>"
+    "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/demo_clip.mp4")
+  add_test(NAME casu_playback_youtube_test COMMAND bash "${WINE_RUN}"
+    "$<TARGET_FILE:casu_playback_youtube_test>"
+    "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/demo_clip.mp4")
+  add_test(NAME casu_playback_youtube_live_test COMMAND bash "${WINE_RUN}"
+    "$<TARGET_FILE:casu_playback_youtube_live_test>"
+    "$<TARGET_FILE_DIR:casu_playback_youtube_live_test>/yt-dlp.exe"
+    "${CASU_YT_TEST_URL}"
+    "120000")
+  add_test(NAME mpcasu_smoke_test COMMAND bash "${WINE_RUN}"
+    "$<TARGET_FILE:mpcasu_smoke_test>"
+    "$<TARGET_FILE:casu_mpcasu>"
+    "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/demo_clip.mp4")
+  add_test(NAME casu_web_backend_test COMMAND bash "${WINE_RUN}" "$<TARGET_FILE:casu_web_backend_test>")
+  add_test(NAME casu_cli_test COMMAND bash "${WINE_RUN}"
+    "$<TARGET_FILE:casu_cli_test>"
+    "$<TARGET_FILE:casu_cli>"
+    "${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
+    "/tmp")
+  add_test(NAME casu_converter_engine_test COMMAND bash "${WINE_RUN}"
+    "$<TARGET_FILE:casu_converter_engine_test>"
+    "${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
+    "/tmp")
+  add_test(NAME casu_converter_test COMMAND bash "${WINE_RUN}"
+    "$<TARGET_FILE:casu_converter_test>"
+    "$<TARGET_FILE:casu_converter>")
+  add_test(NAME golden_verify COMMAND bash
+    "${CMAKE_CURRENT_SOURCE_DIR}/golden/verify_golden.sh")
+else()
+  # Native build (fast host iteration): run directly.
+  add_test(NAME casu_core_test COMMAND casu_core_test)
+  add_test(NAME casu_codec_test COMMAND casu_codec_test)
+  add_test(NAME casu_media_test COMMAND casu_media_test)
+  add_test(NAME casu_network_test COMMAND casu_network_test)
+  add_test(NAME casu_webapi_test COMMAND casu_webapi_test)
+  add_test(NAME casu_playback_test COMMAND casu_playback_test)
+  add_test(NAME casu_playback_youtube_test COMMAND casu_playback_youtube_test
+    "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/demo_clip.mp4")
+  add_test(NAME casu_playback_youtube_live_test COMMAND casu_playback_youtube_live_test
+    "$(command -v yt-dlp)"
+    "${CASU_YT_TEST_URL}"
+    "120000")
+  add_test(NAME casu_web_backend_test COMMAND casu_web_backend_test)
+  add_test(NAME casu_cli_test COMMAND casu_cli_test
+    "$<TARGET_FILE:casu_cli>"
+    "${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
+    "/tmp")
+endif()

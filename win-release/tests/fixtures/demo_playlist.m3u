@@ -1,0 +1,7 @@
+#EXTM3U
+#EXTINF:-1,Demo Clip (test pattern)
+demo_clip.mp4
+#EXTINF:-1,Demo CASUNAT2 (segmented)
+demo_casunat2.casu
+#EXTINF:-1,Bassdrive Radio
+https://ice.bassdrive.net/stream
