@@ -52,6 +52,8 @@ PASS.
 | PKG-001 | Portable ZIP + DLL audit | packaging | CMake/CPack + wine | – | ✓ (clean-prefix) | ✓ | VERIFIED |
 | REL-001 | Release gate JSON | release_gate_guard | gate script | – | ✓ (14/14 PASS) | – | VERIFIED |
 | INST-001 | setup.exe Installer (NSIS) | – | setup.nsi → MPCASU-Setup.exe | – | ✓ (Wine install/uninstall) | ✓ | VERIFIED |
+| INST-002 | Systemweit: casu im PATH + .casu/.mp5-Dateitypen | /usr/bin (Linux) | setup.nsi AddToSystemPath + HKLM Classes | – | ✓ (Wine install) | – | IMPLEMENTING (PATH/Dateityp auf echtem Windows zu verifizieren, BLOCKER-004) |
+| CODEC-001 | Media-Foundation/DirectShow-Decoder (CASUNAT2) | mpcasu_native_backend.py | casu_mft.dll (IMFTransform) | – | – | – | NOT_STARTED (geplant, BLOCKER-005) |
 
 Detailed per-feature work packages follow in `roadmap/` (per tool). No feature
 may silently disappear; anything not portable is marked BLOCKED with reason.

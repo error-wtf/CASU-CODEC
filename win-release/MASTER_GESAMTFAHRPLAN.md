@@ -191,12 +191,20 @@ BLOCKED / VERIFIED.
 - [x] **STEP-041 (WP-REL-008)** SHA256 + Reproduzierbarkeit
       (frischer build-windows-release.sh → identisches Paket/Hashes).
       (VERIFIED: 2 cpack-Läufe → 513 Dateien byte-identisch; dist/SHA256SUMS)
+- [x] **STEP-043 (WP-REL-009)** NSIS setup.exe Installer (systemweit: PATH +
+      Dateitypen + Startmenü) mit CASU-Icon.
+      (VERIFIED 2026-08-19: Silent-Install/Uninstall unter Wine; PATH/Dateityp-
+      Registry nur auf echtem Windows verifizierbar → BLOCKER-004)
+- [x] **STEP-044 (Web-Provider-Tabs)** eingebetteter QtWebEngine-Browser für
+      Spotify/Hearthis/Tidal/Netflix/BROWSE (Port von webplayers.py) +
+      webproviders. YouTube bleibt yt-dlp→Loopback→libVLC (kein Browser-Tab).
+      QtWebEngine nur für MSVC → CASU_HAVE_WEBENGINE (MinGW=Stub, MSVC=build-msvc.bat).
 
 ### D2 Release-Abschluss
 - [ ] **STEP-042** TOOL_PORT_STATUS alle VERIFIED (oder dokumentiert EXCLUDED);
       Feature-Matrix vollständig; `git diff --check` sauber; nur win-release
       geändert; Release-ZIP + SHA256 + Lizenzen + Doku.
-      (offen: Feature-Matrix-Update, finale Abnahme)
+      (offen: Feature-Matrix-Update, finale Abnahme, ggf. MF-Decoder siehe BLOCKER-005)
 
 ---
 

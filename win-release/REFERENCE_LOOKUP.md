@@ -47,6 +47,40 @@ Abbild vom Referenzcode auf Datei:Zeile. Relative zu `/home/error/Codec-Casu`.
 | allow-list stream-proxy | web_casu.py `_stream_proxy` |
 | TranscodeStore (tokens/upload) | web_casu.py TranscodeStore |
 
+## Web-Provider-Tabs (eingebetteter Browser)
+| Was | Datei:Zeile |
+|-----|-------------|
+| WebPlayerTabs (QtWebEngine, persistentes Profil) | mpcasu_qt/webplayers.py (komplett) |
+| WEB_PLAYERS / EXTERNAL_PROVIDERS / spotify_embed_url / web_player_url | casu/webproviders.py |
+| `_open_web_player` Routing (Provider-URL → Tabs) | mpcasu_qt/main_window.py:3644 |
+| Routing: `provider_for_url` bei externen Quellen | main_window.py:4635 / 4697 / 4710 |
+| Windows-Port: WebPlayerTabs | win-release/apps/mpcasu/web_player_tabs.{hpp,cpp} |
+| Windows-Port: webproviders | win-release/src/network/casu/web/webproviders.{hpp,cpp} |
+| Windows-Port: Routing in open_network_source | win-release/apps/mpcasu/main_window.cpp |
+
+## Installer / Installation (Windows)
+| Was | Datei:Zeile |
+|-----|-------------|
+| NSIS-Installer (PATH + Dateitypen + Verknüpfungen) | win-release/scripts/setup.nsi |
+| PATH-Registrierung / -Entfernung (AddToSystemPath / un.RemoveFromSystemPath) | win-release/scripts/setup.nsi |
+| CASUNAT2-Video-Decode-Modell (Key-State/Tile-Update) | casu/native_v2/video.py TileStateCache (211+) |
+| Linux `/usr/bin`-Installation (KEIN Media-Codec) | packaging/build_debs.sh:57/70/84/114 |
+
+## Zu beachten (Fallen)
+- **libVLC state-Mapping** 6/7 + zero-time-EOF: mpcasu_backend.py:600-627 — sonst
+  erfolgreiches Playback sieht wie Fehler aus.
+- **YouTube-Lifecycle** (stop old → start proxy → open): main_window
+  _play_youtube/_on_resolve_ready — nie Proxy vor open zerstören.
+- **YouTube ist KEIN Browser-Tab** (yt-dlp → Loopback → libVLC), nur die
+  Web-Provider (Spotify/Hearthis/Tidal/Netflix/Browse) laufen im eingebetteten
+  QtWebEngine-Browser.
+- **QtWebEngine nur für MSVC**: Web-Provider-Tabs → `CASU_HAVE_WEBENGINE`;
+  MinGW=Stub, MSVC=scripts/build-msvc.bat. Details: WINDOWS_INSTALL_AND_CODEC.md.
+- **NOW PLAYING** feste Überschrift, Titel separat: main_window topbar.
+- **VideoSurface-Overlays** verstecken im Video-Modus: videoframe + main_window
+  _reposition_overlays.
+- **PulseAudio nur Linux** (NativeCasuBackend) → WASAPI/Qt auf Windows.
+
 ## Converter
 | Was | Datei:Zeile |
 |-----|-------------|
@@ -67,16 +101,6 @@ Abbild vom Referenzcode auf Datei:Zeile. Relative zu `/home/error/Codec-Casu`.
 | DesignTokens: sidebar 240, right_panel 370, topbar 72, transport 66 | casu/design.py:45-48 |
 | RED/BG/TOAST/INPUT tokens | casu/design.py:55-69 |
 | Palette/Metrics (Qt-Mirror) | mpcasu_qt/theme.py |
-
-## Zu beachten (Fallen)
-- **libVLC state-Mapping** 6/7 + zero-time-EOF: mpcasu_backend.py:600-627 — sonst
-  erfolgreiches Playback sieht wie Fehler aus.
-- **YouTube-Lifecycle** (stop old → start proxy → open): main_window
-  _play_youtube/_on_resolve_ready — nie Proxy vor open zerstören.
-- **NOW PLAYING** feste Überschrift, Titel separat: main_window topbar.
-- **VideoSurface-Overlays** verstecken im Video-Modus: videoframe + main_window
-  _reposition_overlays.
-- **PulseAudio nur Linux** (NativeCasuBackend) → WASAPI/Qt auf Windows.
 
 ## Nachschlag-Reihenfolge (Token-effizient)
 1. `REFERENCE_LOOKUP.md` → Datei:Zeile

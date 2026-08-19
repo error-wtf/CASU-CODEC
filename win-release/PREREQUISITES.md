@@ -42,6 +42,10 @@ Pfad: `win-release/third_party/` ist die vorgesehene Ablage.
   Cross-Toolchain gebaut (`libzstd.a` statisch → `/usr/x86_64-w64-mingw32/`).
   BLOCKER-001 gelöst. WP-CORE-007 VERIFIED: MP5-decompress versucht zstd zuerst,
   dann zlib-Fallback; Writer bleibt zlib (byte-identische Golden-Fixtures).
+- **NSIS (makensis)** am 2026-08-19 installiert (`apt install nsis`, v3.10) für
+  den `setup.exe`-Installer (`scripts/setup.nsi`). Build: `makensis scripts/setup.nsi`.
+- **Installer-Icon** am 2026-08-19: `assets/casu-installer-icon.ico` (aus
+  `/home/error/casu-installer-icon.png` 1254×1254 per ImageMagick, 6 Größen 16–256).
 
 ## Lizenzen-Hinweis
 Vor dem Bundling ins Paket: Lizenzen (Qt LGPL, VLC GPL/LGPL, FFmpeg GPL/LGPL,
