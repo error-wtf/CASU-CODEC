@@ -77,3 +77,19 @@ abgespielt). Ein MF/DirectShow-Decoder braucht zuerst den **CASUNAT2-Decoder**
   `WM_SETTINGCHANGE` (sonst übernimmt die laufende Shell den neuen PATH nicht).
 - Die Windows-Pakete (`dist/`) werden NICHT committet (`.gitignore`), sondern
   als GitHub-Release-Assets hochgeladen.
+## 5. Playlist-Queue-Architektur (einheitlich, seit 2026-08-19)
+- **Linux-Model ist FLACH** (casu/playlist.py PlaylistModel = Liste von Path/str);
+  Playlist-**Gruppen** sind reine UI-Konstrukte im PlaylistPane (QTreeWidget).
+  `load_playlist` addet NUR die Einträge; die Gruppe entsteht, wenn die .m3u
+  selbst als Item ins Model kommt (Drag&Drop).
+- **Einheitliche gemischte Queue**: Playlists + Dateien + URLs koexistieren.
+- **Playlist-Play ohne Ausklappen**: `_play_playlist_full` (Linux) / flaches
+  Auflösen + play_next (Windows) — spielt ALLE Einträge durch.
+- **Merge**: `_on_playlist_merge` (Linux, Kontextmenü + mergeRequested-Signal) /
+  `merge_selection_into_playlist` (Windows, Kontextmenü + Mehrfachauswahl) —
+  speichert markierte Dateien/URLs in eine bestehende oder neue Playlist
+  (dedupliziert). Siehe Commit 1432db0.
+- **Absturzsicherheit**: leere/kaputte Playlists (PlaylistError), fehlende
+  Dateien (existing_only), leere Merge-Auswahl → Toast, kein Crash.
+- Tests: Linux `tests/test_playlist.py` (20), Windows `casu_playlist_test`
+  (14 Checks unter Wine).
