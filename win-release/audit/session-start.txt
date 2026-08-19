@@ -1,8 +1,69 @@
-SESSION START — 2026-08-16
+SESSION START — 2026-08-18 (new porting run)
 Working tree: /home/error/Codec-Casu (READ ONLY reference)
-HEAD: 36df249ed90089e35137a798fda87cbfb43fafa8
+HEAD: 2367dcbc9158c1698bd8d83c112d1e9bb1281b3b
 Branch: main
-git diff --check: clean (except intended AGENTS.md + win-release additions)
-Test state: 400 passed, 12 skipped (QT_QPA_PLATFORM=offscreen)
-Pure Web Release: MPCASU-PURE-WEB-2.0.0.zip published (sha256 64143894217b34d23571535848210c0ad871a19a5d8730d7782234966fa2e754)
+git diff --check: clean (reference untouched; only win-release/ work)
 Write area: win-release/ ONLY
+
+State verified at session start:
+- Toolchain: cmake 4.2.3, ninja 1.13.2, wine 10.0, x86_64-w64-mingw32-g++ GCC 13-win32, xvfb-run present.
+- STEP-001 (WP-REL-001) VERIFIED: casu_hello.exe is PE32+ and runs under Wine (WINEPREFIX=.wine-test).
+- SCHRITT 0 prerequisites acquired in win-release/third_party/:
+    qt/6.8.3/mingw_64 (Qt6 MinGW DLLs + plugins), vlc/ (libvlc.dll, libvlccore.dll, plugins/),
+    tools/ (ffmpeg.exe, ffprobe.exe, yt-dlp.exe), zstd/zstd.exe. THIRD_PARTY_LICENSES/ empty (pending STEP-005).
+- casu_core (src/core/casu/): sha256.cpp + formats.cpp (kind detect, CASUNAT2 header/chunk parse+validate, MP5 detect) cross-build to libcasu_core.a.
+- tests/casu_core_test.exe runs under Wine: ALL PASS (fixed bug: chunk header written 27B instead of CHUNK_HEADER_SIZE 28B).
+- apps/casu-cli (kind/verify/sha256/info) cross-builds and runs under Wine.
+- casu_core headers verified against reference: CASUNAT2 HEADER ">8sHHQ"=20B, CHUNK_HEADER ">BBHqQQ"=28B (casu/native_v2/writer.py), limits match casu/native_v2/format.py.
+
+Next: complete Phase A (STEP-002 dependencies.cmake+packaging.cmake, STEP-003 build script,
+STEP-004 DLL-audit + wine harness, STEP-005 licenses), then Phase B casu_core WPs.
+
+=== Session-Update (2026-08-18, Port-Run) ===
+- Phase A VERIFIED (STEP-001..006): Toolchain, deps.cmake+packaging.cmake, build-windows-release.sh,
+  wine-run.sh harness, dll-audit.sh, THIRD_PARTY_LICENSES/ (Lizenzen+Componenten-Hashes).
+  CPack-Zip (522 Dateien) entsteht; SHA256SUMS erzeugt.
+- Phase B casu_core (STEP-007..011 VERIFIED):
+    WP-CORE-001 primitives (formats/sha256)
+    WP-CORE-002 manifest+limits (json.cpp bounded parser, manifest.cpp nach casu/schema.py)
+    WP-CORE-003 CASUNAT1 (native.cpp; Golden-PASS demo_clip.mp4.casu)
+    WP-CORE-004 CASUNAT2 (native_v2.cpp integrity/seek/recovery; Golden-PASS demo_casunat2.casu;
+        SHA-256-Padding-Bug 64k+55 gefixt)
+    WP-CORE-005 MP5 (mp5.cpp zlib; Header 20B + stream_id u16 korrigiert; JSON-dump an Python-Digest
+        angepasst; Golden-PASS demo.mp5)
+- 34 Unit-Tests ALL PASS unter Wine. MinGW zlib installiert; libzstd offen (BLOCKER-001).
+- zlib STATISCH gelinkt (libz.a), damit das Paket selbsttragend bleibt (kein zlib1.dll).
+- DLL-Audit OK (nur KERNEL32/msvcrt). build-windows-release.sh end-to-end grün (build→unit→wine→package→sha256→gate).
+- Reference tree unangetastet (nur win-release/).
+
+--- SESSION UPDATE (2026-08-19, Continuation) ---
+Fortgesetzt ab STEP-013 (WP-CORE-007 zstd). In dieser Session VERIFIED:
+- STEP-013 (WP-CORE-007) zstd: BLOCKER-001 gelöst (libzstd 1.5.7 MinGW-Source-Build);
+  mp5.cpp decompress zstd→zlib-Fallback; Unit+13/13 grün.
+- STEP-022 (WP-CLI-016) Journal/Resume (journal.cpp) + paket-aware Tool-Suche.
+- STEP-038 (WP-PURE) Pure-Web byte-identisch gebündelt (SHA256 b71b5d0b…).
+- STEP-032 (WP-MPCASU-040..042) echter-YouTube-Wine-Gate VERIFIED:
+  OpenSSL 3.4.1 MinGW-Source-Build + Qt-TLS-Plugin, yt-dlp player_client=android,
+  YoutubeProxy-Streaming-Fix; Live-CDN-Range/206 byte-exakt.
+- STEP-014 (WP-CORE-008) Golden-Verify (verify_golden.sh): Linux-Referenz vs
+  Wine casu.exe, byte-level Payload-SHA NAT1 == Referenz.
+- STEP-039 (WP-REL-005) Clean-Prefix-Paket-Test VERIFIED.
+- STEP-040 (WP-REL-006) WINDOWS_RELEASE_GATE.json (13/13 PASS).
+- STEP-041 (WP-REL-008) Reproduzierbarkeit: 2 cpack-Läufe → 513 Dateien byte-identisch.
+Offen: STEP-042 Abschluss + WP-PURE-004 Browser-Test.
+15/15 ctest grün unter Wine.
+
+--- SESSION UPDATE 2 (2026-08-19, Web-Player-Tabs + setup.exe) ---
+- Web-Provider-Tabs (eingebetteter QtWebEngine-Browser) portiert: apps/mpcasu/
+  web_player_tabs.{hpp,cpp} (exakt mpcasu_qt/webplayers.py) + src/network/casu/
+  web/webproviders.{hpp,cpp} (casu/webproviders.py). Provider-URLs → eingebetteter
+  Browser; YouTube bleibt yt-dlp → Loopback → libVLC (kein Browser-Tab).
+  QtWebEngine existiert nur für MSVC → CASU_HAVE_WEBENGINE + find_package;
+  MinGW baut Stub, MSVC-Build (scripts/build-msvc.bat + CMakePresets.json)
+  aktiviert den echten eingebetteten Chromium. QtWebEngine-Codepfad mit
+  Stub-Headers syntaxgeprüft (kompiliert sauber). 15/15 ctest grün.
+- setup.exe (NSIS): scripts/setup.nsi → dist/MPCASU-Setup-3.0.0.exe mit
+  CASU-Installer-Icon (assets/casu-installer-icon.ico aus casu-installer-icon.png).
+  Unter Wine: Silent-Install + installierte MPCASU.exe --smoke + Silent-Uninstall
+  getestet. In build-windows-release.sh (Schritt 7b) + Release-Gate "installer".
+- Release-Gate: 14/14 PASS (inkl. installer).

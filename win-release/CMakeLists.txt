@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(casu_codec_windows LANGUAGES CXX)
+enable_testing()
 
 # Cross toolchain for Windows x86_64.
 #   cmake -S . -B build-win64 -G Ninja \
@@ -12,16 +13,30 @@ if(NOT WIN32)
   message(FATAL_ERROR "This tree must be built for Windows using cmake/mingw64-toolchain.cmake")
 endif()
 
+# STEP-002: bundled runtime dependencies (Qt6-MinGW, libVLC, helpers) and the
+# self-contained CPack zip layout.
+include(cmake/dependencies.cmake)
+
 # Shared libraries (added step-by-step during the port; each own CMakeLists)
 add_subdirectory(src/core)          # casu_core
-# add_subdirectory(src/codec)       # casu_codec   (Phase B)
-# add_subdirectory(src/media)       # casu_media
-# add_subdirectory(src/network)     # casu_network
-# add_subdirectory(src/playback)    # casu_playback
-# add_subdirectory(src/webapi)      # casu_webapi
+add_subdirectory(src/codec)         # casu_codec  (Phase B2)
+add_subdirectory(src/media)         # casu_media  (Phase B2)
+add_subdirectory(src/playback)      # casu_playback (M-PCASU-3)
+add_subdirectory(src/network)       # casu_network (Phase B3)
+add_subdirectory(src/webapi)        # casu_webapi  (Phase B5)
+
+# STEP-001 gate: Hello-Windows EXE (builds PE32+, runs under Wine)
+add_subdirectory(src/hello)         # casu_hello
+
+# Phase B/C tests (cross-compiled; run under Wine)
+add_subdirectory(tests)             # casu_core_test, ...
 
 # Apps (Phase C)
-# add_subdirectory(apps/mpcasu)
-# add_subdirectory(apps/converter)
-# add_subdirectory(apps/web-backend)
-# add_subdirectory(apps/casu-cli)
+add_subdirectory(apps/casu-cli)     # casu_cli
+add_subdirectory(apps/mpcasu)       # MPCASU.exe
+add_subdirectory(apps/converter)    # CASU-Converter.exe (Qt GUI)
+add_subdirectory(apps/web-backend)  # CASU-Web-Backend
+
+# STEP-002: CPack packaging rules (included last so all install() rules from
+# app targets are registered first).
+include(cmake/packaging.cmake)

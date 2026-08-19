@@ -1,0 +1,40 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "msvc-webengine",
+      "displayName": "MSVC x64 + QtWebEngine (Windows native, exakte Linux-Funktion)",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build-msvc",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_PREFIX_PATH": "$env{QT6_MSVC_DIR}"
+      },
+      "environment": {
+        "QT6_MSVC_DIR": "C:\\Qt\\6.8.3\\msvc2022_64"
+      }
+    },
+    {
+      "name": "msvc-webengine-ninja",
+      "displayName": "MSVC x64 (Ninja) + QtWebEngine",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-msvc-ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_PREFIX_PATH": "C:\\Qt\\6.8.3\\msvc2022_64"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "msvc-webengine", "configurePreset": "msvc-webengine" },
+    { "name": "msvc-webengine-ninja", "configurePreset": "msvc-webengine-ninja" }
+  ],
+  "testPresets": [
+    {
+      "name": "msvc-webengine",
+      "configurePreset": "msvc-webengine",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}

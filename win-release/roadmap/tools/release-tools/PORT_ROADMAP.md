@@ -27,18 +27,27 @@ Reference: `packaging/build_debs.sh`, `tools/release_gate_guard.py`,
 
 ## WP-REL-005 Clean-Wine-prefix package test
 - New empty WINEPREFIX; only the packaged zip contents (no dev DLLs/PATH).
-  If it only runs in dev prefix → FAIL. STATUS: NOT_STARTED.
+  If it only runs in dev prefix → FAIL. STATUS: VERIFIED (2026-08-18).
+  In neuem `WINEPREFIX` nur mit Paketinhalt: `MPCASU.exe --smoke` +
+  `CASU-Converter.exe --smoke-test` + `casu.exe kind/verify/mp5-info` +
+  `CASU-Web-Backend.exe` (web/, /api/version, web/pure/index.html) OK.
+  Marker: `test-results/clean-prefix.log` = `CLEAN_PREFIX_PASS`.
 
 ## WP-REL-006 WINDOWS_RELEASE_GATE.json
 - Machine-readable PASS/FAIL/BLOCKED/NOT_TESTED for: build, unit_tests,
   compatibility, codec, converter, player, youtube, network, web_backend,
-  pure_web, packaging, wine, licenses. BLOCKED > false PASS. STATUS: NOT_STARTED.
+  pure_web, packaging, wine, licenses. BLOCKED > false PASS. STATUS: VERIFIED
+  (2026-08-18). `scripts/release_gate.sh` → `dist/WINDOWS_RELEASE_GATE.json`;
+  alle 13 Gates PASS beim finalen Build.
 
 ## WP-REL-007 Licenses audit
 - Adopt THIRD_PARTY_LICENSES/README policy; copy exact license texts for
   bundled Qt/libVLC/FFmpeg/zstd/yt-dlp/MinGW-runtime/SQLite; record versions
-  + hashes; source offers. CASU license unchanged. STATUS: NOT_STARTED.
+  + hashes; source offers. CASU license unchanged. STATUS: VERIFIED
+  (2026-08-18; ergänzt um OpenSSL 3.4.1 Apache-2.0 + Hash).
 
 ## WP-REL-008 SHA256 + reproducibility verification
 - Fresh build-windows-release.sh run produces identical package+hashes.
-- STATUS: NOT_STARTED.
+- STATUS: VERIFIED (2026-08-18). Zwei getrennte cpack-Läufe → 513 Dateien
+  byte-identisch (`diff -rq` leer); nur Zip-Container-Timestamps unterscheiden
+  sich (CPack mtime). `dist/SHA256SUMS` geschrieben.

@@ -71,6 +71,34 @@ PySide6 (desktop player), yt-dlp (optional, YouTube),
 
 ---
 
+## Windows port (MPCASU-Windows-x86_64)
+
+The same four programs are available as native Windows x86_64 builds
+(C++20 / Qt 6 / libVLC, cross-compiled with MinGW and verified under Wine):
+
+| Artifact | Content | Use |
+|---|---|---|
+| `MPCASU-Windows-x86_64.zip` | `MPCASU.exe`, `CASU-Converter.exe`, `CASU-Web-Backend.exe`, `casu.exe`, Qt6 runtime, libVLC + plugins, ffmpeg/ffprobe/yt-dlp, `web/pure/` | Portable (unzip + run `MPCASU.exe`) |
+| `MPCASU-Setup-3.0.0.exe` | Same package as a self-contained NSIS installer | One-click install + Start Menu / Desktop shortcuts + uninstaller |
+
+**Install (Windows):** run `MPCASU-Setup-3.0.0.exe` (installs to
+`%ProgramFiles%\MPCASU`) or extract the ZIP and launch `MPCASU.exe`.
+
+**Feature parity with the Linux release:** the same container formats
+(CASUNAT1/2, MP5), the same CLI (`casu.exe`), the same converter and web
+backend, YouTube via `yt-dlp → loopback transport → libVLC` (no browser tab),
+and the **embedded web-player tabs** (Spotify / Hearthis / Tidal / Netflix /
+Browse). QtWebEngine (Chromium embedded) is enabled in the native
+MSVC/QtWebEngine build — run `scripts/build-msvc.bat` on a Windows PC with
+Visual Studio 2022 to produce the exact QtWebEngine build; the shipped MinGW
+package ships the tabs with the embedded-browser stub.
+
+Port status and the machine-readable gate: see `win-release/` in the repo
+(`WINDOWS_RELEASE_GATE.json` — build/unit/compat/codec/converter/player/
+youtube/network/web_backend/pure_web/packaging/installer/wine/licenses).
+
+---
+
 ## Desktop player (Qt)
 
 ```bash
@@ -287,8 +315,9 @@ Media ─ FFmpeg/PyAV ─ CASUNAT1/CASUNAT2/MP5 ─ CASU reader/player/exporter
   labelled “Find on YouTube” handoff; YouTube results are never labelled as
   Spotify streams.
   (personal use only).
-- Physical audio hardware, Windows/macOS packages and long-duration power
-  measurement require separate platform tests.
+- Physical audio hardware, macOS packages and long-duration power
+  measurement require separate platform tests (Windows x86_64 packages are
+  available; see the Windows port section above).
 
 ---
 

@@ -1,0 +1,8 @@
+DirectoryIndex index.html
+AddType audio/x-mpegurl .m3u .m3u8
+Options -Indexes
+<IfModule mod_headers.c>
+  Header set Cache-Control "no-cache, no-store, must-revalidate"
+  Header set Pragma "no-cache"
+  Header set Expires "0"
+</IfModule>
