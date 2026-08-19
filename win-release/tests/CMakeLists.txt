@@ -144,6 +144,28 @@ target_link_libraries(casu_cli_test PRIVATE casu_codec)
 target_compile_features(casu_cli_test PRIVATE cxx_std_20)
 casu_stage_qt_test_dlls(casu_cli_test)
 
+# Windows PlaylistModel unit tests (Playlist-Play + Merge-Feature). Compiles
+# the app's playlist.cpp directly (it is not part of a shared library) and
+# runs under Wine.
+set(MPCASU_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../apps/mpcasu")
+add_executable(casu_playlist_test casu_playlist_test.cpp
+  "${MPCASU_SRC_DIR}/playlist.cpp")
+target_include_directories(casu_playlist_test PRIVATE "${MPCASU_SRC_DIR}")
+target_link_libraries(casu_playlist_test PRIVATE Qt6::Core)
+target_compile_features(casu_playlist_test PRIVATE cxx_std_20)
+if(CMAKE_CROSSCOMPILING)
+  add_custom_command(TARGET casu_playlist_test POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      $<TARGET_RUNTIME_DLLS:casu_playlist_test>
+      $<TARGET_FILE_DIR:casu_playlist_test>
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${CASU_QT_BIN_DIR}/libgcc_s_seh-1.dll"
+      "${CASU_QT_BIN_DIR}/libstdc++-6.dll"
+      "${CASU_QT_BIN_DIR}/libwinpthread-1.dll"
+      $<TARGET_FILE_DIR:casu_playlist_test>
+    COMMAND_EXPAND_LISTS)
+endif()
+
 # CASU-Converter conversion-engine test (non-GUI): ffmpeg arg structure via
 # casu::codec + real small conversions (media<->CASU) under Wine.
 set(CONVERTER_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../apps/converter")
@@ -199,6 +221,8 @@ if(CMAKE_CROSSCOMPILING)
   add_test(NAME casu_converter_test COMMAND bash "${WINE_RUN}"
     "$<TARGET_FILE:casu_converter_test>"
     "$<TARGET_FILE:casu_converter>")
+  add_test(NAME casu_playlist_test COMMAND bash "${WINE_RUN}"
+    "$<TARGET_FILE:casu_playlist_test>")
   add_test(NAME golden_verify COMMAND bash
     "${CMAKE_CURRENT_SOURCE_DIR}/golden/verify_golden.sh")
 else()
