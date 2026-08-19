@@ -37,3 +37,30 @@ Aktuell:
 - **BLOCKER-003 (offen, kein Design-Blocker):** Pure-Web-Windows-Browser-Test
   (WP-PURE-004) fehlt — kein Browser unter Wine verfügbar. Bündelung selbst
   (STEP-038) ist VERIFIED.
+
+- **BLOCKER-004 (offen, Verifikation):** Installer-Registrierung unter Wine
+  prüfen. Der NSIS-Installer (`setup.nsi`) registriert `casu` im System-PATH
+  (AddToSystemPath → HKLM Environment) und `.casu`/`.mp5`-Dateitypen. Silent-
+  Install/Uninstall sind unter Wine getestet, aber die tatsächliche
+  PATH-/Dateityp-Änderung an der echten Windows-Registry ist nur auf echtem
+  Windows verifizierbar (Wine-Prefix-Registry ≠ Windows-Registry-Verhalten bei
+  HKLM + WM_SETTINGCHANGE). 
+  - Next action: auf echtem Windows installieren und prüfen, dass `casu` aus
+    jeder Konsole läuft und Doppelklick auf .casu MPCASU öffnet.
+
+- **BLOCKER-005 (geplant, NICHT gebaut):** Media-Foundation/DirectShow-Decoder
+  für CASUNAT2. Der Nutzer entschied bei der Installations-Frage → "Auch als
+  Media-Codec (MF/DirectShow)". Dies ist ein eigenständiges Groß-Projekt:
+  (1) CASUNAT2-Decoder in C++ (portiert aus `mpcasu_native_backend.py`, ~1280
+  Zeilen Python; Video-State→RGB + PCM), (2) IMFTransform-COM-Gerüst + CLSID/
+  MFT-Registrierung, (3) Verifikation nur auf echtem Windows. Aktuell wird nur
+  die Linux-Parität geliefert (PATH + Dateitypen + Startmenü) — das ist die
+  korrekte, verifizierte Installation. Architektur + Video-Decode-Modell:
+  `WINDOWS_INSTALL_AND_CODEC.md`. Betroffen: neue WPs (noch nicht nummeriert).
+
+- **BLOCKER-006 (gelöst):** QtWebEngine-Codepfad. Web-Provider-Tabs portiert
+  (`web_player_tabs.{hpp,cpp}` + `webproviders.{hpp,cpp}`); QtWebEngine existiert
+  nur für MSVC → `CASU_HAVE_WEBENGINE`; MinGW baut Stub, MSVC-Build
+  (`scripts/build-msvc.bat` + `CMakePresets.json`) aktiviert den echten
+  eingebetteten Chromium. QtWebEngine-Codepfad mit Stub-Headers syntaxgeprüft
+  (kompiliert sauber). Nativer MSVC-Endbuild auf Windows ausstehend.

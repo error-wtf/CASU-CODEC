@@ -13,6 +13,7 @@ Information steht. Pfade relativ zu `win-release/`.
 | `PORT_STATUS.md` | aktueller Fortschritt, aktueller Schritt | Start jeder Sitzung |
 | `WINDOWS_PORT_BASELINE.md` | eingefrorener Referenzstand (SHA, Tests, Komponenten) | einmalig, Kontext |
 | `README_WINDOWS.md` | Zielarchitektur + Toolchain | Kontext |
+| `WINDOWS_INSTALL_AND_CODEC.md` | **Installation (PATH/Dateitypen) + Media-Codec-Entscheidung (MF/DirectShow geplant), Linux-Kompatibilität** | bei Install-/Codec-/Upgrade-Fragen |
 | `research/PROMPT_REQUIREMENTS_LEDGER.md` | verbindliche Anforderungen (REQ-IDs, harte Regeln) | bei jeder Abweichung |
 | `PREREQUISITES.md` | was vor dem Portieren beschafft werden muss (fehlende Windows-Runtime) | **SCHRITT 0** der neuen Session |
 
@@ -66,11 +67,19 @@ Information steht. Pfade relativ zu `win-release/`.
 - `MASTER_GESAMTFAHRPLAN.md` = Weg (der Einzelfahrplan, abhakbar)
 - `RUN_CHECKLIST.md` = Checkliste (der Loop + Gates)
 
+## Kompatibilitäts-Garantie (WICHTIG bei Upgrades)
+- **Linux bleibt unangetastet**: Der Referenzbaum `/home/error/Codec-Casu`
+  (Code: `casu/`, `mpcasu_qt/`, `mpcasu_*.py`, `web/`, `packaging/`) ist READ-ONLY.
+  Alle Windows-Änderungen gehören NUR nach `win-release/`. README.md (Root) ist
+  Doku und darf um Windows-Abschnitte ergänzt werden (kein Linux-Funktionscode).
+- Vor jedem Commit: `git status --short` — keine Fremdänderung außerhalb
+  `win-release/` (+ README.md Doku). Siehe `RUN_CHECKLIST.md`.
+
 ## 5. Tests / Ergebnis-Ablage
 - `tests/unit|integration|golden|compatibility|wine/` — Tests
 - `test-results/compatibility/*.json`, `test-results/wine/` — Ergebnisse
 - `audit/session-start.txt` — Start-Audit jeder Sitzung
-- `roadmap/BLOCKERS.md` — Blocker-Log (noch anzulegen)
+- `roadmap/BLOCKERS.md` — Blocker-Log
 
 ## Merkregel (Token-Effizienz)
 Bei einer Aufgabe: (1) `PORT_STATUS.md` → (2) jeweiliges `tools/<tool>/PORT_ROADMAP.md`

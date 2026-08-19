@@ -51,3 +51,22 @@ Reference: `packaging/build_debs.sh`, `tools/release_gate_guard.py`,
 - STATUS: VERIFIED (2026-08-18). Zwei getrennte cpack-Läufe → 513 Dateien
   byte-identisch (`diff -rq` leer); nur Zip-Container-Timestamps unterscheiden
   sich (CPack mtime). `dist/SHA256SUMS` geschrieben.
+
+## WP-REL-009 NSIS setup.exe installer (Windows)
+- `scripts/setup.nsi` (NSIS) → `dist/MPCASU-Setup-3.0.0.exe` (PE32, lzma) mit
+  CASU-Icon. Installiert das komplette Paket nach `%ProgramFiles%\MPCASU`,
+  Startmenü+Desktop-Verknüpfungen, Uninstaller, Registry, und **systemweit**:
+  `casu` im System-PATH (`AddToSystemPath`, WM_SETTINGCHANGE) + `.casu`/`.mp5`-
+  Dateityp-Assoziation → MPCASU. Linux-Parität (KEIN Media-Codec-Filter).
+- Build in `build-windows-release.sh` Schritt 7b; Gate "installer".
+- STATUS: VERIFIED (2026-08-19) — Silent-Install/Uninstall unter Wine getestet,
+  installierte MPCASU.exe --smoke OK. Offen: PATH/Dateityp-Registry-Einträge
+  nur auf echtem Windows verifizierbar (BLOCKER-004).
+
+## WP-REL-010 Media-Foundation/DirectShow-Decoder (GEPLANT, nicht gebaut)
+- Optionaler echter Windows-Media-Codec: COM-DLL (`casu_mft.dll`) mit
+  IMFTransform + CLSID/MFT-Registrierung; decodiert CASUNAT2 (Video-State→RGB +
+  PCM) für beliebige Windows-Apps. Benötigt zuerst CASUNAT2-Decoder in C++
+  (portiert aus `mpcasu_native_backend.py`). Verifikation nur auf echtem
+  Windows. Architektur + Video-Decode-Modell: `WINDOWS_INSTALL_AND_CODEC.md`.
+  STATUS: NOT_STARTED (siehe BLOCKER-005).

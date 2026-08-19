@@ -33,7 +33,7 @@
 | STEP-040 (WP-REL-006) | **VERIFIED** — scripts/release_gate.sh → dist/WINDOWS_RELEASE_GATE.json; **13/13 Gates PASS** (build/unit/compat/codec/converter/player/youtube/network/web_backend/pure_web/packaging/wine/licenses) |
 | STEP-041 (WP-REL-008) | **VERIFIED** — Reproduzierbarkeit: 2 getrennte cpack-Läufe → 513 Dateien byte-identisch (`diff -rq` leer; nur Zip-mtimes unterscheiden sich); dist/SHA256SUMS geschrieben |
 | Web-Provider-Tabs | **implementiert + QtWebEngine-Codepfad kompiliert** — `web_player_tabs.{hpp,cpp}` (exakte Portierung von mpcasu_qt/webplayers.py): eingebettete QtWebEngine-Tabs für Spotify/Hearthis/Tidal/Netflix/BROWSE, persistentes Profil, URL/Suche. `webproviders.{hpp,cpp}` (casu/webproviders.py: WEB_PLAYERS, spotify_embed_url, web_player_url, provider_for_url, is_external_provider). `main_window`-Routing: Provider-URLs → eingebetteter Browser; **YouTube bleibt yt-dlp → Loopback → libVLC (kein Browser-Tab)**. QtWebEngine existiert nur für MSVC → per `find_package(Qt6 WebEngineWidgets)` + `CASU_HAVE_WEBENGINE`; MinGW baut Stub, MSVC-Build (scripts/build-msvc.bat + CMakePresets.json) aktiviert den echten eingebetteten Chromium. QtWebEngine-Codepfad mit Stub-Headers syntaxgeprüft (kompiliert sauber) |
-| setup.exe | **VERIFIED (NSIS-Installer)** — `scripts/setup.nsi` → `dist/MPCASU-Setup-3.0.0.exe` (PE32, 177 MB, lzma-komprimiert) mit **CASU-Installer-Icon** (`assets/casu-installer-icon.ico`, aus `casu-installer-icon.png` 1254×1254 per ImageMagick, 6 Größen 16–256). Installiert das komplette Paket (Qt/VLC/tools/pure-web) nach `$PROGRAMFILES64\MPCASU`, Startmenü+Desktop-Verknüpfungen mit Icon, Uninstaller, Registry. **Unter Wine getestet**: Silent-Install (alle Dateien + Icon korrekt), installierte MPCASU.exe --smoke OK, Silent-Uninstall entfernt Verzeichnis. In build-windows-release.sh als Schritt 7b + Release-Gate "installer" integriert |
+| setup.exe | **VERIFIED (NSIS-Installer)** — `scripts/setup.nsi` → `dist/MPCASU-Setup-3.0.0.exe` (PE32, 177 MB, lzma-komprimiert) mit **CASU-Installer-Icon** (`assets/casu-installer-icon.ico`). Installiert das komplette Paket nach `$PROGRAMFILES64\MPCASU`, Startmenü+Desktop-Verknüpfungen, Uninstaller, Registry. **Systemweit (Linux-Parität):** `casu` im System-PATH (`AddToSystemPath`, WM_SETTINGCHANGE) + `.casu`/`.mp5`-Dateityp-Assoziation → MPCASU. **Unter Wine getestet**: Silent-Install, installierte MPCASU.exe --smoke OK, Silent-Uninstall. PATH/Dateityp-Registry auf echtem Windows zu verifizieren (BLOCKER-004). In build-windows-release.sh Schritt 7b + Gate "installer" |
 
 ## Progress
 
@@ -56,11 +56,17 @@
 ## Next steps
 
 1. **STEP-042 (Abschluss)** — TOOL_PORT_STATUS alle VERIFIED/EXCLUDED, Feature-Matrix vollständig, `git diff --check` sauber, nur win-release geändert, finaler Release-ZIP + setup.exe + SHA256 + Lizenzen + Doku.
-2. **Optional: MSVC/QtWebEngine-Endbuild auf Windows** — `scripts/build-msvc.bat` auf einem Windows-PC mit Visual Studio ausführen, um den eingebetteten QtWebEngine-Chromium-Build (exakt Linux-Verhalten) nativ zu bauen (hier unter Linux nicht möglich, da QtWebEngine nur für MSVC existiert).
-3. **WP-PURE-004** — Pure-Web Windows-Browser-Test (kein Browser unter Wine verfügbar — dokumentierter EXCLUDED-Kandidat).
+2. **BLOCKER-004** — Installer PATH/Dateityp-Registry auf echtem Windows verifizieren (`casu` aus jeder Konsole, Doppelklick auf .casu öffnet MPCASU).
+3. **Optional: MSVC/QtWebEngine-Endbuild auf Windows** — `scripts/build-msvc.bat` auf einem Windows-PC mit Visual Studio ausführen, um den eingebetteten QtWebEngine-Chromium-Build (exakt Linux-Verhalten) nativ zu bauen.
+4. **CODEC-001 (geplant, BLOCKER-005)** — Media-Foundation/DirectShow-Decoder für CASUNAT2 als eigenständiges Teilprojekt (Architektur in WINDOWS_INSTALL_AND_CODEC.md).
+5. **WP-PURE-004** — Pure-Web Windows-Browser-Test (kein Browser unter Wine verfügbar — dokumentierter EXCLUDED-Kandidat).
 
 ## Offene Punkte / Blocker
 - BLOCKER-001 (libzstd MinGW) → **gelöst**.
 - BLOCKER-002 (echter-YouTube-Gate) → **gelöst** (STEP-032).
-- WP-PURE-004 (Windows-Browser-Test) → offen; kein Browser unter Wine verfügbar (dokumentierter EXCLUDED-Kandidat für STEP-042).
+- BLOCKER-003 (Pure-Web-Browser-Test) → offen (kein Browser unter Wine).
+- BLOCKER-004 (Installer PATH/Dateityp auf echtem Windows) → offen.
+- BLOCKER-005 (MF/DirectShow-Decoder) → geplant, nicht gebaut (Linux-Parität reicht für "exakt gleich").
+- BLOCKER-006 (QtWebEngine-Codepfad) → gelöst (MinGW=Stub, MSVC aktiv; MSVC-Endbuild ausstehend).
+- WP-PURE-004 → offen.
 - STEP-042 Abschluss → offen (Feature-Matrix-Update, finaler Commit).

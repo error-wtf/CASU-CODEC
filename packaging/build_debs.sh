@@ -31,6 +31,15 @@ EOF
 #!/bin/sh
 set -e
 find /usr/share/casu-codec -depth -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+# Register the application/x-casu MIME type so .casu/.mp5 files open with
+# MPCASU in file managers / desktop environments (shared-mime-info).
+if [ -f /usr/share/mime/packages/casu-codec-mime.xml ]; then
+  update-mime-database /usr/share/mime >/dev/null 2>&1 || true
+fi
+# Refresh desktop entry caches so the new MimeType association takes effect.
+if command -v update-desktop-database >/dev/null 2>&1; then
+  update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+fi
 EOF
   chmod 0755 "$stage/DEBIAN/postinst"
   # Bytecode is host/interpreter-specific and mutates on first execution,
@@ -46,7 +55,7 @@ EOF
 }
 
 install_codec() {
-  local stage="$1"; mkdir -p "$stage/usr/share/casu-codec" "$stage/usr/bin" "$stage/usr/share/icons/hicolor/256x256/apps"
+  local stage="$1"; mkdir -p "$stage/usr/share/casu-codec" "$stage/usr/bin" "$stage/usr/share/icons/hicolor/256x256/apps" "$stage/usr/share/mime/packages"
   cp -a "$root/casu" "$root/LICENSE" "$root/README.md" \
     "$root/CASU_FORMAT_SPECIFICATION.md" "$root/ROADMAP_60_STEPS.md" \
     "$root/RELEASE_GATE_STATUS.json" "$root/THIRD_PARTY_COMPONENTS.md" \
@@ -54,6 +63,9 @@ install_codec() {
     "$root/THIRD_PARTY_LICENSES" "$root/docs" "$root/assets" "$root/web" \
     "$stage/usr/share/casu-codec/"
   cp "$root/assets/casu_codec_icon.png" "$stage/usr/share/icons/hicolor/256x256/apps/casu-codec.png"
+  # MIME definition so .casu/.mp5 files are recognized as application/x-casu
+  # and open with MPCASU in file managers / desktop environments.
+  cp "$root/packaging/casu-codec-mime.xml" "$stage/usr/share/mime/packages/casu-codec-mime.xml"
   cat > "$stage/usr/bin/casu" <<'EOF'
 #!/bin/sh
 export PYTHONDONTWRITEBYTECODE=1
