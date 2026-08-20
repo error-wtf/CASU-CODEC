@@ -18,6 +18,7 @@ public:
 
     void set_playing(bool playing);
     void set_active(bool active);
+    void set_mode(const QString& mode);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -28,7 +29,9 @@ private:
     QTimer timer_;
     bool playing_ = false;
     bool active_ = true;
+    QString mode_ = "spectrum";
     double phase_ = 0.0;
+    QVector<double> smoothed_bands_;  // analyser 0.85 smoothing
 };
 
 }  // namespace mpcasu

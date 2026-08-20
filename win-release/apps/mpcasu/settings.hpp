@@ -18,6 +18,19 @@ struct AppSettings {
     QString record_dir;
     QString library_dir;
     QString last_playlist;
+    // Options page (Linux parity).
+    QString visualizer = "spectrum";
+    bool resume_playback = true;
+    int cache_limit_mib = 512;
+    QStringList watched_folders;
+    int record_split_minutes = 0;
+    QString record_format = "mkv";
+    bool ytdlp_consent = false;
+    // Session restore (Linux parity: playlist + position + geometry).
+    QStringList session_queue;
+    int session_index = -1;
+    double session_position = -1.0;
+    QByteArray geometry;
 };
 
 class SettingsStore {

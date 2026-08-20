@@ -75,47 +75,61 @@ Zukunfts-Entwicklung: **v4.x wird übersprungen, nächste Version v5.0.0**
   ("Save selection to playlist…"/"Move to playlist…", dedupliziert),
   Aussortieren ("Remove from playlist" → bleibt lose), Batch-Dedup
   (Playlist + eigene Dateien; Re-Add einer geladenen Playlist wird übersprungen).
+- **Dauerhafte Markierung (Nutzer-Complaint behoben):** Die Markierung
+  überlebt Verschieben und Entfernen — nur überlebende Zeilen bleiben markiert,
+  Esc/leere Auswahl löscht. Linux: `PlaylistPane.select_rows()` +
+  `populate(..., selected=list)`, `_on_playlist_move`/`_on_playlist_remove`
+  speichern Pfade vor dem Re-Render und wählen danach wieder an. Windows:
+  `reselect_playlist_rows()` (QTreeWidgetItem::setSelected — QTreeWidget hat
+  in Qt6 KEIN setItemSelected!), move_playlist_rows + remove-Button
+  (keep-Survivors). Web: `state.multi` wird in removeRows/removePlaylistGroup
+  auf Überlebende gefiltert, movePlaylistGroup löscht nicht mehr;
+  Queue-Summary zeigt "N marked (Esc clears)", Esc-Keydown räumt.
 
 ## 4. Verifikation (alles grün, Stand 2026-08-20)
 
 ```text
 Linux  : QT_QPA_PLATFORM=offscreen QTWEBENGINE_DISABLE_SANDBOX=1
          /usr/bin/python3 -m pytest tests/ -q -p no:cacheprovider
-         → 432 passed, 12 skipped (inkl. test_queue_playback_behavior, move_many)
+         → 433 passed, 12 skipped (inkl. test_queue_playback_behavior,
+           move_many, test_marking_survives_move_and_removal)
 Windows: Build grün; ctest unter Wine 14/14 (OHNE casu_playback_vlc_test +
          casu_playback_youtube_live_test — kein Audio-Gerät/kein Live-Netz)
          WINEPREFIX=/tmp/opencode/wine-prefix WINEDEBUG=-all
          ctest --test-dir build-win64 -j2   (Log /tmp/opencode/win_ctest.log)
          casu_playlist_test.exe: 41 Checks ALL PASS, EXIT=0
 Web    : node --check web/app.js pure-web-release/app.js
-         node /tmp/opencode/pureweb_queue_test.js   (17 Checks ALL PASS)
-         node /tmp/opencode/webapp_queue_test.js    (12 Checks ALL PASS)
-         python3 tools/smoke_web_playlist.py        (mehrfach grün)
+         node /tmp/opencode/pureweb_queue_test.js   (25 Checks ALL PASS,
+           inkl. Markierung überlebt moveRows/removeRows/Gruppen-Move, Esc)
+         node /tmp/opencode/webapp_queue_test.js    (19 Checks ALL PASS)
+         python3 tools/smoke_web_playlist.py        (inkl. Persistenz-Check
+           nach #move-up, mehrfach grün)
          python3 tools/acceptance_web.py            → 16/16 (installiertes web-casu)
-Pakete : DEBs 3.0.0 neu gebaut + installiert; web/ byte-identisch
-         dist/MPCASU-PURE-WEB-3.0.0.zip neu (SHA 6d6d7bf8…), SHA256SUMS neu
+Pakete : DEBs 3.0.0 neu gebaut + installiert (web/ byte-identisch verifiziert)
+         dist/MPCASU-PURE-WEB-3.0.0.zip (SHA 6d6d7bf8…), SHA256SUMS neu
 ```
 
 ## 5. Next Steps (NUR noch Release-Abschluss)
 
 ```text
-1. Windows-Release neu bauen: cd win-release && SKIP_WINE=1
-   ./scripts/build-windows-release.sh  → Log /tmp/opencode/win_release_build.log
-   (spielt neues MPCASU.exe + neues web/pure in ZIP/setup.exe ein; danach
-   release_gate.sh laufen lassen)
+1. Windows-Release NEU bauen (main_window.cpp geändert — Markierungs-Persistenz):
+   cd win-release && SKIP_WINE=1 ./scripts/build-windows-release.sh
+   → Log /tmp/opencode/win_release_build.log; danach release_gate.sh laufen
+   lassen (Gate 14/14, player NOT_TESTED) + WINDOWS_RELEASE_GATE.json prüfen.
 2. git add + commit (alle Dateien aus §1) + push
    Remote: error-wtf/CASU-CODEC, Branch main, Token: /home/error/gittoken.env
    (export GH_TOKEN="$(head -1 /home/error/gittoken.env)")
-3. GitHub-Release v3.0.0-Assets aktualisieren (--clobber):
+3. GitHub-Release v3.0.0-Assets NEU hochladen (--clobber) — DEBs/Web/Zip sind
+   durch die Markierungs-Fixes veraltet:
    - dist/mpcasu_3.0.0_all.deb, dist/casu-codec_3.0.0_all.deb,
      dist/MPCASU-PURE-WEB-3.0.0.zip, dist/SHA256SUMS
    - win-release/dist/MPCASU-Windows-x86_64.zip, MPCASU-Setup-3.0.0.exe, SHA256SUMS
    Danach IMMER kombinierte SHA256SUMS neu berechnen + hochladen
    (Ablauf: HANDOVER.md §4 Schritt 4).
-4. Nutzer-Repro-Test: mpcasu → Add media → Playlist bleibt Gruppe, spielt
-   durch; ↑/↓ + Mehrfachauswahl; rein/raus. Web: http://127.0.0.1:8497/web/
-   → Playlist laden → Gruppen-Tools/Kontextmenü. Pure Web:
-   win-release/README_WINDOWS.md "Pure Web" (Loopback-Host für YouTube).
+4. Nutzer-Repro-Test (Complaint): Markieren → ↑/↓ mehrfach verschieben ohne
+   erneutes Markieren → Entfernen (Überlebende bleiben markiert) → Esc.
+   Web: http://127.0.0.1:8497/web/ → Queue-Summary "N marked (Esc clears)".
+   Pure Web: Loopback-Host für YouTube, siehe win-release/README_WINDOWS.md.
 ```
 
 ## 6. Key Source Files (aktueller Stand)
@@ -126,7 +140,7 @@ Pakete : DEBs 3.0.0 neu gebaut + installiert; web/ byte-identisch
   Mehrfachauswahl, move_many/remove_many, Save/Move to playlist, Remove from
   playlist), `add_files` Batch-Dedup.
 - `casu/playlist.py` — `is_playlist`, `remove_many`, `move_many`.
-- `tests/test_queue_playback_behavior.py` + `tests/test_playlist.py` — 432 total.
+- `tests/test_queue_playback_behavior.py` + `tests/test_playlist.py` — 433 total.
 
 **Windows:**
 - `win-release/apps/mpcasu/main_window.{cpp,hpp}` — QTreeWidget-Playlist-Pane,
@@ -151,3 +165,28 @@ Pakete : DEBs 3.0.0 neu gebaut + installiert; web/ byte-identisch
   insb. `gh release upload --clobber`)
 - `mpcasu_web/` (Legacy-Player, nicht ausgeliefert)
 - alte Audits/Matrizen (nur Architektur-Kontext)
+# SESSION HANDOVER 2026-08-20 — UI-Parität Windows ↔ Linux (21 Lücken) + Release v3.0.0 neu
+
+## 8. Was gemacht wurde
+- **Audit „identischer Aufbau und Funktionen":** alle 21 UI/Feature-Lücken im
+  Windows-Player `win-release/apps/mpcasu/main_window.cpp` geschlossen
+  (DiagnosticsBar, Drop-Overlay, Toast+Screen-Clamp, Queue-Rename,
+  Rec-Settings-Dialog, Options-Cache-Leeren+Provider-Status, Shuffle-`[on]`,
+  Live-Persistenz Volume/Mute/Rate, Badges-Spalte, Now-Playing-EPG,
+  YouTube-Suche+Consent-Gate+Playlist-Expand, Tag-Titel, EPG-Karten-Grid,
+  Media-Info CASU-Manifest, Library-Vollausbau, Chapters/Tracks/Device-Menüs,
+  A/V-Delays, externes Untertitel, Frame-Step, Visualizer-Linux-Optik).
+- Backend: `libvlc_bind.h` + `LibVLCBackend` um VLC-3.0-API erweitert
+  (set_chapter, next_frame, audio/video delay, add_slave, audio device list);
+  `casu_playback_test.cpp` MockBackend-Stubs ergänzt (Abstract-Klasse).
+- Fix: `--play-test` überspringt Session-Restore (Konstruktor-Parameter
+  `bool play_test`), damit CI nie alte Sessions (Radio.m3u) lädt.
+- Release-Pipeline `scripts/build-windows-release.sh` grün (Gates 14/14,
+  ctest 16/16 unter Wine, DLL-Audit 22 OK, NSIS-Setup). Installation unter
+  Wine verifiziert (Program Files, `casu` im PATH, Smoke-Clean-Exit).
+- Screenshot `/tmp/opencode/shots/mpcasu_nowplaying.png` (1360×820).
+
+## 9. Offen
+- Commit+Push dieser Änderungen; GitHub-Release-Assets hochladen (Token
+  `/home/error/gittoken.env`, `gh release upload --clobber`); v5.0.0-Versionsbump.
+- MSVC/QtWebEngine-Endbuild nur auf echtem Windows; BLOCKER-004/005 offen.

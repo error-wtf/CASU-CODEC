@@ -26,7 +26,12 @@ typedef struct libvlc_event_manager_t libvlc_event_manager_t;
 typedef struct libvlc_event_t libvlc_event_t;
 typedef struct libvlc_media_stats_t libvlc_media_stats_t;
 typedef struct libvlc_media_track_t libvlc_media_track_t;
-typedef struct libvlc_audio_output_device_t libvlc_audio_output_device_t;
+struct libvlc_audio_output_device_t_impl {
+    char* psz_device;
+    char* psz_description;
+    struct libvlc_audio_output_device_t_impl* p_next;
+};
+typedef struct libvlc_audio_output_device_t_impl libvlc_audio_output_device_t;
 
 typedef int64_t libvlc_time_t;
 typedef long long libvlc_time_t_ll;
@@ -152,6 +157,25 @@ void libvlc_media_player_set_title(libvlc_media_player_t* p_mi, int i_title);
 int libvlc_media_player_get_chapter_count(libvlc_media_player_t* p_mi);
 int libvlc_media_player_get_chapter(libvlc_media_player_t* p_mi);
 void libvlc_media_player_set_chapter(libvlc_media_player_t* p_mi, int i_chapter);
+void libvlc_media_player_next_frame(libvlc_media_player_t* p_mi);
+
+// --- delays / subtitles / audio output (VLC 3.0 API) ---
+int libvlc_audio_set_delay(libvlc_media_player_t* p_mi, int i_delay);
+int libvlc_video_set_spu_delay(libvlc_media_player_t* p_mi, int i_delay);
+typedef enum libvlc_media_slave_type_t {
+    libvlc_media_slave_type_subtitle = 0,
+    libvlc_media_slave_type_audio = 1,
+    libvlc_media_slave_type_video = 2,
+} libvlc_media_slave_type_t;
+int libvlc_media_player_add_slave(libvlc_media_player_t* p_mi,
+                                  libvlc_media_slave_type_t i_type,
+                                  const char* psz_uri, bool b_select);
+libvlc_audio_output_device_t* libvlc_audio_output_device_list_get(
+    libvlc_instance_t* p_instance, const char* aout);
+void libvlc_audio_output_device_list_release(
+    libvlc_audio_output_device_t* p_list);
+int libvlc_audio_output_device_set(libvlc_media_player_t* p_mi,
+                                   const char* psz_aout, const char* psz_device);
 
 // --- media ---
 libvlc_time_t libvlc_media_get_duration(libvlc_media_t* p_md);

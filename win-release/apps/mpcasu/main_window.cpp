@@ -3,6 +3,10 @@
 
 #include "casu/codec/tools.hpp"
 #include "casu/formats.hpp"
+#include "casu/json.hpp"
+#include "casu/media/tags.hpp"
+#include "casu/native.hpp"
+#include "casu/network/http.hpp"
 #include "casu/network/url.hpp"
 #include "casu/network/ytdlp.hpp"
 #include "casu/web/webproviders.hpp"
@@ -11,22 +15,31 @@
 #include "video_surface.hpp"
 #include "visualizer.hpp"
 
+#include <QApplication>
 #include <QCheckBox>
 #include <QCloseEvent>
+#include <QColor>
 #include <QComboBox>
 #include <QDateTime>
+#include <QDialog>
 #include <QDir>
+#include <QDirIterator>
 #include <QDoubleSpinBox>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFont>
 #include <QFrame>
 #include <QGridLayout>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QInputDialog>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
@@ -35,15 +48,23 @@
 #include <QMessageBox>
 #include <QMimeData>
 #include <QPushButton>
+#include <QProcess>
+#include <QScrollArea>
+#include <QTextBrowser>
 #include <QRandomGenerator>
 #include <QScreen>
+#include <QSet>
 #include <QSlider>
 #include <QSpinBox>
+#include <QSplitter>
+#include <QStandardPaths>
+#include <thread>
 #include <QStackedLayout>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QTableWidget>
 #include <QTabWidget>
+#include <QTemporaryFile>
 #include <QTreeWidget>
 #include <QTime>
 #include <QTimer>
@@ -83,10 +104,15 @@ QString default_output_dir() {
 }  // namespace
 
 MainWindow::MainWindow(const QStringList& initial_files, bool force_proxy,
-                       QString vout, QString aout, QWidget* parent)
+                       QString vout, QString aout, bool play_test,
+                       QWidget* parent)
     : QMainWindow(parent), force_proxy_(force_proxy), vout_(std::move(vout)),
-      aout_(std::move(aout)) {
+      aout_(std::move(aout)), play_test_mode_(play_test) {
     setWindowTitle(QStringLiteral("MPCASU Media Player"));
+    const QString icon_path = QDir(QCoreApplication::applicationDirPath() + "/assets")
+                                  .filePath("mpcasu_player_icon.png");
+    if (QFileInfo::exists(icon_path))
+        setWindowIcon(QIcon(icon_path));
     const QScreen* screen = QGuiApplication::primaryScreen();
     const QRect avail = screen ? screen->availableGeometry() : QRect(0, 0, 1600, 1000);
     setMinimumSize(qMin(980, avail.width()), qMin(620, avail.height()));
@@ -152,6 +178,21 @@ MainWindow::MainWindow(const QStringList& initial_files, bool force_proxy,
         resume_after_seek();
     });
 
+    // Session restore (Linux parity): geometry + last queue + resume position.
+    if (!app_settings_.geometry.isEmpty()) restoreGeometry(app_settings_.geometry);
+    resume_source_ = app_settings_.session_index >= 0 &&
+                             app_settings_.session_index < app_settings_.session_queue.size()
+                         ? app_settings_.session_queue.at(app_settings_.session_index)
+                         : QString();
+    resume_position_ = app_settings_.session_position;
+    if (!play_test_mode_ && app_settings_.resume_playback && !app_settings_.session_queue.isEmpty()) {
+        add_files(app_settings_.session_queue);
+        if (app_settings_.session_index >= 0 &&
+            app_settings_.session_index < playlist_.items().size())
+            playlist_.set_current(app_settings_.session_index);
+        refresh_playlist();
+    }
+
     if (!initial_files.isEmpty()) {
         add_files(initial_files);
         QTimer::singleShot(300, this, [this] { play_queue_index(playlist_.current_index() < 0 ? 0 : playlist_.current_index(), false); });
@@ -180,6 +221,7 @@ void MainWindow::build_ui() {
 
     pages_ = new QStackedWidget(this);
     build_player_page();
+    build_about_page();
     build_library_page();
     build_settings_page();
     build_epg_page();
@@ -191,13 +233,12 @@ void MainWindow::build_ui() {
 
     build_playlist_pane();
     main_layout->addWidget(playlist_view_->parentWidget());
+    apply_viz_mode();
 
     status_label_ = new QLabel(QStringLiteral("Ready"), this);
-    status_label_->setObjectName("StatusBar");
+    status_label_->setObjectName("StatusText");
     statusBar()->addWidget(status_label_);
-    statusBar()->setSizeGripEnabled(false);
-    statusBar()->setStyleSheet(QStringLiteral("background-color: %1; border-top: 1px solid %2; color: %3;")
-                                   .arg(mpcasu::palette().panel, mpcasu::palette().line, mpcasu::palette().muted));}
+    statusBar()->setSizeGripEnabled(false);}
 
 void MainWindow::build_sidebar() {
     sidebar_ = new QFrame(this);
@@ -207,19 +248,37 @@ void MainWindow::build_sidebar() {
     layout->setContentsMargins(12, 16, 12, 12);
     layout->setSpacing(4);
 
-    auto* logo = new QLabel(QStringLiteral("MPCASU"), sidebar_);
-    logo->setObjectName("NowPlayingTitle");
+    // Brand logo (exe-relative assets, mirrors the Linux sidebar header).
+    auto* logo = new QLabel(sidebar_);
+    logo->setObjectName("BrandName");
+    const QString logo_path = QDir(QCoreApplication::applicationDirPath() + "/assets")
+                                  .filePath("mpcasu_player_logo_cropped.png");
+    if (QFileInfo::exists(logo_path)) {
+        QPixmap pix(logo_path);
+        if (!pix.isNull()) {
+            logo->setPixmap(pix.scaledToWidth(180, Qt::SmoothTransformation));
+            logo->setFixedHeight(logo->pixmap().height());
+        } else {
+            logo->setText(QStringLiteral("MPCASU"));
+        }
+    } else {
+        logo->setText(QStringLiteral("MPCASU"));
+    }
+    logo->setCursor(Qt::PointingHandCursor);
     layout->addWidget(logo);
-    auto* sub = new QLabel(QStringLiteral("Media Player · Windows port"), sidebar_);
-    sub->setObjectName("NowPlayingMeta");
+    auto* sub = new QLabel(QStringLiteral("MEDIA · CASU"), sidebar_);
+    sub->setObjectName("BrandSub");
     layout->addWidget(sub);
-    layout->addSpacing(16);
+    layout->addSpacing(12);
 
-    const QStringList groups = {"NOW PLAYING", "LIBRARY", "YOUTUBE", "EPG",
-                                "VISUALIZER", "RECORDING", "SETTINGS", "WEB PLAYERS"};
-    for (const QString& name : groups) {
+    auto add_section = [&](const QString& label) {
+        auto* section = new QLabel(label, sidebar_);
+        section->setObjectName("SidebarSection");
+        layout->addWidget(section);
+    };
+    auto add_nav = [&](const QString& name) {
         auto* btn = new QPushButton(name, sidebar_);
-        btn->setObjectName("NavButton");
+        btn->setObjectName("NavItem");
         btn->setCheckable(true);
         btn->setToolTip(name);
         btn->setCursor(Qt::PointingHandCursor);
@@ -228,11 +287,85 @@ void MainWindow::build_sidebar() {
         nav_map_[name] = btn;
         connect(btn, &QPushButton::clicked, this,
                 [this, name] { navigate(name); });
-    }
+    };
+
+    add_section(QStringLiteral("NOW PLAYING"));
+    add_nav(QStringLiteral("NOW PLAYING"));
+    add_section(QStringLiteral("MEDIA"));
+    add_nav(QStringLiteral("LIBRARY"));
+    add_nav(QStringLiteral("YOUTUBE"));
+    add_nav(QStringLiteral("EPG"));
+    add_nav(QStringLiteral("WEB PLAYERS"));
+    add_section(QStringLiteral("TOOLS"));
+    add_nav(QStringLiteral("VISUALIZER"));
+    add_nav(QStringLiteral("RECORDING"));
+    add_section(QStringLiteral("SYSTEM"));
+    add_nav(QStringLiteral("SETTINGS"));
+    add_nav(QStringLiteral("ABOUT"));
     layout->addStretch();
     auto* backend = new QLabel(QStringLiteral("libVLC backend"), sidebar_);
-    backend->setObjectName("NowPlayingMeta");
+    backend->setObjectName("StatusText");
     layout->addWidget(backend);
+}
+
+void MainWindow::build_about_page() {
+    auto* page = new QWidget(this);
+    page->setObjectName("Page");
+    auto* wrap = new QVBoxLayout(page);
+    wrap->setContentsMargins(24, 24, 24, 24);
+    auto* panel = new QFrame(page);
+    panel->setObjectName("PagePanel");
+    panel->setMaximumWidth(560);
+    auto* col = new QVBoxLayout(panel);
+    col->setContentsMargins(28, 28, 28, 28);
+    col->setSpacing(10);
+
+    auto* icon = new QLabel(panel);
+    icon->setAlignment(Qt::AlignCenter);
+    const QString icon_path = QDir(QCoreApplication::applicationDirPath() + "/assets")
+                                  .filePath("mpcasu_player_icon.png");
+    if (QFileInfo::exists(icon_path)) {
+        QPixmap pix(icon_path);
+        if (!pix.isNull())
+            icon->setPixmap(pix.scaledToWidth(96, Qt::SmoothTransformation));
+    }
+    col->addWidget(icon);
+
+    auto* name = new QLabel(QStringLiteral("MPCASU Media Player"), panel);
+    name->setObjectName("BrandName");
+    name->setAlignment(Qt::AlignCenter);
+    col->addWidget(name);
+    auto* version = new QLabel(QStringLiteral("Version 3.0.0 · Windows port (MinGW-w64 x64 + Qt 6)"), panel);
+    version->setObjectName("BrandSub");
+    version->setAlignment(Qt::AlignCenter);
+    col->addWidget(version);
+
+    auto* divider = new QFrame(panel);
+    divider->setFrameShape(QFrame::HLine);
+    divider->setStyleSheet(QStringLiteral("color: %1;").arg(mpcasu::palette().line));
+    col->addWidget(divider);
+
+    auto* license = new QLabel(
+        QStringLiteral("License: LicenseRef-CASU-AntiCapitalist-1.4 — free for "
+                       "personal and non-commercial use. Built on Qt 6, libVLC, "
+                       "ffmpeg, yt-dlp and zstd."),
+        panel);
+    license->setObjectName("StatusText");
+    license->setWordWrap(true);
+    col->addWidget(license);
+    auto* parity = new QLabel(
+        QStringLiteral("Feature parity target: the Linux reference player "
+                       "(mpcasu_qt/main_window.py). Playlist groups, queue "
+                       "semantics and the web players behave identically."),
+        panel);
+    parity->setObjectName("StatusText");
+    parity->setWordWrap(true);
+    col->addWidget(parity);
+    col->addStretch();
+
+    wrap->addWidget(panel);
+    wrap->addStretch();
+    pages_->addWidget(page);
 }
 
 void MainWindow::build_player_page() {
@@ -242,21 +375,21 @@ void MainWindow::build_player_page() {
     col->setSpacing(0);
 
     // TopBar: NOW PLAYING is a fixed heading; the dynamic title is separate.
-    auto* topbar = new QFrame(player_page_);
-    topbar->setObjectName("TopBar");
-    topbar->setFixedHeight(metrics().topbar_height);
-    auto* tb = new QHBoxLayout(topbar);
+    topbar_ = new QFrame(player_page_);
+    topbar_->setObjectName("TopBar");
+    topbar_->setFixedHeight(metrics().topbar_height);
+    auto* tb = new QHBoxLayout(topbar_);
     tb->setContentsMargins(12, 0, 12, 0);
     tb->setSpacing(8);
-    auto* heading = new QLabel(QStringLiteral("NOW PLAYING"), topbar);
+    auto* heading = new QLabel(QStringLiteral("NOW PLAYING"), topbar_);
     heading->setObjectName("NowPlayingTitle");
     tb->addWidget(heading);
-    topbar_title_ = new QLabel(QStringLiteral("No media loaded"), topbar);
+    topbar_title_ = new QLabel(QStringLiteral("No media loaded"), topbar_);
     topbar_title_->setObjectName("NowPlayingMeta");
     topbar_title_->setTextInteractionFlags(Qt::TextSelectableByMouse);
     tb->addWidget(topbar_title_, 1);
     tb->addStretch();
-    col->addWidget(topbar);
+    col->addWidget(topbar_);
 
     // Stage: video surface + visualizer switch.
     auto* stage = new QWidget(player_page_);
@@ -268,19 +401,154 @@ void MainWindow::build_player_page() {
     stage_stack_->addWidget(visualizer_);
     col->addWidget(stage, 1);
 
+    // Toast overlay (web #toast): transient message above the stage.
+    toast_label_ = new QLabel(stage);
+    toast_label_->setObjectName("Toast");
+    toast_label_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    toast_label_->hide();
+    toast_timer_ = new QTimer(this);
+    toast_timer_->setSingleShot(true);
+    connect(toast_timer_, &QTimer::timeout, this, [this] { toast_label_->hide(); });
+
+    // Drop overlay (Linux parity): red "DROP TO PLAY / ADD TO QUEUE" banner
+    // shown while dragging files/URLs over the stage.
+    drop_overlay_ = new QLabel(QStringLiteral("DROP TO PLAY / ADD TO QUEUE"), player_page_);
+    drop_overlay_->setAlignment(Qt::AlignCenter);
+    drop_overlay_->setStyleSheet(QStringLiteral(
+        "background: #07090bcc; border: 2px solid #ff1e2d; border-radius: 10px;"
+        " color: #ff1e2d; font-size: 16px; font-weight: 800;"));
+    drop_overlay_->hide();
+
     build_transport();
     col->addWidget(transport_frame_);
+
+    // Diagnostics bar (Linux parity): four status cards above the stage.
+    diagnostics_bar_ = new QFrame(player_page_);
+    diagnostics_bar_->setObjectName("Panel");
+    auto* diag_layout = new QHBoxLayout(diagnostics_bar_);
+    diag_layout->setContentsMargins(12, 8, 12, 8);
+    diag_layout->setSpacing(8);
+    const std::vector<std::pair<const char*, const char*>> kDiagCards = {
+        {"SEGMENTED PLAYBACK", "unavailable"},
+        {"LIVE GUIDE", "no EPG loaded"},
+        {"INTEGRITY MODE", "unavailable"},
+        {"CASU SUPPORT", "Legacy backend"},
+    };
+    for (const auto& [title, def] : kDiagCards) {
+        auto* card = new QFrame(diagnostics_bar_);
+        card->setObjectName("Panel");
+        auto* cl = new QVBoxLayout(card);
+        cl->setContentsMargins(12, 8, 12, 8);
+        cl->setSpacing(3);
+        auto* t = new QLabel(QString::fromLatin1(title), card);
+        t->setObjectName("PanelTitle");
+        cl->addWidget(t);
+        auto* v = new QLabel(QString::fromLatin1(def), card);
+        v->setObjectName("PanelValue");
+        cl->addWidget(v);
+        diag_layout->addWidget(card);
+        diag_labels_.insert(QString::fromLatin1(title), v);
+    }
+    col->addWidget(diagnostics_bar_);
     pages_->addWidget(player_page_);
 }
 
 // ------------------------------------------------------------------ transport
 
 namespace {
+class QueueTree : public QTreeWidget {
+public:
+    using QTreeWidget::QTreeWidget;
+    std::function<void()> on_delete_key;
+    std::function<void(const QStringList&)> on_reordered;
+protected:
+    void keyPressEvent(QKeyEvent* event) override {
+        // Delete/Backspace removes the selected queue rows (Linux parity).
+        if ((event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace) &&
+            on_delete_key) {
+            on_delete_key();
+            event->accept();
+            return;
+        }
+        QTreeWidget::keyPressEvent(event);
+    }
+    void dropEvent(QDropEvent* event) override {
+        // Drag-reorder of top-level queue rows (Linux QueueTree parity).
+        QStringList before;
+        for (int i = 0; i < topLevelItemCount(); ++i)
+            before.append(topLevelItem(i)->data(0, Qt::UserRole).toString());
+        QTreeWidget::dropEvent(event);
+        if (event->isAccepted() && on_reordered && topLevelItemCount() > 0) {
+            QStringList after;
+            for (int i = 0; i < topLevelItemCount(); ++i)
+                after.append(topLevelItem(i)->data(0, Qt::UserRole).toString());
+            if (after != before) on_reordered(after);
+        }
+    }
+};
+
 QPushButton* make_transport_button(const QString& text, QWidget* parent, const QString& tooltip) {
     auto* b = new QPushButton(text, parent);
     b->setObjectName("TransportButton");
     b->setToolTip(tooltip);
     return b;
+}
+
+QString provider_status_text() {
+    // Linux parity: live capability check of the external providers.
+    auto has = [](const QString& name) {
+        return !QStandardPaths::findExecutable(name).isEmpty();
+    };
+    QStringList lines;
+    lines << QStringLiteral("libVLC (legacy playback): bundled");
+#ifdef CASU_HAS_LIBAV
+    lines << QStringLiteral("FFmpeg/libav (convert/analysis): bundled");
+#else
+    lines << QStringLiteral("FFmpeg (convert/analysis): %1").arg(
+        has(QStringLiteral("ffmpeg")) ? QStringLiteral("✓") : QStringLiteral("✗ missing"));
+#endif
+    lines << QStringLiteral("yt-dlp (YouTube provider): %1").arg(
+        has(QStringLiteral("yt-dlp")) ? QStringLiteral("✓") : QStringLiteral("✗ missing"));
+    const bool has_deno = has(QStringLiteral("deno"));
+    lines << QStringLiteral("spotDL (Spotify provider): %1").arg(
+        has(QStringLiteral("spotdl")) ? QStringLiteral("✓")
+                                      : QStringLiteral("✗ not installed"));
+    lines << QStringLiteral("Deno (optional spotDL helper): %1").arg(
+        has_deno ? QStringLiteral("✓") : QStringLiteral("– optional"));
+    return lines.join(QStringLiteral("\n"));
+}
+
+QString queue_badge_for(const QString& path) {
+    // Linux parity (main_window.py _badge_for): short type badge per entry.
+    const QString low = path.toLower();
+    if (low.startsWith(QStringLiteral("http://")) ||
+        low.startsWith(QStringLiteral("https://"))) {
+        if (low.contains(QStringLiteral("youtube.com")) ||
+            low.contains(QStringLiteral("youtu.be")))
+            return QStringLiteral("YT");
+        return QStringLiteral("STREAM");
+    }
+    if (low.startsWith(QStringLiteral("rtsp://"))) return QStringLiteral("RTSP");
+    if (low.startsWith(QStringLiteral("rtmp://"))) return QStringLiteral("RTMP");
+    if (low.startsWith(QStringLiteral("udp://")) ||
+        low.startsWith(QStringLiteral("srt://")))
+        return QStringLiteral("UDP");
+    const QString ext = QFileInfo(path).suffix().toLower();
+    static const QStringList audio_exts = {
+        "mp3", "flac", "wav", "aac", "ogg", "opus", "m4a", "wma",
+        "aiff", "alac", "ape", "wv", "tta", "dts", "mpc", "voc", "au"};
+    static const QStringList video_exts = {
+        "mp4", "mkv", "webm", "avi", "mov", "m4v", "flv", "wmv",
+        "mpeg", "mpg", "m2ts", "mts", "ts", "vob", "ogv", "3gp",
+        "divx", "rm", "rmvb", "mxf", "asf"};
+    if (audio_exts.contains(ext)) return ext.toUpper();
+    if (video_exts.contains(ext)) return ext.toUpper();
+    if (ext == "m3u" || ext == "m3u8" || ext == "pls" || ext == "wpl" ||
+        ext == "xspf" || ext == "jspf" || ext == "asx" || ext == "wmx" ||
+        ext == "wvx" || ext == "rmp" || ext == "ram")
+        return QStringLiteral("PLAYLIST");
+    if (ext == "casu" || ext == "mp5") return QStringLiteral("CASU");
+    return QStringLiteral("MEDIA");
 }
 }  // namespace
 
@@ -312,10 +580,17 @@ void MainWindow::build_transport() {
     shuffle_btn_ = make_transport_button(QStringLiteral("⤨"), frame, QStringLiteral("Shuffle"));
     shuffle_btn_->setCheckable(true);
     shuffle_btn_->setChecked(playlist_.shuffle);
+    shuffle_btn_->setProperty("on", playlist_.shuffle ? QStringLiteral("true")
+                                                      : QStringLiteral("false"));
     connect(shuffle_btn_, &QPushButton::toggled, this, [this](bool on) {
         playlist_.shuffle = on;
         app_settings_.shuffle = on;
         settings_->save(app_settings_);
+        // Linux parity: highlight the active state via TransportButton[on=true].
+        shuffle_btn_->setProperty("on", on ? QStringLiteral("true") : QStringLiteral("false"));
+        shuffle_btn_->style()->unpolish(shuffle_btn_);
+        shuffle_btn_->style()->polish(shuffle_btn_);
+        status(on ? QStringLiteral("Shuffle on") : QStringLiteral("Shuffle off"));
     });
     controls->addWidget(shuffle_btn_);
 
@@ -341,6 +616,11 @@ void MainWindow::build_transport() {
     auto* snapshot_btn = make_transport_button(QStringLiteral("▧"), frame, QStringLiteral("Snapshot"));
     connect(snapshot_btn, &QPushButton::clicked, this, &MainWindow::save_snapshot);
     controls->addWidget(snapshot_btn);
+
+    ab_btn_ = make_transport_button(QStringLiteral("A–B"), frame, QStringLiteral("A–B loop (set A, set B, clear)"));
+    ab_btn_->setCheckable(true);
+    connect(ab_btn_, &QPushButton::clicked, this, &MainWindow::cycle_ab_loop);
+    controls->addWidget(ab_btn_);
 
     rate_btn_ = make_transport_button(QStringLiteral("1×"), frame, QStringLiteral("Playback speed"));
     connect(rate_btn_, &QPushButton::clicked, this, &MainWindow::cycle_rate);
@@ -380,19 +660,277 @@ void MainWindow::build_transport() {
     auto* more_btn = make_transport_button(QStringLiteral("⋯"), frame, QStringLiteral("More controls"));
     auto* more_menu = new QMenu(frame);
     more_menu->addAction(QStringLiteral("■ Stop"), this, &MainWindow::stop_playback);
+    more_menu->addAction(QStringLiteral("Media info (Ctrl+I)"), this, &MainWindow::show_media_info);
+    more_menu->addAction(QStringLiteral("Rec-Settings…"), this, &MainWindow::show_record_settings_dialog);
     more_menu->addAction(QStringLiteral("‹ Rewind 10s"), this, [this] { seek_to(qMax(0.0, controller_->position() - 10.0)); });
     more_menu->addAction(QStringLiteral("› Forward 10s"), this, [this] { seek_to(controller_->position() + 10.0); });
     more_menu->addAction(QStringLiteral("Open file…"), this, &MainWindow::choose_files);
     more_menu->addAction(QStringLiteral("Add URL…"), this, &MainWindow::add_url);
+
+    // Linux parity: track / chapter / device / delay / frame-step controls.
+    auto* chapters_menu = more_menu->addMenu(QStringLiteral("Chapters"));
+    connect(chapters_menu, &QMenu::aboutToShow, this, [this, chapters_menu] {
+        chapters_menu->clear();
+        if (!backend_) return;
+        const auto chapters = backend_->chapters();
+        if (chapters.empty()) {
+            chapters_menu->addAction(QStringLiteral("(no chapters)"));
+            return;
+        }
+        for (const auto& ch : chapters)
+            chapters_menu->addAction(QString::fromStdString(ch.name), this,
+                                     [this, ch] {
+                try { backend_->set_chapter(ch.index); }
+                catch (const casu::playback::PlaybackError& e) {
+                    status(QString::fromStdString(e.what()));
+                }
+            });
+    });
+    auto* tracks_menu = more_menu->addMenu(QStringLiteral("Tracks"));
+    connect(tracks_menu, &QMenu::aboutToShow, this, [this, tracks_menu] {
+        tracks_menu->clear();
+        if (!backend_) { tracks_menu->addAction(QStringLiteral("(no media)")); return; }
+        auto add_group = [this, tracks_menu](const QString& title,
+                                             const std::vector<casu::playback::TrackInfo>& descs,
+                                             int current, auto setter) {
+            auto* sub = tracks_menu->addMenu(title);
+            if (descs.empty()) { sub->addAction(QStringLiteral("(none)")); return; }
+            for (const auto& t : descs) {
+                QAction* act = sub->addAction(
+                    QString::fromStdString(t.name), this, [this, setter, t] {
+                        try { setter(t.id); }
+                        catch (const casu::playback::PlaybackError& e) {
+                            status(QString::fromStdString(e.what()));
+                        }
+                    });
+                act->setCheckable(true);
+                act->setChecked(t.id == current);
+            }
+        };
+        add_group(QStringLiteral("Audio"),
+                  backend_->audio_track_descriptions(), backend_->audio_track(),
+                  [this](int id) { backend_->set_audio_track(id); });
+        add_group(QStringLiteral("Video"),
+                  backend_->video_track_descriptions(), backend_->video_track(),
+                  [this](int id) { backend_->set_video_track(id); });
+        add_group(QStringLiteral("Subtitles"),
+                  backend_->subtitle_track_descriptions(), backend_->subtitle_track(),
+                  [this](int id) { backend_->set_subtitle_track(id); });
+    });
+    auto* devices_menu = more_menu->addMenu(QStringLiteral("Audio device"));
+    connect(devices_menu, &QMenu::aboutToShow, this, [this, devices_menu] {
+        devices_menu->clear();
+        if (!backend_) { devices_menu->addAction(QStringLiteral("(no media)")); return; }
+        const auto devices = backend_->audio_devices();
+        if (devices.empty()) { devices_menu->addAction(QStringLiteral("(system default)")); return; }
+        for (const auto& d : devices)
+            devices_menu->addAction(QString::fromStdString(d.name), this,
+                                    [this, d] {
+                try { backend_->set_audio_device(d.name); }
+                catch (const casu::playback::PlaybackError& e) {
+                    status(QString::fromStdString(e.what()));
+                }
+            });
+    });
+    more_menu->addAction(QStringLiteral("Load subtitle file…"), this, [this] {
+        if (!backend_) { status(QStringLiteral("No active media backend")); return; }
+        const QString file = QFileDialog::getOpenFileName(
+            this, QStringLiteral("Load subtitle"), QDir::homePath(),
+            QStringLiteral("Subtitles (*.srt *.ass *.ssa *.sub *.vtt);;All files (*)"));
+        if (file.isEmpty()) return;
+        try {
+            if (backend_->load_subtitle_file(file.toStdString()))
+                status(QStringLiteral("External subtitle loaded · %1").arg(QFileInfo(file).fileName()));
+            else
+                status(QStringLiteral("Could not load subtitle: %1").arg(QFileInfo(file).fileName()));
+        } catch (const casu::playback::PlaybackError& e) {
+            status(QString::fromStdString(e.what()));
+        }
+    });
+    more_menu->addAction(QStringLiteral("A/V delays…"), this, [this] {
+        if (!backend_) { status(QStringLiteral("No active media backend")); return; }
+        QDialog dlg(this);
+        dlg.setWindowTitle(QStringLiteral("Audio / subtitle delay"));
+        auto* layout = new QVBoxLayout(&dlg);
+        layout->setSpacing(10);
+        auto* audio_row = new QHBoxLayout();
+        audio_row->addWidget(new QLabel(QStringLiteral("Audio delay (ms)")));
+        auto* audio_spin = new QSpinBox();
+        audio_spin->setRange(-10000, 10000);
+        audio_spin->setValue(0);
+        audio_row->addWidget(audio_spin);
+        layout->addLayout(audio_row);
+        auto* sub_row = new QHBoxLayout();
+        sub_row->addWidget(new QLabel(QStringLiteral("Subtitle delay (ms)")));
+        auto* sub_spin = new QSpinBox();
+        sub_spin->setRange(-10000, 10000);
+        sub_spin->setValue(0);
+        sub_row->addWidget(sub_spin);
+        layout->addLayout(sub_row);
+        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+        connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+        layout->addWidget(buttons);
+        if (dlg.exec() != QDialog::Accepted) return;
+        try {
+            backend_->set_audio_delay(audio_spin->value());
+            backend_->set_subtitle_delay(sub_spin->value());
+            status(QStringLiteral("Delays set: audio %1 ms, subtitle %2 ms")
+                       .arg(audio_spin->value()).arg(sub_spin->value()));
+        } catch (const casu::playback::PlaybackError& e) {
+            status(QString::fromStdString(e.what()));
+        }
+    });
+    more_menu->addAction(QStringLiteral("Frame step"), this, [this] {
+        if (!backend_) { status(QStringLiteral("No active media backend")); return; }
+        try {
+            paused_ = true;
+            backend_->next_frame();
+            update_play_button();
+            status(QStringLiteral("Advanced one decoded frame"));
+        } catch (const casu::playback::PlaybackError& e) {
+            status(QString::fromStdString(e.what()));
+        }
+    });
     more_btn->setMenu(more_menu);
     controls->addWidget(more_btn);
 
     layout->addLayout(controls);
     frame->setObjectName("Panel");
     transport_frame_ = frame;
+
+    // Fullscreen overlay (Linux parity): floating transport bar that appears
+    // in fullscreen on mouse move and auto-hides after 3 s.
+    fs_overlay_ = new QWidget(this);
+    fs_overlay_->setObjectName("FsOverlay");
+    fs_overlay_->setAttribute(Qt::WA_StyledBackground, true);
+    auto* fs_layout = new QHBoxLayout(fs_overlay_);
+    fs_layout->setContentsMargins(12, 6, 12, 6);
+    fs_layout->setSpacing(8);
+    fs_title_ = new QLabel(QStringLiteral(""), fs_overlay_);
+    fs_title_->setStyleSheet(QStringLiteral("color: #e8ecf1;"));
+    fs_layout->addWidget(fs_title_, 1);
+    fs_play_btn_ = new QPushButton(QStringLiteral("| |"), fs_overlay_);
+    fs_play_btn_->setObjectName("PlayButton");
+    fs_play_btn_->setFixedSize(40, 28);
+    connect(fs_play_btn_, &QPushButton::clicked, this, &MainWindow::toggle_playback);
+    fs_layout->addWidget(fs_play_btn_);
+    fs_time_ = new QLabel(QStringLiteral("00:00 / 00:00"), fs_overlay_);
+    fs_time_->setStyleSheet(QStringLiteral("color: #e8ecf1;"));
+    fs_layout->addWidget(fs_time_);
+    auto* fs_exit = new QPushButton(QStringLiteral("✕"), fs_overlay_);
+    fs_exit->setObjectName("IconButton");
+    fs_exit->setFixedSize(28, 28);
+    fs_exit->setToolTip(QStringLiteral("Exit fullscreen (F)"));
+    connect(fs_exit, &QPushButton::clicked, this, &MainWindow::exit_fullscreen_ui);
+    fs_layout->addWidget(fs_exit);
+    fs_overlay_->hide();
+    fs_hide_timer_ = new QTimer(this);
+    fs_hide_timer_->setSingleShot(true);
+    fs_hide_timer_->setInterval(3000);
+    connect(fs_hide_timer_, &QTimer::timeout, this, &MainWindow::hide_fs_overlay);
 }
 
 // ------------------------------------------------------------------ playlist pane
+
+void MainWindow::remove_selected_rows() {
+    QVector<int> rows;
+    for (auto* it : playlist_view_->selectedItems())
+        if (it->parent() == nullptr) rows.append(playlist_view_->indexOfTopLevelItem(it));
+    if (rows.isEmpty()) return;
+    const auto& items = playlist_.items();
+    QSet<int> removed;
+    for (int row : rows)
+        if (row >= 0 && row < items.size()) removed.insert(row);
+    QStringList keep;
+    for (auto* it : playlist_view_->selectedItems()) {
+        const int row = playlist_view_->indexOfTopLevelItem(it);
+        if (row >= 0 && !removed.contains(row) && it->parent() == nullptr)
+            keep << it->data(0, Qt::UserRole).toString();
+    }
+    playlist_.remove_many(rows);
+    invalidate_seq();
+    refresh_playlist();
+    if (!keep.isEmpty()) reselect_playlist_rows(keep);
+}
+
+void MainWindow::rename_queue_entry() {
+    if (!playlist_view_) return;
+    auto* item = playlist_view_->currentItem();
+    if (!item) { status(QStringLiteral("Select a queue entry to rename.")); return; }
+    if (item->parent()) item = item->parent();
+    const int row = playlist_view_->indexOfTopLevelItem(item);
+    if (row < 0 || row >= playlist_.items().size()) return;
+    const QString current = item->text(0);
+    auto* editor = new QLineEdit(playlist_view_);
+    editor->setText(current);
+    editor->setObjectName("IconButton");
+    playlist_view_->setItemWidget(item, 0, editor);
+    const QString path = item->data(0, Qt::UserRole).toString();
+    connect(editor, &QLineEdit::returnPressed, this,
+            [this, item, editor] { commit_queue_rename(item, editor); });
+    connect(editor, &QLineEdit::editingFinished, this,
+            [this, item, editor] { commit_queue_rename(item, editor); });
+    editor->setFocus();
+    editor->selectAll();
+}
+
+void MainWindow::commit_queue_rename(QTreeWidgetItem* item, QLineEdit* editor) {
+    if (!item || !editor) return;
+    const QString text = editor->text().trimmed();
+    playlist_view_->removeItemWidget(item, 0);
+    editor->deleteLater();
+    if (!text.isEmpty()) {
+        const QString path = item->data(0, Qt::UserRole).toString();
+        if (!path.isEmpty()) display_titles_.insert(path, text);
+        item->setText(0, text);
+        status(QStringLiteral("Renamed queue entry"));
+    }
+}
+
+void MainWindow::apply_queue_filter() {
+    if (!playlist_view_ || !view_filter_) return;
+    const int idx = view_filter_->currentIndex();
+    const QString view = idx == 0 ? QStringLiteral("all")
+                         : idx == 1 ? QStringLiteral("files")
+                         : idx == 2 ? QStringLiteral("streams")
+                         : idx == 3 ? QStringLiteral("playlists")
+                         : idx == 4 ? QStringLiteral("casu")
+                         : idx == 5 ? QStringLiteral("youtube")
+                                    : QStringLiteral("spotify");
+    const QString needle = queue_search_ ? queue_search_->text().toLower() : QString();
+    int visible = 0;
+    for (int i = 0; i < playlist_view_->topLevelItemCount(); ++i) {
+        QTreeWidgetItem* item = playlist_view_->topLevelItem(i);
+        const QString path = item->data(0, Qt::UserRole).toString();
+        const QString low = path.toLower();
+        const bool is_url = low.startsWith(QStringLiteral("http://")) ||
+                            low.startsWith(QStringLiteral("https://")) ||
+                            low.startsWith(QStringLiteral("rtsp://")) ||
+                            low.startsWith(QStringLiteral("rtmp://"));
+        const bool is_playlist = playlist_.is_playlist_row(i);
+        bool show = (view == "all") ||
+                    (view == "playlists" && is_playlist) ||
+                    (view == "files" && !is_url && !is_playlist) ||
+                    (view == "casu" && (low.endsWith(".casu") || low.endsWith(".mp5"))) ||
+                    (view == "youtube" && (low.contains("youtube.com") || low.contains("youtu.be"))) ||
+                    (view == "spotify" && low.contains("spotify.com")) ||
+                    (view == "streams" && is_url && !is_playlist);
+        if (show && !needle.isEmpty()) {
+            show = item->text(0).toLower().contains(needle) ||
+                   QFileInfo(path).fileName().toLower().contains(needle);
+            if (show && item->childCount() > 0) {
+                // A playlist group matches when any child matches.
+                show = false;
+                for (int k = 0; k < item->childCount(); ++k)
+                    if (item->child(k)->text(0).toLower().contains(needle)) { show = true; break; }
+            }
+        }
+        item->setHidden(!show);
+        if (show) ++visible;
+    }
+    if (empty_hint_) empty_hint_->setVisible(visible == 0);
+}
 
 void MainWindow::build_playlist_pane() {
     auto* pane = new QFrame(this);
@@ -406,6 +944,19 @@ void MainWindow::build_playlist_pane() {
     title->setObjectName("NowPlayingTitle");
     layout->addWidget(title);
 
+    view_filter_ = new QComboBox(pane);
+    view_filter_->addItems({"All", "Local files", "Streams", "Playlists",
+                            "CASU files", "YouTube", "Spotify"});
+    connect(view_filter_, &QComboBox::currentIndexChanged,
+            this, [this] { apply_queue_filter(); });
+    layout->addWidget(view_filter_);
+    queue_search_ = new QLineEdit(pane);
+    queue_search_->setPlaceholderText(QStringLiteral("Filter queue…"));
+    queue_search_->setClearButtonEnabled(true);
+    connect(queue_search_, &QLineEdit::textChanged,
+            this, [this] { apply_queue_filter(); });
+    layout->addWidget(queue_search_);
+
     auto* buttons = new QHBoxLayout();
     auto* choose_btn = new QPushButton(QStringLiteral("Choose files"), pane);
     choose_btn->setObjectName("IconButton");
@@ -417,12 +968,49 @@ void MainWindow::build_playlist_pane() {
     buttons->addWidget(url_btn);
     layout->addLayout(buttons);
 
-    playlist_view_ = new QTreeWidget(pane);
+    playlist_view_ = new QueueTree(pane);
     playlist_view_->setHeaderHidden(true);
+    playlist_view_->setColumnCount(2);
     playlist_view_->setSelectionMode(QAbstractItemView::ExtendedSelection);
     playlist_view_->setContextMenuPolicy(Qt::CustomContextMenu);
+    playlist_view_->setDragEnabled(true);
+    playlist_view_->setAcceptDrops(true);
+    playlist_view_->setDragDropMode(QAbstractItemView::InternalMove);
+    playlist_view_->setDropIndicatorShown(true);
+    static_cast<QueueTree*>(playlist_view_)->on_delete_key = [this] { remove_selected_rows(); };
+    static_cast<QueueTree*>(playlist_view_)->on_reordered =
+        [this](const QStringList& order) {
+            playlist_.reorder(order);
+            invalidate_seq();
+            refresh_playlist();
+            status(QStringLiteral("Queue reordered"));
+        };
     connect(playlist_view_, &QTreeWidget::itemDoubleClicked, this,
             &MainWindow::playlist_double_clicked);
+    connect(playlist_view_, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem* item, int) {
+        // Single click behaves like Linux: playlist rows toggle expand,
+        // loose rows play, children play (but never during multi-marking).
+        if (QApplication::keyboardModifiers() & (Qt::ControlModifier | Qt::ShiftModifier))
+            return;
+        if (item->parent() == nullptr) {
+            const int row = playlist_view_->indexOfTopLevelItem(item);
+            if (row < 0) return;
+            if (playlist_.is_playlist_row(row)) {
+                item->setExpanded(!item->isExpanded());
+                return;
+            }
+            play_queue_index(row, false);
+            return;
+        }
+        const int row = playlist_view_->indexOfTopLevelItem(item->parent());
+        if (row >= 0 && !item->data(0, Qt::UserRole).toString().isEmpty())
+            play_seq_entry(item->data(0, Qt::UserRole).toString(), row, false);
+    });
+    empty_hint_ = new QLabel(QStringLiteral("No media queued — add files, a URL or load a playlist."), pane);
+    empty_hint_->setObjectName("StatusText");
+    empty_hint_->setWordWrap(true);
+    empty_hint_->setAlignment(Qt::AlignCenter);
+    layout->addWidget(empty_hint_);
     connect(playlist_view_, &QTreeWidget::itemExpanded, this, [this](QTreeWidgetItem* item) {
         if (item->parent() == nullptr) {
             expanded_groups_.insert(item->data(0, Qt::UserRole).toString());
@@ -441,9 +1029,10 @@ void MainWindow::build_playlist_pane() {
     auto* up_btn = new QPushButton(QStringLiteral("↑"), pane);
     auto* down_btn = new QPushButton(QStringLiteral("↓"), pane);
     auto* remove_btn = new QPushButton(QStringLiteral("×"), pane);
+    auto* rename_btn = new QPushButton(QStringLiteral("✎"), pane);
     auto* load_btn = new QPushButton(QStringLiteral("Load"), pane);
     auto* save_btn = new QPushButton(QStringLiteral("Save"), pane);
-    for (auto* b : {up_btn, down_btn, remove_btn, load_btn, save_btn}) {
+    for (auto* b : {up_btn, down_btn, remove_btn, rename_btn, load_btn, save_btn}) {
         b->setObjectName("IconButton");
         tools->addWidget(b);
     }
@@ -460,13 +1049,10 @@ void MainWindow::build_playlist_pane() {
         move_playlist_rows(rows, 1);
     });
     connect(remove_btn, &QPushButton::clicked, this, [this] {
-        QVector<int> rows;
-        for (auto* it : playlist_view_->selectedItems())
-            if (it->parent() == nullptr) rows.append(playlist_view_->indexOfTopLevelItem(it));
-        playlist_.remove_many(rows);
-        invalidate_seq();
-        refresh_playlist();
+        remove_selected_rows();
     });
+    rename_btn->setToolTip(QStringLiteral("Rename the selected queue entry"));
+    connect(rename_btn, &QPushButton::clicked, this, &MainWindow::rename_queue_entry);
     connect(load_btn, &QPushButton::clicked, this, &MainWindow::load_playlist_file);
     connect(save_btn, &QPushButton::clicked, this, &MainWindow::save_playlist_file);
     layout->addLayout(tools);
@@ -475,140 +1061,526 @@ void MainWindow::build_playlist_pane() {
 // ------------------------------------------------------------------ other pages
 
 void MainWindow::build_library_page() {
+    // Linux parity (LibraryPage): search + artist/album/genre/favorites modes.
     auto* page = new QWidget(this);
     auto* layout = new QVBoxLayout(page);
-    layout->setContentsMargins(20, 20, 20, 20);
+    layout->setContentsMargins(20, 18, 20, 16);
     layout->setSpacing(10);
     auto* title = new QLabel(QStringLiteral("LIBRARY"), page);
     title->setObjectName("NowPlayingTitle");
     layout->addWidget(title);
-    auto* hint = new QLabel(QStringLiteral("Saved media (JSON store). Add the current item or play a saved entry."), page);
-    hint->setObjectName("NowPlayingMeta");
-    layout->addWidget(hint);
 
-    library_view_ = new QListWidget(page);
-    layout->addWidget(library_view_, 1);
+    auto* top = new QHBoxLayout();
+    library_search_ = new QLineEdit(page);
+    library_search_->setObjectName("IconButton");
+    library_search_->setPlaceholderText(
+        QStringLiteral("Search library · title, artist, album, genre…"));
+    connect(library_search_, &QLineEdit::textChanged, this,
+            [this](const QString&) { refresh_library(); });
+    top->addWidget(library_search_, 1);
 
-    auto* buttons = new QHBoxLayout();
-    auto* play_btn = new QPushButton(QStringLiteral("▶ Play selected"), page);
-    play_btn->setObjectName("IconButton");
-    connect(play_btn, &QPushButton::clicked, this, &MainWindow::on_library_play);
-    buttons->addWidget(play_btn);
-    auto* add_btn = new QPushButton(QStringLiteral("＋ Add current"), page);
-    add_btn->setObjectName("IconButton");
-    connect(add_btn, &QPushButton::clicked, this, &MainWindow::on_library_add_current);
-    buttons->addWidget(add_btn);
-    auto* del_btn = new QPushButton(QStringLiteral("× Remove"), page);
-    del_btn->setObjectName("IconButton");
-    connect(del_btn, &QPushButton::clicked, this, [this] {
-        int row = library_view_->currentRow();
-        if (row >= 0) { library_->remove(row); refresh_library(); }
+    library_mode_ = new QComboBox(page);
+    library_mode_->setObjectName("IconButton");
+    library_mode_->addItem(QStringLiteral("All Tracks"), QStringLiteral("all"));
+    library_mode_->addItem(QStringLiteral("Artists"), QStringLiteral("artists"));
+    library_mode_->addItem(QStringLiteral("Albums"), QStringLiteral("albums"));
+    library_mode_->addItem(QStringLiteral("Genres"), QStringLiteral("genres"));
+    library_mode_->addItem(QStringLiteral("Favorites"), QStringLiteral("favorites"));
+    connect(library_mode_, &QComboBox::currentIndexChanged, this,
+            [this](int) { refresh_library(); });
+    top->addWidget(library_mode_);
+
+    auto* refresh_btn = new QPushButton(QStringLiteral("Refresh"), page);
+    refresh_btn->setObjectName("IconButton");
+    connect(refresh_btn, &QPushButton::clicked, this, [this] { refresh_library(); });
+    top->addWidget(refresh_btn);
+    layout->addLayout(top);
+
+    auto* split = new QSplitter(Qt::Horizontal, page);
+    library_groups_ = new QListWidget(split);
+    library_groups_->setObjectName("QueueTree");
+    connect(library_groups_, &QListWidget::currentItemChanged, this,
+            [this](QListWidgetItem* current, QListWidgetItem*) {
+                if (current) refresh_library();
+            });
+    split->addWidget(library_groups_);
+    library_tracks_ = new QListWidget(split);
+    library_tracks_->setObjectName("QueueTree");
+    connect(library_tracks_, &QListWidget::itemDoubleClicked, this,
+            [this](QListWidgetItem* item) { on_library_add_selected(item); });
+    library_tracks_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(library_tracks_, &QListWidget::customContextMenuRequested, this,
+            [this](const QPoint& pos) {
+                QListWidgetItem* item = library_tracks_->itemAt(pos);
+                if (!item) return;
+                const QString path = item->data(Qt::UserRole).toString();
+                QMenu menu(library_tracks_);
+                const bool fav = library_->index_of(path) >= 0 &&
+                                 library_->entries()[library_->index_of(path)].favorite;
+                QAction* act = menu.addAction(fav ? QStringLiteral("★ Unmark favorite")
+                                                  : QStringLiteral("☆ Mark as favorite"));
+                if (menu.exec(library_tracks_->viewport()->mapToGlobal(pos)) == act) {
+                    library_->set_favorite(path, !fav);
+                    refresh_library();
+                }
+            });
+    split->addWidget(library_tracks_);
+    split->setStretchFactor(0, 2);
+    split->setStretchFactor(1, 5);
+    split->setSizes({260, 720});
+    layout->addWidget(split, 1);
+
+    auto* bottom = new QHBoxLayout();
+    library_count_ = new QLabel(QStringLiteral(""), page);
+    library_count_->setObjectName("NowPlayingMeta");
+    bottom->addWidget(library_count_);
+    bottom->addStretch();
+    auto* add_btn = new QPushButton(QStringLiteral("Add to queue"), page);
+    add_btn->setObjectName("PrimaryButton");
+    connect(add_btn, &QPushButton::clicked, this,
+            [this] { on_library_add_selected(library_tracks_->currentItem()); });
+    bottom->addWidget(add_btn);
+    layout->addLayout(bottom);
+
+    auto* folders_label = new QLabel(QStringLiteral("WATCHED FOLDERS"), page);
+    folders_label->setObjectName("SidebarSection");
+    layout->addWidget(folders_label);
+    library_folders_ = new QListWidget(page);
+    library_folders_->setObjectName("QueueTree");
+    library_folders_->setMaximumHeight(110);
+    for (const QString& folder : app_settings_.watched_folders)
+        library_folders_->addItem(folder);
+    layout->addWidget(library_folders_);
+    auto* folder_row = new QHBoxLayout();
+    auto* add_folder_btn = new QPushButton(QStringLiteral("Add folder…"), page);
+    add_folder_btn->setObjectName("IconButton");
+    connect(add_folder_btn, &QPushButton::clicked, this, [this] {
+        const QString folder = QFileDialog::getExistingDirectory(
+            this, QStringLiteral("Add library folder"));
+        if (folder.isEmpty()) return;
+        for (const QString& f : app_settings_.watched_folders)
+            if (f == folder) return;
+        app_settings_.watched_folders.append(folder);
+        settings_->save(app_settings_);
+        library_folders_->addItem(folder);
     });
-    buttons->addWidget(del_btn);
-    layout->addLayout(buttons);
+    folder_row->addWidget(add_folder_btn);
+    auto* remove_folder_btn = new QPushButton(QStringLiteral("Remove selected"), page);
+    remove_folder_btn->setObjectName("IconButton");
+    connect(remove_folder_btn, &QPushButton::clicked, this, [this] {
+        const int row = library_folders_->currentRow();
+        if (row < 0) return;
+        app_settings_.watched_folders.removeAt(row);
+        settings_->save(app_settings_);
+        delete library_folders_->takeItem(row);
+    });
+    folder_row->addWidget(remove_folder_btn);
+    auto* scan_btn = new QPushButton(QStringLiteral("Scan now"), page);
+    scan_btn->setObjectName("IconButton");
+    connect(scan_btn, &QPushButton::clicked, this, [this] { scan_library_folders(); });
+    folder_row->addWidget(scan_btn);
+    folder_row->addStretch();
+    layout->addLayout(folder_row);
     refresh_library();
     pages_->addWidget(page);
 }
 
+void MainWindow::on_library_add_selected(QListWidgetItem* item) {
+    if (!item) return;
+    const QString path = item->data(Qt::UserRole).toString();
+    if (path.isEmpty()) return;
+    add_files({path});
+    status(QStringLiteral("Added to queue: %1").arg(QFileInfo(path).fileName()));
+}
+
+void MainWindow::scan_library_folders() {
+    int added = 0;
+    for (const QString& folder : app_settings_.watched_folders) {
+        QDirIterator it(folder, {"*.mp3", "*.flac", "*.wav", "*.ogg", "*.opus",
+                                 "*.m4a", "*.aac", "*.mp4", "*.mkv", "*.webm",
+                                 "*.avi", "*.mov", "*.m3u", "*.m3u8", "*.pls"},
+                        QDir::Files, QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            const QString file = it.next();
+            if (library_->index_of(file) >= 0) continue;
+            QString title;
+            try {
+                const auto tags = casu::media::metadata_for(file.toStdString());
+                title = QString::fromStdString(tags.at("title"));
+            } catch (const std::out_of_range&) {}
+            library_->add(file, title);
+            ++added;
+        }
+    }
+    library_->save();
+    refresh_library();
+    status(added > 0 ? QStringLiteral("Library scan: %1 new item(s)").arg(added)
+                     : QStringLiteral("Library scan: nothing new"));
+}
+
 void MainWindow::build_settings_page() {
     auto* page = new QWidget(this);
-    auto* layout = new QVBoxLayout(page);
-    layout->setContentsMargins(24, 24, 24, 24);
-    layout->setSpacing(12);
-    auto* title = new QLabel(QStringLiteral("SETTINGS"), page);
+    auto* outer = new QVBoxLayout(page);
+    outer->setContentsMargins(20, 18, 20, 18);
+    auto* title = new QLabel(QStringLiteral("OPTIONS"), page);
     title->setObjectName("NowPlayingTitle");
-    layout->addWidget(title);
+    outer->addWidget(title);
 
-    auto* grid = new QGridLayout();
-    grid->setHorizontalSpacing(12);
-    grid->setVerticalSpacing(8);
+    auto* scroll = new QScrollArea(page);
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto* content = new QWidget(scroll);
+    content->setStyleSheet(QStringLiteral("background: transparent;"));
+    auto* layout = new QVBoxLayout(content);
+    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setSpacing(14);
 
-    grid->addWidget(new QLabel(QStringLiteral("Volume"), page), 0, 0);
-    settings_volume_ = new QSlider(Qt::Horizontal, page);
+    auto add_section = [layout](const QString& text) {
+        auto* label = new QLabel(text);
+        label->setObjectName("SidebarSection");
+        layout->addWidget(label);
+    };
+
+    add_section(QStringLiteral("PLAYBACK"));
+    auto* row = new QHBoxLayout();
+    row->addWidget(new QLabel(QStringLiteral("Volume")));
+    settings_volume_ = new QSlider(Qt::Horizontal, content);
     settings_volume_->setRange(0, 200);
     settings_volume_->setValue(volume_);
-    grid->addWidget(settings_volume_, 0, 1);
-
-    grid->addWidget(new QLabel(QStringLiteral("Rate"), page), 1, 0);
-    settings_rate_ = new QDoubleSpinBox(page);
+    row->addWidget(settings_volume_, 1);
+    layout->addLayout(row);
+    auto* row2 = new QHBoxLayout();
+    row2->addWidget(new QLabel(QStringLiteral("Rate")));
+    settings_rate_ = new QDoubleSpinBox(content);
     settings_rate_->setRange(0.25, 4.0);
     settings_rate_->setSingleStep(0.25);
     settings_rate_->setValue(rate_);
-    grid->addWidget(settings_rate_, 1, 1);
-
-    grid->addWidget(new QLabel(QStringLiteral("Shuffle"), page), 2, 0);
-    settings_shuffle_ = new QCheckBox(page);
+    row2->addWidget(settings_rate_);
+    row2->addStretch();
+    layout->addLayout(row2);
+    auto* row3 = new QHBoxLayout();
+    row3->addWidget(new QLabel(QStringLiteral("Shuffle")));
+    settings_shuffle_ = new QCheckBox(content);
     settings_shuffle_->setChecked(playlist_.shuffle);
-    grid->addWidget(settings_shuffle_, 2, 1);
-
-    grid->addWidget(new QLabel(QStringLiteral("Repeat"), page), 3, 0);
-    settings_repeat_ = new QComboBox(page);
+    row3->addWidget(settings_shuffle_);
+    row3->addSpacing(18);
+    row3->addWidget(new QLabel(QStringLiteral("Repeat")));
+    settings_repeat_ = new QComboBox(content);
     settings_repeat_->addItems({"off", "all", "one"});
     settings_repeat_->setCurrentText(app_settings_.repeat);
-    grid->addWidget(settings_repeat_, 3, 1);
+    row3->addWidget(settings_repeat_);
+    row3->addStretch();
+    layout->addLayout(row3);
+    auto* row4 = new QHBoxLayout();
+    settings_muted_ = new QCheckBox(QStringLiteral("Muted"), content);
+    settings_muted_->setChecked(app_settings_.muted);
+    row4->addWidget(settings_muted_);
+    row4->addSpacing(18);
+    settings_resume_ = new QCheckBox(QStringLiteral("Resume playback on startup"), content);
+    settings_resume_->setChecked(app_settings_.resume_playback);
+    row4->addWidget(settings_resume_);
+    row4->addStretch();
+    layout->addLayout(row4);
 
-    grid->addWidget(new QLabel(QStringLiteral("Record dir"), page), 4, 0);
-    settings_record_dir_ = new QLineEdit(output_dir_, page);
-    grid->addWidget(settings_record_dir_, 4, 1);
+    add_section(QStringLiteral("VISUALIZER"));
+    auto* viz_row = new QHBoxLayout();
+    settings_viz_ = new QComboBox(content);
+    settings_viz_->addItem(QStringLiteral("Spectrum"), QStringLiteral("spectrum"));
+    settings_viz_->addItem(QStringLiteral("Waveform"), QStringLiteral("waveform"));
+    settings_viz_->addItem(QStringLiteral("Both"), QStringLiteral("both"));
+    settings_viz_->addItem(QStringLiteral("Off"), QStringLiteral("off"));
+    const int viz_index = settings_viz_->findData(app_settings_.visualizer);
+    settings_viz_->setCurrentIndex(qMax(0, viz_index));
+    viz_row->addWidget(settings_viz_);
+    viz_row->addStretch();
+    layout->addLayout(viz_row);
 
-    layout->addLayout(grid);
+    add_section(QStringLiteral("CACHE"));
+    auto* cache_row = new QHBoxLayout();
+    settings_cache_ = new QSpinBox(content);
+    settings_cache_->setRange(64, 8192);
+    settings_cache_->setSuffix(QStringLiteral(" MiB"));
+    settings_cache_->setValue(app_settings_.cache_limit_mib);
+    cache_row->addWidget(settings_cache_);
+    auto* clear_cache_btn = new QPushButton(QStringLiteral("Clear yt-dlp temp cache"), content);
+    clear_cache_btn->setObjectName("IconButton");
+    connect(clear_cache_btn, &QPushButton::clicked, this, [this] {
+        QDir cache_dir(QDir::tempPath() + QStringLiteral("/yt-dlp"));
+        if (cache_dir.exists()) {
+            cache_dir.removeRecursively();
+            toast(QStringLiteral("Cleared %1").arg(cache_dir.absolutePath()));
+        } else {
+            toast(QStringLiteral("No yt-dlp cache found"));
+        }
+    });
+    cache_row->addWidget(clear_cache_btn);
+    cache_row->addStretch();
+    layout->addLayout(cache_row);
 
-    auto* info = new QLabel(page);
-    info->setObjectName("NowPlayingMeta");
-    info->setWordWrap(true);
-    info->setText(QStringLiteral("Backend: in-process libVLC 3.0 (no external player). "
-                                "Settings are stored in config/settings.json."));
-    layout->addWidget(info);
-    backend_info_label_ = info;
+    add_section(QStringLiteral("LIBRARY FOLDERS"));
+    auto* folders_hint = new QLabel(
+        QStringLiteral("Folders whose audio/video files are indexed into the "
+                       "library (tags and file names are read for "
+                       "album/track/artist/genre)."),
+        content);
+    folders_hint->setObjectName("NowPlayingMeta");
+    folders_hint->setWordWrap(true);
+    layout->addWidget(folders_hint);
+    settings_folders_ = new QListWidget(content);
+    settings_folders_->setObjectName("QueueTree");
+    settings_folders_->setMinimumHeight(110);
+    settings_folders_->setMaximumHeight(180);
+    for (const QString& folder : app_settings_.watched_folders)
+        settings_folders_->addItem(folder);
+    layout->addWidget(settings_folders_);
+    auto* folder_row = new QHBoxLayout();
+    auto* add_folder_btn = new QPushButton(QStringLiteral("Add folder…"), content);
+    connect(add_folder_btn, &QPushButton::clicked, this, [this] {
+        const QString folder = QFileDialog::getExistingDirectory(this);
+        if (folder.isEmpty()) return;
+        for (int i = 0; i < settings_folders_->count(); ++i)
+            if (settings_folders_->item(i)->text() == folder) return;
+        settings_folders_->addItem(folder);
+        settings_folders_->setCurrentRow(settings_folders_->count() - 1);
+    });
+    folder_row->addWidget(add_folder_btn);
+    auto* remove_folder_btn = new QPushButton(QStringLiteral("Remove selected"), content);
+    connect(remove_folder_btn, &QPushButton::clicked, this, [this] {
+        const int row = settings_folders_->currentRow();
+        if (row >= 0) delete settings_folders_->takeItem(row);
+    });
+    folder_row->addWidget(remove_folder_btn);
+    folder_row->addStretch();
+    layout->addLayout(folder_row);
 
-    auto* save_btn = new QPushButton(QStringLiteral("Save settings"), page);
-    save_btn->setObjectName("PlayButton");
-    connect(save_btn, &QPushButton::clicked, this, &MainWindow::on_settings_save);
-    layout->addWidget(save_btn, 0, Qt::AlignLeft);
+    add_section(QStringLiteral("RECORDINGS & SNAPSHOTS"));
+    auto* rec_row = new QHBoxLayout();
+    settings_record_dir_ = new QLineEdit(output_dir_, content);
+    settings_record_dir_->setPlaceholderText(
+        QStringLiteral("Default folder for recordings and snapshots"));
+    rec_row->addWidget(settings_record_dir_, 1);
+    auto* rec_btn = new QPushButton(QStringLiteral("Choose folder…"), content);
+    connect(rec_btn, &QPushButton::clicked, this, [this] {
+        const QString folder = QFileDialog::getExistingDirectory(this);
+        if (!folder.isEmpty()) settings_record_dir_->setText(folder);
+    });
+    rec_row->addWidget(rec_btn);
+    layout->addLayout(rec_row);
+    auto* split_row = new QHBoxLayout();
+    split_row->addWidget(new QLabel(QStringLiteral("Split recordings every")));
+    settings_split_ = new QSpinBox(content);
+    settings_split_->setRange(0, 24 * 60);
+    settings_split_->setSuffix(QStringLiteral(" min"));
+    settings_split_->setSpecialValueText(QStringLiteral("no splitting"));
+    settings_split_->setValue(app_settings_.record_split_minutes);
+    split_row->addWidget(settings_split_);
+    split_row->addSpacing(12);
+    split_row->addWidget(new QLabel(QStringLiteral("Format")));
+    settings_format_ = new QComboBox(content);
+    for (const QString& fmt : {"mkv", "mp4", "ts", "webm", "ogg", "mp3", "flac", "wav"})
+        settings_format_->addItem(fmt);
+    const int fmt_index = settings_format_->findText(app_settings_.record_format);
+    settings_format_->setCurrentIndex(qMax(0, fmt_index));
+    split_row->addWidget(settings_format_);
+    split_row->addStretch();
+    layout->addLayout(split_row);
+
+    add_section(QStringLiteral("LEGAL"));
+    settings_consent_ = new QCheckBox(
+        QStringLiteral("I understand that YouTube uses yt-dlp and Spotify uses "
+                       "spotDL (personal use only)"),
+        content);
+    settings_consent_->setChecked(app_settings_.ytdlp_consent);
+    layout->addWidget(settings_consent_);
+
+    add_section(QStringLiteral("PROVIDERS"));
+    auto* providers = new QLabel(content);
+    providers->setObjectName("NowPlayingMeta");
+    providers->setWordWrap(true);
+    providers->setText(provider_status_text());
+    layout->addWidget(providers);
+    backend_info_label_ = providers;
+
+    auto* apply_row = new QHBoxLayout();
+    apply_row->addStretch();
+    auto* apply_btn = new QPushButton(QStringLiteral("Apply"), content);
+    apply_btn->setObjectName("PrimaryButton");
+    connect(apply_btn, &QPushButton::clicked, this, &MainWindow::on_settings_save);
+    apply_row->addWidget(apply_btn);
+    layout->addLayout(apply_row);
     layout->addStretch();
+
+    scroll->setWidget(content);
+    outer->addWidget(scroll, 1);
     pages_->addWidget(page);
 }
 
 void MainWindow::build_epg_page() {
+    // Linux parity (EpgPage): M3U catalog + XMLTV guide, web-style channel cards.
     auto* page = new QWidget(this);
-    auto* layout = new QVBoxLayout(page);
-    layout->setContentsMargins(20, 20, 20, 20);
-    layout->setSpacing(10);
+    auto* outer = new QVBoxLayout(page);
+    outer->setContentsMargins(20, 18, 20, 16);
+    outer->setSpacing(10);
     auto* title = new QLabel(QStringLiteral("EPG / IPTV"), page);
     title->setObjectName("NowPlayingTitle");
-    layout->addWidget(title);
+    outer->addWidget(title);
 
-    auto* row = new QHBoxLayout();
-    auto* load_btn = new QPushButton(QStringLiteral("Load XMLTV file…"), page);
-    load_btn->setObjectName("IconButton");
-    connect(load_btn, &QPushButton::clicked, this, &MainWindow::on_epg_load);
-    row->addWidget(load_btn);
-    epg_channel_ = new QComboBox(page);
-    epg_channel_->setMinimumWidth(220);
-    connect(epg_channel_, &QComboBox::currentTextChanged, this, [this] {
-        if (!epg_table_) return;
-        QString channel = epg_channel_->currentData().toString();
-        qint64 now = QDateTime::currentMSecsSinceEpoch();
-        QVector<EpgProgram> picks = now_and_next(epg_, channel, now);
-        epg_table_->setRowCount(picks.size());
-        for (int i = 0; i < picks.size(); ++i) {
-            epg_table_->setItem(i, 0, new QTableWidgetItem(
-                QDateTime::fromMSecsSinceEpoch(picks[i].start_ms).toString("HH:mm")));
-            epg_table_->setItem(i, 1, new QTableWidgetItem(picks[i].title));
-            epg_table_->setItem(i, 2, new QTableWidgetItem(picks[i].subtitle));
-        }
+    auto* source_row = new QHBoxLayout();
+    epg_source_ = new QLineEdit(page);
+    epg_source_->setPlaceholderText(QStringLiteral("M3U / XMLTV path or http(s) URL…"));
+    source_row->addWidget(epg_source_, 1);
+    auto* load_file_btn = new QPushButton(QStringLiteral("Load file"), page);
+    load_file_btn->setObjectName("IconButton");
+    connect(load_file_btn, &QPushButton::clicked, this, &MainWindow::on_epg_load);
+    source_row->addWidget(load_file_btn);
+    auto* load_url_btn = new QPushButton(QStringLiteral("Load URL"), page);
+    load_url_btn->setObjectName("IconButton");
+    connect(load_url_btn, &QPushButton::clicked, this, [this] {
+        load_epg_source(epg_source_->text().trimmed());
     });
-    row->addWidget(epg_channel_, 1);
-    layout->addLayout(row);
+    source_row->addWidget(load_url_btn);
+    outer->addLayout(source_row);
 
-    epg_table_ = new QTableWidget(0, 3, page);
-    epg_table_->setHorizontalHeaderLabels({"Start", "Title", "Sub-title"});
-    epg_table_->horizontalHeader()->setStretchLastSection(true);
-    layout->addWidget(epg_table_, 1);
-    auto* hint = new QLabel(QStringLiteral("Load an XMLTV (.xml) file to browse now/next listings per channel."), page);
-    hint->setObjectName("NowPlayingMeta");
-    layout->addWidget(hint);
+    epg_status_ = new QLabel(
+        QStringLiteral("Load an Extended-M3U playlist (and optional XMLTV guide) to browse channels."),
+        page);
+    epg_status_->setObjectName("NowPlayingMeta");
+    outer->addWidget(epg_status_);
+
+    auto* scroll = new QScrollArea(page);
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+    auto* grid_host = new QWidget(scroll);
+    grid_host->setStyleSheet(QStringLiteral("background: transparent;"));
+    epg_grid_ = new QGridLayout(grid_host);
+    epg_grid_->setSpacing(8);
+    scroll->setWidget(grid_host);
+    outer->addWidget(scroll, 1);
     pages_->addWidget(page);
+}
+
+void MainWindow::on_epg_load() {
+    QString file = QFileDialog::getOpenFileName(
+        this, QStringLiteral("Load playlist / guide"), QDir::homePath(),
+        QStringLiteral("Playlists & guides (*.m3u *.m3u8 *.pls *.xspf *.wpl *.asx *.xml *.xmltv);;All files (*)"));
+    if (file.isEmpty()) return;
+    load_epg_source(file);
+}
+
+void MainWindow::load_epg_source(const QString& source) {
+    if (source.isEmpty()) return;
+    const QString lower = source.toLower();
+    // XMLTV guide.
+    if (lower.endsWith(QStringLiteral(".xml")) || lower.endsWith(QStringLiteral(".xmltv"))) {
+        QByteArray data;
+        QString err;
+        if (lower.startsWith(QStringLiteral("http://")) ||
+            lower.startsWith(QStringLiteral("https://"))) {
+            const casu::network::HttpResponse res =
+                casu::network::HttpClient().get(source.toStdString(), 30000);
+            if (!res.error.empty()) {
+                epg_status_->setText(QStringLiteral("Guide fetch failed: %1")
+                                         .arg(QString::fromStdString(res.error)));
+                return;
+            }
+            data = QByteArray(reinterpret_cast<const char*>(res.body.data()),
+                              static_cast<int>(res.body.size()));
+        } else {
+            QFile f(source);
+            if (!f.open(QIODevice::ReadOnly)) {
+                epg_status_->setText(QStringLiteral("Could not read %1").arg(source));
+                return;
+            }
+            data = f.readAll();
+        }
+        err = parse_xmltv(data, &epg_);
+        if (!err.isEmpty()) {
+            epg_status_->setText(QStringLiteral("EPG error: %1").arg(err));
+            return;
+        }
+        epg_status_->setText(QStringLiteral("Guide loaded: %1 programmes").arg(epg_.programs.size()));
+        update_diagnostics_guide();
+        render_epg_cards();
+        return;
+    }
+    // M3U / playlist catalog (local or fetched over HTTP).
+    EpgCatalog catalog;
+    if (lower.startsWith(QStringLiteral("http://")) ||
+        lower.startsWith(QStringLiteral("https://"))) {
+        const casu::network::HttpResponse res =
+            casu::network::HttpClient().get(source.toStdString(), 30000);
+        if (!res.error.empty()) {
+            epg_status_->setText(QStringLiteral("Fetch failed: %1").arg(QString::fromStdString(res.error)));
+            return;
+        }
+        QTemporaryFile tmp;
+        if (!tmp.open()) return;
+        tmp.write(QByteArray(reinterpret_cast<const char*>(res.body.data()),
+                             static_cast<int>(res.body.size())));
+        tmp.flush();
+        PlaylistModel tmp_model;
+        if (PlaylistModel::load_file(tmp.fileName(), &tmp_model).empty())
+            for (const PlaylistItem& item : tmp_model.items())
+                catalog.channels.append(
+                    EpgChannel{item.path, item.title.isEmpty() ? QFileInfo(item.path).fileName() : item.title, item.path});
+    } else {
+        PlaylistModel tmp_model;
+        if (PlaylistModel::load_file(source, &tmp_model).empty())
+            for (const PlaylistItem& item : tmp_model.items())
+                catalog.channels.append(
+                    EpgChannel{item.path, item.title.isEmpty() ? QFileInfo(item.path).fileName() : item.title, item.path});
+    }
+    if (catalog.channels.isEmpty()) {
+        epg_status_->setText(QStringLiteral("No channels found in %1").arg(source));
+        return;
+    }
+    epg_ = catalog;
+    epg_status_->setText(QStringLiteral("%1 channels loaded").arg(catalog.channels.size()));
+    update_diagnostics_guide();
+    render_epg_cards();
+}
+
+void MainWindow::render_epg_cards() {
+    if (!epg_grid_) return;
+    while (QLayoutItem* item = epg_grid_->takeAt(0)) {
+        if (QWidget* w = item->widget()) w->deleteLater();
+        delete item;
+    }
+    const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
+    for (int index = 0; index < epg_.channels.size(); ++index) {
+        const EpgChannel& ch = epg_.channels[index];
+        auto* card = new QFrame(epg_grid_->parentWidget());
+        card->setObjectName("EpgChannel");
+        card->setCursor(Qt::PointingHandCursor);
+        auto* cl = new QVBoxLayout(card);
+        cl->setContentsMargins(12, 10, 12, 10);
+        auto* name = new QLabel(ch.name, card);
+        name->setObjectName("NowPlayingTitle");
+        name->setStyleSheet(QStringLiteral("font-size: 13px;"));
+        name->setWordWrap(true);
+        cl->addWidget(name);
+        QString now_text;
+        const QVector<EpgProgram> picks = now_and_next(epg_, ch.id, now_ms);
+        if (!picks.isEmpty()) now_text = picks.first().title;
+        auto* meta = new QLabel(now_text, card);
+        meta->setObjectName("NowPlayingMeta");
+        meta->setWordWrap(true);
+        cl->addWidget(meta);
+        const QString url = ch.url;
+        card->installEventFilter(this);
+        epg_card_urls_[card] = url;
+        epg_grid_->addWidget(card, index / 3, index % 3);
+    }
+}
+
+bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
+    if (event->type() == QEvent::MouseButtonRelease && epg_card_urls_.contains(watched)) {
+        open_network_source(epg_card_urls_.value(watched), epg_card_urls_.value(watched));
+        return true;
+    }
+    return QMainWindow::eventFilter(watched, event);
 }
 
 void MainWindow::build_recording_page() {
@@ -680,29 +1652,69 @@ void MainWindow::build_youtube_page() {
     layout->addWidget(title);
 
     auto* hint = new QLabel(QStringLiteral(
-        "Enter a YouTube URL (resolved via yt-dlp, then streamed through the "
-        "loopback Range/206 transport) or an existing local file path to test "
-        "the loopback transport offline."), page);
+        "Enter a YouTube URL, a search term or a stream URL. YouTube is "
+        "resolved via yt-dlp and streamed through the loopback Range/206 "
+        "transport."), page);
     hint->setObjectName("NowPlayingMeta");
     hint->setWordWrap(true);
     layout->addWidget(hint);
 
+    // Consent gate (Linux parity): legal notice before yt-dlp features.
+    yt_consent_frame_ = new QFrame(page);
+    yt_consent_frame_->setObjectName("Panel");
+    auto* consent_layout = new QVBoxLayout(yt_consent_frame_);
+    consent_layout->setContentsMargins(14, 12, 14, 12);
+    consent_layout->setSpacing(8);
+    auto* notice = new QLabel(
+        QStringLiteral("Legal notice — YouTube search/playback uses yt-dlp "
+                       "(GNU GPL); Spotify uses spotDL: Spotify metadata "
+                       "matched on YouTube (metadata → match → YouTube audio "
+                       "source). Stream URLs are resolved temporarily and "
+                       "never stored or redistributed. Personal use only."),
+        yt_consent_frame_);
+    notice->setObjectName("NowPlayingMeta");
+    notice->setWordWrap(true);
+    consent_layout->addWidget(notice);
+    auto* accept_btn = new QPushButton(
+        QStringLiteral("Accept and enable yt-dlp features"), yt_consent_frame_);
+    accept_btn->setObjectName("PrimaryButton");
+    connect(accept_btn, &QPushButton::clicked, this, [this] {
+        app_settings_.ytdlp_consent = true;
+        settings_->save(app_settings_);
+        if (yt_consent_frame_) yt_consent_frame_->hide();
+        status(QStringLiteral("yt-dlp features enabled"));
+    });
+    consent_layout->addWidget(accept_btn, 0, Qt::AlignLeft);
+    yt_consent_frame_->setVisible(!app_settings_.ytdlp_consent);
+    layout->addWidget(yt_consent_frame_);
+
     youtube_url_ = new QLineEdit(page);
-    youtube_url_->setPlaceholderText(QStringLiteral("https://www.youtube.com/watch?v=…  or  C:\\media\\clip.mp4"));
+    youtube_url_->setPlaceholderText(QStringLiteral("https://www.youtube.com/watch?v=…  or  search term"));
+    youtube_url_->setClearButtonEnabled(true);
+    connect(youtube_url_, &QLineEdit::returnPressed, this, &MainWindow::on_youtube_play);
     layout->addWidget(youtube_url_);
 
     auto* row = new QHBoxLayout();
-    auto* play = new QPushButton(QStringLiteral("▶ Play via loopback transport"), page);
+    auto* play = new QPushButton(QStringLiteral("Play / search"), page);
     play->setObjectName("PlayButton");
     connect(play, &QPushButton::clicked, this, &MainWindow::on_youtube_play);
     row->addWidget(play);
     layout->addLayout(row);
 
+    yt_results_ = new QListWidget(page);
+    yt_results_->setObjectName("QueueTree");
+    connect(yt_results_, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* item) {
+        if (!item) return;
+        const QString url = item->data(Qt::UserRole).toString();
+        if (url.isEmpty()) return;
+        open_network_source(url, url);
+    });
+    layout->addWidget(yt_results_, 1);
+
     youtube_status_ = new QLabel(QStringLiteral("Idle"), page);
     youtube_status_->setObjectName("NowPlayingMeta");
     youtube_status_->setWordWrap(true);
     layout->addWidget(youtube_status_);
-    layout->addStretch();
     pages_->addWidget(page);
 }
 
@@ -734,6 +1746,7 @@ void MainWindow::navigate(const QString& page) {
     static const QMap<QString, int> pages = {
         {"NOW PLAYING", 0}, {"LIBRARY", 1}, {"YOUTUBE", 2}, {"EPG", 3},
         {"VISUALIZER", 4}, {"RECORDING", 5}, {"SETTINGS", 6}, {"WEB PLAYERS", 7},
+        {"ABOUT", 8},
     };
     int idx = pages.value(page, 0);
     pages_->setCurrentIndex(idx);
@@ -743,9 +1756,180 @@ void MainWindow::navigate(const QString& page) {
         youtube_status_->setText(QStringLiteral("Enter a YouTube URL (resolved via yt-dlp) or a "
                                                 "local file path (loopback transport test)."));
     }
+    if (page == "SETTINGS" && backend_info_label_)
+        backend_info_label_->setText(provider_status_text());
 }
 
 // ------------------------------------------------------------------ status/toast
+
+void MainWindow::show_media_info() {
+    // Media info dialog (mirror of the Linux show_media_info): ffprobe
+    // metadata + manifest basics in a readable text browser.
+    const QString path = current_played_path_.isEmpty()
+                             ? (playlist_.items().isEmpty() ? QString()
+                                                            : playlist_.items().first().path)
+                             : current_played_path_;
+    QString text;
+    if (path.isEmpty()) {
+        QMessageBox::information(this, QStringLiteral("Media info"),
+                                 QStringLiteral("No media loaded."));
+        return;
+    }
+    text += QStringLiteral("<b>%1</b>\n\n").arg(path.toHtmlEscaped());
+    // Linux parity: native CASU containers show their manifest (no ffprobe).
+    if (QFileInfo::exists(path)) {
+        const casu::CasuKind kind = casu::detect_casu_kind(path.toStdString());
+        if (kind != casu::CasuKind::None && kind != casu::CasuKind::Sidecar) {
+            bool native_v2 = kind == casu::CasuKind::Casunat2;
+            QString format_name;
+            QString duration;
+            QVector<QPair<QString, QString>> streams;
+            QStringList metadata_keys;
+            try {
+                if (native_v2) {
+                    QFile f(path);
+                    if (f.open(QIODevice::ReadOnly)) {
+                        const QByteArray head = f.read(20);
+                        const casu::casunat2::Header h = casu::casunat2::parse_header(
+                            reinterpret_cast<const uint8_t*>(head.constData()),
+                            static_cast<std::size_t>(head.size()));
+                        if (h.manifest_length > 0 && h.manifest_length <= 64ULL * 1024 * 1024) {
+                            const QByteArray manifest_bytes = f.read(
+                                static_cast<qint64>(qBound<uint64_t>(
+                                    0, h.manifest_length, 64ULL * 1024 * 1024)));
+                            const casu::JsonValue manifest = casu::parse_json(
+                                manifest_bytes.constData(),
+                                static_cast<std::size_t>(manifest_bytes.size()));
+                            format_name = QStringLiteral("CASUNAT2 segmented media");
+                            if (const casu::JsonValue* d = manifest.find("duration"))
+                                duration = QString::number(d->as_double(), 'f', 2);
+                            if (const casu::JsonValue* md = manifest.find("metadata");
+                                md && md->is_object())
+                                for (const auto& [key, val] : md->as_object().items)
+                                    if (val.is_string())
+                                        metadata_keys.append(QString::fromStdString(key));
+                            if (const casu::JsonValue* s = manifest.find("streams");
+                                s && s->is_array())
+                                for (const casu::JsonValue& item : s->as_array().items) {
+                                    if (!item.is_object()) continue;
+                                    QString type;
+                                    if (const casu::JsonValue* t = item.find("type"))
+                                        type = QString::fromStdString(t->as_string());
+                                    streams.append({type,
+                                                    QStringLiteral("casu-%1").arg(type)});
+                                }
+                        }
+                    }
+                } else {
+                    const casu::casunat1::Container c =
+                        casu::casunat1::read_native(path.toStdString(), false);
+                    format_name = QStringLiteral("CASU native container");
+                    if (const casu::JsonValue* src = c.manifest.find("source");
+                        src && src->is_object())
+                        if (const casu::JsonValue* d = src->find("duration_s"))
+                            duration = QString::number(d->as_double(), 'f', 2);
+                    if (const casu::JsonValue* s = c.manifest.find("streams");
+                        s && s->is_array())
+                        for (const casu::JsonValue& item : s->as_array().items) {
+                            if (!item.is_object()) continue;
+                            QString type;
+                            if (const casu::JsonValue* t = item.find("type"))
+                                type = QString::fromStdString(t->as_string());
+                            streams.append({type, QStringLiteral("casu-%1").arg(type)});
+                        }
+                }
+            } catch (const std::exception& e) {
+                text += QStringLiteral("CASU: manifest read failed — %1\n")
+                            .arg(QString::fromStdString(e.what()));
+            }
+            text += QStringLiteral("CASU: %1\n").arg(
+                native_v2 ? QStringLiteral("verified native CASUNAT2")
+                          : QStringLiteral("verified CASUNAT1 compatibility envelope"));
+            text += QStringLiteral("Container: %1\n").arg(format_name);
+            text += QStringLiteral("Duration: %1 s\n")
+                        .arg(duration.isEmpty() ? QStringLiteral("unknown") : duration);
+            text += QStringLiteral("Size: %1 bytes\n").arg(QFileInfo(path).size());
+            for (const QString& key : metadata_keys)
+                text += QStringLiteral("%1: (see manifest)\n").arg(key);
+            text += QStringLiteral("\nStreams:\n");
+            for (const auto& [type, codec] : streams)
+                text += QStringLiteral("  %1 · %2\n").arg(type, codec);
+            QDialog dialog(this);
+            dialog.setWindowTitle(QStringLiteral("Media info"));
+            dialog.setObjectName("Panel");
+            dialog.resize(520, 420);
+            auto* layout = new QVBoxLayout(&dialog);
+            auto* browser = new QTextBrowser(&dialog);
+            browser->setObjectName("PagePanel");
+            browser->setText(text);
+            layout->addWidget(browser);
+            dialog.exec();
+            return;
+        }
+    }
+    const QString ffprobe = qEnvironmentVariable("CASU_FFPROBE");
+    if (!ffprobe.isEmpty() && QFileInfo::exists(ffprobe) && QFileInfo::exists(path)) {
+        QProcess probe;
+        probe.start(ffprobe, {"-v", "quiet", "-print_format", "json",
+                              "-show_format", "-show_streams", path});
+        if (probe.waitForFinished(15000)) {
+            const QByteArray out = probe.readAllStandardOutput();
+            QJsonParseError err;
+            const QJsonDocument doc = QJsonDocument::fromJson(out, &err);
+            if (err.error == QJsonParseError::NoError && doc.isObject()) {
+                const QJsonObject root = doc.object();
+                const QJsonObject format = root.value("format").toObject();
+                const QString duration = format.value("duration").toString();
+                if (!duration.isEmpty())
+                    text += QStringLiteral("Duration: %1\n").arg(format_duration(duration.toDouble()));
+                if (format.contains("bit_rate"))
+                    text += QStringLiteral("Bitrate: %1 kbit/s\n")
+                                .arg(format.value("bit_rate").toDouble() / 1000.0);
+                if (format.contains("format_name"))
+                    text += QStringLiteral("Format: %1\n").arg(format.value("format_name").toString());
+                if (format.contains("tags")) {
+                    const QJsonObject tags = format.value("tags").toObject();
+                    for (const QString& key : {"title", "artist", "album"}) {
+                        if (tags.contains(key))
+                            text += QStringLiteral("%1: %2\n")
+                                        .arg(key, tags.value(key).toString().toHtmlEscaped());
+                    }
+                }
+                text += QStringLiteral("\nStreams:\n");
+                const QJsonArray streams = root.value("streams").toArray();
+                for (const QJsonValue& sv : streams) {
+                    const QJsonObject s = sv.toObject();
+                    const QString type = s.value("codec_type").toString();
+                    const QString codec = s.value("codec_name").toString();
+                    QString line = QStringLiteral("  %1 · %2").arg(type, codec);
+                    if (type == "video" && s.contains("width")) {
+                        line += QStringLiteral(" · %1×%2").arg(s.value("width").toInt())
+                                                          .arg(s.value("height").toInt());
+                    }
+                    if (type == "audio" && s.contains("sample_rate"))
+                        line += QStringLiteral(" · %1 Hz").arg(s.value("sample_rate").toInt());
+                    text += line + "\n";
+                }
+            } else {
+                text += QStringLiteral("ffprobe parse failed: %1\n").arg(err.errorString());
+            }
+        } else {
+            text += QStringLiteral("ffprobe failed (%1)\n").arg(probe.errorString());
+        }
+    } else {
+        text += QStringLiteral("(ffprobe not available for this source)\n");
+    }
+    QDialog dialog(this);
+    dialog.setWindowTitle(QStringLiteral("Media info"));
+    dialog.setObjectName("Panel");
+    dialog.resize(520, 420);
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* browser = new QTextBrowser(&dialog);
+    browser->setObjectName("PagePanel");
+    browser->setText(text);
+    layout->addWidget(browser);
+    dialog.exec();
+}
 
 void MainWindow::status(const QString& text) {
     if (status_label_) status_label_->setText(text);
@@ -753,6 +1937,19 @@ void MainWindow::status(const QString& text) {
 
 void MainWindow::toast(const QString& text) {
     status(text);
+    if (!toast_label_ || !toast_label_->parentWidget()) return;
+    toast_label_->setText(text);
+    toast_label_->setWordWrap(true);
+    toast_label_->adjustSize();
+    const QWidget* stage = toast_label_->parentWidget();
+    const int width = qMin(toast_label_->width(), qMax(240, stage->width() - 32));
+    toast_label_->setFixedWidth(width);
+    toast_label_->adjustSize();
+    toast_label_->move(qMax(16, (stage->width() - toast_label_->width()) / 2),
+                       qMax(8, stage->height() - toast_label_->height() - 18));
+    toast_label_->show();
+    toast_label_->raise();
+    toast_timer_->start(2600);
 }
 
 // ------------------------------------------------------------------ playback core
@@ -766,6 +1963,8 @@ void MainWindow::stop_playback() {
     }
     backend_.reset();
     controller_->poll();
+    set_diagnostics(QStringLiteral("Legacy backend"), QStringLiteral("unavailable"),
+                    QStringLiteral("unavailable"), QString());
     if (surface_) {
         surface_->set_video_active(false);
         surface_->clear();
@@ -787,11 +1986,65 @@ void MainWindow::open_backend_and_play(const QString& source, const QString& tit
     current_source_ = source;
     current_title_ = title.isEmpty() ? display_title_for_path(source) : title;
     topbar_title_->setText(current_title_);
+    // Linux parity: Now-Playing caption shows the EPG now/next line for URLs.
+    if (source.startsWith(QStringLiteral("http://")) ||
+        source.startsWith(QStringLiteral("https://"))) {
+        const QString epg_line = epg_now_next_text(source);
+        if (!epg_line.isEmpty() && epg_line != QStringLiteral("no EPG loaded") &&
+            epg_line != QStringLiteral("EPG loaded"))
+            topbar_title_->setText(current_title_ + QStringLiteral("\n") + epg_line);
+    }
+    ab_loop_a_ = -1.0;
+    ab_loop_b_ = -1.0;
+    if (ab_btn_) { ab_btn_->setChecked(false); }
+    // Resume playback at the saved position (Linux parity).
+    if (!resume_source_.isEmpty() && resume_source_ == source && resume_position_ > 5.0) {
+        QTimer::singleShot(600, this, [this, source] {
+            try { backend_->seek(resume_position_); } catch (const casu::playback::PlaybackError&) {}
+            controller_->seek(resume_position_);
+            status(QStringLiteral("Resumed %1 at %2 s")
+                       .arg(QFileInfo(source).fileName())
+                       .arg(resume_position_, 0, 'f', 1));
+            resume_source_.clear();
+            resume_position_ = -1.0;
+        });
+    }
 
     bool audio = !is_network_like(source) && is_audio_ext(source);
     surface_->set_video_active(!audio);
     if (visualizer_) static_cast<VisualizerWidget*>(visualizer_)->set_playing(true);
     if (audio) surface_->clear();
+
+    // Diagnostics bar (Linux parity): describe container capabilities.
+    QString diag_support = QStringLiteral("Legacy backend");
+    QString diag_integrity = QStringLiteral("unavailable");
+    QString diag_segmented = QStringLiteral("unavailable");
+    if (is_network_like(source)) {
+        diag_support = QStringLiteral("Legacy network backend");
+    } else if (is_casu_container(source)) {
+        switch (casu::detect_casu_kind(source.toStdString())) {
+            case casu::CasuKind::Mp5:
+                diag_support = QStringLiteral("MP5 enhanced container + libVLC");
+                diag_integrity = QStringLiteral("SHA-256 verified attachment");
+                break;
+            case casu::CasuKind::Casunat1:
+                diag_support = QStringLiteral("CASUNAT1 container + libVLC");
+                diag_integrity = QStringLiteral("verified source manifest");
+                break;
+            case casu::CasuKind::Sidecar:
+                diag_support = QStringLiteral("CASUNAT1 + CASUNAT2");
+                diag_integrity = QStringLiteral("CASUNAT1 envelope verified on load");
+                break;
+            case casu::CasuKind::Casunat2:
+                diag_support = QStringLiteral("CASUNAT2 native key-state/tile/PCM");
+                break;
+            default:
+                break;
+        }
+        diag_segmented = QStringLiteral("no segment data");
+    }
+    set_diagnostics(diag_support, diag_integrity, diag_segmented, QString());
+    update_diagnostics_guide();
 
     std::vector<std::string> runtime_options;
     if (!vout_.isEmpty())
@@ -1070,6 +2323,11 @@ void MainWindow::set_volume(int value) {
     if (backend_) {
         try { backend_->set_volume(volume_); } catch (const casu::playback::PlaybackError&) {}
     }
+    // Linux parity: live values survive a restart (saved on every change).
+    if (app_settings_.volume != volume_) {
+        app_settings_.volume = volume_;
+        settings_->save(app_settings_);
+    }
 }
 
 void MainWindow::toggle_mute() {
@@ -1078,6 +2336,10 @@ void MainWindow::toggle_mute() {
         try { backend_->set_mute(muted_); } catch (const casu::playback::PlaybackError&) {}
     }
     mute_btn_->setText(muted_ ? QStringLiteral("×") : QStringLiteral("♪"));
+    if (app_settings_.muted != muted_) {
+        app_settings_.muted = muted_;
+        settings_->save(app_settings_);
+    }
 }
 
 void MainWindow::cycle_rate() {
@@ -1094,11 +2356,137 @@ void MainWindow::cycle_rate() {
     if (backend_) {
         try { backend_->set_rate(rate_); } catch (const casu::playback::PlaybackError&) {}
     }
+    if (qAbs(app_settings_.rate - rate_) > 0.001) {
+        app_settings_.rate = rate_;
+        settings_->save(app_settings_);
+    }
 }
 
 void MainWindow::toggle_fullscreen() {
-    if (isFullScreen()) showNormal();
-    else showFullScreen();
+    if (isFullScreen()) {
+        showNormal();
+        exit_fullscreen_ui();
+        return;
+    }
+    // Linux parity: hide chrome, floating transport overlay instead.
+    if (sidebar_) sidebar_->hide();
+    if (topbar_) topbar_->hide();
+    if (transport_frame_) transport_frame_->hide();
+    if (diagnostics_bar_) diagnostics_bar_->hide();
+    statusBar()->hide();
+    showFullScreen();
+    show_fs_overlay();
+}
+
+void MainWindow::exit_fullscreen_ui() {
+    hide_fs_overlay();
+    if (sidebar_) sidebar_->show();
+    if (topbar_) topbar_->show();
+    if (transport_frame_) transport_frame_->show();
+    if (diagnostics_bar_) diagnostics_bar_->show();
+    statusBar()->show();
+}
+
+void MainWindow::show_fs_overlay() {
+    if (!fs_overlay_ || !isFullScreen()) return;
+    if (fs_title_ && !current_title_.isEmpty()) fs_title_->setText(current_title_);
+    if (fs_play_btn_) {
+        const casu::playback::PlaybackState st =
+            controller_ ? controller_->state() : casu::playback::PlaybackState::STOPPED;
+        fs_play_btn_->setText(st == casu::playback::PlaybackState::PLAYING && !paused_
+                                  ? QStringLiteral("| |")
+                                  : QStringLiteral("▶"));
+    }
+    if (fs_time_ && controller_) {
+        const double pos = controller_->position();
+        const double dur = controller_->duration() > 0.0 ? controller_->duration() : duration_;
+        fs_time_->setText(QStringLiteral("%1 / %2").arg(format_duration(pos), format_duration(dur)));
+    }
+    const int w = player_page_ ? player_page_->width() : width();
+    const int h = player_page_ ? player_page_->height() : height();
+    const QPoint origin = player_page_ ? player_page_->mapTo(this, QPoint(0, 0)) : QPoint(0, 0);
+    fs_overlay_->setGeometry(origin.x() + 24, origin.y() + h - 52, w - 48, 40);
+    fs_overlay_->raise();
+    fs_overlay_->show();
+    if (fs_hide_timer_) fs_hide_timer_->start();
+}
+
+void MainWindow::hide_fs_overlay() {
+    if (fs_hide_timer_) fs_hide_timer_->stop();
+    if (fs_overlay_) fs_overlay_->hide();
+}
+
+void MainWindow::mouseMoveEvent(QMouseEvent* event) {
+    if (isFullScreen()) show_fs_overlay();
+    QMainWindow::mouseMoveEvent(event);
+}
+
+void MainWindow::resizeEvent(QResizeEvent* event) {
+    QMainWindow::resizeEvent(event);
+    if (isFullScreen()) show_fs_overlay();
+    if (toast_label_ && toast_label_->isVisible()) {
+        const QWidget* stage = toast_label_->parentWidget();
+        const int width = qMin(toast_label_->width(), qMax(240, stage->width() - 32));
+        toast_label_->setFixedWidth(width);
+        toast_label_->adjustSize();
+        toast_label_->move(qMax(16, (stage->width() - toast_label_->width()) / 2),
+                           qMax(8, stage->height() - toast_label_->height() - 18));
+    }
+}
+
+void MainWindow::moveEvent(QMoveEvent* event) {
+    QMainWindow::moveEvent(event);
+    clamp_to_screen();
+}
+
+void MainWindow::showEvent(QShowEvent* event) {
+    QMainWindow::showEvent(event);
+    clamp_to_screen();
+}
+
+void MainWindow::clamp_to_screen() {
+    if (isFullScreen() || clamping_) return;
+    clamping_ = true;
+    QScreen* screen = QGuiApplication::primaryScreen();
+    if (screen) {
+        const QRect avail = screen->availableGeometry();
+        QRect geo = geometry();
+        geo.setWidth(qMin(geo.width(), avail.width()));
+        geo.setHeight(qMin(geo.height(), avail.height()));
+        const int max_x = avail.left() + qMax(0, avail.width() - geo.width());
+        const int max_y = avail.top() + qMax(0, avail.height() - geo.height());
+        geo.moveLeft(qBound(avail.left(), geo.left(), max_x));
+        geo.moveTop(qBound(avail.top(), geo.top(), max_y));
+        if (geo != geometry()) setGeometry(geo);
+    }
+    clamping_ = false;
+}
+
+void MainWindow::change_volume(int delta) {
+    set_volume(volume_ + delta);
+    toast(QStringLiteral("Volume %1%").arg(volume_));
+}
+
+void MainWindow::open_files_dialog() {
+    const QStringList files = QFileDialog::getOpenFileNames(
+        this, QStringLiteral("Open media"), QDir::homePath(),
+        QStringLiteral("Media (*.mp4 *.mkv *.webm *.avi *.mov *.mp3 *.flac *.wav *.ogg *.m4a *.aac "
+                       "*.opus *.casu *.mp5 *.m3u *.m3u8 *.pls);;All files (*.*)"));
+    if (files.isEmpty()) return;
+    add_files(files);
+    if (playlist_.current_index() >= 0)
+        play_queue_index(playlist_.current_index(), false);
+}
+
+void MainWindow::open_url_dialog() {
+    bool ok = false;
+    QString url = QInputDialog::getText(this, QStringLiteral("Open URL"),
+                                        QStringLiteral("Stream URL or YouTube link"),
+                                        QLineEdit::Normal, QString(), &ok);
+    if (!ok || url.trimmed().isEmpty()) return;
+    add_files({url.trimmed()});
+    if (playlist_.current_index() >= 0)
+        play_queue_index(playlist_.current_index(), false);
 }
 
 void MainWindow::save_snapshot() {
@@ -1135,6 +2523,8 @@ void MainWindow::on_backend_state(casu::playback::PlaybackState s) {
         case casu::playback::PlaybackState::ERROR:
             status(QStringLiteral("Playback error detected"));
             surface_->set_video_active(false);
+            set_diagnostics(QStringLiteral("backend error; inspect media information/logs"),
+                            QString(), QString(), QString());
             break;
         case casu::playback::PlaybackState::PLAYING:
             paused_ = false;
@@ -1149,6 +2539,31 @@ void MainWindow::on_backend_state(casu::playback::PlaybackState s) {
     }
 }
 
+void MainWindow::cycle_ab_loop() {
+    // A → B → loop on → off (Linux cycle_ab_loop semantics with toasts).
+    if (ab_loop_a_ < 0.0) {
+        ab_loop_a_ = controller_->position();
+        ab_loop_b_ = -1.0;
+        toast(QStringLiteral("A point set at %1").arg(format_duration(ab_loop_a_)));
+        return;
+    }
+    if (ab_loop_b_ < 0.0) {
+        const double pos = controller_->position();
+        if (pos <= ab_loop_a_ + 0.5) {
+            ab_loop_a_ = pos;
+            toast(QStringLiteral("A point set at %1").arg(format_duration(pos)));
+            return;
+        }
+        ab_loop_b_ = pos;
+        toast(QStringLiteral("A–B loop active (%1 → %2)")
+                  .arg(format_duration(ab_loop_a_), format_duration(ab_loop_b_)));
+        return;
+    }
+    ab_loop_a_ = -1.0;
+    ab_loop_b_ = -1.0;
+    toast(QStringLiteral("A–B loop off"));
+}
+
 void MainWindow::poll() {
     if (!backend_) return;
     controller_->poll();
@@ -1158,11 +2573,19 @@ void MainWindow::poll() {
         duration_ = dur;
         seek_slider_->setRange(0, static_cast<int>(dur * 1000.0));
     }
+    if (ab_loop_b_ > 0.0 && pos >= ab_loop_b_ && !paused_) {
+        try { backend_->seek(ab_loop_a_); } catch (const casu::playback::PlaybackError&) {}
+        controller_->seek(ab_loop_a_);
+    }
     if (!seek_slider_->isSliderDown()) {
         int ms = qBound(0, static_cast<int>(pos * 1000.0), 0x7fffffff);
         seek_slider_->setValue(ms);
         time_current_->setText(format_duration(pos));
         time_total_->setText(format_duration(duration_));
+    }
+    if (fs_overlay_ && fs_overlay_->isVisible() && fs_time_) {
+        const double dur = controller_->duration() > 0.0 ? controller_->duration() : duration_;
+        fs_time_->setText(QStringLiteral("%1 / %2").arg(format_duration(pos), format_duration(dur)));
     }
     if (duration_ > 0.0 && pos >= duration_ - 0.25 && !paused_) handle_end();
     const casu::playback::PlaybackState st = controller_->state();
@@ -1179,6 +2602,10 @@ void MainWindow::update_play_button() {
     play_btn_->setText(st == casu::playback::PlaybackState::PLAYING && !paused_
                            ? QStringLiteral("| |")
                            : QStringLiteral("▶"));
+    if (fs_play_btn_)
+        fs_play_btn_->setText(st == casu::playback::PlaybackState::PLAYING && !paused_
+                                  ? QStringLiteral("| |")
+                                  : QStringLiteral("▶"));
 }
 
 // ------------------------------------------------------------------ playlist UI actions
@@ -1335,9 +2762,28 @@ void MainWindow::playlist_context_menu(const QPoint& pos) {
 
 void MainWindow::move_playlist_rows(const QVector<int>& rows, int delta) {
     if (rows.isEmpty()) return;
+    const auto& items = playlist_.items();
+    QStringList saved;
+    for (int row : rows)
+        if (row >= 0 && row < items.size())
+            saved << items[row].path;
     playlist_.move_many(rows, delta);
     invalidate_seq();
     refresh_playlist();
+    if (!saved.isEmpty()) reselect_playlist_rows(saved);
+}
+
+void MainWindow::reselect_playlist_rows(const QStringList& paths) {
+    // Persistent marking: re-select the same rows after the re-render, so
+    // repeated moves/removes work without re-marking.
+    if (!playlist_view_ || paths.isEmpty()) return;
+    const QSet<QString> want(paths.begin(), paths.end());
+    playlist_view_->clearSelection();
+    for (int i = 0; i < playlist_view_->topLevelItemCount(); ++i) {
+        auto* item = playlist_view_->topLevelItem(i);
+        if (want.contains(item->data(0, Qt::UserRole).toString()))
+            item->setSelected(true);
+    }
 }
 
 void MainWindow::expand_playlist_group(QTreeWidgetItem* top) {
@@ -1354,9 +2800,16 @@ void MainWindow::expand_playlist_group(QTreeWidgetItem* top) {
     }
     for (const PlaylistItem& entry : tmp.items()) {
         auto* child = new QTreeWidgetItem();
-        child->setText(0, entry.title.isEmpty() ? entry.path : entry.title);
+        child->setText(0, entry.title.isEmpty() ? queue_label_for(entry.path)
+                                                : entry.title);
         child->setData(0, Qt::UserRole, entry.path);
         child->setToolTip(0, entry.path);
+        child->setText(1, queue_badge_for(entry.path));
+        child->setTextAlignment(1, Qt::AlignRight | Qt::AlignVCenter);
+        child->setForeground(1, QColor(mpcasu::palette().muted));
+        QFont badge_font = child->font(0);
+        badge_font.setPointSizeF(qMax(7.0, badge_font.pointSizeF() - 1.0));
+        child->setFont(1, badge_font);
         top->addChild(child);
     }
 }
@@ -1531,6 +2984,9 @@ void MainWindow::refresh_playlist() {
     for (int i = 0; i < playlist_.items().size(); ++i) {
         const PlaylistItem& item = playlist_.items()[i];
         QString label = item.title.isEmpty() ? item.path : item.title;
+        if (display_titles_.contains(item.path)) label = display_titles_.value(item.path);
+        // Linux parity (_label_for): tag title "title — artist" fallback.
+        else if (!item.is_playlist) label = queue_label_for(item.path);
         if (item.is_playlist) {
             // Playlist groups stay visible as rows; a placeholder child gives
             // the expand arrow. Children are loaded lazily on expand.
@@ -1540,6 +2996,13 @@ void MainWindow::refresh_playlist() {
         auto* it = new QTreeWidgetItem(QStringList{label});
         it->setData(0, Qt::UserRole, item.path);
         it->setToolTip(0, item.path);
+        // Linux parity: right-aligned type badge in the second column.
+        it->setText(1, queue_badge_for(item.path));
+        it->setTextAlignment(1, Qt::AlignRight | Qt::AlignVCenter);
+        it->setForeground(1, QColor(mpcasu::palette().muted));
+        QFont badge_font = it->font(0);
+        badge_font.setPointSizeF(qMax(7.0, badge_font.pointSizeF() - 1.0));
+        it->setFont(1, badge_font);
         if (item.is_playlist) {
             auto* placeholder = new QTreeWidgetItem(QStringList{QStringLiteral("…")});
             it->addChild(placeholder);
@@ -1552,6 +3015,7 @@ void MainWindow::refresh_playlist() {
     }
     if (playlist_.current_index() >= 0)
         playlist_view_->setCurrentItem(playlist_view_->topLevelItem(playlist_.current_index()));
+    apply_queue_filter();
 }
 
 void MainWindow::add_files(const QStringList& paths) {
@@ -1591,16 +3055,6 @@ void MainWindow::add_files(const QStringList& paths) {
 
 // ------------------------------------------------------------------ page actions
 
-void MainWindow::on_library_play() {
-    int row = library_view_->currentRow();
-    if (row < 0) { status(QStringLiteral("Select a library entry first.")); return; }
-    const LibraryEntry& e = library_->entries()[row];
-    playlist_.clear();
-    playlist_.add(e.path, e.title);
-    refresh_playlist();
-    play_queue_index(0, false);
-}
-
 void MainWindow::on_library_add_current() {
     if (current_source_.isEmpty()) { status(QStringLiteral("Nothing playing yet.")); return; }
     library_->add(current_source_, current_title_);
@@ -1609,10 +3063,95 @@ void MainWindow::on_library_add_current() {
 }
 
 void MainWindow::refresh_library() {
-    if (!library_view_) return;
-    library_view_->clear();
-    for (const LibraryEntry& e : library_->entries())
-        library_view_->addItem(e.title.isEmpty() ? e.path : e.title);
+    // Linux parity (LibraryPage._refresh): modes + search + group navigation.
+    if (!library_tracks_) return;
+    library_tracks_->clear();
+    const QString query = library_search_->text().trimmed().toLower();
+    const QString mode = library_mode_->currentData().toString();
+    auto meta_of = [this](const QString& path, const QString& key) -> QString {
+        const QString cache_key = path + QLatin1Char('|') + key;
+        auto it = lib_meta_.constFind(cache_key);
+        if (it != lib_meta_.constEnd()) return it.value();
+        QString value;
+        try {
+            const auto tags = casu::media::metadata_for(path.toStdString());
+            const auto found = tags.find(key.toStdString());
+            if (found != tags.end()) value = QString::fromStdString(found->second);
+        } catch (const std::exception&) {}
+        lib_meta_.insert(cache_key, value);
+        return value;
+    };
+    QVector<const LibraryEntry*> entries;
+    if (mode == "favorites") {
+        for (const LibraryEntry& e : library_->entries())
+            if (e.favorite) entries.append(&e);
+    } else {
+        for (const LibraryEntry& e : library_->entries()) entries.append(&e);
+    }
+    auto matches = [&](const LibraryEntry& e) {
+        if (query.isEmpty()) return true;
+        const QString hay = QStringLiteral("%1 %2 %3 %4 %5 %6")
+                                .arg(e.title, meta_of(e.path, "title"),
+                                     meta_of(e.path, "artist"),
+                                     meta_of(e.path, "album"),
+                                     meta_of(e.path, "genre"),
+                                     QFileInfo(e.path).fileName())
+                                .toLower();
+        return hay.contains(query);
+    };
+    if (mode == "all") {
+        library_groups_->setEnabled(false);
+        library_groups_->clear();
+        int shown = 0;
+        for (const LibraryEntry* e : entries) {
+            if (!matches(*e)) continue;
+            QString text = e->title.isEmpty() ? QFileInfo(e->path).fileName() : e->title;
+            QStringList details;
+            for (const QString& k : {"artist", "album", "genre"}) {
+                const QString v = meta_of(e->path, k).trimmed();
+                if (!v.isEmpty()) details << v;
+            }
+            if (!details.isEmpty()) text += QStringLiteral("\n") + details.join(QStringLiteral(" · "));
+            auto* item = new QListWidgetItem((e->favorite ? QStringLiteral("★ ") : QString()) + text);
+            item->setData(Qt::UserRole, e->path);
+            library_tracks_->addItem(item);
+            ++shown;
+        }
+        library_count_->setText(QStringLiteral("%1 tracks").arg(shown));
+        return;
+    }
+    // Group modes: artists / albums / genres.
+    const QString field = mode == "artists" ? QStringLiteral("artist")
+                          : mode == "albums" ? QStringLiteral("album")
+                                             : QStringLiteral("genre");
+    library_groups_->setEnabled(true);
+    library_groups_->clear();
+    QStringList groups;
+    for (const LibraryEntry* e : entries) {
+        const QString v = meta_of(e->path, field).trimmed();
+        if (!v.isEmpty() && !groups.contains(v)) groups.append(v);
+    }
+    groups.sort(Qt::CaseInsensitive);
+    library_groups_->addItems(groups);
+    const QString selected = library_groups_->currentItem()
+                                 ? library_groups_->currentItem()->text()
+                                 : (groups.isEmpty() ? QString() : groups.first());
+    if (!groups.isEmpty() && !library_groups_->currentItem())
+        library_groups_->setCurrentRow(0);
+    int shown = 0;
+    if (!selected.isEmpty()) {
+        for (const LibraryEntry* e : entries) {
+            if (!matches(*e)) continue;
+            if (meta_of(e->path, field).trimmed() != selected) continue;
+            QString text = e->title.isEmpty() ? QFileInfo(e->path).fileName() : e->title;
+            auto* item = new QListWidgetItem((e->favorite ? QStringLiteral("★ ") : QString()) + text);
+            item->setData(Qt::UserRole, e->path);
+            library_tracks_->addItem(item);
+            ++shown;
+        }
+    }
+    library_count_->setText(groups.isEmpty() ? QStringLiteral("No groups found")
+                                             : QStringLiteral("%1 tracks").arg(shown));
 }
 
 void MainWindow::on_settings_save() {
@@ -1621,6 +3160,16 @@ void MainWindow::on_settings_save() {
     app_settings_.shuffle = settings_shuffle_->isChecked();
     app_settings_.repeat = settings_repeat_->currentText();
     app_settings_.record_dir = settings_record_dir_->text().trimmed();
+    app_settings_.muted = settings_muted_->isChecked();
+    app_settings_.resume_playback = settings_resume_->isChecked();
+    app_settings_.visualizer = settings_viz_->currentData().toString();
+    app_settings_.cache_limit_mib = settings_cache_->value();
+    app_settings_.watched_folders.clear();
+    for (int i = 0; i < settings_folders_->count(); ++i)
+        app_settings_.watched_folders.append(settings_folders_->item(i)->text());
+    app_settings_.record_split_minutes = settings_split_->value();
+    app_settings_.record_format = settings_format_->currentText();
+    app_settings_.ytdlp_consent = settings_consent_->isChecked();
     settings_->save(app_settings_);
     volume_ = app_settings_.volume;
     rate_ = app_settings_.rate;
@@ -1633,25 +3182,78 @@ void MainWindow::on_settings_save() {
     output_dir_ = app_settings_.record_dir;
     if (record_dir_) record_dir_->setText(output_dir_);
     if (volume_slider_) volume_slider_->setValue(volume_);
+    if (mute_btn_) mute_btn_->setChecked(app_settings_.muted);
     shuffle_btn_->setChecked(playlist_.shuffle);
     if (playlist_.repeat == PlaylistModel::RepeatMode::Off) repeat_btn_->setText(QStringLiteral("↻"));
     else if (playlist_.repeat == PlaylistModel::RepeatMode::One) repeat_btn_->setText(QStringLiteral("↻1"));
     else repeat_btn_->setText(QStringLiteral("↻∞"));
+    apply_viz_mode();
     status(QStringLiteral("Settings saved"));
 }
 
-void MainWindow::on_epg_load() {
-    QString file = QFileDialog::getOpenFileName(this, QStringLiteral("Load XMLTV"),
-                                                QDir::homePath(), QStringLiteral("XMLTV (*.xml)"));
-    if (file.isEmpty()) return;
-    QFile f(file);
-    if (!f.open(QIODevice::ReadOnly)) { status(QStringLiteral("Could not read %1").arg(file)); return; }
-    QString err = parse_xmltv(f.readAll(), &epg_);
-    if (!err.isEmpty()) { status(QStringLiteral("EPG error: %1").arg(err)); return; }
-    epg_channel_->clear();
-    for (const EpgChannel& ch : epg_.channels)
-        epg_channel_->addItem(ch.name.isEmpty() ? ch.id : ch.name, ch.id);
-    status(QStringLiteral("EPG: %1 channels, %2 programs").arg(epg_.channels.size()).arg(epg_.programs.size()));
+void MainWindow::show_record_settings_dialog() {
+    // Linux parity: quick-access dialog for recording folder/format/split.
+    QDialog dlg(this);
+    dlg.setWindowTitle(QStringLiteral("Recording settings"));
+    auto* layout = new QVBoxLayout(&dlg);
+    layout->setSpacing(10);
+
+    auto* folder_row = new QHBoxLayout();
+    folder_row->addWidget(new QLabel(QStringLiteral("Speicherort")));
+    auto* folder_entry = new QLineEdit(output_dir_);
+    folder_entry->setObjectName("IconButton");
+    folder_row->addWidget(folder_entry, 1);
+    auto* folder_btn = new QPushButton(QStringLiteral("…"));
+    folder_btn->setObjectName("IconButton");
+    connect(folder_btn, &QPushButton::clicked, this, [&dlg, folder_entry] {
+        const QString dir = QFileDialog::getExistingDirectory(
+            &dlg, QStringLiteral("Aufnahmenordner"), folder_entry->text());
+        if (!dir.isEmpty()) folder_entry->setText(dir);
+    });
+    folder_row->addWidget(folder_btn);
+    layout->addLayout(folder_row);
+
+    auto* format_row = new QHBoxLayout();
+    format_row->addWidget(new QLabel(QStringLiteral("Format")));
+    auto* format_combo = new QComboBox();
+    format_combo->setObjectName("IconButton");
+    for (const char* fmt : {"mkv", "mp4", "ts", "webm", "ogg", "mp3", "flac", "wav"})
+        format_combo->addItem(QString::fromLatin1(fmt));
+    format_combo->setCurrentText(app_settings_.record_format);
+    format_row->addWidget(format_combo);
+    format_row->addStretch();
+    layout->addLayout(format_row);
+
+    auto* split_cb = new QCheckBox(QStringLiteral("Aufzeichnung automatisch teilen"));
+    split_cb->setChecked(app_settings_.record_split_minutes > 0);
+    layout->addWidget(split_cb);
+    auto* split_row = new QHBoxLayout();
+    split_row->addWidget(new QLabel(QStringLiteral("Alle")));
+    auto* split_spin = new QSpinBox();
+    split_spin->setObjectName("IconButton");
+    split_spin->setRange(1, 24 * 60);
+    split_spin->setSuffix(QStringLiteral(" min"));
+    split_spin->setValue(qMax(1, app_settings_.record_split_minutes));
+    split_spin->setEnabled(split_cb->isChecked());
+    connect(split_cb, &QCheckBox::toggled, split_spin, &QSpinBox::setEnabled);
+    split_row->addWidget(split_spin);
+    split_row->addStretch();
+    layout->addLayout(split_row);
+
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    if (dlg.exec() != QDialog::Accepted) return;
+    app_settings_.record_dir = folder_entry->text().trimmed();
+    app_settings_.record_format = format_combo->currentText();
+    app_settings_.record_split_minutes = split_cb->isChecked() ? split_spin->value() : 0;
+    settings_->save(app_settings_);
+    output_dir_ = app_settings_.record_dir;
+    if (record_dir_) record_dir_->setText(output_dir_);
+    if (settings_record_dir_) settings_record_dir_->setText(output_dir_);
+    toast(QStringLiteral("Recording settings gespeichert"));
 }
 
 void MainWindow::on_recording_toggle() {
@@ -1672,6 +3274,16 @@ void MainWindow::on_recording_toggle() {
     else status(QStringLiteral("Recording to %1").arg(out));
 }
 
+void MainWindow::apply_viz_mode() {
+    const bool on = app_settings_.visualizer != "off";
+    if (viz_btn_) viz_btn_->setChecked(on);
+    if (stage_stack_) stage_stack_->setCurrentIndex(on ? 1 : 0);
+    if (visualizer_) {
+        static_cast<VisualizerWidget*>(visualizer_)->set_mode(app_settings_.visualizer);
+        static_cast<VisualizerWidget*>(visualizer_)->set_active(on);
+    }
+}
+
 void MainWindow::on_visualizer_toggle() {
     if (stage_stack_) {
         stage_stack_->setCurrentIndex(viz_btn_->isChecked() ? 1 : 0);
@@ -1681,19 +3293,206 @@ void MainWindow::on_visualizer_toggle() {
 
 void MainWindow::on_youtube_play() {
     QString input = youtube_url_->text().trimmed();
-    if (input.isEmpty()) { status(QStringLiteral("Enter a URL or file path.")); return; }
-    open_network_source(input, input);
+    if (input.isEmpty()) { status(QStringLiteral("Enter a URL, file path or search term.")); return; }
+    const QString lower = input.toLower();
+    const bool is_url = lower.startsWith(QStringLiteral("http://")) ||
+                        lower.startsWith(QStringLiteral("https://")) ||
+                        lower.startsWith(QStringLiteral("rtsp://")) ||
+                        lower.startsWith(QStringLiteral("rtmp://")) ||
+                        lower.startsWith(QStringLiteral("udp://")) ||
+                        lower.startsWith(QStringLiteral("rtp://")) ||
+                        lower.startsWith(QStringLiteral("ftp://")) ||
+                        lower.startsWith(QStringLiteral("smb://"));
+    // YouTube playlist URLs expand into queue entries (Linux parity).
+    if (casu::network::is_youtube_url(input.toStdString()) &&
+        input.contains(QStringLiteral("list="))) {
+        youtube_status_->setText(QStringLiteral("Expanding YouTube playlist…"));
+        std::thread([this, input] {
+            try {
+                const auto found = casu::network::YtDlp().expand_playlist(
+                    input.toStdString(), 100, 60000);
+                QMetaObject::invokeMethod(this, [this, input, found] {
+                    QStringList urls;
+                    for (const auto& r : found) urls.append(QString::fromStdString(r.url));
+                    add_files(urls);
+                    youtube_status_->setText(
+                        QStringLiteral("Playlist expanded: %1 entries").arg(found.size()));
+                    status(QStringLiteral("Added %1 playlist entries").arg(found.size()));
+                }, Qt::QueuedConnection);
+            } catch (const std::exception& e) {
+                QMetaObject::invokeMethod(this, [this, e] {
+                    youtube_status_->setText(QStringLiteral("Playlist expand failed: %1")
+                                                 .arg(QString::fromStdString(e.what())));
+                }, Qt::QueuedConnection);
+            }
+        }).detach();
+        return;
+    }
+    if (is_url || QFileInfo::exists(input)) {
+        open_network_source(input, input);
+        return;
+    }
+    // Anything else is a search term (yt-dlp ytsearch).
+    if (!app_settings_.ytdlp_consent) {
+        youtube_status_->setText(
+            QStringLiteral("YouTube search needs the yt-dlp consent above."));
+        return;
+    }
+    if (yt_searching_) return;
+    yt_searching_ = true;
+    youtube_status_->setText(QStringLiteral("Searching YouTube via yt-dlp…"));
+    std::thread([this, input] {
+        try {
+            const auto found = casu::network::YtDlp().search(input.toStdString(), 12, 45000);
+            QMetaObject::invokeMethod(this, [this, found] {
+                yt_searching_ = false;
+                yt_results_->clear();
+                for (const auto& r : found) {
+                    const QString title = QString::fromStdString(r.title);
+                    const QString uploader = QString::fromStdString(r.uploader);
+                    const QString dur = r.has_duration && r.duration >= 0
+                                            ? QStringLiteral("%1:%2")
+                                                  .arg(static_cast<int>(r.duration) / 60)
+                                                  .arg(static_cast<int>(r.duration) % 60, 2, 10,
+                                                       QLatin1Char('0'))
+                                            : QStringLiteral("live");
+                    auto* item = new QListWidgetItem(
+                        QStringLiteral("%1  ·  %2  ·  %3")
+                            .arg(title, uploader.isEmpty() ? QStringLiteral("unknown") : uploader, dur));
+                    item->setData(Qt::UserRole, QString::fromStdString(r.url));
+                    yt_results_->addItem(item);
+                }
+                youtube_status_->setText(
+                    found.empty() ? QStringLiteral("No results.")
+                                  : QStringLiteral("Double-click a result to play it."));
+            }, Qt::QueuedConnection);
+        } catch (const std::exception& e) {
+            QMetaObject::invokeMethod(this, [this, e] {
+                yt_searching_ = false;
+                youtube_status_->setText(QStringLiteral("Search failed: %1")
+                                             .arg(QString::fromStdString(e.what())));
+            }, Qt::QueuedConnection);
+        }
+    }).detach();
+}
+
+void MainWindow::set_diagnostics(const QString& support, const QString& integrity,
+                                 const QString& segmented, const QString& guide) {
+    if (diag_labels_.isEmpty()) return;
+    if (!support.isNull() && diag_labels_.contains(QStringLiteral("CASU SUPPORT")))
+        diag_labels_[QStringLiteral("CASU SUPPORT")]->setText(support);
+    if (!integrity.isNull() && diag_labels_.contains(QStringLiteral("INTEGRITY MODE")))
+        diag_labels_[QStringLiteral("INTEGRITY MODE")]->setText(integrity);
+    if (!segmented.isNull() && diag_labels_.contains(QStringLiteral("SEGMENTED PLAYBACK")))
+        diag_labels_[QStringLiteral("SEGMENTED PLAYBACK")]->setText(segmented);
+    if (!guide.isNull() && diag_labels_.contains(QStringLiteral("LIVE GUIDE")))
+        diag_labels_[QStringLiteral("LIVE GUIDE")]->setText(guide);
+}
+
+void MainWindow::update_diagnostics_guide() {
+    if (epg_.channels.isEmpty()) {
+        set_diagnostics(QString(), QString(), QString(), QStringLiteral("no EPG loaded"));
+        return;
+    }
+    QString channel;
+    if (!epg_.channels.isEmpty()) channel = epg_.channels.first().id;
+    QVector<EpgProgram> picks = now_and_next(epg_, channel, QDateTime::currentMSecsSinceEpoch());
+    if (!picks.isEmpty()) {
+        QStringList parts;
+        for (const EpgProgram& p : picks)
+            parts << QStringLiteral("%1 · %2")
+                         .arg(QDateTime::fromMSecsSinceEpoch(p.start_ms).toString("HH:mm"), p.title);
+        set_diagnostics(QString(), QString(), QString(), parts.join(QStringLiteral("  |  ")));
+        return;
+    }
+    const QString name = std::find_if(epg_.channels.cbegin(), epg_.channels.cend(),
+                                      [&](const EpgChannel& c) { return c.id == channel; }) !=
+                                 epg_.channels.cend()
+                             ? std::find_if(epg_.channels.cbegin(), epg_.channels.cend(),
+                                            [&](const EpgChannel& c) { return c.id == channel; })
+                                   ->name
+                             : channel;
+    set_diagnostics(QString(), QString(), QString(), name.isEmpty() ? QStringLiteral("EPG loaded") : name);
+}
+
+QString MainWindow::epg_now_next_text(const QString& source) {
+    // Linux parity (main_window.py _epg_now_next): channel · now: title line.
+    if (epg_.channels.isEmpty() && epg_.programs.isEmpty())
+        return QStringLiteral("no EPG loaded");
+    for (const EpgChannel& c : epg_.channels) {
+        if (c.url != source) continue;
+        if (!epg_.programs.isEmpty()) {
+            const QVector<EpgProgram> picks =
+                now_and_next(epg_, c.id, QDateTime::currentMSecsSinceEpoch());
+            if (!picks.isEmpty())
+                return QStringLiteral("%1 · now: %2").arg(c.name, picks.first().title);
+        }
+        return c.name;
+    }
+    return QStringLiteral("EPG loaded");
+}
+
+QString MainWindow::queue_label_for(const QString& path) {
+    // Linux parity (main_window.py _label_for): display name for a queue row.
+    const QString text = path;
+    if (text.startsWith(QStringLiteral("http://")) ||
+        text.startsWith(QStringLiteral("https://")) ||
+        text.startsWith(QStringLiteral("rtsp://")) ||
+        text.startsWith(QStringLiteral("rtmp://")) ||
+        text.startsWith(QStringLiteral("udp://")) ||
+        text.startsWith(QStringLiteral("rtp://")) ||
+        text.startsWith(QStringLiteral("spotify:")) ||
+        text.startsWith(QStringLiteral("ytdl:")))
+        return text;
+    auto it = tag_titles_.constFind(text);
+    if (it == tag_titles_.constEnd()) {
+        // "title — artist" from media tags, else an empty string.
+        QString value;
+        try {
+            const auto tags = casu::media::metadata_for(text.toStdString());
+            const QString title = QString::fromStdString(tags.at("title")).trimmed();
+            const QString artist = QString::fromStdString(tags.at("artist")).trimmed();
+            if (!title.isEmpty())
+                value = artist.isEmpty() ? title : QStringLiteral("%1 — %2").arg(title, artist);
+        } catch (const std::out_of_range&) {
+            // no title/artist key
+        }
+        it = tag_titles_.insert(text, value);
+    }
+    if (!it.value().isEmpty()) return it.value();
+    return QFileInfo(text).fileName();
 }
 
 // ------------------------------------------------------------------ window events
 
 void MainWindow::dragEnterEvent(QDragEnterEvent* event) {
+    if (event->mimeData()->hasUrls()) {
+        if (drop_overlay_ && surface_) {
+            drop_overlay_->setGeometry(surface_->geometry());
+            drop_overlay_->show();
+            drop_overlay_->raise();
+        }
+        event->acceptProposedAction();
+    }
+}
+
+void MainWindow::dragMoveEvent(QDragMoveEvent* event) {
     if (event->mimeData()->hasUrls()) event->acceptProposedAction();
 }
 
+void MainWindow::dragLeaveEvent(QDragLeaveEvent* event) {
+    if (drop_overlay_) drop_overlay_->hide();
+    QMainWindow::dragLeaveEvent(event);
+}
+
 void MainWindow::dropEvent(QDropEvent* event) {
+    if (drop_overlay_) drop_overlay_->hide();
     QStringList paths;
-    for (const QUrl& url : event->mimeData()->urls()) paths << url.toLocalFile();
+    for (const QUrl& url : event->mimeData()->urls()) {
+        const QString local = url.toLocalFile();
+        paths << (local.isEmpty() ? url.toString() : local);
+    }
+    paths.removeAll(QString());
     if (paths.isEmpty()) return;
     add_files(paths);
     event->acceptProposedAction();
@@ -1718,13 +3517,69 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
             seek_to(controller_->position() - 5.0);
             event->accept();
             return;
+        case Qt::Key_Up:
+            change_volume(5);
+            event->accept();
+            return;
+        case Qt::Key_Down:
+            change_volume(-5);
+            event->accept();
+            return;
+        case Qt::Key_M:
+            toggle_mute();
+            event->accept();
+            return;
+        case Qt::Key_S:
+            stop_playback();
+            event->accept();
+            return;
+        case Qt::Key_Escape:
+            if (isFullScreen()) {
+                exit_fullscreen_ui();
+                event->accept();
+                return;
+            }
+            // Escape returns to the player page from any sub-view (Linux).
+            if (pages_ && pages_->currentIndex() != 0) {
+                navigate(QStringLiteral("NOW PLAYING"));
+                event->accept();
+                return;
+            }
+            break;
         default:
             break;
+    }
+    if (event->modifiers() & Qt::ControlModifier) {
+        switch (event->key()) {
+            case Qt::Key_O:
+                open_files_dialog();
+                event->accept();
+                return;
+            case Qt::Key_L:
+                open_url_dialog();
+                event->accept();
+                return;
+            case Qt::Key_I:
+                show_media_info();
+                event->accept();
+                return;
+            default:
+                break;
+        }
     }
     QMainWindow::keyPressEvent(event);
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
+    // Session restore: persist queue + resume position + geometry BEFORE the
+    // backend is torn down (position must be read while still valid).
+    app_settings_.session_queue.clear();
+    for (const PlaylistItem& item : playlist_.items())
+        app_settings_.session_queue.append(item.path);
+    app_settings_.session_index = playlist_.current_index();
+    app_settings_.session_position = controller_ ? controller_->position() : -1.0;
+    app_settings_.geometry = saveGeometry();
+    settings_->save(app_settings_);
     stop_playback();
     if (recorder_) recorder_->kill();
     if (poll_timer_) poll_timer_->stop();

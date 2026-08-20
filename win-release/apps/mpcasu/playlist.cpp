@@ -67,6 +67,19 @@ void PlaylistModel::move_many(const QVector<int>& indices, int delta) {
     }
 }
 
+void PlaylistModel::reorder(const QStringList& paths) {
+    QVector<PlaylistItem> reordered;
+    for (const QString& path : paths) {
+        const int idx = index_of(path);
+        if (idx >= 0) reordered.append(items_[idx]);
+    }
+    for (const PlaylistItem& item : items_) {
+        if (!paths.contains(item.path)) reordered.append(item);
+    }
+    items_ = std::move(reordered);
+    current_ = qBound(-1, current_, static_cast<int>(items_.size()) - 1);
+}
+
 int PlaylistModel::index_of(const QString& path) const {
     for (int i = 0; i < items_.size(); ++i)
         if (items_[i].path == path) return i;

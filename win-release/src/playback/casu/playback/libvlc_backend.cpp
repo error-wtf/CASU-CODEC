@@ -524,6 +524,61 @@ std::vector<ChapterInfo> LibVLCBackend::chapters() {
     return out;
 }
 
+void LibVLCBackend::set_chapter(int index) {
+    if (!player_) throw PlaybackError("no active media player");
+    libvlc_media_player_set_chapter(player_, index);
+}
+
+void LibVLCBackend::next_frame() {
+    if (!player_) throw PlaybackError("no active media player");
+    libvlc_media_player_next_frame(player_);
+}
+
+void LibVLCBackend::set_audio_delay(double milliseconds) {
+    if (!player_) throw PlaybackError("no active media player");
+    if (libvlc_audio_set_delay(player_, static_cast<int>(milliseconds)) != 0)
+        throw PlaybackError("libVLC rejected the audio delay");
+}
+
+void LibVLCBackend::set_subtitle_delay(double milliseconds) {
+    if (!player_) throw PlaybackError("no active media player");
+    if (libvlc_video_set_spu_delay(player_, static_cast<int>(milliseconds)) != 0)
+        throw PlaybackError("libVLC rejected the subtitle delay");
+}
+
+bool LibVLCBackend::load_subtitle_file(const std::string& path) {
+    if (!player_) throw PlaybackError("no active media player");
+    // VLC 3 add_slave takes a URI; convert a plain path to a file:// URI.
+    std::string uri = path;
+    if (uri.find("://") == std::string::npos) {
+        uri = "file://";
+        for (char c : path) {
+            if (c == '\\') uri += '/';
+            else uri += c;
+        }
+    }
+    return libvlc_media_player_add_slave(
+               player_, libvlc_media_slave_type_subtitle, uri.c_str(), true) == 0;
+}
+
+std::vector<TrackInfo> LibVLCBackend::audio_devices() {
+    std::vector<TrackInfo> out;
+    if (!instance_) return out;
+    libvlc_audio_output_device_t* list =
+        libvlc_audio_output_device_list_get(instance_, nullptr);
+    for (libvlc_audio_output_device_t* d = list; d; d = d->p_next) {
+        if (!d->psz_device) continue;
+        out.push_back(TrackInfo{0, d->psz_device});
+    }
+    libvlc_audio_output_device_list_release(list);
+    return out;
+}
+
+void LibVLCBackend::set_audio_device(const std::string& device) {
+    if (!player_) throw PlaybackError("no active media player");
+    libvlc_audio_output_device_set(player_, nullptr, device.c_str());
+}
+
 void LibVLCBackend::snapshot(const std::string& path) {
     if (!player_) throw PlaybackError("no active media player");
     if (path.size() < 4) throw PlaybackError("video snapshots must use a .png destination");

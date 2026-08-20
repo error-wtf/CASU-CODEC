@@ -68,6 +68,13 @@ public:
     std::vector<TrackInfo> subtitle_track_descriptions() override;
 
     std::vector<ChapterInfo> chapters() override;
+    void set_chapter(int index) override;
+    void next_frame() override;
+    void set_audio_delay(double milliseconds) override;
+    void set_subtitle_delay(double milliseconds) override;
+    bool load_subtitle_file(const std::string& path) override;
+    std::vector<TrackInfo> audio_devices() override;
+    void set_audio_device(const std::string& device) override;
     void snapshot(const std::string& path) override;
 
     std::string last_error() override;

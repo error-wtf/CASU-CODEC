@@ -13,6 +13,7 @@ struct LibraryEntry {
     QString title;
     QString kind;  // "video" | "audio" | "playlist" | "stream"
     qint64 added_ms = 0;
+    bool favorite = false;  // Linux parity: favorites mode
 };
 
 class MediaLibrary {
@@ -24,6 +25,8 @@ public:
     void add(const QString& path, const QString& title);
     void remove(int index);
     void clear();
+    void set_favorite(const QString& path, bool favorite);
+    int index_of(const QString& path) const;
     const QVector<LibraryEntry>& entries() const { return entries_; }
 
 private:
