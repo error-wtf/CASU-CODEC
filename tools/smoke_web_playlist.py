@@ -83,9 +83,26 @@ def main() -> int:
             if "radio2.m3u" not in page.locator("#queue li.queue-group").first.inner_text():
                 issues.append("group move-down failed")
 
-            # multi-select both entries of the moved-down group, remove -> whole group
+            # multi-select both entries of the moved-down group
             page.locator("#queue li:not(.queue-group)").nth(1).click(modifiers=["Control"])
             page.locator("#queue li:not(.queue-group)").nth(2).click(modifiers=["Control"])
+            page.wait_for_timeout(200)
+            if page.locator("#queue li.multi").count() != 2:
+                issues.append("marking did not apply (expected 2 .multi rows)")
+
+            # persistent marking: move up, marks must survive the re-render
+            page.click("#move-up")
+            page.wait_for_timeout(300)
+            if page.locator("#queue li.multi").count() != 2:
+                issues.append("marking lost after move (must persist for repeated moves)")
+            if "radio.m3u" not in page.locator("#queue li:not(.queue-group)").first.inner_text():
+                issues.append("moved block did not reorder")
+            page.click("#move-up")
+            page.wait_for_timeout(200)
+            if page.locator("#queue li.multi").count() != 2:
+                issues.append("marking lost on repeated move")
+
+            # remove -> whole group
             page.click("#remove")
             page.wait_for_timeout(300)
             groups = page.locator("#queue li.queue-group").count()

@@ -541,7 +541,21 @@ class PlaylistPane(QFrame):
                 return str(item.data(0, Qt.UserRole))
         return None
 
-    def populate(self, paths: list, selected: int = -1):
+    def select_rows(self, indexes: list):
+        """Re-apply a (multi-)selection after a re-render — persistent marking."""
+        want = {str(self._all_paths[i]) for i in indexes
+                if 0 <= i < len(self._all_paths)}
+        if not want:
+            return
+        self.tree.blockSignals(True)
+        self.tree.clearSelection()
+        for index in range(self.tree.topLevelItemCount()):
+            item = self.tree.topLevelItem(index)
+            if str(item.data(0, Qt.UserRole)) in want:
+                item.setSelected(True)
+        self.tree.blockSignals(False)
+
+    def populate(self, paths: list, selected=None):
         self._all_paths = list(paths)
         view = str(self._view_combo.currentData() or "all")
         visible = [(index, path) for index, path in enumerate(self._all_paths)
@@ -571,7 +585,9 @@ class PlaylistPane(QFrame):
             if item.isExpanded() and self._is_playlist(item.data(0, Qt.UserRole) or ""):
                 self._expand_playlist_item(item)
                 item.setExpanded(True)
-        if 0 <= selected < len(self._all_paths):
+        if isinstance(selected, (list, set, tuple)):
+            self.select_rows(sorted(int(i) for i in selected))
+        elif isinstance(selected, int) and 0 <= selected < len(self._all_paths):
             want = str(self._all_paths[selected])
             for index in range(self.tree.topLevelItemCount()):
                 if str(self.tree.topLevelItem(index).data(0, Qt.UserRole)) == want:
@@ -5023,6 +5039,8 @@ class MainWindow(QMainWindow):
             self._set_caption("")
             self.status("Playlist cleared")
             return
+        items = self.playlist_model.items
+        before = set(self._playlist_pane.selected_rows())
         try:
             self.playlist_model.remove(indices)
         except PlaylistError as exc:
@@ -5030,17 +5048,36 @@ class MainWindow(QMainWindow):
             return
         self._invalidate_play_seq()
         self._render_playlist()
+        # Persistent marking: rows that were marked but not removed stay marked.
+        removed = {int(i) for i in indices if 0 <= i < len(items)}
+        keep = {str(items[i]) for i in (set(before) - removed)}
+        if keep:
+            new_indices = [i for i, path in enumerate(self.playlist_model.items)
+                           if str(path) in keep]
+            if new_indices:
+                self._playlist_pane.select_rows(new_indices)
 
     def _on_playlist_move(self, delta: int, indices: list):
         if not indices:
             return
+        items = self.playlist_model.items
+        saved = [items[i] for i in sorted({int(i) for i in indices})
+                 if 0 <= i < len(items)]
         try:
-            target = self.playlist_model.move_many(indices, delta)
+            self.playlist_model.move_many(indices, delta)
         except PlaylistError as exc:
             self.status(str(exc))
             return
         self._invalidate_play_seq()
         self._render_playlist()
+        if saved:
+            # Persistent marking: re-select the same rows after the re-render,
+            # so repeated moves/removes work without re-marking.
+            want = {str(path) for path in saved}
+            new_indices = [i for i, path in enumerate(self.playlist_model.items)
+                           if str(path) in want]
+            if new_indices:
+                self._playlist_pane.select_rows(new_indices)
 
     def _on_playlist_merge(self, rows: list):
         """Merge/append selected queue rows (media files / URLs) into a playlist.
