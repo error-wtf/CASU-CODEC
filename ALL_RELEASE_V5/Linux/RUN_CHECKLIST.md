@@ -39,3 +39,8 @@ Ein Feature nach dem anderen, immer derselbe Loop. "VERIFIED" nur mit Nachweis.
 - Visualizer: Repaint-Schleife nur bei sichtbarem Fenster (sonst CPU-Pegel).
 - Wayland vs X11: Launcher wählt je Session.
 - `build_debs.sh` leert `dist/` — PURE-WEB-ZIP danach wiederherstellen.
+- **Stray-Kopien:** `mpcasu` lädt die INSTALLIERTE Version (cd / im Skript);
+  vorher konnte ein `./mpcasu_qt` im cwd eine alte Kopie laden → nach jedem
+  Release alle externen mpcasu_qt-Kopien prüfen/ersetzen.
+- **Root/Container:** QtWebEngine braucht `QTWEBENGINE_DISABLE_SANDBOX=1`
+  (im Launcher, wenn uid=0); ohne das crasht die GUI still beim Start.

@@ -380,6 +380,35 @@ class PlaylistModel:
         self._items[source], self._items[target] = self._items[target], self._items[source]
         return target
 
+    def replace_with(self, index: int, values: Iterable) -> list:
+        """Replace the item at ``index`` with ``values`` in place.
+
+        The group row is removed and the values are inserted at its position
+        (deduplicated against the remaining items and against the removed
+        group itself, so a playlist can never contain itself). This is the
+        canonical mixed-queue operation: playing a playlist group resolves it
+        into its entries exactly where it sits in the queue, keeping the
+        relative order of all surrounding rows. Returns the values that were
+        actually inserted.
+        """
+        index = int(index)
+        if index < 0 or index >= len(self._items):
+            raise PlaylistError("playlist index is out of range")
+        group = str(self._items[index])
+        rest = [str(item) for i, item in enumerate(self._items) if i != index]
+        inserted: list = []
+        for value in values:
+            path = self._path(value)
+            text = str(path)
+            if text == group or text in rest:
+                continue
+            if len(self._items) >= MAX_PLAYLIST_ITEMS:
+                raise PlaylistError("playlist item count exceeds limit")
+            inserted.append(path)
+            rest.append(text)
+        self._items[index:index + 1] = inserted
+        return inserted
+
     def clear(self) -> None:
         self._items.clear()
 
