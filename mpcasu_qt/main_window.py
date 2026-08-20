@@ -347,7 +347,9 @@ class PlaylistPane(QFrame):
 
     playRequested = Signal(int)
     removeRequested = Signal(list)
-    moveRequested = Signal(int, int)
+    # moveRequested: (delta, selected top-level rows) — moving a multi-
+    # selection (Ctrl/Shift) moves all selected rows together.
+    moveRequested = Signal(int, list)
     orderChanged = Signal(list)
     childPlayRequested = Signal(str)
     saveRequested = Signal()
@@ -358,6 +360,10 @@ class PlaylistPane(QFrame):
     # mergeRequested: emit the selected top-level rows (media/URLs) so the
     # main window can offer to merge/append them into a playlist.
     mergeRequested = Signal(list)
+    # childRemoveRequested/childMoveRequested: playlist children taken out of
+    # their playlist file ("remove from playlist" / "move to playlist").
+    childRemoveRequested = Signal(list)
+    childMoveRequested = Signal(list)
 
     PLAYLIST_SUFFIXES = {".m3u", ".m3u8", ".pls", ".json", ".wpl", ".xspf",
                          ".jspf", ".asx", ".wmx", ".wvx", ".rmp", ".ram"}
@@ -434,21 +440,20 @@ class PlaylistPane(QFrame):
         up_btn = QPushButton("↑")
         up_btn.setObjectName("IconButton")
         up_btn.setFixedWidth(30)
-        up_btn.setToolTip("Move up")
-        up_btn.clicked.connect(lambda: self.moveRequested.emit(-1, self.selected_row()))
+        up_btn.setToolTip("Move selection up")
+        up_btn.clicked.connect(lambda: self.moveRequested.emit(-1, self.selected_rows()))
         cl.addWidget(up_btn)
         down_btn = QPushButton("↓")
         down_btn.setObjectName("IconButton")
         down_btn.setFixedWidth(30)
-        down_btn.setToolTip("Move down")
-        down_btn.clicked.connect(lambda: self.moveRequested.emit(1, self.selected_row()))
+        down_btn.setToolTip("Move selection down")
+        down_btn.clicked.connect(lambda: self.moveRequested.emit(1, self.selected_rows()))
         cl.addWidget(down_btn)
         remove_btn = QPushButton("×")
         remove_btn.setObjectName("IconButton")
         remove_btn.setFixedWidth(30)
-        remove_btn.setToolTip("Remove selected entry (Del)")
-        remove_btn.clicked.connect(lambda: self.removeRequested.emit([self.selected_row()])
-                                   if self.selected_row() >= 0 else None)
+        remove_btn.setToolTip("Remove selected entries (Del)")
+        remove_btn.clicked.connect(lambda: self.removeRequested.emit(self.selected_rows()))
         cl.addWidget(remove_btn)
         rename_btn = QPushButton("✎")
         rename_btn.setObjectName("IconButton")
@@ -522,6 +527,12 @@ class PlaylistPane(QFrame):
             if row >= 0:
                 return row
         return -1
+
+    def selected_rows(self) -> list:
+        """Sorted top-level rows of the current (multi-)selection."""
+        return sorted({self.tree.indexOfTopLevelItem(item)
+                       for item in self.tree.selectedItems()
+                       if self.tree.indexOfTopLevelItem(item) >= 0})
 
     def selected_child(self) -> str | None:
         """Path/URL of the selected child of an expanded playlist group."""
@@ -845,6 +856,21 @@ class PlaylistPane(QFrame):
                     return str(child.data(0, Qt.UserRole + 1) or "").strip()
         return ""
 
+    def refresh_group(self, playlist_path):
+        """Re-read the children of a playlist group from its (possibly
+        rewritten) file, keeping the current expanded/collapsed state."""
+        playlist_path = str(playlist_path)
+        for index in range(self.tree.topLevelItemCount()):
+            top = self.tree.topLevelItem(index)
+            if str(top.data(0, Qt.UserRole) or "") != playlist_path:
+                continue
+            expanded = top.isExpanded()
+            while top.childCount():
+                top.removeChild(top.child(0))
+            self._expand_playlist_item(top)
+            top.setExpanded(expanded)
+            return
+
     def _context_menu(self, position):
         item = self.tree.itemAt(position)
         menu = QMenu(self)
@@ -879,9 +905,8 @@ class PlaylistPane(QFrame):
                     else:
                         menu.addAction("Expand", single.setExpanded)
             menu.addSeparator()
-            if count == 1:
-                menu.addAction("Move up", lambda: self.moveRequested.emit(-1, row))
-                menu.addAction("Move down", lambda: self.moveRequested.emit(1, row))
+            menu.addAction("Move up", lambda: self.moveRequested.emit(-1, list(top_rows)))
+            menu.addAction("Move down", lambda: self.moveRequested.emit(1, list(top_rows)))
             remove_label = "Remove" if count <= 1 else f"Remove ({count} items)"
             menu.addAction(remove_label, lambda: self.removeRequested.emit(list(top_rows)))
         else:
@@ -901,6 +926,12 @@ class PlaylistPane(QFrame):
                 label = "Save to playlist…" if len(data) == 1 else \
                         f"Save {len(data)} items to playlist…"
                 menu.addAction(label, lambda: self.mergeRequested.emit(data))
+                move_label = "Move to playlist…" if len(data) == 1 else \
+                             f"Move {len(data)} items to playlist…"
+                menu.addAction(move_label, lambda: self.childMoveRequested.emit(data))
+                remove_label = "Remove from playlist" if len(data) == 1 else \
+                               f"Remove {len(data)} items from playlist"
+                menu.addAction(remove_label, lambda: self.childRemoveRequested.emit(data))
         menu.exec(self.tree.viewport().mapToGlobal(position))
 
 
@@ -2252,6 +2283,10 @@ class MainWindow(QMainWindow):
         self._advancing = False
         self._end_handled = False
         self._started_at = 0.0
+        # Logical playback sequence over the queue: playlist groups stay in
+        # the model (they are never dissolved); playback walks this flattened
+        # list instead. Rebuilt lazily, invalidated on every queue mutation.
+        self._play_seq: list[str] | None = None
         self._start_offset = 0.0
         self._visual_phase = 0.0
         self._visual_state = "idle"
@@ -2756,6 +2791,8 @@ class MainWindow(QMainWindow):
         self._playlist_pane.mergeRequested.connect(self._on_playlist_merge)
         self._playlist_pane.orderChanged.connect(self._apply_queue_order)
         self._playlist_pane.childPlayRequested.connect(self._on_queue_child_play)
+        self._playlist_pane.childRemoveRequested.connect(self._on_child_remove_from_playlist)
+        self._playlist_pane.childMoveRequested.connect(self._on_child_move_to_playlist)
         self._playlist_pane.saveRequested.connect(self.save_playlist)
         self._playlist_pane.loadRequested.connect(self.load_playlist)
         self._random = random.SystemRandom()
@@ -3245,15 +3282,37 @@ class MainWindow(QMainWindow):
             self.status("Playlist is empty")
             return
 
-        # The queue is the single source of truth: playlist groups are
-        # resolved into their entries in place when played, so advancing is a
-        # plain walk through the model — UI expand state never matters.
-        current_index = self.playlist_model.index_of(self.current) if self.current else None
-        if current_index is None:
-            selected = self._selected_playlist_row()
-            index = selected if selected >= 0 else 0
-        else:
-            index = current_index
+        # The queue is the single source of truth: playlist groups stay in
+        # the model (they are never dissolved into their entries), so the
+        # playback order is a logical walk through the flattened queue —
+        # UI expand state never matters, and the playlists stay visible.
+        seq = self._ensure_play_seq()
+        count = len(seq)
+        if not count:
+            self.status("Playlist is empty")
+            return
+
+        current_text = str(self.current) if self.current else None
+        index = -1
+        if current_text is not None:
+            try:
+                index = seq.index(current_text)
+            except ValueError:
+                index = -1
+        if index < 0:
+            # Current entry is not part of the logical sequence (queue was
+            # edited or a stream is playing): continue from the selected
+            # row/child (or the beginning).
+            index = self._row_to_seq(self._selected_playlist_row())
+            if index is None:
+                child = self._playlist_pane.selected_child()
+                if child is not None:
+                    try:
+                        index = seq.index(str(child))
+                    except ValueError:
+                        index = -1
+            if index is None or index < 0:
+                index = 0
         if self._shuffle and count > 1:
             choices = [value for value in range(count) if value != index]
             target = self._random.choice(choices)
@@ -3264,29 +3323,40 @@ class MainWindow(QMainWindow):
         if target >= count:
             self.status("End of playlist")
             return
-        self._playlist_pane.select_row(target)
-        self.play_selected()
+        self._play_playlist_entry(seq[target])
 
     def play_previous(self):
-        count = len(self.playlist_model)
+        seq = self._ensure_play_seq()
+        count = len(seq)
         if not count:
             self.status("Playlist is empty")
             return
 
-        current_index = self.playlist_model.index_of(self.current) if self.current else None
-        if current_index is None:
-            selected = self._selected_playlist_row()
-            index = selected if selected >= 0 else 0
-        else:
-            index = current_index
+        current_text = str(self.current) if self.current else None
+        index = -1
+        if current_text is not None:
+            try:
+                index = seq.index(current_text)
+            except ValueError:
+                index = -1
+        if index < 0:
+            index = self._row_to_seq(self._selected_playlist_row())
+            if index is None:
+                child = self._playlist_pane.selected_child()
+                if child is not None:
+                    try:
+                        index = seq.index(str(child))
+                    except ValueError:
+                        index = -1
+            if index is None or index < 0:
+                index = 0
         target = index - 1
         if target < 0 and self._repeat_mode == "all":
             target = count - 1
         if target < 0:
             self.status("Beginning of playlist")
             return
-        self._playlist_pane.select_row(target)
-        self.play_selected()
+        self._play_playlist_entry(seq[target])
 
     def _selected_playlist_row(self) -> int:
         return self._playlist_pane.selected_row()
@@ -3603,6 +3673,7 @@ class MainWindow(QMainWindow):
                 self.media_library.upsert(path)
             except OSError:
                 pass
+        self._invalidate_play_seq()
         self._render_playlist()
 
     def add_dialog(self):
@@ -4815,42 +4886,76 @@ class MainWindow(QMainWindow):
         self.play_selected()
 
     def _play_playlist_full(self, playlist: Path):
-        """Queue the whole playlist and start playback from its first track.
-
-        The playlist's group row inside the queue is resolved IN PLACE into
-        its entries (canonical mixed order: A1, A2, X, B1, B2), so play_next
-        simply walks the queue linearly afterwards — independent of whether
-        the playlist group is expanded or collapsed in the UI.
-        """
-        entries = self._resolve_playlist_in_queue(playlist)
+        """Play the whole playlist: its group row stays in the queue, the
+        playback sequence walks through all its entries (then continues with
+        whatever follows in the queue). The expanded/collapsed UI state never
+        matters — and the playlist never disappears from the display."""
+        entries = self._playlist_entries(playlist)
         if not entries:
             return
-        self._play_playlist_entry(entries[0])
-
-    def _resolve_playlist_in_queue(self, playlist: Path) -> list:
-        """Load the playlist and replace its group row in the queue with its
-        entries, keeping the group's position (canonical order). Returns the
-        entries, or [] when the playlist is empty/cannot be read."""
-        try:
-            loaded = load_playlist_file(playlist)
-        except (PlaylistError, OSError, ValueError) as exc:
-            self.toast(f"Could not read playlist: {exc}")
-            return []
-        entries = list(loaded.items)
-        if not entries:
-            self.toast("Playlist is empty")
-            return []
+        seq = self._ensure_play_seq()
         row = self.playlist_model.index_of(playlist)
-        try:
-            if row is not None:
-                self.playlist_model.replace_with(row, entries)
+        pos = self._row_to_seq(row) if row is not None else None
+        if pos is None or pos >= len(seq):
+            pos = 0
+        self._play_playlist_entry(seq[pos])
+
+    def _playback_sequence(self) -> list:
+        """Logical playback order over the queue: each playlist group
+        contributes its entries (in file order) at the group's position,
+        every other row is itself. The queue model is NEVER modified here —
+        playlists stay visible as groups."""
+        seq: list[str] = []
+        for idx in range(len(self.playlist_model)):
+            try:
+                item = self.playlist_model.item(idx)
+            except PlaylistError:
+                continue
+            if isinstance(item, str):
+                seq.append(str(item))
+                continue
+            if item.suffix.lower() in PlaylistPane.PLAYLIST_SUFFIXES:
+                try:
+                    loaded = load_playlist_file(item)
+                except (PlaylistError, OSError, ValueError):
+                    continue
+                seq.extend(str(entry) for entry in loaded.items)
             else:
-                self.playlist_model.add(entries)
-        except PlaylistError as exc:
-            self.toast(str(exc))
-            return []
-        self._render_playlist()
-        return entries
+                seq.append(str(item))
+        return seq
+
+    def _ensure_play_seq(self) -> list:
+        if self._play_seq is None:
+            self._play_seq = self._playback_sequence()
+        return self._play_seq
+
+    def _invalidate_play_seq(self):
+        self._play_seq = None
+
+    def _row_to_seq(self, row: int) -> int | None:
+        """First position in the logical playback sequence that the top-level
+        queue row ``row`` contributes (a playlist group's first entry), or
+        None when the row does not exist."""
+        if row is None or row < 0:
+            return None
+        pos = 0
+        for idx in range(len(self.playlist_model)):
+            if idx == row:
+                return pos
+            try:
+                item = self.playlist_model.item(idx)
+            except PlaylistError:
+                continue
+            if isinstance(item, str):
+                pos += 1
+            elif item.suffix.lower() in PlaylistPane.PLAYLIST_SUFFIXES:
+                try:
+                    pos += len(load_playlist_file(item).items)
+                except (PlaylistError, OSError, ValueError):
+                    pass
+            else:
+                pos += 1
+        return None
 
     def _playlist_entries(self, playlist: Path) -> list:
         try:
@@ -4883,11 +4988,15 @@ class MainWindow(QMainWindow):
         return None
 
     def _play_playlist_entry(self, entry):
-        # Select the queue row of the entry (it is part of the queue after
-        # group resolution) so Next/Previous keep the linear queue order.
+        # Highlight what is playing: the row itself, or the child inside its
+        # (still visible) playlist group. The queue model is never modified.
         index = self.playlist_model.index_of(entry)
         if index is not None:
             self._playlist_pane.select_row(index)
+        else:
+            playlist = self._containing_playlist(entry)
+            if playlist is not None:
+                self._playlist_pane.select_child(playlist, entry)
         # Play one playlist entry (stream or local file) using the same path
         # as clicking a playlist child.
         if isinstance(entry, str) and entry.startswith(("http://", "https://",
@@ -4907,6 +5016,7 @@ class MainWindow(QMainWindow):
             if self.backend:
                 self.stop()
             self.playlist_model.clear()
+            self._invalidate_play_seq()
             self._render_playlist()
             self.current = None
             self._now_playing_bar.set_now_playing("")
@@ -4918,17 +5028,19 @@ class MainWindow(QMainWindow):
         except PlaylistError as exc:
             self.status(str(exc))
             return
+        self._invalidate_play_seq()
         self._render_playlist()
 
-    def _on_playlist_move(self, delta: int, index: int):
-        if index < 0:
+    def _on_playlist_move(self, delta: int, indices: list):
+        if not indices:
             return
         try:
-            target = self.playlist_model.move(index, delta)
+            target = self.playlist_model.move_many(indices, delta)
         except PlaylistError as exc:
             self.status(str(exc))
             return
-        self._render_playlist(target)
+        self._invalidate_play_seq()
+        self._render_playlist()
 
     def _on_playlist_merge(self, rows: list):
         """Merge/append selected queue rows (media files / URLs) into a playlist.
@@ -4977,37 +5089,12 @@ class MainWindow(QMainWindow):
 
         # Collect existing playlists already in the queue (their .m3u/.pls/...
         # files), so the user can extend one of them.
-        playlists: list[Path] = []
-        for idx in range(len(self.playlist_model)):
-            try:
-                item = self.playlist_model.item(idx)
-            except PlaylistError:
-                continue
-            if not isinstance(item, str) and item.suffix.lower() in PlaylistPane.PLAYLIST_SUFFIXES:
-                playlists.append(item)
-
-        choices = ["<Create new playlist>"] + [str(p) for p in playlists]
-        if len(choices) == 1:
-            target_name, ok = QInputDialog.getText(
-                self, "New playlist", "Playlist name (e.g. mylist.m3u):")
-            if not ok or not target_name.strip():
-                return
-            target = self._resolve_playlist_target(target_name.strip())
-        else:
-            choice, ok = QInputDialog.getItem(
-                self, "Merge into playlist",
-                "Choose a playlist to append the selected items to, or create a new one:",
-                choices, 0, False)
-            if not ok:
-                return
-            if choice == "<Create new playlist>":
-                target_name, ok2 = QInputDialog.getText(
-                    self, "New playlist", "Playlist name (e.g. mylist.m3u):")
-                if not ok2 or not target_name.strip():
-                    return
-                target = self._resolve_playlist_target(target_name.strip())
-            else:
-                target = Path(choice)
+        playlists = self._queue_playlists()
+        target = self._choose_playlist_target(
+            playlists, title="Merge into playlist",
+            label="Choose a playlist to append the selected items to, or create a new one:")
+        if target is None:
+            return
 
         # Merge: load existing, append new entries (deduplicated), save.
         try:
@@ -5027,10 +5114,136 @@ class MainWindow(QMainWindow):
             return
         self.toast(f"Added {added} item(s) to {target.name}")
         self.status(f"Playlist updated · {target.name}")
+        # The target playlist file changed: the logical playback sequence
+        # must reflect the new contents next time it is used.
+        self._invalidate_play_seq()
         # Refresh the playlist group in the queue if it is already present;
         # keep the selection (order/markings stay visible after the merge).
         sel = rows[0] if isinstance(rows[0], int) else -1
         self._render_playlist(sel)
+
+    def _queue_playlists(self) -> list:
+        """Playlist files (groups) currently present in the queue."""
+        playlists: list[Path] = []
+        for idx in range(len(self.playlist_model)):
+            try:
+                item = self.playlist_model.item(idx)
+            except PlaylistError:
+                continue
+            if not isinstance(item, str) and item.suffix.lower() in PlaylistPane.PLAYLIST_SUFFIXES:
+                playlists.append(item)
+        return playlists
+
+    def _choose_playlist_target(self, playlists: list, *, title: str,
+                                label: str) -> Path | None:
+        """Dialog to pick an existing queue playlist or create a new one."""
+        from PySide6.QtWidgets import QInputDialog
+        choices = ["<Create new playlist>"] + [str(p) for p in playlists]
+        if len(choices) == 1:
+            target_name, ok = QInputDialog.getText(
+                self, "New playlist", "Playlist name (e.g. mylist.m3u):")
+            if not ok or not target_name.strip():
+                return None
+            return self._resolve_playlist_target(target_name.strip())
+        choice, ok = QInputDialog.getItem(
+            self, title, label, choices, 0, False)
+        if not ok:
+            return None
+        if choice == "<Create new playlist>":
+            target_name, ok2 = QInputDialog.getText(
+                self, "New playlist", "Playlist name (e.g. mylist.m3u):")
+            if not ok2 or not target_name.strip():
+                return None
+            return self._resolve_playlist_target(target_name.strip())
+        return Path(choice)
+
+    def _on_child_remove_from_playlist(self, entries: list):
+        """'Remove from playlist': take the selected children OUT of their
+        playlist file. The playlist group stays visible in the queue."""
+        if not entries:
+            return
+        removed_total = 0
+        touched: set = set()
+        for entry in entries:
+            playlist = self._containing_playlist(entry)
+            if playlist is None:
+                continue
+            touched.add(str(playlist))
+            try:
+                model = load_playlist_file(playlist)
+            except (PlaylistError, OSError, ValueError):
+                continue
+            indices = [i for i in range(len(model.items))
+                       if str(model.items[i]) == str(entry)]
+            if not indices:
+                continue
+            try:
+                model.remove(indices)
+                save_playlist_file(playlist, model)
+            except (PlaylistError, OSError) as exc:
+                self.toast(f"Could not update {playlist.name}: {exc}")
+                continue
+            removed_total += len(indices)
+        for path in touched:
+            self._playlist_pane.refresh_group(Path(path))
+        self._invalidate_play_seq()
+        if removed_total:
+            self.toast(f"Removed {removed_total} item(s) from playlist")
+            self.status(f"Playlist updated · {removed_total} item(s) removed")
+
+    def _on_child_move_to_playlist(self, entries: list):
+        """'Move to playlist': take the selected children OUT of their source
+        playlist file and append them to a target playlist (choose or create).
+        Both playlists stay visible in the queue."""
+        if not entries:
+            return
+        target = self._choose_playlist_target(
+            self._queue_playlists(), title="Move to playlist",
+            label="Choose a playlist to move the selected items to, or create a new one:")
+        if target is None:
+            return
+        removed_total = 0
+        touched: set = set()
+        for entry in entries:
+            playlist = self._containing_playlist(entry)
+            if playlist is None or str(playlist) == str(target):
+                continue
+            touched.add(str(playlist))
+            try:
+                model = load_playlist_file(playlist)
+            except (PlaylistError, OSError, ValueError):
+                continue
+            indices = [i for i in range(len(model.items))
+                       if str(model.items[i]) == str(entry)]
+            if not indices:
+                continue
+            try:
+                model.remove(indices)
+                save_playlist_file(playlist, model)
+            except (PlaylistError, OSError) as exc:
+                self.toast(f"Could not update {playlist.name}: {exc}")
+                continue
+            removed_total += len(indices)
+        try:
+            model = load_playlist_file(target)
+        except (PlaylistError, OSError, ValueError):
+            model = PlaylistModel()
+        added = 0
+        for entry in entries:
+            before = len(model.items)
+            model.add((entry,))
+            if len(model.items) > before:
+                added += 1
+        try:
+            save_playlist_file(target, model)
+        except (PlaylistError, OSError) as exc:
+            self.toast(f"Could not save {target.name}: {exc}")
+            return
+        for path in touched:
+            self._playlist_pane.refresh_group(Path(path))
+        self._invalidate_play_seq()
+        self.toast(f"Moved {added} item(s) to {target.name}")
+        self.status(f"Playlist updated · {target.name}")
 
     def _resolve_playlist_target(self, name: str) -> Path:
         """Ensure the playlist name has a supported extension and resolve it
@@ -5055,6 +5268,7 @@ class MainWindow(QMainWindow):
         except PlaylistError as exc:
             self.status(str(exc))
             return
+        self._invalidate_play_seq()
         self._render_playlist()
 
     def save_playlist(self):
@@ -5130,6 +5344,7 @@ class MainWindow(QMainWindow):
         except (PlaylistError, OSError, ValueError) as exc:
             self.toast(f"Could not load playlist: {exc}")
             return
+        self._invalidate_play_seq()
         self._render_playlist()
         self.status(f"Playlist loaded · {source.name} · {added} item(s) added")
         self.toast(f"Playlist loaded · {added} item(s) added")
@@ -5143,6 +5358,7 @@ class MainWindow(QMainWindow):
                 {"version": 1, "items": [str(value) for value in values]})
         except PlaylistError:
             return
+        self._invalidate_play_seq()
         if self.current is not None:
             index = self.playlist_model.index_of(self.current)
             if index is not None:
@@ -5150,13 +5366,10 @@ class MainWindow(QMainWindow):
         self.status("Queue reordered")
 
     def _on_queue_child_play(self, source: str):
-        # Playing a child of an expandable playlist group resolves that group
-        # into the queue in place first (canonical mixed order), then plays
-        # the entry. The expanded/collapsed UI state never changes playback.
-        playlist = self._containing_playlist(source)
-        if playlist is not None:
-            if not self._resolve_playlist_in_queue(playlist):
-                return
+        # Playing a child of an expandable playlist group plays exactly that
+        # entry; the group stays in the queue (visible), playback continues
+        # through the logical sequence afterwards. The expanded/collapsed UI
+        # state never changes playback.
         self._play_playlist_entry(source)
 
     def add_watched_folder(self):

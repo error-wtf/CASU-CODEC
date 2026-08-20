@@ -6,17 +6,49 @@ Ziel: **Windows x86_64**, C++20 + Qt 6 + CMake + Ninja + MinGW-w64
 Kanonische Arbeitskopie: `win-release/` (Code + Build). Dieser Ordner ist die
 Release-Planung mit denselben Hilfsdateien wie der Linux-Port.
 
-## Status (2026-08-19)
+## Status (2026-08-20)
 
 - **v3.0.0 VERÖFFENTLICHT** — `MPCASU-Setup-3.0.0.exe` + `MPCASU-Windows-x86_64.zip`
   (GitHub-Release v3.0.0, `error-wtf/CASU-CODEC`).
 - Release-Gate: **14/14 PASS** (`win-release/dist/WINDOWS_RELEASE_GATE.json`,
   generated_utc 2026-08-19T10:48:55Z).
-- ctest unter Wine: **16/16 grün** (inkl. `casu_playlist_test`, 14 Checks).
-- Playlist-Queue-Feature (Playlist-Play ohne Ausklappen + Merge in Playlists)
-  im ZIP + setup.exe verifiziert (strings-Check).
+- **Playlist-Gruppen-Semantik (nicht-destruktiv, implementiert + getestet):**
+  `playlist_view_` ist jetzt ein QTreeWidget — Playlists erscheinen als
+  sichtbare, auf-/zuklappbare Gruppenzeilen und werden beim Spielen **nie
+  aufgelöst**. Die Wiedergabe läuft über die logische Sequenz
+  (`logical_sequence()` — Gruppen laufen in ihre Einträge auf, lose
+  Dateien/URLs dazwischen, inkl. Shuffle/Repeat). Gruppen + Mehrfachauswahlen
+  (Strg/Shift) verschiebbar (↑/↓, Kontextmenü "Move up/down", Block-Move via
+  `move_many`); Einträge ein- ("Save selection to playlist…"/"Move to
+  playlist…", dedupliziert) und aussortierbar ("Remove from playlist");
+  Batch-Dedup (Playlist + eigene Dateien → kein Doppelt-Laden). Test:
+  `casu_playlist_test.exe` unter Wine — **ALL PASS** (40 Checks, 2026-08-20).
+- ctest unter Wine: **14/14 grün** (ohne `casu_playback_vlc_test`/
+  `casu_playback_youtube_live_test` — kein Audio-Gerät/kein Live-Netz), inkl.
+  `casu_playlist_test` mit der Gruppen-Semantik (2026-08-20).
+- **Web-Player (web-casu `/web/` + Pure Web) tragen dieselbe Gruppen-Semantik**
+  (implementiert + getestet): Gruppen bleiben sichtbar (auf-/zuklappbar),
+  Gruppen-Tools im Header (▶/↑/↓/×) + Kontextmenü, Mehrfachauswahl Block-Move,
+  "Save selection to playlist…" (rein), "Remove from playlist" (raus),
+  Re-Add-Dedup. Geprüft: Node-Unit-Harness ALL PASS (17 + 12 Checks) +
+  Playwright-Smoke `tools/smoke_web_playlist.py` (mehrfach grün).
+  `win-release/web/pure/` byte-identisch aktualisiert
+  (`MPCASU-PURE-WEB-3.0.0.zip` neu, SHA `6d6d7bf8…`).
 - **Nächste Version: v5.0.0** (v4.x wird übersprungen — siehe README.md im
   ALL_RELEASE_V5-Root).
+
+## Playlist-Gruppen-Semantik (Kurzform)
+
+1. Playlist wählen (Choose files/Load) → EINE Gruppenzeile "[Playlist] Name".
+2. Spielen (Doppelklick auf Gruppe = erste Eintrag, auf Kind = genau dieser
+   Eintrag) → Gruppe bleibt stehen; logische Sequenz spielt weiter.
+3. ↑/↓ bzw. Kontextmenü verschiebt Gruppen und Mehrfachauswahlen (Block).
+4. "Save selection to playlist…"/"Move to playlist…" sortiert ein (rein);
+   "Remove from playlist" sortiert Kinder aus (raus).
+5. Lose Dateien/URLs (ohne Playlist) werden überall in der Queue mitgespielt.
+6. Playlist + eigene Dateien zusammen gewählt → kein Doppelt-Laden (Batch-Dedup).
+
+Details: siehe `ALL_RELEASE_V5/README.md` → "Playlist-Gruppen-Semantik".
 
 ## Build (Linux → Windows)
 

@@ -18,6 +18,7 @@
 
 #include <QMainWindow>
 #include <QObject>
+#include <QSet>
 #include <QTimer>
 
 #include <memory>
@@ -30,6 +31,7 @@ class QSlider;
 class QStackedWidget;
 class QTableWidget;
 class QTreeWidget;
+class QTreeWidgetItem;
 class QComboBox;
 class QCheckBox;
 class QSpinBox;
@@ -117,6 +119,15 @@ private:
     void update_play_button();
     void refresh_library();
     void refresh_playlist();
+    void expand_playlist_group(QTreeWidgetItem* top);
+    void refresh_playlist_group(const QString& path);
+
+    // playlist pane / groups
+    QVector<QString> logical_sequence() const;
+    void play_seq_entry(const QString& path, int row, bool automatic);
+    void move_playlist_rows(const QVector<int>& rows, int delta);
+    void remove_children_from_playlist(const QStringList& entries);
+    void move_children_to_playlist(const QStringList& entries);
 
     // transport
     void toggle_playback();
@@ -201,7 +212,12 @@ private:
     QWidget* visualizer_ = nullptr;
 
     // playlist pane
-    QListWidget* playlist_view_ = nullptr;
+    QTreeWidget* playlist_view_ = nullptr;
+    QSet<QString> expanded_groups_;
+    QString current_played_path_;
+    bool seq_valid_ = false;
+    QVector<QString> seq_;  // cached logical playback sequence
+    void invalidate_seq() { seq_valid_ = false; }
 
     // sidebar
     QList<QPushButton*> nav_buttons_;

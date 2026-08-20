@@ -29,6 +29,21 @@ Ein WP nach dem anderen, immer derselbe Loop. "VERIFIED" nur mit Nachweis.
 - Codec/Converter: Golden-Vergleich (Hashes/JSON) Linux↔Wine.
 - Clean-Prefix: gepacktes Release in NEUEM WINEPREFIX; nur Paket-Inhalt.
 - Keine falschen PASS: "kompiliert" ≠ "Unit grün" ≠ "funktioniert".
+- **Playlist-Gruppen-Parität (nicht-destruktiv, wie Linux):** Playlists bleiben
+  als sichtbare Gruppen im Queue (nie aufgelöst); logische Sequenz spielt
+  Gruppen + lose Dateien/URLs gemischt durch; Gruppen + Mehrfachauswahlen
+  (Strg/Shift) verschiebbar (↑/↓, Kontextmenü); Einträge ein- ("Save
+  selection…"/"Move to playlist…") und aussortierbar ("Remove from playlist");
+  Batch-Dedup. Abgedeckt durch `casu_playlist_test.exe` (ALL PASS, Stand
+  2026-08-20) — nach jeder Änderung an `main_window.cpp`/`playlist.cpp` neu
+  ausführen.
+- **ctest unter Wine:** 14/14 grün (ohne `casu_playback_vlc_test`/
+  `casu_playback_youtube_live_test` — kein Audio-Gerät/kein Live-Netz) —
+  `WINEPREFIX=/tmp/opencode/wine-prefix WINEDEBUG=-all ctest --test-dir build-win64 -j2`.
+- **Web-Player (web-casu + Pure Web):** Node-Harness ALL PASS
+  (`/tmp/opencode/webapp_queue_test.js` + `pureweb_queue_test.js`) +
+  `python3 tools/smoke_web_playlist.py` mehrfach grün; `win-release/web/pure/`
+  muss byte-identisch mit `pure-web-release/` sein (diff -rq leer).
 
 ## Fehlerbehandlung
 - Ursache verstehen (Referenz/Ownership/Logs) → lösen ODER `BLOCKED` in
@@ -36,6 +51,14 @@ Ein WP nach dem anderen, immer derselbe Loop. "VERIFIED" nur mit Nachweis.
 - Nie still Feature weglassen → `BLOCKED` statt verschwinden.
 
 ## Häufige Stolperfallen
+- **Gruppen bleiben sichtbar:** `playlist_view_` ist ein QTreeWidget — oberste
+  Zeilen sind Gruppen (is_playlist), Kinder sind deren Einträge. Wiedergabe
+  läuft über die logische Sequenz (`logical_sequence()`), nicht über das
+  Modell; `seq_valid_` bei jeder Mutation invalidierten (invalidate_seq).
+- **QTreeWidget-Kinder:** Beim `refresh_playlist()` werden Gruppen mit
+  Platzhalter-Kind angelegt; echte Kinder erst bei Expand
+  (`expand_playlist_group`). `refresh_playlist_group(path)` lädt nur die
+  betroffene Gruppe neu (erhält Expand-Zustand).
 - libVLC 6/7-State + zero-time-EOF (mpcasu_backend.py:600-627).
 - YouTube-Lifecycle: stop old → start proxy → open; nie Proxy vor open killen.
 - VideoSurface: keine Qt-Overlays aufs native Video (Flicker).

@@ -4,11 +4,11 @@
 |-------|-------|
 | Current version | **v3.0.0 veröffentlicht** (GitHub-Release v3.0.0) |
 | Next version | **v5.0.0** (v4.x übersprungen) |
-| Reference HEAD | `0722878` (main, gepusht) |
-| Tests | `test_playlist.py` 20 PASS · `test_player_ui.py` 9 PASS · Gesamtsuite 409 passed/14 skipped |
-| Playlist-Queue | `_play_playlist_full`, `_current_playlist_context`, `_on_playlist_merge` — fertig |
+| Reference HEAD | `edb51f1` (main, gepusht) + uncommitted Playlist-Gruppen-Arbeit |
+| Tests | Gesamtsuite **432 passed / 12 skipped** (Stand 2026-08-20, inkl. `test_playlist.py` move_many + `test_queue_playback_behavior.py` Gruppen-Play/Verschieben/Ein-/Aussortieren) |
+| Playlist-Queue (nicht-destruktiv) | Gruppen bleiben sichtbar, logische Sequenz `_play_seq`, Gruppen + Mehrfachauswahl verschiebbar (move_many), Einträge ein-/aussortierbar, loses Material überall abspielbar, Batch-Dedup — fertig |
 | MIME | `.casu` registriert (casu-codec-mime.xml, postinst) — verifiziert im DEB |
-| DEBs | casu-codec/casu-converter/mpcasu/web-casu 3.0.0 — gebaut + Release hochgeladen |
+| DEBs | casu-codec/casu-converter/mpcasu/web-casu 3.0.0 — gebaut + Release hochgeladen (DEB-Neubau nach Gruppen-Arbeit läuft/offen) |
 | Pure Web | 3.0.0 frozen (SHA `b71b5d0b…`), byte-identisch in Windows-Paket |
 | Offen | optional: AppImage/Snap/Flatpak, arm64 (Nutzer-Entscheid); v5.0-Versionsbump |
 
@@ -19,9 +19,12 @@
    GitHub-Release v5.0.0 (4 DEBs + PURE-WEB + kombinierte SHA256SUMS).
 3. Optional (Nutzer-Entscheid): AppImage/Snap/Flatpak, arm64.
 
-## Verlauf (v3.0.0)
+## Verlauf (v3.0.0 + Gruppen-Arbeit)
 - Playlist-Formate (M3U/PLS/WPL/XSPF/JSPF/ASX/RMP/RAM/JSON) nativ in allen Playern.
 - Absturz/Hänger-Fixes (Visualizer-Repaint, Dateidialog, Doppelt-Laden).
-- Playlist-Play ab Track 1 + Durchschalten (Next/Previous).
+- **Playlist-Gruppen-Semantik (nicht-destruktiv, 2026-08-20):** Playlists
+  bleiben beim Spielen sichtbar; Wiedergabe über logische Sequenz (`_play_seq`);
+  `move_many` (Block-Move, Mehrfachauswahl Strg/Shift); "Move to playlist…"/
+  "Remove from playlist" für Kinder; loses Material ein-/aussortierbar +
+  überall abspielbar; Batch-Dedup. Tests entsprechend erweitert (432 passed).
 - Multi-Select in Queue + formatbewusster Save-Dialog.
-- Playlist-Queue-Feature (Play ohne Ausklappen + Merge) — Tests erweitert (20).

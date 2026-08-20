@@ -30,8 +30,17 @@ Windows-Port; Skripte liegen in `win-release/scripts/` und decken beide Seiten a
 - **Playlist-Modell ist FLACH** (`casu/playlist.py PlaylistModel` = Liste von
   Path/str); Playlist-Gruppen sind reine UI-Konstrukte im PlaylistPane
   (QTreeWidget). Beim Portieren/Merge nie Gruppen im Model erzeugen.
-- `_current_playlist_context`: Durchspielen einer Playlist ohne Ausklappen —
-  Einträge aus der Datei laden, nicht aus UI-Kindern.
+- **Nicht-destruktive Gruppen-Queue (v3.0.0-Nachfolger):** Playlist bleibt im
+  Queue sichtbar (Gruppenzeile, nie aufgelöst); abgespielt wird die logische
+  Sequenz der flachen Einträge (`_play_seq`, gecacht; `invalidate_seq()`
+  invalidiert bei jeder Queue-Änderung). Gruppen + Mehrfachauswahl verschiebbar
+  (↑/↓, Kontextmenü), Einträge ein- ("rein")/aussortierbar ("raus"), Batch-Dedup.
+  Das alte `_current_playlist_context`-Konzept ist ENTFERNT — Playlist-Play
+  läuft über die logische Sequenz, nicht über separate Kontext-Ladung.
+- Web-Player (`web/` + `pure-web-release/`): flaches `state.items`-Modell mit
+  `item.playlist`-Attribut (Gruppen = UI/Attribut, EPG/IPTV-Views iterieren
+  flach); Gruppen bleiben nie aufgelöst; `moveRowSegment` mit Bounds-Check VOR
+  dem Splice (nie Item-Verlust).
 - MIME: `.casu`-Assoziation kommt aus `packaging/casu-codec-mime.xml`;
   Änderungen → DEB neu bauen + postinst-Pfad testen.
 - `build_debs.sh` leert `dist/` → PURE-WEB-ZIP danach ggf. wiederherstellen

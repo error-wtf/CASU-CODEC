@@ -26,6 +26,7 @@ void PlaylistModel::add(const QString& path, const QString& title) {
     item.path = path;
     item.is_url = path.contains("://");
     item.title = title.isEmpty() ? display_title_for_path(path) : title;
+    item.is_playlist = looks_like_playlist(path) && QFileInfo::exists(path);
     items_.append(item);
 }
 
@@ -40,10 +41,30 @@ void PlaylistModel::remove(int index) {
     else if (current_ == index) current_ = -1;
 }
 
+void PlaylistModel::remove_many(const QVector<int>& indices) {
+    QVector<int> rows;
+    for (int i : indices)
+        if (i >= 0 && i < items_.size()) rows.append(i);
+    std::sort(rows.begin(), rows.end(), std::greater<int>());
+    for (int r : rows) remove(r);
+}
+
 void PlaylistModel::move(int from, int to) {
     if (from < 0 || from >= items_.size() || to < 0 || to >= items_.size() || from == to)
         return;
     items_.move(from, to);
+}
+
+void PlaylistModel::move_many(const QVector<int>& indices, int delta) {
+    QVector<int> rows;
+    for (int i : indices)
+        if (i >= 0 && i < items_.size()) rows.append(i);
+    std::sort(rows.begin(), rows.end());
+    if (delta > 0) {
+        for (auto it = rows.rbegin(); it != rows.rend(); ++it) move(*it, *it + 1);
+    } else if (delta < 0) {
+        for (int r : rows) move(r, r - 1);
+    }
 }
 
 int PlaylistModel::index_of(const QString& path) const {
