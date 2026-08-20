@@ -68,6 +68,30 @@ target_compile_features(casu_mpcasu PRIVATE cxx_std_20)
 set_target_properties(casu_mpcasu PROPERTIES RUNTIME_OUTPUT_NAME "MPCASU")
 casu_stage_app("MPCASU.exe" casu_mpcasu)
 
+# Application icon resource (embedded into the exe; loaded via IDI_ICON1).
+find_program(MINGW_WINDRES x86_64-w64-mingw32-windres)
+if(MINGW_WINDRES)
+  add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/app_res.o
+    COMMAND ${MINGW_WINDRES}
+      ${CMAKE_CURRENT_SOURCE_DIR}/app.rc -O coff
+      -o ${CMAKE_CURRENT_BINARY_DIR}/app_res.o
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/app.rc
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets/mpcasu_player_icon.ico)
+  target_sources(casu_mpcasu PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/app_res.o)
+endif()
+
+# Brand assets next to the exe (build tree AND packaged zip): branch icons,
+# combo arrow, header logo, player icon, web icon. Mirrors the Linux
+# repo-level assets/ directory (theme.py resolves them __file__-relative;
+# this port resolves them applicationDirPath()-relative).
+add_custom_command(TARGET casu_mpcasu POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_CURRENT_SOURCE_DIR}/assets
+    $<TARGET_FILE_DIR:casu_mpcasu>/assets
+  COMMAND_EXPAND_LISTS)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/assets
+        DESTINATION assets COMPONENT assets)
+
 if(CMAKE_CROSSCOMPILING)
   # Stage Qt + MinGW runtime DLLs next to the exe.
   add_custom_command(TARGET casu_mpcasu POST_BUILD

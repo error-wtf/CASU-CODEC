@@ -80,12 +80,14 @@ int main(int argc, char** argv) {
     bool play_test = false;
     QString vout;
     QString aout;
+    QString screenshot;
     QStringList media;
     for (int i = 1; i < argc; ++i) {
         QString arg = QString::fromLocal8Bit(argv[i]);
         if (arg == "--smoke") smoke = true;
         else if (arg == "--proxy") proxy = true;
         else if (arg == "--play-test") play_test = true;
+        else if (arg == "--screenshot" && i + 1 < argc) screenshot = QString::fromLocal8Bit(argv[++i]);
         else if (arg == "--vout" && i + 1 < argc) vout = QString::fromLocal8Bit(argv[++i]);
         else if (arg == "--aout" && i + 1 < argc) aout = QString::fromLocal8Bit(argv[++i]);
         else if (!arg.startsWith("--")) media << arg;    }
@@ -99,7 +101,7 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    mpcasu::MainWindow window(media, proxy, vout, aout);
+    mpcasu::MainWindow window(media, proxy, vout, aout, play_test);
     window.show();
     log_startup(QStringLiteral("started pid=%1 exe=%2").arg(QCoreApplication::applicationPid())
                     .arg(QDir::toNativeSeparators(QCoreApplication::applicationFilePath())));
@@ -131,6 +133,20 @@ int main(int argc, char** argv) {
             std::printf("MPCASU_WINDOW_CLOSED\n");
             std::fflush(stdout);
             app.exit(0);
+        });
+    }
+
+    if (!screenshot.isEmpty()) {
+        // Visual regression helper: render the real window (stylesheet, layout)
+        // to a PNG for offline inspection (used by the parity workflow).
+        QTimer::singleShot(1500, &window, [&app, &window, screenshot] {
+            const QPixmap pix = window.grab();
+            const bool ok = pix.save(screenshot, "PNG");
+            std::printf("MPCASU_SCREENSHOT=%d %s\n", ok ? 1 : 0,
+                        qPrintable(QDir::toNativeSeparators(screenshot)));
+            std::fflush(stdout);
+            window.close();
+            app.exit(ok ? 0 : 1);
         });
     }
 

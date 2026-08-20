@@ -61,6 +61,13 @@ public:
     virtual std::vector<TrackInfo> subtitle_track_descriptions() = 0;
 
     virtual std::vector<ChapterInfo> chapters() = 0;
+    virtual void set_chapter(int index) = 0;
+    virtual void next_frame() = 0;
+    virtual void set_audio_delay(double milliseconds) = 0;
+    virtual void set_subtitle_delay(double milliseconds) = 0;
+    virtual bool load_subtitle_file(const std::string& path) = 0;
+    virtual std::vector<TrackInfo> audio_devices() = 0;
+    virtual void set_audio_device(const std::string& device) = 0;
     virtual void snapshot(const std::string& path) = 0;
 
     virtual std::string last_error() = 0;

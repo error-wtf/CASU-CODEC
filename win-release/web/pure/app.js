@@ -209,7 +209,8 @@ function renderQueue() {
     if (index === state.index) li.scrollIntoView({ block: "nearest" });
   });
   $("queue-summary").textContent =
-    `${shown}/${state.items.length} item${state.items.length === 1 ? "" : "s"}`;
+    `${shown}/${state.items.length} item${state.items.length === 1 ? "" : "s"}` +
+    (state.multi.size ? ` · ${state.multi.size} marked (Esc clears)` : "");
 }
 
 function addItem(item) {
@@ -319,8 +320,8 @@ function removeRows() {
   const playing = state.items[state.index];
   const doomed = new Set();
   for (const row of rows) for (let i = row.start; i <= row.end; i++) doomed.add(state.items[i]);
-  state.multi.clear();
   state.items = state.items.filter((item) => !doomed.has(item));
+  state.multi = new Set(state.items.filter((item) => state.multi.has(item)));
   state.index = playing && doomed.has(playing) ? -1 : (playing ? state.items.indexOf(playing) : -1);
   if (state.index < 0) { stopAll(); }
   renderQueue();
@@ -331,7 +332,6 @@ function movePlaylistGroup(name, delta) {
   const item = state.items.find((e) => e.playlist === name);
   if (!item) return;
   const row = rowOf(state.items.indexOf(item));
-  state.multi.clear();
   moveRowSegment(row.start, delta);
   const playing = state.items[state.index];
   state.index = playing ? state.items.indexOf(playing) : -1;
@@ -345,7 +345,7 @@ function removePlaylistGroup(name) {
   if (!members.length) return;
   state.items = state.items.filter((e) => e.playlist !== name);
   members.forEach(releaseItem);
-  state.multi.clear();
+  state.multi = new Set(state.items.filter((item) => state.multi.has(item)));
   state.index = playing && playing.playlist === name ? -1 : (playing ? state.items.indexOf(playing) : -1);
   if (state.index < 0) { stopAll(); }
   renderQueue();
@@ -356,6 +356,14 @@ function playPlaylistGroup(name) {
   const index = state.items.findIndex((e) => e.playlist === name);
   if (index >= 0) playIndex(index);
 }
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && state.multi.size) {
+    state.multi.clear();
+    renderQueue();
+    persistQueue();
+  }
+});
 
 // Sort the selected rows INTO a playlist ("rein"): a new name creates a new
 // group; an existing group appends the selection (deduplicated) and moves the

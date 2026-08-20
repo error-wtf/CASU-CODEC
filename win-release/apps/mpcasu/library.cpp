@@ -24,6 +24,7 @@ void MediaLibrary::load() {
         e.title = o.value("title").toString();
         e.kind = o.value("kind").toString();
         e.added_ms = o.value("added_ms").toVariant().toLongLong();
+        e.favorite = o.value("favorite").toBool();
         if (!e.path.isEmpty()) entries_.append(e);
     }
 }
@@ -36,11 +37,27 @@ void MediaLibrary::save() {
         o["title"] = e.title;
         o["kind"] = e.kind;
         o["added_ms"] = qint64(e.added_ms);
+        o["favorite"] = e.favorite;
         arr.append(o);
     }
     QFile f(path_);
     if (!f.open(QIODevice::WriteOnly)) return;
     f.write(QJsonDocument(arr).toJson(QJsonDocument::Indented));
+}
+
+void MediaLibrary::set_favorite(const QString& path, bool favorite) {
+    for (LibraryEntry& e : entries_)
+        if (e.path == path) {
+            e.favorite = favorite;
+            save();
+            return;
+        }
+}
+
+int MediaLibrary::index_of(const QString& path) const {
+    for (int i = 0; i < entries_.size(); ++i)
+        if (entries_[i].path == path) return i;
+    return -1;
 }
 
 void MediaLibrary::add(const QString& path, const QString& title) {

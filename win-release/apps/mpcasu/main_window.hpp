@@ -17,6 +17,11 @@
 #include "youtube_proxy.hpp"
 
 #include <QMainWindow>
+#include <QEvent>
+#include <QGridLayout>
+#include <QHash>
+#include <QListWidgetItem>
+#include <QMap>
 #include <QObject>
 #include <QSet>
 #include <QTimer>
@@ -67,9 +72,10 @@ private:
 
 class MainWindow final : public QMainWindow {
 public:
-    explicit MainWindow(const QStringList& initial_files = {},
-                        bool force_proxy = false, QString vout = {},
-                        QString aout = {}, QWidget* parent = nullptr);
+explicit MainWindow(const QStringList& initial_files = {},
+                    bool force_proxy = false, QString vout = {},
+                    QString aout = {}, bool play_test = false,
+                    QWidget* parent = nullptr);
     ~MainWindow() override;
 
     void add_files(const QStringList& paths);
@@ -86,6 +92,8 @@ public:
 
 protected:
     void dragEnterEvent(QDragEnterEvent* event) override;
+    void dragMoveEvent(QDragMoveEvent* event) override;
+    void dragLeaveEvent(QDragLeaveEvent* event) override;
     void dropEvent(QDropEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
@@ -95,6 +103,7 @@ private:
     void build_sidebar();
     void build_playlist_pane();
     void build_player_page();
+    void build_about_page();
     void build_transport();
     void build_library_page();
     void build_settings_page();
@@ -107,6 +116,11 @@ private:
     void status(const QString& text);
     void toast(const QString& text);
     void navigate(const QString& page);
+    void change_volume(int delta);
+    void exit_fullscreen_ui();
+    void open_files_dialog();
+    void open_url_dialog();
+    void show_media_info();
 
     void open_backend_and_play(const QString& source, const QString& title);
     void open_network_source(const QString& source, const QString& title);
@@ -126,6 +140,7 @@ private:
     QVector<QString> logical_sequence() const;
     void play_seq_entry(const QString& path, int row, bool automatic);
     void move_playlist_rows(const QVector<int>& rows, int delta);
+    void reselect_playlist_rows(const QStringList& paths);
     void remove_children_from_playlist(const QStringList& entries);
     void move_children_to_playlist(const QStringList& entries);
 
@@ -155,18 +170,41 @@ private:
     void merge_selection_into_playlist();
 
     // pages
-    void on_library_play();
     void on_library_add_current();
+    void on_library_add_selected(QListWidgetItem* item);
+    void scan_library_folders();
     void on_settings_save();
     void on_epg_load();
+    void load_epg_source(const QString& source);
+    void render_epg_cards();
+    bool eventFilter(QObject* watched, QEvent* event) override;
     void on_recording_toggle();
+    void show_record_settings_dialog();
     void on_visualizer_toggle();
+    void rename_queue_entry();
+    void commit_queue_rename(QTreeWidgetItem* item, QLineEdit* editor);
+    void apply_viz_mode();
+    void set_diagnostics(const QString& support, const QString& integrity,
+                         const QString& segmented, const QString& guide);
+    void update_diagnostics_guide();
+    QString epg_now_next_text(const QString& source);
+    QString queue_label_for(const QString& path);
+    void show_fs_overlay();
+    void hide_fs_overlay();
+    void clamp_to_screen();
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
+    void moveEvent(QMoveEvent* event) override;
+    void showEvent(QShowEvent* event) override;
     void on_youtube_play();
 
     VideoSurface* surface_ = nullptr;
     QStackedLayout* stage_stack_ = nullptr;
     QFrame* transport_frame_ = nullptr;
+    QFrame* topbar_ = nullptr;
     QFrame* sidebar_ = nullptr;
+    QFrame* diagnostics_bar_ = nullptr;
+    QMap<QString, QLabel*> diag_labels_;
     BackendEventBridge* bridge_ = nullptr;
     casu::playback::CppPlaybackController* controller_ = nullptr;
     std::shared_ptr<casu::playback::PlaybackBackend> backend_;
@@ -187,6 +225,8 @@ private:
     bool paused_ = false;
     bool end_handled_ = false;
     bool advancing_ = false;
+    bool clamping_ = false;
+    bool play_test_mode_ = false;  // CI: no session restore / resume
     double duration_ = 0.0;
     int volume_ = 100;
     bool muted_ = false;
@@ -204,27 +244,54 @@ private:
     QPushButton* mute_btn_ = nullptr;
     QSlider* volume_slider_ = nullptr;
     QPushButton* rate_btn_ = nullptr;
+    QPushButton* ab_btn_ = nullptr;
     QPushButton* repeat_btn_ = nullptr;
     QPushButton* shuffle_btn_ = nullptr;
     QPushButton* record_btn_ = nullptr;
     QPushButton* viz_btn_ = nullptr;
+    QWidget* fs_overlay_ = nullptr;
+    QLabel* fs_title_ = nullptr;
+    QLabel* fs_time_ = nullptr;
+    QPushButton* fs_play_btn_ = nullptr;
+    QTimer* fs_hide_timer_ = nullptr;
     QLabel* status_label_ = nullptr;
+    QLabel* toast_label_ = nullptr;
+    QLabel* drop_overlay_ = nullptr;
+    QTimer* toast_timer_ = nullptr;
     QWidget* visualizer_ = nullptr;
 
     // playlist pane
     QTreeWidget* playlist_view_ = nullptr;
+    QComboBox* view_filter_ = nullptr;
+    QLineEdit* queue_search_ = nullptr;
+    QLabel* empty_hint_ = nullptr;
     QSet<QString> expanded_groups_;
+    QHash<QString, QString> display_titles_;
+    QHash<QString, QString> tag_titles_;  // Linux parity: cached tag titles
     QString current_played_path_;
+    QString resume_source_;
+    double resume_position_ = -1.0;
     bool seq_valid_ = false;
     QVector<QString> seq_;  // cached logical playback sequence
     void invalidate_seq() { seq_valid_ = false; }
+    void apply_queue_filter();
+    void remove_selected_rows();
+    void cycle_ab_loop();
+    double ab_loop_a_ = -1.0;
+    double ab_loop_b_ = -1.0;
 
     // sidebar
     QList<QPushButton*> nav_buttons_;
     QMap<QString, QPushButton*> nav_map_;
 
     // library page
-    QListWidget* library_view_ = nullptr;
+    QLineEdit* library_search_ = nullptr;
+    QComboBox* library_mode_ = nullptr;
+    QListWidget* library_groups_ = nullptr;
+    QListWidget* library_tracks_ = nullptr;
+    QListWidget* library_folders_ = nullptr;
+    QLabel* library_count_ = nullptr;
+    QHash<QString, QString> lib_meta_;  // cached tag fields: "path|field" → value
 
     // settings page
     QSlider* settings_volume_ = nullptr;
@@ -233,10 +300,20 @@ private:
     QComboBox* settings_repeat_ = nullptr;
     QLineEdit* settings_record_dir_ = nullptr;
     QLabel* backend_info_label_ = nullptr;
+    QCheckBox* settings_muted_ = nullptr;
+    QCheckBox* settings_resume_ = nullptr;
+    QComboBox* settings_viz_ = nullptr;
+    QSpinBox* settings_cache_ = nullptr;
+    QListWidget* settings_folders_ = nullptr;
+    QSpinBox* settings_split_ = nullptr;
+    QComboBox* settings_format_ = nullptr;
+    QCheckBox* settings_consent_ = nullptr;
 
     // epg page
-    QComboBox* epg_channel_ = nullptr;
-    QTableWidget* epg_table_ = nullptr;
+    QLineEdit* epg_source_ = nullptr;
+    QLabel* epg_status_ = nullptr;
+    QGridLayout* epg_grid_ = nullptr;
+    QHash<QObject*, QString> epg_card_urls_;
 
     // recording page
     QLabel* record_status_ = nullptr;
@@ -245,6 +322,9 @@ private:
     // youtube page
     QLineEdit* youtube_url_ = nullptr;
     QLabel* youtube_status_ = nullptr;
+    QFrame* yt_consent_frame_ = nullptr;
+    QListWidget* yt_results_ = nullptr;
+    bool yt_searching_ = false;
 };
 
 }  // namespace mpcasu

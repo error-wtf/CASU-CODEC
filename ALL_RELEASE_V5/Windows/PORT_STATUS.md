@@ -7,12 +7,13 @@
 | Reference tree modified | NO |
 | Baseline | HEAD `2367dcbc`, 400 tests PASS (Linux-Referenz) |
 | Pure Web Release | 3.0.0 frozen (SHA `b71b5d0b…`) → **neu 2026-08-20** (Gruppen-Semantik, SHA `6d6d7bf8…`, 18 Dateien) |
-| ctest (Wine) | **14/14 grün** (ohne VLC-Live/YouTube-Live) inkl. `casu_playlist_test` (Gruppen-Semantik, logische Sequenz, move_many/remove_many, rein/raus) |
-| Release-Gate | **14/14 PASS** — `win-release/dist/WINDOWS_RELEASE_GATE.json` (generated_utc 2026-08-19T10:48:55Z) |
+| ctest (Wine) | **16/16 grün** inkl. `mpcasu_smoke_test` (Smoke + Play-Test) und `casu_playlist_test` |
+| Release-Gate | **14/14 PASS** — `win-release/dist/WINDOWS_RELEASE_GATE.json` (generated_utc 2026-08-20T21:10:38Z) |
 | Golden | 8 PASS (verify_golden.sh) |
 | Installer | setup.exe gebaut + install/uninstall unter Wine verifiziert (PATH bleibt) |
 | Playlist-Queue | **Gruppen-Semantik** vollständig auf Windows portiert (QTreeWidget, logische Sequenz, Gruppen + Mehrfachauswahl verschiebbar, ein-/aussortierbar, Batch-Dedup) — Tests ALL PASS; Build grün; `web/pure` byte-identisch aktualisiert |
-| Offen | MSVC/QtWebEngine-Endbuild (nur auf echtem Windows); BLOCKER-004 (PATH/Registry auf echtem Windows); BLOCKER-005 (MF/DirectShow-Decoder geplant, nicht gebaut); Windows-Release neu bauen (SKIP_WINE=1), um neues MPCASU.exe + `web/pure` einzuspielen |
+| **UI-Parität** | **Alle 21 Audit-Lücken geschlossen** (2026-08-20): DiagnosticsBar, Drop-Overlay, Toast+Screen-Clamp, Queue-Rename, Rec-Settings-Dialog, Cache-Leeren + Provider-Status, Shuffle-`[on=true]`, Live-Volume/Mute/Rate-Persistenz, Badges-Spalte, Now-Playing-EPG-Zeile, YouTube-Suche + Consent-Gate + Playlist-Expand, Tag-Titel, EPG-Karten-Grid (M3U/URL/Play), Media-Info CASU-Manifest, Library-Vollausbau (Suche/Modi/Favoriten/Ordner/Scan), Chapters-, Track-, Device-Menüs, A/V-Delays, externes Untertitel, Frame-Step, Visualizer-Linux-Optik. Backend: `set_chapter`/`next_frame`/Delays/`add_slave`/Device-Liste in `libvlc_bind.h` + `LibVLCBackend`. Fix: Play-Test ignoriert Session-Restore (`--play-test`). Release neu gebaut + installiert (Program Files, PATH ✓, Smoke ✓) |
+| Offen | MSVC/QtWebEngine-Endbuild (nur auf echtem Windows); BLOCKER-004 (PATH/Registry auf echtem Windows); BLOCKER-005 (MF/DirectShow-Decoder geplant, nicht gebaut) |
 
 ## Nächste Schritte (v5.0.0)
 1. Versionsbump 3.0.0 → 5.0.0 überall (setup.nsi, Paketversion, Doku).

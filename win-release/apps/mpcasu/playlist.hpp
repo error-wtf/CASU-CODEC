@@ -32,6 +32,7 @@ public:
     void remove_many(const QVector<int>& indices);
     void move(int from, int to);
     void move_many(const QVector<int>& indices, int delta);
+    void reorder(const QStringList& paths);
     const QVector<PlaylistItem>& items() const { return items_; }
     int size() const { return items_.size(); }
     bool empty() const { return items_.isEmpty(); }

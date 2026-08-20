@@ -58,6 +58,13 @@ public:
     void set_subtitle_track(int) override {}
     std::vector<TrackInfo> subtitle_track_descriptions() override { return {}; }
     std::vector<ChapterInfo> chapters() override { return {}; }
+    void set_chapter(int) override {}
+    void next_frame() override {}
+    void set_audio_delay(double) override {}
+    void set_subtitle_delay(double) override {}
+    bool load_subtitle_file(const std::string&) override { return true; }
+    std::vector<TrackInfo> audio_devices() override { return {}; }
+    void set_audio_device(const std::string&) override {}
     void snapshot(const std::string&) override {}
     std::string last_error() override { return "mock error detail"; }
     bool is_actively_playing() override { return true; }
