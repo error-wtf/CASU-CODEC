@@ -68,6 +68,11 @@ werden beim Abspielen **nie aufgelöst**:
 3. **Verschieben:** Ganze Gruppen UND Mehrfachauswahlen (Strg wahllos, Shift
    in Reihe) sind per ↑/↓-Button und Kontextmenü ("Move up/down") frei
    verschiebbar; eine Selektion bewegt sich als Block.
+8. **Dauerhafte Markierung:** Die (Mehrfach-)Auswahl bleibt nach dem
+   Verschieben UND nach dem Entfernen erhalten — man kann also wiederholt
+   verschieben/entfernen, ohne neu zu markieren; überlebende Zeilen einer
+   Entfernung bleiben markiert. Erst eine leere Auswahl bzw. **Esc** löscht
+   die Markierung.
 4. **Einsortieren ("rein"):** Auswahl (Dateien, URLs, ganze Gruppen — diese
    werden in ihre Einträge expandiert) kann per "Save selection to
    playlist…"/"Move to playlist…" in eine Playlist einsortiert werden

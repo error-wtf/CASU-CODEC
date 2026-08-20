@@ -456,6 +456,43 @@ def test_multi_selection_move_moves_all_selected_rows_together(window, tmp_path)
     assert window._played[-1] == str(a1.resolve())  # Ende
 
 
+def test_marking_survives_move_and_removal(window, tmp_path):
+    """Persistente Markierung (v3.0.0-Nachfolger): nach dem Verschieben und
+    Entfernen bleibt die Markierung erhalten — mehrfaches Verschieben ohne
+    erneutes Markieren; nur Esc/leere Auswahl löscht sie."""
+    a1 = _media(tmp_path, "a1.mp3")
+    x = _media(tmp_path, "x.mp4")
+    y = _media(tmp_path, "y.mp4")
+    b1 = _media(tmp_path, "b1.mp3")
+    plA = _make_playlist(tmp_path, "A.m3u", [a1])
+    plB = _make_playlist(tmp_path, "B.m3u", [b1])
+
+    window.add_files([plA, x, y, plB])
+    assert _items(window) == [str(plA.resolve()), str(x.resolve()),
+                              str(y.resolve()), str(plB.resolve())]
+    pane = window._playlist_pane
+
+    # Playlist A + x markieren und nach unten verschieben
+    pane.select_rows([0, 1])
+    assert pane.selected_rows() == [0, 1]
+    window._on_playlist_move(1, [0, 1])
+    assert _items(window) == [str(y.resolve()), str(plA.resolve()),
+                              str(x.resolve()), str(plB.resolve())]
+    # Markierung überlebt den Re-Render: Zeilen 1+2 sind weiterhin markiert
+    assert pane.selected_rows() == [1, 2]
+    # erneutes Verschieben (nach oben) — Markierung bleibt erhalten
+    window._on_playlist_move(-1, [1, 2])
+    assert _items(window) == [str(plA.resolve()), str(x.resolve()),
+                              str(y.resolve()), str(plB.resolve())]
+    assert pane.selected_rows() == [0, 1]
+
+    # Entfernen einer markierten Zeile: die übrigen bleiben markiert
+    window._on_playlist_remove([0])
+    assert _items(window) == [str(x.resolve()), str(y.resolve()),
+                              str(plB.resolve())]
+    assert pane.selected_rows() == [0]
+
+
 def test_loose_file_play_continues_through_following_playlists(window, tmp_path):
     """Play auf ein loses mp3 (gehört zu keiner Playlist) in der Mitte der
     Queue spielt von dort ALLES bis zum Ende weiter — inkl. aller folgenden
