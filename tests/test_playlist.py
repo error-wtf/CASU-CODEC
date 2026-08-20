@@ -273,3 +273,42 @@ def test_playlist_play_queue_roundtrip_dedups_and_orders(tmp_path):
     # Reihenfolge erhalten -> index_of(a)==0, index_of(b)==1 (play_next von a -> b).
     assert model.index_of(a) == 0
     assert model.index_of(b) == 1
+
+
+def test_replace_with_resolves_playlist_group_in_place(tmp_path):
+    """Kernoperation der Playlist-Reparatur: die .m3u-Gruppen-Zeile wird an
+    Ort und Stelle durch ihre Einträge ersetzt — kanonische Mischreihenfolge
+    (Playlist A: A1, A2 + Datei X + Playlist B: B1, B2 -> A1, A2, X, B1, B2)."""
+    a1 = tmp_path / "a1.mp3"; a1.write_bytes(b"a")
+    a2 = tmp_path / "a2.mp3"; a2.write_bytes(b"a")
+    x = tmp_path / "x.mp4"; x.write_bytes(b"x")
+    b1 = tmp_path / "b1.mp3"; b1.write_bytes(b"b")
+    b2 = tmp_path / "b2.mp3"; b2.write_bytes(b"b")
+    plA = tmp_path / "A.m3u"
+    plB = tmp_path / "B.m3u"
+    save_playlist_file(plA, PlaylistModel((a1, a2)))
+    save_playlist_file(plB, PlaylistModel((b1, b2)))
+
+    queue = PlaylistModel((plA, x, plB))
+    inserted = queue.replace_with(queue.index_of(plA), load_playlist_file(plA).items)
+    assert inserted == [a1.resolve(), a2.resolve()]
+    assert queue.items == (a1.resolve(), a2.resolve(), x.resolve(), plB.resolve())
+    inserted = queue.replace_with(queue.index_of(plB), load_playlist_file(plB).items)
+    assert inserted == [b1.resolve(), b2.resolve()]
+    assert queue.items == (a1.resolve(), a2.resolve(), x.resolve(),
+                           b1.resolve(), b2.resolve())
+
+    # Dedup: bereits gequeuete Einträge werden nicht dupliziert.
+    queue2 = PlaylistModel((a1, plA))
+    inserted = queue2.replace_with(queue2.index_of(plA), load_playlist_file(plA).items)
+    assert inserted == [a2.resolve()]
+    assert queue2.items == (a1.resolve(), a2.resolve())
+
+    # Rekursion: eine Playlist kann sich nie selbst enthalten.
+    queue3 = PlaylistModel((plA,))
+    inserted = queue3.replace_with(0, [a1, plA])
+    assert inserted == [a1.resolve()]
+    assert queue3.items == (a1.resolve(),)
+
+    with pytest.raises(PlaylistError, match="out of range"):
+        queue.replace_with(99, [a1])

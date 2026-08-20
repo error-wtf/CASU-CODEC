@@ -14,6 +14,11 @@ RESULTS_DIR="test-results"
 TOOLCHAIN="cmake/mingw64-toolchain.cmake"
 SKIP_WINE="${SKIP_WINE:-0}"
 
+# Absolute paths: the packaging steps run in subshells that change directory.
+BUILD_DIR="$(realpath "$BUILD_DIR")"
+DIST_DIR="$(realpath "$DIST_DIR")"
+RESULTS_DIR="$(realpath "$RESULTS_DIR")"
+
 mkdir -p "$RESULTS_DIR" "$DIST_DIR"
 
 echo "==> [1/8] configure"
@@ -68,7 +73,7 @@ echo "==> [7b/8] setup.exe installer"
 # NSIS installer into dist/. Requires makensis (NSIS) on the build host.
 if command -v makensis >/dev/null 2>&1; then
     rm -rf "$DIST_DIR/_stage/MPCASU-Windows-x86_64"
-    (cd "$DIST_DIR/_stage" && unzip -oq MPCASU-Windows-x86_64.zip)
+    (cd "$DIST_DIR/_stage" && unzip -oq "$DIST_DIR/MPCASU-Windows-x86_64.zip")
     if makensis scripts/setup.nsi > "$RESULTS_DIR/setup-nsis.log" 2>&1; then
         echo "    OK: $(ls -1 "$DIST_DIR"/MPCASU-Setup-*.exe)"
     else

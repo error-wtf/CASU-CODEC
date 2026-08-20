@@ -40,3 +40,17 @@ Windows-Port; Skripte liegen in `win-release/scripts/` und decken beide Seiten a
 ## 5. Bekannte Backups (Stand 2026-08-19)
 `v3-before-playlist-feature`, `v3-after-linux-playlist-fixes`,
 `v3-linux-playlist-merge-done`, `v3-playlist-feature-complete`.
+
+## 6. Launcher-/Sandbox-Fixes (2026-08-19, in v3.0.0-DEBs enthalten)
+- **Stray-`mpcasu_qt`-Shadowing:** `/usr/bin/mpcasu` macht jetzt `cd /`, damit
+  ein `./mpcasu_qt` im aktuellen Verzeichnis NIEMALS die installierte Version
+  (/usr/share/casu-codec) überschattet. Vorher wurde beim Start aus Repo-
+  Verzeichnissen eine alte Kopie ohne Playlist-Fixes geladen → "broken".
+- **QtWebEngine-Sandbox als root/Container:** `QTWEBENGINE_DISABLE_SANDBOX=1`
+  wenn `id -u = 0` (Chromium-Zygote crashte die GUI beim Start sonst still).
+- **Weitere alte mpcasu_qt-Kopien** (Lino-Codec, Dokumente/Codec-Casu,
+  Lino-Codec-work-recovered, Lino-Codec-VOLLBACKUP-*) wurden auf den Stand der
+  reparierten Referenz ersetzt (Backups: `/tmp/opencode/alt-main-windows/`).
+- Bei künftigen Fixes IMMER: DEBs neu bauen, `mpcasu`-Skript verifizieren
+  (`grep -c 'cd /' /usr/bin/mpcasu`), Test als root (`mpcasu` startet ohne
+  Zygote-Crash), und alle externen mpcasu_qt-Kopien prüfen.

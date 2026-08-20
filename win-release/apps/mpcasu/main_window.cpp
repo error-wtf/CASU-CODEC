@@ -1153,11 +1153,22 @@ void MainWindow::merge_selection_into_playlist() {
     const QList<QListWidgetItem*> sel = playlist_view_->selectedItems();
     if (sel.isEmpty()) { status(QStringLiteral("Select items to save to a playlist first.")); return; }
 
-    // Collect the selected media paths / URLs (deduplicated).
+    // Collect the selected media paths / URLs (deduplicated). Playlist files
+    // in the selection are expanded into their entries, so whole playlists
+    // can be merged into other playlists.
     QStringList entries;
     for (auto* it : sel) {
         const QString path = it->data(Qt::UserRole).toString();
-        if (!path.isEmpty() && !entries.contains(path)) entries.append(path);
+        if (path.isEmpty()) continue;
+        if (PlaylistModel::looks_like_playlist(path) && QFileInfo::exists(path)) {
+            PlaylistModel tmp;
+            if (PlaylistModel::load_file(path, &tmp).empty()) {
+                for (const PlaylistItem& item : tmp.items())
+                    if (!entries.contains(item.path)) entries.append(item.path);
+                continue;
+            }
+        }
+        if (!entries.contains(path)) entries.append(path);
     }
     if (entries.isEmpty()) { status(QStringLiteral("Nothing to merge: no playable item selected.")); return; }
 
@@ -1225,16 +1236,26 @@ void MainWindow::refresh_playlist() {
 }
 
 void MainWindow::add_files(const QStringList& paths) {
+    int added = 0;
     for (const QString& path : paths) {
         if (PlaylistModel::looks_like_playlist(path) && QFileInfo::exists(path)) {
             PlaylistModel tmp;
             std::string err = PlaylistModel::load_file(path, &tmp);
             if (err.empty()) {
-                for (const PlaylistItem& item : tmp.items()) playlist_.add(item.path, item.title);
+                // Flatten the playlist into its entries; never duplicate
+                // media that is already queued (playlist + its files picked
+                // together must not double-load).
+                for (const PlaylistItem& item : tmp.items()) {
+                    if (playlist_.index_of(item.path) < 0) {
+                        playlist_.add(item.path, item.title);
+                        ++added;
+                    }
+                }
                 continue;
             }
         }
-        playlist_.add(path);
+        // Plain media files and stream URLs are queued as-is, deduplicated.
+        if (playlist_.index_of(path) < 0) { playlist_.add(path); ++added; }
     }
     refresh_playlist();
     status(QStringLiteral("%1 item(s) in queue").arg(playlist_.size()));
