@@ -67,6 +67,51 @@ def main() -> int:
             if "#EXTM3U" not in text or "none1" not in text or "none2" not in text:
                 issues.append("saved M3U incomplete")
 
+            # second playlist -> second group; move first group down
+            m3u2 = work / "radio2.m3u"
+            m3u2.write_text(
+                "#EXTM3U\n"
+                '#EXTINF:-1 tvg-id="c" group-title="Radio",Gamma FM\n'
+                "http://127.0.0.1:8893/none3\n", encoding="utf-8")
+            page.set_input_files("#file-input", [str(m3u2)])
+            page.wait_for_selector("#queue li.queue-group >> nth=1", timeout=10_000)
+            first_group = page.locator("#queue li.queue-group").first
+            if "radio.m3u" not in first_group.inner_text():
+                issues.append("first group should be radio.m3u after second load")
+            first_group.locator("button[title='Move playlist down']").click()
+            page.wait_for_timeout(300)
+            if "radio2.m3u" not in page.locator("#queue li.queue-group").first.inner_text():
+                issues.append("group move-down failed")
+
+            # multi-select both entries of the moved-down group, remove -> whole group
+            page.locator("#queue li:not(.queue-group)").nth(1).click(modifiers=["Control"])
+            page.locator("#queue li:not(.queue-group)").nth(2).click(modifiers=["Control"])
+            page.click("#remove")
+            page.wait_for_timeout(300)
+            groups = page.locator("#queue li.queue-group").count()
+            if groups != 1 or "radio2.m3u" not in page.locator("#queue li.queue-group").first.inner_text():
+                issues.append("multi-remove of group entries failed")
+
+            # right-click entry -> remove from playlist (stays loose, group disappears)
+            page.locator("#queue li:not(.queue-group)").first.click(button="right")
+            page.wait_for_selector(".queue-menu", timeout=5_000)
+            page.locator(".queue-menu button", has_text="Remove from playlist").click()
+            page.wait_for_timeout(300)
+            if page.locator("#queue li.queue-group").count() != 0:
+                issues.append("remove-from-playlist did not dissolve the group")
+            if page.locator("#queue li:not(.queue-group)").count() != 1:
+                issues.append("removed entry did not stay loose in the queue")
+
+            # right-click loose entry -> save selection as new playlist (prompt)
+            page.on("dialog", lambda d: d.accept("NeueGruppe"))
+            page.locator("#queue li:not(.queue-group)").first.click(modifiers=["Control"])
+            page.locator("#queue li:not(.queue-group)").first.click(button="right")
+            page.wait_for_selector(".queue-menu", timeout=5_000)
+            page.locator(".queue-menu button", has_text="Save selection to playlist").click()
+            page.wait_for_selector("#queue li.queue-group[data-group='NeueGruppe']", timeout=10_000)
+            if page.locator("#queue li.queue-group").count() != 1:
+                issues.append("save-selection-to-playlist did not create a new group")
+
             browser.close()
     finally:
         server.terminate()
@@ -75,7 +120,7 @@ def main() -> int:
     for issue in issues:
         print(f"[FAIL] {issue}")
     if not issues:
-        print("queue group header + expand/collapse + save-as-M3U OK")
+        print("group tools + multi-select + rein/raus + save-selection OK")
         print("WEB PLAYLIST SMOKE OK")
     return 1 if issues else 0
 

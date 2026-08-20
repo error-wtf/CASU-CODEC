@@ -23,17 +23,31 @@ Ein Feature nach dem anderen, immer derselbe Loop. "VERIFIED" nur mit Nachweis.
    aktualisieren.
 
 ## Harte Gates (nie überspringen)
-- Playlist-Queue: Playlist-Play ohne Ausklappen + Merge dedupliziert + gemischte
-  Queue — durch Tests abgedeckt (20 Playlist-Tests).
+- Playlist-Queue (nicht-destruktiv): Playlist-Gruppen bleiben beim Spielen
+  sichtbar (kein Auflösen); logische Sequenz spielt Gruppen + lose
+  Dateien/URLs gemischt durch; Gruppen + Mehrfachauswahlen (Strg/Shift)
+  verschiebbar; Einträge ein- ("Save selection…"/"Move to playlist…") und
+  aussortierbar ("Remove from playlist"); Batch-Dedup (Playlist + eigene
+  Dateien → kein Doppelt-Laden) — durch `tests/test_queue_playback_behavior.py`
+  + `tests/test_playlist.py` abgedeckt (432 passed, 12 skipped, Stand 2026-08-20).
 - MIME: `.casu`-Datei im Dateimanager → MPCASU (nach DEB-Installation).
 - Keine falschen PASS: Syntax-Check ≠ Tests grün ≠ UI-Verhalten korrekt.
 - YouTube: echter Stream via yt-dlp → Loopback → libVLC (nicht nur Mock).
+- Web-Player (web-casu + Pure Web): `node --check web/app.js pure-web-release/app.js`,
+  Node-Harness ALL PASS (`/tmp/opencode/webapp_queue_test.js` 12 Checks,
+  `/tmp/opencode/pureweb_queue_test.js` 17 Checks), `python3 tools/smoke_web_playlist.py`
+  mehrfach grün (Gruppen-Tools, Block-Move, Mehrfachauswahl, rein/raus,
+  Save-selection).
 
 ## Fehlerbehandlung
 - Ursache verstehen → lösen ODER als BLOCKED dokumentieren (BLOCKERS.md im
   win-release/roadmap/ oder NOTIZEN an Nutzer). Nie still Feature weglassen.
 
 ## Häufige Stolperfallen
+- **Gruppen bleiben sichtbar:** Playlist-Zeilen werden beim Spielen NIE
+  aufgelöst — Wiedergabe läuft über die logische Sequenz (`_play_seq`), nicht
+  über Modell-Änderungen. Jede Queue-Mutation muss die Sequenz invalidieren
+  (`_invalidate_play_seq`), sonst spielt Next/Previous eine veraltete Liste.
 - PlaylistModel ist flach — Gruppen nur im UI.
 - Durchspielen ohne Ausklappen: Einträge aus Datei laden (nicht UI-Kinder).
 - Visualizer: Repaint-Schleife nur bei sichtbarem Fenster (sonst CPU-Pegel).

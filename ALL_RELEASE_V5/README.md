@@ -50,3 +50,37 @@ liegen äquivalente Dateien (gleiche Namen, OS-spezifischer Inhalt):
   `/home/error/gittoken.env`, `.gitignore` schließt sie aus).
 - Jede neue Version: erst `SAFE-GUARD`-Backup, dann Tests, dann Pakete, dann
   Release-Update (Workflow siehe `Windows/SAFE-GUARD.md`).
+
+## Playlist-Gruppen-Semantik (VERBINDLICH für alle Ziel-OS)
+
+Seit dem v3.0.0-Nachfolger gilt in **jedem** Player (Linux + Windows +
+**web-casu** + **Pure Web**) die nicht-destruktive Queue-Semantik — Playlists
+werden beim Abspielen **nie aufgelöst**:
+
+1. **Gruppen bleiben sichtbar:** Eine Playlist erscheint als EINE Zeile
+   ("[Playlist] Name") im Queue. Sie wird beim Spielen nicht in ihre Einträge
+   aufgelöst, sondern bleibt als verschiebbare Gruppe stehen (zusammen-
+  /aufklappbar).
+2. **Logische Wiedergabe-Sequenz:** Abgespielt wird die flache Sequenz der
+   Einträge — Playlist-Gruppen laufen in ihre Einträge auf, lose Dateien und
+   URLs (die keiner Playlist angehören) stehen dazwischen und werden ebenfalls
+   komplett durchgespielt (Next/Previous, Shuffle, Repeat).
+3. **Verschieben:** Ganze Gruppen UND Mehrfachauswahlen (Strg wahllos, Shift
+   in Reihe) sind per ↑/↓-Button und Kontextmenü ("Move up/down") frei
+   verschiebbar; eine Selektion bewegt sich als Block.
+4. **Einsortieren ("rein"):** Auswahl (Dateien, URLs, ganze Gruppen — diese
+   werden in ihre Einträge expandiert) kann per "Save selection to
+   playlist…"/"Move to playlist…" in eine Playlist einsortiert werden
+   (dedupliziert, bestehende Reihenfolge bleibt).
+5. **Aussortieren ("raus"):** Kinder (Einträge) können per "Remove from
+   playlist" aus ihrer Gruppe entfernt werden; die Gruppe bleibt bestehen.
+6. **Loses Material:** Dateien/URLs ohne Playlist sind ein-/aussortierbar und
+   werden in jeder Position der Queue abgespielt (vorne, zwischen Gruppen,
+   hinten).
+7. **Kein Doppelt-Laden:** Wird eine Playlist zusammen mit ihren eigenen
+   Dateien gewählt, kommen deren Pfade nur einmal vor (Batch-Dedup). Eine
+   bereits geladene Playlist wird bei erneutem Wählen übersprungen.
+
+Diese Semantik ist in `FEATURE_MATRIX.md` je OS als Paritätsmerkmal
+dokumentiert und durch Tests abgedeckt (Linux `tests/test_queue_playback_behavior.py`,
+Windows `win-release/tests/casu_playlist_test.cpp`, Web `tools/smoke_web_playlist.py`).

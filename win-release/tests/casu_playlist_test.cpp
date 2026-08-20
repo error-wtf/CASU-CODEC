@@ -86,8 +86,9 @@ int main() {
         check(PlaylistModel::looks_like_playlist(dirPath + "/x.mp4") == false, "not a playlist for .mp4");
     }
 
-    // --- Mixed combination: playlist A + file X + playlist B in one queue ---
-    // Canonical order: A1, A2, X, B1, B2 — plays through in sequence.
+    // --- Mixed combination: playlist group + file + playlist group in queue ---
+    // Playlist files are added as ONE visible GROUP row (never flattened);
+    // the logical playback sequence is A1, A2, X, B1, B2.
     {
         const QString a1 = dirPath + "/a1.mp3";
         const QString a2 = dirPath + "/a2.mp3";
@@ -105,80 +106,135 @@ int main() {
         check(PlaylistModel::save_m3u(plA, pa).empty(), "save playlist A");
         check(PlaylistModel::save_m3u(plB, pb).empty(), "save playlist B");
 
-        // Simulate MainWindow::add_files (flat expansion + dedup).
+        // Simulate MainWindow::add_files: playlist => group row, media/URLs
+        // appended flat, deduplicated by path. A media file that is a child
+        // of a playlist chosen in the SAME batch is covered (not double-added).
         PlaylistModel queue;
-        auto add_source = [&](const QString& p) {
-            if (PlaylistModel::looks_like_playlist(p) && QFileInfo::exists(p)) {
-                PlaylistModel tmp;
-                if (PlaylistModel::load_file(p, &tmp).empty()) {
-                    for (const PlaylistItem& item : tmp.items())
-                        if (queue.index_of(item.path) < 0) queue.add(item.path, item.title);
-                    return;
+        auto add_batch = [&](const QStringList& batch) {
+            QStringList covered;
+            for (const QString& p : batch) {
+                if (PlaylistModel::looks_like_playlist(p) && QFileInfo::exists(p)) {
+                    PlaylistModel tmp;
+                    if (PlaylistModel::load_file(p, &tmp).empty())
+                        for (const PlaylistItem& item : tmp.items()) covered.append(item.path);
                 }
             }
-            if (queue.index_of(p) < 0) queue.add(p);
+            for (const QString& p : batch) {
+                if (PlaylistModel::looks_like_playlist(p) && QFileInfo::exists(p)) {
+                    if (queue.index_of(p) < 0) queue.add(p);
+                    continue;
+                }
+                if (!covered.contains(p) && queue.index_of(p) < 0) queue.add(p);
+            }
         };
-        add_source(plA);
-        add_source(x);
-        add_source(plB);
-        check(queue.size() == 5, "mixed queue has 5 entries");
-        check(queue.index_of(a1) == 0, "mixed queue order: A1 first");
-        check(queue.index_of(a2) == 1, "mixed queue order: A2 second");
-        check(queue.index_of(x) == 2, "mixed queue order: X in the middle");
-        check(queue.index_of(b1) == 3, "mixed queue order: B1 fourth");
-        check(queue.index_of(b2) == 4, "mixed queue order: B2 last");
+        add_batch({plA, x, plB});
+        check(queue.size() == 3, "queue keeps playlist groups (3 rows, not 5)");
+        check(queue.is_playlist_row(0), "row 0 is a playlist group (A)");
+        check(!queue.is_playlist_row(1), "row 1 is a loose file (X)");
+        check(queue.is_playlist_row(2), "row 2 is a playlist group (B)");
 
-        // The combined queue plays through in order and ends cleanly.
-        queue.set_current(0);
-        int expected = 1;
-        for (; expected < 5; ++expected) {
-            int next = queue.next_index(true);
-            check(next == expected, "mixed queue advances in order");
-            queue.set_current(next);
-        }
-        check(queue.next_index(true) == -1, "mixed queue ends after last entry");
-
-        // Re-adding a playlist (or its media) must not duplicate rows.
-        add_source(plA);
-        add_source(a1);
-        check(queue.size() == 5, "re-add of playlist/media deduplicates");
-        check(queue.index_of(a1) == 0 && queue.index_of(b2) == 4, "dedup keeps order");
-    }
-
-    // --- Merge a whole playlist into another playlist ---
-    {
-        const QString a1 = dirPath + "/merge-a1.mp3";
-        const QString a2 = dirPath + "/merge-a2.mp3";
-        { QFile f(a1); f.open(QIODevice::WriteOnly); f.write("m"); }
-        { QFile f(a2); f.open(QIODevice::WriteOnly); f.write("m"); }
-        const QString plA = dirPath + "/MergeA.m3u";
-        const QString plB = dirPath + "/MergeB.m3u";
-        PlaylistModel pa, pb;
-        pa.add(a1); pa.add(a2);
-        check(PlaylistModel::save_m3u(plA, pa).empty(), "merge source playlist saved");
-        pb.add(dirPath + "/existing.mp3");
-        check(PlaylistModel::save_m3u(plB, pb).empty(), "merge target playlist saved");
-
-        // Simulate merge_selection_into_playlist: the selection contains the
-        // playlist path; its entries are expanded and appended (dedup).
-        QStringList selection = {plA};
-        PlaylistModel merged;
-        PlaylistModel::load_file(plB, &merged);
-        for (const QString& path : selection) {
-            if (PlaylistModel::looks_like_playlist(path) && QFileInfo::exists(path)) {
+        // Logical playback sequence walks groups into their entries.
+        QVector<QString> seq;
+        for (int i = 0; i < queue.items().size(); ++i) {
+            const PlaylistItem& item = queue.items()[i];
+            if (item.is_playlist) {
                 PlaylistModel tmp;
-                if (PlaylistModel::load_file(path, &tmp).empty()) {
-                    for (const PlaylistItem& item : tmp.items())
-                        if (merged.index_of(item.path) < 0) merged.add(item.path, item.title);
+                if (PlaylistModel::load_file(item.path, &tmp).empty()) {
+                    for (const PlaylistItem& entry : tmp.items()) seq.append(entry.path);
                     continue;
                 }
             }
-            if (merged.index_of(path) < 0) merged.add(path);
+            seq.append(item.path);
         }
-        check(merged.size() == 3, "playlist-into-playlist merge adds all entries");
-        check(merged.index_of(a1) == 1 && merged.index_of(a2) == 2,
-              "merged playlist entries keep order after existing content");
-        check(PlaylistModel::save_m3u(plB, merged).empty(), "merged playlist persisted");
+        check(seq.size() == 5, "logical sequence has 5 entries");
+        check(seq[0] == a1 && seq[1] == a2 && seq[2] == x && seq[3] == b1 && seq[4] == b2,
+              "logical sequence order: A1 A2 X B1 B2");
+
+        // Re-adding a playlist (or its media) must not duplicate rows — even in
+        // the same batch as the playlist itself.
+        add_batch({plA, a1});
+        check(queue.size() == 3, "re-add of playlist/media deduplicates (still 3 rows)");
+    }
+
+    // --- move_many: multi-selection moves as a block; others shift ---
+    {
+        PlaylistModel m;
+        m.add(dirPath + "/1.mp3");
+        m.add(dirPath + "/2.mp3");
+        m.add(dirPath + "/3.mp3");
+        m.add(dirPath + "/4.mp3");
+        // Move rows {0,1} down by 1: block 0,1 -> 1,2; row 2 shifts up to 0.
+        QVector<int> sel = {0, 1};
+        m.move_many(sel, 1);
+        check(m.items()[0].path.endsWith("/3.mp3"), "move_many down: 3 to top");
+        check(m.items()[1].path.endsWith("/1.mp3"), "move_many down: 1 second");
+        check(m.items()[2].path.endsWith("/2.mp3"), "move_many down: 2 third");
+        check(m.items()[3].path.endsWith("/4.mp3"), "move_many down: 4 last");
+        // Move rows {0,1} up by 1 (now containing 3 and 1).
+        sel = {0, 1};
+        m.move_many(sel, -1);
+        check(m.items()[0].path.endsWith("/3.mp3") == false, "move_many up: block moved");
+        check(m.items()[0].path.endsWith("/1.mp3"), "move_many up: 1 to top");
+        check(m.items()[1].path.endsWith("/3.mp3"), "move_many up: 3 second");
+    }
+
+    // --- remove_many: children/rows removed at once ---
+    {
+        PlaylistModel m;
+        m.add(dirPath + "/r1.mp3");
+        m.add(dirPath + "/r2.mp3");
+        m.add(dirPath + "/r3.mp3");
+        m.remove_many({0, 2});
+        check(m.size() == 1, "remove_many removes both rows");
+        check(m.items()[0].path.endsWith("/r2.mp3"), "remove_many keeps the middle row");
+    }
+
+    // --- Move children out of a playlist ("sort out") ---
+    {
+        const QString a1 = dirPath + "/s-a1.mp3";
+        const QString a2 = dirPath + "/s-a2.mp3";
+        { QFile f(a1); f.open(QIODevice::WriteOnly); f.write("m"); }
+        { QFile f(a2); f.open(QIODevice::WriteOnly); f.write("m"); }
+        const QString plS = dirPath + "/S.m3u";
+        PlaylistModel ps;
+        ps.add(a1); ps.add(a2);
+        check(PlaylistModel::save_m3u(plS, ps).empty(), "save playlist S");
+
+        // Load the group, remove a2 from the file, persist, reload.
+        PlaylistModel group;
+        check(PlaylistModel::load_file(plS, &group).empty(), "load group S");
+        QVector<int> to_remove;
+        for (int k = 0; k < group.items().size(); ++k)
+            if (group.items()[k].path == a2) to_remove.append(k);
+        group.remove_many(to_remove);
+        check(group.size() == 1, "child removed from playlist model");
+        check(PlaylistModel::save_m3u(plS, group).empty(), "playlist S persisted after removal");
+        PlaylistModel reloaded;
+        PlaylistModel::load_file(plS, &reloaded);
+        check(reloaded.size() == 1 && reloaded.index_of(a2) < 0, "removed child gone after reload");
+    }
+
+    // --- Move children into another playlist ("sort in") ---
+    {
+        const QString c1 = dirPath + "/c1.mp3";
+        const QString c2 = dirPath + "/c2.mp3";
+        { QFile f(c1); f.open(QIODevice::WriteOnly); f.write("m"); }
+        { QFile f(c2); f.open(QIODevice::WriteOnly); f.write("m"); }
+        const QString srcPl = dirPath + "/Src.m3u";
+        const QString dstPl = dirPath + "/Dst.m3u";
+        PlaylistModel src;
+        src.add(c1); src.add(c2);
+        check(PlaylistModel::save_m3u(srcPl, src).empty(), "save source playlist");
+        PlaylistModel dst;
+        dst.add(dirPath + "/existing.mp3");
+        check(PlaylistModel::save_m3u(dstPl, dst).empty(), "save target playlist");
+
+        // Append c1 (dedup: existing content stays first).
+        PlaylistModel target;
+        PlaylistModel::load_file(dstPl, &target);
+        if (target.index_of(c1) < 0) target.add(c1);
+        check(target.size() == 2 && target.index_of(c1) == 1, "child appended to target playlist");
+        check(PlaylistModel::save_m3u(dstPl, target).empty(), "target playlist persisted");
     }
 
     std::printf(failures == 0 ? "ALL PASS\n" : "%d FAILURES\n", failures);

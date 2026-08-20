@@ -17,6 +17,10 @@ struct PlaylistItem {
     QString path;   // local path or stream URL
     QString title;  // EXTINF / entry title or derived name
     bool is_url = false;
+    // A playlist GROUP row: the item is a playlist file whose entries are
+    // only logically part of the queue (children shown in the tree). The
+    // group stays visible/movable; it is never dissolved into its entries.
+    bool is_playlist = false;
 };
 
 class PlaylistModel {
@@ -25,11 +29,16 @@ public:
     void add(const QString& path, const QString& title = QString());
     void add_files(const QStringList& paths);
     void remove(int index);
+    void remove_many(const QVector<int>& indices);
     void move(int from, int to);
+    void move_many(const QVector<int>& indices, int delta);
     const QVector<PlaylistItem>& items() const { return items_; }
     int size() const { return items_.size(); }
     bool empty() const { return items_.isEmpty(); }
     int index_of(const QString& path) const;
+    bool is_playlist_row(int index) const {
+        return index >= 0 && index < items_.size() && items_[index].is_playlist;
+    }
 
     int current_index() const { return current_; }
     void set_current(int index) { current_ = index; }

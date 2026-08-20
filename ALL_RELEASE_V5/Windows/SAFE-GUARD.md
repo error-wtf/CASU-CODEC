@@ -43,6 +43,20 @@ Windows-Build; bei Fehler Restore + erneuter Lauf. `run --no-restore` = nur test
 - **Clean-Prefix**: gepacktes Release in NEUEM WINEPREFIX; nur Paket-Inhalt.
 - **Keine falschen PASS**: "kompiliert" ≠ "Unit grün" ≠ "funktioniert".
 
+## 4b. Playlist-Gruppen-Gates (v3.0.0-Nachfolger, nicht überspringen)
+
+- ctest unter Wine OHNE `casu_playback_vlc_test`/`casu_playback_youtube_live_test`
+  → **14/14 grün**; `casu_playlist_test` deckt die Gruppen-Semantik ab
+  (Gruppenzeilen, logische Sequenz, Batch-Dedup, move_many/remove_many,
+  Kinder rein/raus) — alle Checks ALL PASS, EXIT=0.
+- Web-Player: `node --check web/app.js pure-web-release/app.js`, Node-Harness
+  (`/tmp/opencode/webapp_queue_test.js` + `pureweb_queue_test.js`, ALL PASS),
+  `python3 tools/smoke_web_playlist.py` mehrfach grün.
+- Nach Web-Änderungen: `dist/MPCASU-PURE-WEB-3.0.0.zip` neu erzeugen (aus
+  `pure-web-release/`, 18 Dateien, ohne `.htaccess`), `win-release/web/pure/`
+  byte-identisch kopieren (SHA256 in `PORT_STATUS.md` aktualisieren), Windows-
+  Release neu bauen (`SKIP_WINE=1`), damit Zip/setup.exe aktuell sind.
+
 ## 5. Stolperfallen (aus der Windows-Port-Analyse)
 
 - libVLC-State 6/7 + zero-time-EOF (mpcasu_backend.py:600-627).

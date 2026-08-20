@@ -275,10 +275,10 @@ def test_playlist_play_queue_roundtrip_dedups_and_orders(tmp_path):
     assert model.index_of(b) == 1
 
 
-def test_replace_with_resolves_playlist_group_in_place(tmp_path):
-    """Kernoperation der Playlist-Reparatur: die .m3u-Gruppen-Zeile wird an
-    Ort und Stelle durch ihre Einträge ersetzt — kanonische Mischreihenfolge
-    (Playlist A: A1, A2 + Datei X + Playlist B: B1, B2 -> A1, A2, X, B1, B2)."""
+def test_move_swaps_playlist_groups_whole(tmp_path):
+    """Playlist-Gruppen (Zeilen) lassen sich in der Queue hin und her
+    verschieben — die Gruppe bleibt als EIN Eintrag erhalten (sie wird nie
+    in ihre Einträge aufgelöst)."""
     a1 = tmp_path / "a1.mp3"; a1.write_bytes(b"a")
     a2 = tmp_path / "a2.mp3"; a2.write_bytes(b"a")
     x = tmp_path / "x.mp4"; x.write_bytes(b"x")
@@ -290,25 +290,42 @@ def test_replace_with_resolves_playlist_group_in_place(tmp_path):
     save_playlist_file(plB, PlaylistModel((b1, b2)))
 
     queue = PlaylistModel((plA, x, plB))
-    inserted = queue.replace_with(queue.index_of(plA), load_playlist_file(plA).items)
-    assert inserted == [a1.resolve(), a2.resolve()]
-    assert queue.items == (a1.resolve(), a2.resolve(), x.resolve(), plB.resolve())
-    inserted = queue.replace_with(queue.index_of(plB), load_playlist_file(plB).items)
-    assert inserted == [b1.resolve(), b2.resolve()]
-    assert queue.items == (a1.resolve(), a2.resolve(), x.resolve(),
-                           b1.resolve(), b2.resolve())
+    # Playlist B nach oben (Row 2 -> Row 1), Playlist A nach unten (Row 0 -> 1).
+    assert queue.move(2, -1) == 1
+    assert queue.items == (plA.resolve(), plB.resolve(), x.resolve())
+    assert queue.move(0, 1) == 1
+    assert queue.items == (plB.resolve(), plA.resolve(), x.resolve())
+    # Gruppen bleiben intakt: keine Einträge in die Queue durchgesickert.
+    assert queue.items == (plB.resolve(), plA.resolve(), x.resolve())
+    # Kein Verschieben über den Rand: move(0, -1) bleibt an Ort und Stelle.
+    assert queue.move(0, -1) == 0
+    assert queue.items == (plB.resolve(), plA.resolve(), x.resolve())
 
-    # Dedup: bereits gequeuete Einträge werden nicht dupliziert.
-    queue2 = PlaylistModel((a1, plA))
-    inserted = queue2.replace_with(queue2.index_of(plA), load_playlist_file(plA).items)
-    assert inserted == [a2.resolve()]
-    assert queue2.items == (a1.resolve(), a2.resolve())
 
-    # Rekursion: eine Playlist kann sich nie selbst enthalten.
-    queue3 = PlaylistModel((plA,))
-    inserted = queue3.replace_with(0, [a1, plA])
-    assert inserted == [a1.resolve()]
-    assert queue3.items == (a1.resolve(),)
+def test_move_many_moves_multi_selection_as_block(tmp_path):
+    """Strg/Shift-Mehrfachauswahl (lose Dateien + Playlist-Gruppen) wandert
+    als Block; relative Reihenfolge bleibt erhalten; Gruppen bleiben intakt."""
+    a1 = tmp_path / "a1.mp3"; a1.write_bytes(b"a")
+    x = tmp_path / "x.mp4"; x.write_bytes(b"x")
+    y = tmp_path / "y.mp4"; y.write_bytes(b"y")
+    b1 = tmp_path / "b1.mp3"; b1.write_bytes(b"b")
+    plA = tmp_path / "A.m3u"
+    plB = tmp_path / "B.m3u"
+    save_playlist_file(plA, PlaylistModel((a1,)))
+    save_playlist_file(plB, PlaylistModel((b1,)))
 
+    queue = PlaylistModel((plA, x, y, plB))
+    # Row 0 (A) + Row 1 (x) gemeinsam nach unten.
+    queue.move_many([0, 1], 1)
+    assert queue.items == (y.resolve(), plA.resolve(), x.resolve(), plB.resolve())
+    # Row 2 (x) + Row 3 (B) gemeinsam nach oben: die nicht-selektierte
+    # Zeile (y, plA) wird nach unten verdrängt, der Block wandert als Ganzes.
+    queue.move_many([2, 3], -1)
+    assert queue.items == (y.resolve(), x.resolve(), plB.resolve(), plA.resolve())
+    # Am Rand bleibt nur der Block stehen, dessen Zeilen nicht mehr wandern
+    # können; verschiebbare Zeilen der Selektion wandern trotzdem (Row 1 kann
+    # nach oben, Row 0 ist oben angekommen).
+    queue.move_many([0, 1], -1)
+    assert queue.items == (x.resolve(), y.resolve(), plB.resolve(), plA.resolve())
     with pytest.raises(PlaylistError, match="out of range"):
-        queue.replace_with(99, [a1])
+        queue.move_many([0, 99], 1)

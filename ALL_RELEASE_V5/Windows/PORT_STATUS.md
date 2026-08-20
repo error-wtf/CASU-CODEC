@@ -6,13 +6,13 @@
 | Next version | **v5.0.0** (v4.x übersprungen) |
 | Reference tree modified | NO |
 | Baseline | HEAD `2367dcbc`, 400 tests PASS (Linux-Referenz) |
-| Pure Web Release | 3.0.0 frozen (SHA `b71b5d0b…`) |
-| ctest (Wine) | **16/16 grün** (inkl. casu_playlist_test, 14 Checks) |
+| Pure Web Release | 3.0.0 frozen (SHA `b71b5d0b…`) → **neu 2026-08-20** (Gruppen-Semantik, SHA `6d6d7bf8…`, 18 Dateien) |
+| ctest (Wine) | **14/14 grün** (ohne VLC-Live/YouTube-Live) inkl. `casu_playlist_test` (Gruppen-Semantik, logische Sequenz, move_many/remove_many, rein/raus) |
 | Release-Gate | **14/14 PASS** — `win-release/dist/WINDOWS_RELEASE_GATE.json` (generated_utc 2026-08-19T10:48:55Z) |
 | Golden | 8 PASS (verify_golden.sh) |
 | Installer | setup.exe gebaut + install/uninstall unter Wine verifiziert (PATH bleibt) |
-| Playlist-Queue | Playlist-Play + Merge im ZIP/setup.exe verifiziert (strings) |
-| Offen | MSVC/QtWebEngine-Endbuild (nur auf echtem Windows); BLOCKER-004 (PATH/Registry auf echtem Windows); BLOCKER-005 (MF/DirectShow-Decoder geplant, nicht gebaut) |
+| Playlist-Queue | **Gruppen-Semantik** vollständig auf Windows portiert (QTreeWidget, logische Sequenz, Gruppen + Mehrfachauswahl verschiebbar, ein-/aussortierbar, Batch-Dedup) — Tests ALL PASS; Build grün; `web/pure` byte-identisch aktualisiert |
+| Offen | MSVC/QtWebEngine-Endbuild (nur auf echtem Windows); BLOCKER-004 (PATH/Registry auf echtem Windows); BLOCKER-005 (MF/DirectShow-Decoder geplant, nicht gebaut); Windows-Release neu bauen (SKIP_WINE=1), um neues MPCASU.exe + `web/pure` einzuspielen |
 
 ## Nächste Schritte (v5.0.0)
 1. Versionsbump 3.0.0 → 5.0.0 überall (setup.nsi, Paketversion, Doku).
@@ -26,3 +26,18 @@
 - Phase A Foundation, B Shared-Core, C Apps, D Packaging+Gate — alle VERIFIED.
 - Web-Provider-Tabs (QtWebEngine-Pfad, CASU_HAVE_WEBENGINE) + setup.exe ergänzt.
 - Playlist-Queue-Feature (Playlist-Play + Merge) auf Windows portiert + Tests.
+
+## Verlauf (v3.0.0-Nachfolger / Gruppen-Semantik)
+- Windows-Player auf nicht-destruktive Gruppen-Queue umgestellt: Playlist-Pane
+  ist jetzt ein QTreeWidget (Gruppenzeilen, auf-/zuklappbar, ↑/↓/×/Load/Save
+  mit Mehrfachauswahl), Wiedergabe läuft über die logische Sequenz
+  (`logical_sequence()`, Repeat-One/Shuffle erhalten), Kontextmenü mit
+  Play/Expand/Collapse/Save selection/Move to playlist/Remove from playlist,
+  `add_files` mit Batch-Dedup, `move_playlist_rows`/`move_children_to_playlist`/
+  `remove_children_from_playlist` neu. Alle `casu_playlist_test`-Checks ALL PASS.
+- **Web-Player** (web-casu `/web/` + Pure Web `pure-web-release/`): gleiche
+  Gruppen-Semantik implementiert (Gruppen-Tools, Kontextmenü, Mehrfachauswahl
+  Block-Move, rein/raus, Re-Add-Dedup) — Node-Unit-Harness ALL PASS (17 + 12
+  Checks) + Playwright-Smoke `tools/smoke_web_playlist.py` mehrfach grün;
+  `MPCASU-PURE-WEB-3.0.0.zip` neu erzeugt (18 Dateien, SHA `6d6d7bf8…`),
+  `win-release/web/pure/` byte-identisch aktualisiert.

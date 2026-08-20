@@ -91,6 +91,7 @@ const state = {
   playbackToken: 0, youtubeState: -1, youtubeTime: 0, youtubeDuration: 0,
   epgNames: new Map(), programmes: [], abStart: null, abEnd: null, abToken: -1,
   rateIndex: 2, view: "now", expanded: new Set(),
+  multi: new Set(),
   backend: { stream: false, catalog: false, search: false },
   viz: true, hls: null, vizCtx: null, vizAnalyser: null, vizRaf: 0,
   suppressAutoplay: false,
@@ -144,6 +145,7 @@ function renderQueue() {
         const count = state.items.filter((e) => e.playlist === item.playlist && viewFilter(e)).length;
         const header = document.createElement("li");
         header.className = "queue-group" + (open ? " open" : "");
+        header.dataset.group = item.playlist;
         header.innerHTML = `<span class="thumb">☷</span><span class="track"><strong></strong><small></small></span>`;
         header.querySelector("strong").textContent = item.playlist;
         header.querySelector("small").textContent =
@@ -152,19 +154,36 @@ function renderQueue() {
           open ? state.expanded.delete(item.playlist) : state.expanded.add(item.playlist);
           renderQueue();
         };
+        const tools = document.createElement("span");
+        tools.className = "item-tools";
+        const play = document.createElement("button");
+        play.type = "button"; play.textContent = "▶"; play.title = "Play playlist from the start";
+        play.onclick = (e) => { e.stopPropagation(); playPlaylistGroup(item.playlist); };
+        const up = document.createElement("button");
+        up.type = "button"; up.textContent = "↑"; up.title = "Move playlist up";
+        up.onclick = (e) => { e.stopPropagation(); movePlaylistGroup(item.playlist, -1); };
+        const down = document.createElement("button");
+        down.type = "button"; down.textContent = "↓"; down.title = "Move playlist down";
+        down.onclick = (e) => { e.stopPropagation(); movePlaylistGroup(item.playlist, 1); };
+        const remove = document.createElement("button");
+        remove.type = "button"; remove.textContent = "×"; remove.title = "Remove playlist (entries stay removed from the queue)";
+        remove.onclick = (e) => { e.stopPropagation(); removePlaylistGroup(item.playlist); };
+        tools.append(play, up, down, remove);
+        header.append(tools);
         queueNode.append(header);
       }
       if (!state.expanded.has(item.playlist)) return;
     } else { lastPlaylist = null; }
     const li = document.createElement("li");
     li.dataset.index = index;
-    li.className = index === state.index ? "active" : "";
+    const multi = state.multi.has(item);
+    li.className = (index === state.index ? "active" : "") + (multi ? " multi" : "");
     li.setAttribute("aria-current", index === state.index ? "true" : "false");
     li.innerHTML =
       `<span class="thumb">${item.kind === "audio" ? "♫" : item.kind?.startsWith("casu") ? "◆" : "▶"}</span>` +
       `<span class="track"><strong></strong><small></small></span>`;
     li.querySelector("strong").textContent = itemLabel(item);
-    li.querySelector("small").textContent = (item.kind || "media").toUpperCase();
+    li.querySelector("small").textContent = (item.kind || "media").toUpperCase() + (item.playlist ? " · " + item.playlist : "");
     const tools = document.createElement("span");
     tools.className = "item-tools";
     const rename = document.createElement("button");
@@ -175,7 +194,14 @@ function renderQueue() {
     remove.onclick = (e) => { e.stopPropagation(); removeIndex(index); };
     tools.append(rename, remove);
     li.append(tools);
-    li.onclick = () => playIndex(index);
+    li.onclick = (event) => {
+      if (event.ctrlKey || event.shiftKey) {
+        multi ? state.multi.delete(item) : state.multi.add(item);
+        renderQueue();
+        return;
+      }
+      playIndex(index);
+    };
     li.onfocus = () => { state.selected = index; };
     li.onkeydown = (event) => { if (event.key === "Enter") { event.preventDefault(); playIndex(index); } };
     li.tabIndex = 0;
@@ -217,6 +243,218 @@ function releaseItem(item) {
   const urls = [item?.url, ...(item?.trackUrls || [])];
   for (const url of urls) if (state.objectUrls.has(url)) { URL.revokeObjectURL(url); state.objectUrls.delete(url); }
 }
+
+// ---------------------------------------------------------------------------
+// queue groups & selection (non-destructive playlist groups)
+//
+// A playlist stays visible as ONE group row (header). Playback walks the flat
+// items (logical sequence), so collapsed groups and loose files still play.
+// Rows = group blocks or loose items; multi-selection (Ctrl/Shift) moves rows
+// as a block; entries can be sorted INTO a playlist group and taken OUT.
+// ---------------------------------------------------------------------------
+function rowOf(index) {
+  const item = state.items[index];
+  if (!item) return null;
+  if (item.playlist) {
+    let start = index;
+    while (start > 0 && state.items[start - 1]?.playlist === item.playlist) start--;
+    let end = index;
+    while (end + 1 < state.items.length && state.items[end + 1]?.playlist === item.playlist) end++;
+    return { start, end, group: true, name: item.playlist };
+  }
+  return { start: index, end: index, group: false };
+}
+
+function selectedRows() {
+  const rows = [];
+  if (state.multi.size) {
+    for (let i = 0; i < state.items.length; i++) {
+      if (!state.multi.has(state.items[i])) continue;
+      const row = rowOf(i);
+      if (!rows.some((r) => i >= r.start && i <= r.end)) rows.push(row);
+    }
+    return rows;
+  }
+  const sel = state.selected >= 0 ? state.selected : state.index;
+  return sel >= 0 ? [rowOf(sel)] : [];
+}
+
+function moveRowSegment(start, delta) {
+  const row = rowOf(start);
+  if (!row) return;
+  if (delta > 0) {
+    if (row.end + 1 >= state.items.length) return;
+    const len = row.end - row.start + 1;
+    const removed = state.items.splice(row.start, len);
+    const below = rowOf(row.start);
+    state.items.splice(below.end + 1, 0, ...removed);
+  } else {
+    if (row.start <= 0) return;
+    const len = row.end - row.start + 1;
+    const removed = state.items.splice(row.start, len);
+    const above = rowOf(row.start - 1);
+    state.items.splice(above.start, 0, ...removed);
+  }
+}
+
+function moveRows(delta) {
+  const rows = selectedRows();
+  if (!rows.length) return;
+  const playing = state.items[state.index];
+  const starts = rows.map((r) => r.start).sort((a, b) => a - b);
+  if (delta > 0) {
+    for (let i = starts.length - 1; i >= 0; i--) moveRowSegment(starts[i], 1);
+  } else {
+    for (let i = 0; i < starts.length; i++) moveRowSegment(starts[i], -1);
+  }
+  state.index = playing ? state.items.indexOf(playing) : -1;
+  if (state.selected >= 0) state.selected = playing ? state.items.indexOf(playing) : -1;
+  renderQueue();
+  persistQueue();
+}
+
+function removeRows() {
+  const rows = selectedRows();
+  if (!rows.length) return;
+  const playing = state.items[state.index];
+  const doomed = new Set();
+  for (const row of rows) for (let i = row.start; i <= row.end; i++) doomed.add(state.items[i]);
+  state.multi.clear();
+  state.items = state.items.filter((item) => !doomed.has(item));
+  state.index = playing && doomed.has(playing) ? -1 : (playing ? state.items.indexOf(playing) : -1);
+  if (state.index < 0) { stopAll(); }
+  renderQueue();
+  persistQueue();
+}
+
+function movePlaylistGroup(name, delta) {
+  const item = state.items.find((e) => e.playlist === name);
+  if (!item) return;
+  const row = rowOf(state.items.indexOf(item));
+  state.multi.clear();
+  moveRowSegment(row.start, delta);
+  const playing = state.items[state.index];
+  state.index = playing ? state.items.indexOf(playing) : -1;
+  renderQueue();
+  persistQueue();
+}
+
+function removePlaylistGroup(name) {
+  const playing = state.items[state.index];
+  const members = state.items.filter((e) => e.playlist === name);
+  if (!members.length) return;
+  state.items = state.items.filter((e) => e.playlist !== name);
+  members.forEach(releaseItem);
+  state.multi.clear();
+  state.index = playing && playing.playlist === name ? -1 : (playing ? state.items.indexOf(playing) : -1);
+  if (state.index < 0) { stopAll(); }
+  renderQueue();
+  persistQueue();
+}
+
+function playPlaylistGroup(name) {
+  const index = state.items.findIndex((e) => e.playlist === name);
+  if (index >= 0) playIndex(index);
+}
+
+// Sort the selected rows INTO a playlist ("rein"): a new name creates a new
+// group; an existing group appends the selection (deduplicated) and moves the
+// items out of any other group they belonged to.
+function saveSelectionToPlaylist() {
+  const rows = selectedRows();
+  if (!rows.length) { toast("Select rows (Ctrl/Shift click) first, or right-click a row"); return; }
+  const targets = [];
+  for (const row of rows) for (let i = row.start; i <= row.end; i++) targets.push(state.items[i]);
+  const existing = [...new Set(state.items.map((e) => e.playlist).filter(Boolean))];
+  const hint = existing.length
+    ? `Existing playlists: ${existing.join(", ")}. New name = new group, existing name = append into it.`
+    : "New playlist name — the selected items become its visible group.";
+  const name = prompt(hint, existing.length ? existing[0] : "New playlist");
+  if (name === null || !name.trim()) return;
+  const groupName = name.trim();
+  const playing = state.items[state.index];
+  const members = state.items.filter((e) => e.playlist === groupName);
+  if (members.length) {
+    const seen = new Set(members);
+    const toInsert = targets.filter((t) => !seen.has(t));
+    if (!toInsert.length) { toast("Selection is already inside that playlist"); return; }
+    state.items = state.items.filter((e) => !toInsert.includes(e));
+    const last = state.items.lastIndexOf(members[members.length - 1]);
+    for (const it of toInsert) it.playlist = groupName;
+    state.items.splice(last + 1, 0, ...toInsert);
+    state.index = playing ? state.items.indexOf(playing) : -1;
+    state.expanded.add(groupName);
+    renderQueue();
+    persistQueue();
+    toast(`${toInsert.length} item(s) sorted into “${groupName}”`);
+    return;
+  }
+  for (const it of targets) it.playlist = groupName;
+  const removed = targets.filter((t) => state.items.includes(t));
+  state.items = state.items.filter((t) => !targets.includes(t));
+  state.items.push(...removed);
+  state.index = playing ? state.items.indexOf(playing) : -1;
+  state.expanded.add(groupName);
+  renderQueue();
+  persistQueue();
+  toast(`Playlist “${groupName}” created with ${removed.length} item(s)`);
+}
+
+// Take entries OUT of their playlist ("raus"): they stay in the queue as
+// loose items, grouped no more.
+function removeFromPlaylist(items) {
+  const playing = state.items[state.index];
+  let count = 0;
+  for (const it of items) if (it?.playlist) { it.playlist = ""; count++; }
+  if (!count) { toast("No playlist entry selected"); return; }
+  state.index = playing ? state.items.indexOf(playing) : -1;
+  renderQueue();
+  persistQueue();
+  toast(`${count} item(s) removed from their playlist (stay in the queue)`);
+}
+
+function showQueueMenu(event, item, groupName) {
+  event.preventDefault();
+  const menu = document.createElement("div");
+  menu.className = "queue-menu";
+  const add = (label, action) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.onclick = () => { menu.remove(); action(); };
+    menu.append(button);
+    return button;
+  };
+  if (groupName) {
+    add("▶ Play playlist", () => playPlaylistGroup(groupName));
+    if (state.expanded.has(groupName)) add("Collapse playlist", () => { state.expanded.delete(groupName); renderQueue(); });
+    else add("Expand playlist", () => { state.expanded.add(groupName); renderQueue(); });
+    add("↑ Move playlist up", () => movePlaylistGroup(groupName, -1));
+    add("↓ Move playlist down", () => movePlaylistGroup(groupName, 1));
+    add("Remove playlist from queue", () => removePlaylistGroup(groupName));
+    add("Remove ALL entries from playlist (keep in queue)", () =>
+      removeFromPlaylist(state.items.filter((e) => e.playlist === groupName)));
+  } else if (item) {
+    const index = state.items.indexOf(item);
+    add("▶ Play", () => playIndex(index));
+    add("↑ Move up", () => moveRows(-1));
+    add("↓ Move down", () => moveRows(1));
+    add("Remove from queue", () => removeRows());
+    add("Save selection to playlist…", saveSelectionToPlaylist);
+    if (item.playlist) add("Remove from playlist", () => removeFromPlaylist([item]));
+  }
+  menu.style.left = event.clientX + "px";
+  menu.style.top = event.clientY + "px";
+  document.body.append(menu);
+  const close = (e) => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener("click", close, true); } };
+  setTimeout(() => document.addEventListener("click", close, true), 0);
+}
+queueNode.addEventListener("contextmenu", (event) => {
+  const li = event.target.closest("li");
+  if (!li) return;
+  if (li.dataset.group) showQueueMenu(event, null, li.dataset.group);
+  else if (li.dataset.index !== undefined) showQueueMenu(event, state.items[Number(li.dataset.index)]);
+});
 
 // ---------------------------------------------------------------------------
 // local files
@@ -699,7 +937,10 @@ async function addFiles(files) {
   const consumed = new Set();
   const before = state.items.length;
   for (const file of epgFiles) { try { await addEpg(file); } catch (error) { toast(`${file.name}: ${error.message}`); } }
-  for (const file of playlists) { try { await addPlaylist(file, ordinary, consumed); } catch (error) { toast(`${file.name}: ${error.message}`); } }
+  for (const file of playlists) {
+    if (state.items.some((e) => e.playlist === file.name)) { toast(`Playlist “${file.name}” is already in the queue`); continue; }
+    try { await addPlaylist(file, ordinary, consumed); } catch (error) { toast(`${file.name}: ${error.message}`); }
+  }
   for (const file of casuFiles) {
     try {
       const casu = await parseCasu(file);
@@ -739,7 +980,12 @@ async function addFiles(files) {
     }
   }
   for (const file of ordinaryFiles) {
-    if (!consumed.has(file.name)) addLocal(file, file.type.startsWith("audio/") ? "audio" : "video");
+    if (consumed.has(file.name)) continue;
+    // No double-loading: media already in the queue (same relative path) is
+    // not added a second time.
+    const key = file.webkitRelativePath ? file.webkitRelativePath.replaceAll("\\", "/") : file.name;
+    if (state.items.some((e) => e.file && (e.file.name === key || e.file.webkitRelativePath === key))) continue;
+    addLocal(file, file.type.startsWith("audio/") ? "audio" : "video");
   }
   const added = state.items.slice(before).filter((item) => item.file);
   for (const subtitle of subtitleFiles) {
@@ -1338,9 +1584,9 @@ $("queue-toggle").onclick = () => {
   if (shell.classList.contains("embed-mode")) shell.classList.toggle("queue-collapsed");
   else shell.classList.toggle("show-queue");
 };
-$("move-up").onclick = () => moveItem(-1);
-$("move-down").onclick = () => moveItem(1);
-$("remove").onclick = () => { if (state.selected >= 0) removeIndex(state.selected); };
+$("move-up").onclick = () => moveRows(-1);
+$("move-down").onclick = () => moveRows(1);
+$("remove").onclick = () => { if (selectedRows().length) removeRows(); else toast("Select rows first (Ctrl/Shift click)"); };
 $("rename").onclick = () => { if (state.selected >= 0) renameIndex(state.selected); };
 $("save-pl").onclick = savePlaylist;
 $("clear-all").onclick = () => {
@@ -1355,17 +1601,6 @@ $("clear-all").onclick = () => {
   persistQueue();
 };
 
-function moveItem(delta) {
-  if (state.selected < 0) return;
-  const target = state.selected + delta;
-  if (target < 0 || target >= state.items.length) return;
-  const [item] = state.items.splice(state.selected, 1);
-  state.items.splice(target, 0, item);
-  state.selected = target;
-  if (state.index === state.selected - delta && delta) state.index = target;
-  renderQueue();
-  persistQueue();
-}
 function savePlaylist() {
   const urls = state.items.filter((item) => item.url && !item.file).map((item) => item.url);
   if (!urls.length) { toast("No network items to save"); return; }
@@ -1384,6 +1619,7 @@ function persistQueue() {
   try {
     const items = state.items.filter((item) => item.url && !item.file).map((item) => ({
       url: item.url, title: item.title, subtitle: item.subtitle, kind: item.kind,
+      playlist: item.playlist || "",
     }));
     localStorage.setItem(STORE_KEY, JSON.stringify(items));
   } catch (error) { /* storage is best-effort */ }
@@ -1399,7 +1635,9 @@ function restoreQueue() {
     try {
       for (const entry of items) {
         if (!entry || typeof entry.url !== "string") continue;
-        addItem({ url: entry.url, title: entry.title || entry.url, subtitle: entry.subtitle, kind: entry.kind || (youtubeId(entry.url) ? "youtube" : "stream") });
+        const item = { url: entry.url, title: entry.title || entry.url, subtitle: entry.subtitle, kind: entry.kind || (youtubeId(entry.url) ? "youtube" : "stream") };
+        if (entry.playlist) { item.playlist = entry.playlist; state.expanded.add(entry.playlist); }
+        addItem(item);
         restored++;
       }
     } finally { state.suppressAutoplay = false; }

@@ -35,6 +35,7 @@
 #include <QMessageBox>
 #include <QMimeData>
 #include <QPushButton>
+#include <QRandomGenerator>
 #include <QScreen>
 #include <QSlider>
 #include <QSpinBox>
@@ -43,6 +44,7 @@
 #include <QStatusBar>
 #include <QTableWidget>
 #include <QTabWidget>
+#include <QTreeWidget>
 #include <QTime>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -415,12 +417,23 @@ void MainWindow::build_playlist_pane() {
     buttons->addWidget(url_btn);
     layout->addLayout(buttons);
 
-    playlist_view_ = new QListWidget(pane);
+    playlist_view_ = new QTreeWidget(pane);
+    playlist_view_->setHeaderHidden(true);
     playlist_view_->setSelectionMode(QAbstractItemView::ExtendedSelection);
     playlist_view_->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(playlist_view_, &QListWidget::itemDoubleClicked, this,
+    connect(playlist_view_, &QTreeWidget::itemDoubleClicked, this,
             &MainWindow::playlist_double_clicked);
-    connect(playlist_view_, &QListWidget::customContextMenuRequested, this,
+    connect(playlist_view_, &QTreeWidget::itemExpanded, this, [this](QTreeWidgetItem* item) {
+        if (item->parent() == nullptr) {
+            expanded_groups_.insert(item->data(0, Qt::UserRole).toString());
+            expand_playlist_group(item);
+        }
+    });
+    connect(playlist_view_, &QTreeWidget::itemCollapsed, this, [this](QTreeWidgetItem* item) {
+        if (item->parent() == nullptr)
+            expanded_groups_.remove(item->data(0, Qt::UserRole).toString());
+    });
+    connect(playlist_view_, &QTreeWidget::customContextMenuRequested, this,
             &MainWindow::playlist_context_menu);
     layout->addWidget(playlist_view_, 1);
 
@@ -435,16 +448,24 @@ void MainWindow::build_playlist_pane() {
         tools->addWidget(b);
     }
     connect(up_btn, &QPushButton::clicked, this, [this] {
-        int row = playlist_view_->currentRow();
-        if (row > 0) { playlist_.move(row, row - 1); refresh_playlist(); playlist_view_->setCurrentRow(row - 1); }
+        QVector<int> rows;
+        for (auto* it : playlist_view_->selectedItems())
+            if (it->parent() == nullptr) rows.append(playlist_view_->indexOfTopLevelItem(it));
+        move_playlist_rows(rows, -1);
     });
     connect(down_btn, &QPushButton::clicked, this, [this] {
-        int row = playlist_view_->currentRow();
-        if (row >= 0 && row + 1 < playlist_.size()) { playlist_.move(row, row + 1); refresh_playlist(); playlist_view_->setCurrentRow(row + 1); }
+        QVector<int> rows;
+        for (auto* it : playlist_view_->selectedItems())
+            if (it->parent() == nullptr) rows.append(playlist_view_->indexOfTopLevelItem(it));
+        move_playlist_rows(rows, 1);
     });
     connect(remove_btn, &QPushButton::clicked, this, [this] {
-        int row = playlist_view_->currentRow();
-        if (row >= 0) { playlist_.remove(row); refresh_playlist(); }
+        QVector<int> rows;
+        for (auto* it : playlist_view_->selectedItems())
+            if (it->parent() == nullptr) rows.append(playlist_view_->indexOfTopLevelItem(it));
+        playlist_.remove_many(rows);
+        invalidate_seq();
+        refresh_playlist();
     });
     connect(load_btn, &QPushButton::clicked, this, &MainWindow::load_playlist_file);
     connect(save_btn, &QPushButton::clicked, this, &MainWindow::save_playlist_file);
@@ -901,14 +922,33 @@ void MainWindow::resume_after_seek() {
 
 void MainWindow::play_queue_index(int index, bool automatic) {
     if (index < 0 || index >= playlist_.size()) return;
-    playlist_.set_current(index);
-    const PlaylistItem& item = playlist_.items()[index];
+    // A playlist GROUP row plays its first entry; the group itself stays in
+    // the queue (visible, movable) — it is never dissolved into its entries.
+    QString path;
+    if (playlist_.is_playlist_row(index)) {
+        PlaylistModel tmp;
+        if (!PlaylistModel::load_file(playlist_.items()[index].path, &tmp).empty() || tmp.empty()) {
+            status(QStringLiteral("Playlist is empty"));
+            return;
+        }
+        path = tmp.items()[0].path;
+    } else {
+        path = playlist_.items()[index].path;
+    }
+    play_seq_entry(path, index, automatic);
+}
+
+void MainWindow::play_seq_entry(const QString& path, int row, bool automatic) {
+    if (row < 0 || row >= playlist_.size()) return;
+    playlist_.set_current(row);
+    current_played_path_ = path;
     refresh_playlist();
-    if (item.is_url || is_network_like(item.path)) {
-        open_network_source(item.path, item.title);
+    const PlaylistItem& item = playlist_.items()[row];
+    if (item.is_url || is_network_like(path)) {
+        open_network_source(path, item.title);
     } else {
         stop_playback();
-        open_backend_and_play(item.path, item.title);
+        open_backend_and_play(path, item.title);
     }
 }
 
@@ -919,17 +959,89 @@ void MainWindow::play_selected_path(const QString& path) {
     open_backend_and_play(path, display_title_for_path(path));
 }
 
+QVector<QString> MainWindow::logical_sequence() const {
+    QVector<QString> seq;
+    for (int i = 0; i < playlist_.size(); ++i) {
+        const PlaylistItem& item = playlist_.items()[i];
+        if (item.is_playlist) {
+            PlaylistModel tmp;
+            if (!PlaylistModel::load_file(item.path, &tmp).empty()) continue;
+            for (const PlaylistItem& entry : tmp.items()) seq.append(entry.path);
+        } else {
+            seq.append(item.path);
+        }
+    }
+    return seq;
+}
+
 void MainWindow::play_next(bool automatic) {
     if (playlist_.empty()) { stop_playback(); return; }
-    int next = playlist_.next_index(automatic);
-    if (next < 0) { stop_playback(); return; }
-    play_queue_index(next, automatic);
+    if (automatic && playlist_.repeat == PlaylistModel::RepeatMode::One &&
+        !current_played_path_.isEmpty() && backend_) {
+        // Replay the current track.
+        end_handled_ = false;
+        try { controller_->play(); controller_->seek(0.0); } catch (const casu::playback::PlaybackError&) {}
+        paused_ = false;
+        update_play_button();
+        return;
+    }
+    if (!seq_valid_) { seq_ = logical_sequence(); seq_valid_ = true; }
+    if (seq_.isEmpty()) return;
+    int pos = seq_.indexOf(current_played_path_);
+    if (pos < 0) pos = playlist_.current_index() < 0 ? 0 : qMax(0, playlist_.current_index());
+    if (playlist_.shuffle && seq_.size() > 1) {
+        int target;
+        do { target = QRandomGenerator::global()->bounded(seq_.size()); } while (target == pos);
+        // Map the sequence position back to its owning row and play it.
+        int row = playlist_.current_index();
+        play_seq_entry(seq_[target], row < 0 ? 0 : row, automatic);
+        return;
+    }
+    int target = pos + 1;
+    if (target >= seq_.size()) {
+        if (playlist_.repeat == PlaylistModel::RepeatMode::All) target = 0;
+        else { stop_playback(); status(QStringLiteral("End of playlist")); return; }
+    }
+    // Find the row that owns seq_[target].
+    int row = -1;
+    int seen = 0;
+    for (int i = 0; i < playlist_.size() && row < 0; ++i) {
+        const PlaylistItem& item = playlist_.items()[i];
+        int count = 1;
+        if (item.is_playlist) {
+            PlaylistModel tmp;
+            if (PlaylistModel::load_file(item.path, &tmp).empty()) count = tmp.size();
+        }
+        if (target < seen + count) row = i;
+        seen += count;
+    }
+    if (row < 0) { stop_playback(); return; }
+    play_seq_entry(seq_[target], row, automatic);
 }
 
 void MainWindow::play_previous() {
     if (playlist_.empty()) return;
-    int prev = playlist_.previous_index();
-    play_queue_index(prev, false);
+    if (!seq_valid_) { seq_ = logical_sequence(); seq_valid_ = true; }
+    if (seq_.isEmpty()) return;
+    int pos = seq_.indexOf(current_played_path_);
+    if (pos < 0) pos = playlist_.current_index() < 0 ? 0 : qMax(0, playlist_.current_index());
+    int target = pos - 1;
+    if (target < 0 && playlist_.repeat == PlaylistModel::RepeatMode::All) target = seq_.size() - 1;
+    if (target < 0) { status(QStringLiteral("Beginning of playlist")); return; }
+    int row = -1;
+    int seen = 0;
+    for (int i = 0; i < playlist_.size() && row < 0; ++i) {
+        const PlaylistItem& item = playlist_.items()[i];
+        int count = 1;
+        if (item.is_playlist) {
+            PlaylistModel tmp;
+            if (PlaylistModel::load_file(item.path, &tmp).empty()) count = tmp.size();
+        }
+        if (target < seen + count) row = i;
+        seen += count;
+    }
+    if (row < 0) return;
+    play_seq_entry(seq_[target], row, false);
 }
 
 void MainWindow::handle_end() {
@@ -1097,12 +1209,14 @@ void MainWindow::load_playlist_file() {
     PlaylistModel tmp;
     std::string err = PlaylistModel::load_file(file, &tmp);
     if (!err.empty()) { status(QStringLiteral("Playlist error: %1").arg(QString::fromStdString(err))); return; }
-    playlist_.clear();
-    for (const PlaylistItem& item : tmp.items()) playlist_.add(item.path, item.title);
+    // The playlist joins the queue as ONE visible group row (entries stay in
+    // their playlist, the group stays movable).
+    if (playlist_.index_of(file) < 0) playlist_.add(file);
     app_settings_.last_playlist = file;
     settings_->save(app_settings_);
+    invalidate_seq();
     refresh_playlist();
-    status(QStringLiteral("Loaded %1 entries from %2").arg(playlist_.size()).arg(QFileInfo(file).fileName()));
+    status(QStringLiteral("Added %1 as playlist group · %2 entry/ies").arg(QFileInfo(file).fileName()).arg(tmp.size()));
 }
 
 void MainWindow::save_playlist_file() {
@@ -1111,56 +1225,165 @@ void MainWindow::save_playlist_file() {
                                                 QDir::homePath() + "/queue.m3u",
                                                 QStringLiteral("M3U (*.m3u);;PLS (*.pls)"));
     if (file.isEmpty()) return;
-    std::string err = file.toLower().endsWith(".pls") ? PlaylistModel::save_pls(file, playlist_)
-                                                      : PlaylistModel::save_m3u(file, playlist_);
+    // Save the queue as ONE flat playlist: playlist groups are resolved into
+    // their entries so the file contains real media/URLs, never references.
+    PlaylistModel flat;
+    for (const PlaylistItem& item : playlist_.items()) {
+        if (item.is_playlist) {
+            PlaylistModel tmp;
+            if (PlaylistModel::load_file(item.path, &tmp).empty()) {
+                for (const PlaylistItem& entry : tmp.items()) flat.add(entry.path, entry.title);
+                continue;
+            }
+        }
+        flat.add(item.path, item.title);
+    }
+    std::string err = file.toLower().endsWith(".pls") ? PlaylistModel::save_pls(file, flat)
+                                                      : PlaylistModel::save_m3u(file, flat);
     if (!err.empty()) status(QStringLiteral("Playlist error: %1").arg(QString::fromStdString(err)));
     else status(QStringLiteral("Playlist saved"));
 }
 
 void MainWindow::playlist_double_clicked() {
-    int row = playlist_view_->currentRow();
-    if (row >= 0) play_queue_index(row, false);
+    QTreeWidgetItem* item = playlist_view_->currentItem();
+    if (!item) return;
+    if (item->parent() == nullptr) {
+        int row = playlist_view_->indexOfTopLevelItem(item);
+        if (row < 0) return;
+        if (playlist_.is_playlist_row(row)) {
+            item->setExpanded(!item->isExpanded());
+            return;
+        }
+        play_queue_index(row, false);
+        return;
+    }
+    // A playlist child: play exactly that entry; the group stays visible and
+    // playback continues through the logical sequence afterwards.
+    int row = playlist_view_->indexOfTopLevelItem(item->parent());
+    if (row >= 0 && !item->data(0, Qt::UserRole).toString().isEmpty())
+        play_seq_entry(item->data(0, Qt::UserRole).toString(), row, false);
 }
 
 void MainWindow::playlist_context_menu(const QPoint& pos) {
     QMenu menu(this);
-    const QList<QListWidgetItem*> sel = playlist_view_->selectedItems();
-    if (!sel.isEmpty()) {
-        const int count = sel.size();
-        QString label = count == 1 ? QStringLiteral("Play") :
-                                     QStringLiteral("Play (%1 items)").arg(count);
-        menu.addAction(label, this, [this, sel] {
-            int row = playlist_view_->row(sel.first());
-            if (row >= 0) play_queue_index(row, false);
-        });
-        QString merge_label = count == 1
-            ? QStringLiteral("Save selection to playlist…")
-            : QStringLiteral("Save %1 items to playlist…").arg(count);
-        menu.addAction(merge_label, this, &MainWindow::merge_selection_into_playlist);
-        menu.addSeparator();
-        menu.addAction(QStringLiteral("Remove selected"), this, [this, sel] {
-            QList<int> rows;
-            for (auto* it : sel) rows.append(playlist_view_->row(it));
-            std::sort(rows.begin(), rows.end(), std::greater<int>());
-            for (int r : rows) playlist_.remove(r);
+    QTreeWidgetItem* item = playlist_view_->itemAt(pos);
+    if (!item) {
+        menu.addAction(QStringLiteral("Clear queue"), this, [this] {
+            playlist_.clear();
+            invalidate_seq();
             refresh_playlist();
         });
+        menu.exec(playlist_view_->viewport()->mapToGlobal(pos));
+        return;
     }
+
+    QTreeWidgetItem* top = item->parent() ? item->parent() : item;
+    const bool child = item->parent() != nullptr;
+    QVector<int> rows;
+    for (auto* it : playlist_view_->selectedItems())
+        if (it->parent() == nullptr) rows.append(playlist_view_->indexOfTopLevelItem(it));
+    if (rows.isEmpty()) rows.append(playlist_view_->indexOfTopLevelItem(top));
+
+    const int count = rows.size();
+    QString play_label = count == 1 ? QStringLiteral("Play") :
+                                      QStringLiteral("Play (%1 items)").arg(count);
+    menu.addAction(play_label, this, [this, rows] {
+        play_queue_index(rows.first(), false);
+    });
+
+    if (count == 1 && !child && playlist_.is_playlist_row(rows.first())) {
+        QTreeWidgetItem* g = playlist_view_->topLevelItem(rows.first());
+        if (g->isExpanded())
+            menu.addAction(QStringLiteral("Collapse"), this, [g] { g->setExpanded(false); });
+        else
+            menu.addAction(QStringLiteral("Expand"), this, [g] { g->setExpanded(true); });
+    }
+
+    // Merge/save the selection into a playlist ("sort in"). Whole playlist
+    // groups expand into their entries; children are used directly.
+    QString merge_label = count == 1 ? QStringLiteral("Save selection to playlist…")
+                                     : QStringLiteral("Save %1 items to playlist…").arg(count);
+    menu.addAction(merge_label, this, &MainWindow::merge_selection_into_playlist);
+
+    if (child) {
+        // Children can be taken OUT of their playlist ("sort out").
+        QStringList entries;
+        for (auto* it : playlist_view_->selectedItems())
+            if (it->parent() != nullptr && !it->data(0, Qt::UserRole).toString().isEmpty())
+                entries.append(it->data(0, Qt::UserRole).toString());
+        if (entries.isEmpty()) entries.append(item->data(0, Qt::UserRole).toString());
+        QString move_label = entries.size() == 1 ? QStringLiteral("Move to playlist…")
+                                                 : QStringLiteral("Move %1 items to playlist…").arg(entries.size());
+        menu.addAction(move_label, this, [this, entries] { move_children_to_playlist(entries); });
+        QString out_label = entries.size() == 1 ? QStringLiteral("Remove from playlist")
+                                                : QStringLiteral("Remove %1 items from playlist").arg(entries.size());
+        menu.addAction(out_label, this, [this, entries] { remove_children_from_playlist(entries); });
+    }
+
+    menu.addSeparator();
+    menu.addAction(QStringLiteral("Move up"), this, [this, rows] { move_playlist_rows(rows, -1); });
+    menu.addAction(QStringLiteral("Move down"), this, [this, rows] { move_playlist_rows(rows, 1); });
+    QString remove_label = count == 1 ? QStringLiteral("Remove selected")
+                                      : QStringLiteral("Remove (%1 items)").arg(count);
+    menu.addAction(remove_label, this, [this, rows] {
+        playlist_.remove_many(rows);
+        invalidate_seq();
+        refresh_playlist();
+    });
     menu.exec(playlist_view_->viewport()->mapToGlobal(pos));
 }
 
-void MainWindow::merge_selection_into_playlist() {
-    const QList<QListWidgetItem*> sel = playlist_view_->selectedItems();
-    if (sel.isEmpty()) { status(QStringLiteral("Select items to save to a playlist first.")); return; }
+void MainWindow::move_playlist_rows(const QVector<int>& rows, int delta) {
+    if (rows.isEmpty()) return;
+    playlist_.move_many(rows, delta);
+    invalidate_seq();
+    refresh_playlist();
+}
 
+void MainWindow::expand_playlist_group(QTreeWidgetItem* top) {
+    const QString source = top->data(0, Qt::UserRole).toString();
+    if (top->childCount() && top->child(0)->data(0, Qt::UserRole).isValid() &&
+        !top->child(0)->data(0, Qt::UserRole).toString().isEmpty())
+        return;
+    while (top->childCount()) top->removeChild(top->child(0));
+    PlaylistModel tmp;
+    if (!PlaylistModel::load_file(source, &tmp).empty() || tmp.empty()) {
+        auto* err = new QTreeWidgetItem(QStringList{QStringLiteral("(empty playlist)")});
+        top->addChild(err);
+        return;
+    }
+    for (const PlaylistItem& entry : tmp.items()) {
+        auto* child = new QTreeWidgetItem();
+        child->setText(0, entry.title.isEmpty() ? entry.path : entry.title);
+        child->setData(0, Qt::UserRole, entry.path);
+        child->setToolTip(0, entry.path);
+        top->addChild(child);
+    }
+}
+
+void MainWindow::refresh_playlist_group(const QString& path) {
+    if (!playlist_view_) return;
+    for (int i = 0; i < playlist_view_->topLevelItemCount(); ++i) {
+        QTreeWidgetItem* top = playlist_view_->topLevelItem(i);
+        if (top->data(0, Qt::UserRole).toString() != path) continue;
+        const bool expanded = top->isExpanded();
+        while (top->childCount()) top->removeChild(top->child(0));
+        expand_playlist_group(top);
+        top->setExpanded(expanded);
+        return;
+    }
+}
+
+void MainWindow::merge_selection_into_playlist() {
     // Collect the selected media paths / URLs (deduplicated). Playlist files
-    // in the selection are expanded into their entries, so whole playlists
-    // can be merged into other playlists.
+    // (groups) expand into their entries; children are used directly — so
+    // whole playlists, loose files/URLs and single playlist entries can all
+    // be sorted into a playlist.
     QStringList entries;
-    for (auto* it : sel) {
-        const QString path = it->data(Qt::UserRole).toString();
+    for (auto* it : playlist_view_->selectedItems()) {
+        const QString path = it->data(0, Qt::UserRole).toString();
         if (path.isEmpty()) continue;
-        if (PlaylistModel::looks_like_playlist(path) && QFileInfo::exists(path)) {
+        if (it->parent() == nullptr && PlaylistModel::looks_like_playlist(path) && QFileInfo::exists(path)) {
             PlaylistModel tmp;
             if (PlaylistModel::load_file(path, &tmp).empty()) {
                 for (const PlaylistItem& item : tmp.items())
@@ -1222,41 +1445,146 @@ void MainWindow::merge_selection_into_playlist() {
     toast(QStringLiteral("Playlist updated · %1").arg(QFileInfo(target).fileName()));
 }
 
+void MainWindow::remove_children_from_playlist(const QStringList& entries) {
+    if (entries.isEmpty()) return;
+    // Children can be sorted OUT of their playlist: for every playlist group
+    // in the queue that contains one of the entries, the entry is removed
+    // from the playlist file and the group is refreshed.
+    int removed = 0;
+    for (int i = 0; i < playlist_.items().size(); ++i) {
+        const PlaylistItem& item = playlist_.items()[i];
+        if (!item.is_playlist || !QFileInfo::exists(item.path)) continue;
+        PlaylistModel tmp;
+        if (!PlaylistModel::load_file(item.path, &tmp).empty()) continue;
+        QVector<int> to_remove;
+        for (int k = 0; k < tmp.items().size(); ++k)
+            if (entries.contains(tmp.items()[k].path)) to_remove.append(k);
+        if (to_remove.isEmpty()) continue;
+        const int before = tmp.size();
+        tmp.remove_many(to_remove);
+        std::string err = item.path.toLower().endsWith(".pls")
+                              ? PlaylistModel::save_pls(item.path, tmp)
+                              : PlaylistModel::save_m3u(item.path, tmp);
+        if (!err.empty()) { status(QStringLiteral("Could not save playlist: %1").arg(QString::fromStdString(err))); return; }
+        removed += before - tmp.size();
+        refresh_playlist_group(item.path);
+    }
+    if (removed == 0) { status(QStringLiteral("Selected items are not inside any queued playlist.")); return; }
+    invalidate_seq();
+    status(QStringLiteral("Removed %1 item(s) from their playlist(s)").arg(removed));
+}
+
+void MainWindow::move_children_to_playlist(const QStringList& entries) {
+    if (entries.isEmpty()) return;
+    // Target candidates: every playlist GROUP in the queue except the group
+    // the selected children belong to.
+    QStringList candidates;
+    QTreeWidgetItem* parent = nullptr;
+    for (auto* it : playlist_view_->selectedItems()) {
+        if (it->parent()) { parent = it->parent(); break; }
+    }
+    const QString own = parent ? parent->data(0, Qt::UserRole).toString() : QString();
+    for (const PlaylistItem& item : playlist_.items()) {
+        if (item.is_playlist && item.path != own && QFileInfo::exists(item.path))
+            candidates.append(item.path);
+    }
+    QString target;
+    if (!candidates.isEmpty()) {
+        QInputDialog dlg(this);
+        dlg.setWindowTitle(QStringLiteral("Move to playlist"));
+        dlg.setLabelText(QStringLiteral("Move %1 item(s) into:").arg(entries.size()));
+        dlg.setComboBoxItems(candidates);
+        if (dlg.exec() != QDialog::Accepted) return;
+        target = dlg.textValue();
+    } else {
+        target = QFileDialog::getSaveFileName(this, QStringLiteral("New target playlist"),
+                                              QDir::homePath() + "/queue.m3u",
+                                              QStringLiteral("M3U (*.m3u);;PLS (*.pls)"));
+        if (target.isEmpty()) return;
+    }
+
+    PlaylistModel tmp;
+    std::string err;
+    if (QFileInfo::exists(target)) {
+        err = PlaylistModel::load_file(target, &tmp);
+        if (!err.empty()) { status(QStringLiteral("Could not read playlist: %1").arg(QString::fromStdString(err))); return; }
+    }
+    int added = 0;
+    for (const QString& entry : entries) {
+        if (tmp.index_of(entry) < 0) { tmp.add(entry); ++added; }
+    }
+    err = target.toLower().endsWith(".pls") ? PlaylistModel::save_pls(target, tmp)
+                                            : PlaylistModel::save_m3u(target, tmp);
+    if (!err.empty()) { status(QStringLiteral("Could not save playlist: %1").arg(QString::fromStdString(err))); return; }
+    app_settings_.last_playlist = target;
+    settings_->save(app_settings_);
+    // Remove the moved children from their original playlist ("out of one,
+    // into the other").
+    remove_children_from_playlist(entries);
+    refresh_playlist_group(target);
+    status(QStringLiteral("Moved %1 item(s) to %2").arg(added).arg(QFileInfo(target).fileName()));
+}
+
 void MainWindow::refresh_playlist() {
     if (!playlist_view_) return;
     playlist_view_->clear();
     for (int i = 0; i < playlist_.items().size(); ++i) {
         const PlaylistItem& item = playlist_.items()[i];
         QString label = item.title.isEmpty() ? item.path : item.title;
+        if (item.is_playlist) {
+            // Playlist groups stay visible as rows; a placeholder child gives
+            // the expand arrow. Children are loaded lazily on expand.
+            label = QStringLiteral("[Playlist] ") + label;
+        }
         if (i == playlist_.current_index()) label = QStringLiteral("▶ ") + label;
-        auto* it = new QListWidgetItem(label, playlist_view_);
-        it->setData(Qt::UserRole, item.path);
-        it->setToolTip(item.path);
+        auto* it = new QTreeWidgetItem(QStringList{label});
+        it->setData(0, Qt::UserRole, item.path);
+        it->setToolTip(0, item.path);
+        if (item.is_playlist) {
+            auto* placeholder = new QTreeWidgetItem(QStringList{QStringLiteral("…")});
+            it->addChild(placeholder);
+            if (expanded_groups_.contains(item.path)) {
+                it->setExpanded(true);
+                expand_playlist_group(it);
+            }
+        }
+        playlist_view_->addTopLevelItem(it);
     }
+    if (playlist_.current_index() >= 0)
+        playlist_view_->setCurrentItem(playlist_view_->topLevelItem(playlist_.current_index()));
 }
 
 void MainWindow::add_files(const QStringList& paths) {
     int added = 0;
+    // A media file that is already available as a child of a playlist in this
+    // batch must not be added a second time as a separate top-level row
+    // (choosing a playlist together with its own files must not double-load).
+    QStringList covered;
     for (const QString& path : paths) {
-        if (PlaylistModel::looks_like_playlist(path) && QFileInfo::exists(path)) {
-            PlaylistModel tmp;
-            std::string err = PlaylistModel::load_file(path, &tmp);
-            if (err.empty()) {
-                // Flatten the playlist into its entries; never duplicate
-                // media that is already queued (playlist + its files picked
-                // together must not double-load).
-                for (const PlaylistItem& item : tmp.items()) {
-                    if (playlist_.index_of(item.path) < 0) {
-                        playlist_.add(item.path, item.title);
-                        ++added;
-                    }
-                }
-                continue;
-            }
-        }
-        // Plain media files and stream URLs are queued as-is, deduplicated.
-        if (playlist_.index_of(path) < 0) { playlist_.add(path); ++added; }
+        if (!PlaylistModel::looks_like_playlist(path) || !QFileInfo::exists(path)) continue;
+        PlaylistModel tmp;
+        if (!PlaylistModel::load_file(path, &tmp).empty()) continue;
+        for (const PlaylistItem& item : tmp.items()) covered.append(item.path);
     }
+    for (const QString& path : paths) {
+        // Playlist files are added as ONE visible GROUP row (never flattened
+        // away); their entries are played through the logical sequence.
+        if (PlaylistModel::looks_like_playlist(path) && QFileInfo::exists(path)) {
+            if (playlist_.index_of(path) < 0) {
+                playlist_.add(path);
+                ++added;
+            }
+            continue;
+        }
+        // Plain media files and stream URLs are queued as-is, deduplicated
+        // (against the queue AND against the children of playlists chosen
+        // together in this batch).
+        if (!covered.contains(path) && playlist_.index_of(path) < 0) {
+            playlist_.add(path);
+            ++added;
+        }
+    }
+    invalidate_seq();
     refresh_playlist();
     status(QStringLiteral("%1 item(s) in queue").arg(playlist_.size()));
 }
