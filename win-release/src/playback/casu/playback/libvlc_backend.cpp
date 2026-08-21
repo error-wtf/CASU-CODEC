@@ -536,13 +536,18 @@ void LibVLCBackend::next_frame() {
 
 void LibVLCBackend::set_audio_delay(double milliseconds) {
     if (!player_) throw PlaybackError("no active media player");
-    if (libvlc_audio_set_delay(player_, static_cast<int>(milliseconds)) != 0)
+    // Linux parity (mpcasu_backend.py): libVLC delay APIs expect MICROSECONDS,
+    // the UI layer works in milliseconds.
+    const long long microseconds = static_cast<long long>(milliseconds * 1000.0);
+    if (libvlc_audio_set_delay(player_, static_cast<int>(microseconds)) != 0)
         throw PlaybackError("libVLC rejected the audio delay");
 }
 
 void LibVLCBackend::set_subtitle_delay(double milliseconds) {
     if (!player_) throw PlaybackError("no active media player");
-    if (libvlc_video_set_spu_delay(player_, static_cast<int>(milliseconds)) != 0)
+    // Linux parity: milliseconds -> microseconds for libVLC.
+    const long long microseconds = static_cast<long long>(milliseconds * 1000.0);
+    if (libvlc_video_set_spu_delay(player_, static_cast<int>(microseconds)) != 0)
         throw PlaybackError("libVLC rejected the subtitle delay");
 }
 

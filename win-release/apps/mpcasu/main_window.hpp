@@ -293,6 +293,9 @@ private:
     void invalidate_seq() { seq_valid_ = false; }
     void apply_queue_filter();
     void remove_selected_rows();
+    void remove_selected_rows(const QVector<int>& fixed_rows);
+    QString selected_child_entry() const;
+    bool play_selected_child();
     void cycle_ab_loop();
     double ab_loop_a_ = -1.0;
     double ab_loop_b_ = -1.0;
