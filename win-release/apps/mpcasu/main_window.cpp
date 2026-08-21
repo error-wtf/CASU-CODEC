@@ -240,7 +240,7 @@ void MainWindow::build_ui() {
 
     // Linux parity: status bar shows version | tagline | telemetry placeholder;
     // transient status messages go to the center label.
-    status_label_ = new QLabel(QStringLiteral("MPCASU 3.0.0"), this);
+    status_label_ = new QLabel(QStringLiteral("MPCASU 5.0.0"), this);
     status_label_->setObjectName("StatusText");
     statusBar()->addWidget(status_label_);
     status_center_ = new QLabel(
@@ -356,7 +356,7 @@ void MainWindow::build_about_page() {
     name->setObjectName("BrandName");
     name->setAlignment(Qt::AlignCenter);
     col->addWidget(name);
-    auto* version = new QLabel(QStringLiteral("Version 3.0.0 · Windows port (MinGW-w64 x64 + Qt 6)"), panel);
+    auto* version = new QLabel(QStringLiteral("Version 5.0.0 · Windows port (MinGW-w64 x64 + Qt 6)"), panel);
     version->setObjectName("BrandSub");
     version->setAlignment(Qt::AlignCenter);
     col->addWidget(version);
@@ -926,25 +926,46 @@ void MainWindow::build_transport() {
 
 // ------------------------------------------------------------------ playlist pane
 
-void MainWindow::remove_selected_rows() {
+void MainWindow::remove_selected_rows(const QVector<int>& fixed_rows) {
     QVector<int> rows;
-    for (auto* it : playlist_view_->selectedItems())
-        if (it->parent() == nullptr) rows.append(playlist_view_->indexOfTopLevelItem(it));
+    if (!fixed_rows.isEmpty()) {
+        rows = fixed_rows;
+    } else {
+        for (auto* it : playlist_view_->selectedItems())
+            if (it->parent() == nullptr) rows.append(playlist_view_->indexOfTopLevelItem(it));
+    }
     if (rows.isEmpty()) return;
+    // Linux parity (_on_playlist_remove): rows that were marked but not
+    // removed stay marked; clearing everything stops playback and resets the
+    // now-playing caption.
+    const bool clears_all = rows.size() >= playlist_.size();
     const auto& items = playlist_.items();
+    QSet<QString> marked;
+    for (auto* it : playlist_view_->selectedItems()) {
+        if (it->parent() != nullptr) continue;
+        const int row = playlist_view_->indexOfTopLevelItem(it);
+        if (row >= 0 && row < items.size()) marked.insert(items[row].path);
+    }
     QSet<int> removed;
     for (int row : rows)
         if (row >= 0 && row < items.size()) removed.insert(row);
     QStringList keep;
-    for (auto* it : playlist_view_->selectedItems()) {
-        const int row = playlist_view_->indexOfTopLevelItem(it);
-        if (row >= 0 && !removed.contains(row) && it->parent() == nullptr)
-            keep << it->data(0, Qt::UserRole).toString();
-    }
+    for (int i = 0; i < items.size(); ++i)
+        if (marked.contains(items[i].path) && !removed.contains(i))
+            keep << items[i].path;
     playlist_.remove_many(rows);
     invalidate_seq();
     refresh_playlist();
-    if (!keep.isEmpty()) reselect_playlist_rows(keep);
+    if (clears_all) {
+        stop_playback();
+        status(QStringLiteral("Playlist cleared"));
+    } else if (!keep.isEmpty()) {
+        reselect_playlist_rows(keep);
+    }
+}
+
+void MainWindow::remove_selected_rows() {
+    remove_selected_rows(QVector<int>());
 }
 
 void MainWindow::rename_queue_entry() {
@@ -2317,9 +2338,55 @@ void MainWindow::apply_backend_settings() {
     }
 }
 
+QString MainWindow::selected_child_entry() const {
+    if (!playlist_view_) return QString();
+    // Linux parity (PlaylistPane.selected_child): a selected CHILD of an
+    // expanded group wins over the top-level selection.
+    for (auto* it : playlist_view_->selectedItems()) {
+        if (it->parent() != nullptr) {
+            const QString entry = it->data(0, Qt::UserRole).toString();
+            if (!entry.isEmpty()) return entry;
+        }
+    }
+    return QString();
+}
+
+bool MainWindow::play_selected_child() {
+    const QString child = selected_child_entry();
+    if (child.isEmpty()) return false;
+    // Owning group row (queue position) for highlighting/current bookkeeping.
+    int row = -1;
+    for (int i = 0; i < playlist_.size(); ++i) {
+        const PlaylistItem& item = playlist_.items()[i];
+        if (!item.is_playlist || !QFileInfo::exists(item.path)) continue;
+        PlaylistModel tmp;
+        if (!PlaylistModel::load_file(item.path, &tmp).empty()) continue;
+        if (tmp.index_of(child) >= 0) { row = i; break; }
+    }
+    if (row < 0) row = playlist_.index_of(child);
+    // Linux parity (_play_playlist_entry): URLs resolve externally, missing
+    // files toast without touching playback.
+    if (is_network_like(child)) {
+        play_seq_entry(child, row < 0 ? 0 : row, false);
+        return true;
+    }
+    if (!QFileInfo::exists(child)) {
+        toast(QStringLiteral("Local file not found: %1").arg(QFileInfo(child).fileName()));
+        return true;
+    }
+    play_seq_entry(child, row < 0 ? 0 : row, false);
+    return true;
+}
+
 void MainWindow::toggle_playback() {
     if (!backend_) {
-        if (playlist_.empty()) { status(QStringLiteral("Add a media file first.")); return; }
+        if (playlist_.empty() && selected_child_entry().isEmpty()) {
+            status(QStringLiteral("Add a media file first."));
+            return;
+        }
+        // Linux parity (play_selected): a selected playlist child plays
+        // through the group-resolution path, before any top-level row.
+        if (play_selected_child()) return;
         int idx = playlist_.current_index() < 0 ? 0 : playlist_.current_index();
         play_queue_index(idx, false);
         return;
@@ -2362,12 +2429,13 @@ void MainWindow::play_queue_index(int index, bool automatic) {
     // the queue (visible, movable) — it is never dissolved into its entries.
     QString path;
     if (playlist_.is_playlist_row(index)) {
-        PlaylistModel tmp;
-        if (!PlaylistModel::load_file(playlist_.items()[index].path, &tmp).empty() || tmp.empty()) {
+        const QVector<QString> seq = mpcasu::playlist_logical_sequence(playlist_.items());
+        const int pos = mpcasu::playlist_row_to_seq(playlist_.items(), index);
+        if (pos < 0 || pos >= seq.size()) {
             status(QStringLiteral("Playlist is empty"));
             return;
         }
-        path = tmp.items()[0].path;
+        path = seq[pos];
     } else {
         path = playlist_.items()[index].path;
     }
@@ -2396,18 +2464,7 @@ void MainWindow::play_selected_path(const QString& path) {
 }
 
 QVector<QString> MainWindow::logical_sequence() const {
-    QVector<QString> seq;
-    for (int i = 0; i < playlist_.size(); ++i) {
-        const PlaylistItem& item = playlist_.items()[i];
-        if (item.is_playlist) {
-            PlaylistModel tmp;
-            if (!PlaylistModel::load_file(item.path, &tmp).empty()) continue;
-            for (const PlaylistItem& entry : tmp.items()) seq.append(entry.path);
-        } else {
-            seq.append(item.path);
-        }
-    }
-    return seq;
+    return mpcasu::playlist_logical_sequence(playlist_.items());
 }
 
 void MainWindow::play_next(bool automatic) {
@@ -2424,12 +2481,20 @@ void MainWindow::play_next(bool automatic) {
     if (!seq_valid_) { seq_ = logical_sequence(); seq_valid_ = true; }
     if (seq_.isEmpty()) return;
     int pos = seq_.indexOf(current_played_path_);
-    if (pos < 0) pos = playlist_.current_index() < 0 ? 0 : qMax(0, playlist_.current_index());
+    // Linux parity: when the current entry is not part of the sequence
+    // (e.g. after queue changes), fall back to the SEQUENCE position of the
+    // current row — never use the raw row index as a sequence index.
+    if (pos < 0) {
+        const int row = playlist_.current_index();
+        const int mapped = playlist_row_to_seq(playlist_.items(), row);
+        pos = mapped >= 0 ? mapped : 0;
+    }
     if (playlist_.shuffle && seq_.size() > 1) {
         int target;
         do { target = QRandomGenerator::global()->bounded(seq_.size()); } while (target == pos);
-        // Map the sequence position back to its owning row and play it.
-        int row = playlist_.current_index();
+        // Map the sequence position back to its OWNING row (Linux
+        // _play_playlist_entry highlights what actually plays).
+        const int row = playlist_seq_owner_row(playlist_.items(), target);
         play_seq_entry(seq_[target], row < 0 ? 0 : row, automatic);
         return;
     }
@@ -2438,19 +2503,7 @@ void MainWindow::play_next(bool automatic) {
         if (playlist_.repeat == PlaylistModel::RepeatMode::All) target = 0;
         else { stop_playback(); status(QStringLiteral("End of playlist")); return; }
     }
-    // Find the row that owns seq_[target].
-    int row = -1;
-    int seen = 0;
-    for (int i = 0; i < playlist_.size() && row < 0; ++i) {
-        const PlaylistItem& item = playlist_.items()[i];
-        int count = 1;
-        if (item.is_playlist) {
-            PlaylistModel tmp;
-            if (PlaylistModel::load_file(item.path, &tmp).empty()) count = tmp.size();
-        }
-        if (target < seen + count) row = i;
-        seen += count;
-    }
+    const int row = playlist_seq_owner_row(playlist_.items(), target);
     if (row < 0) { stop_playback(); return; }
     play_seq_entry(seq_[target], row, automatic);
 }
@@ -2460,22 +2513,15 @@ void MainWindow::play_previous() {
     if (!seq_valid_) { seq_ = logical_sequence(); seq_valid_ = true; }
     if (seq_.isEmpty()) return;
     int pos = seq_.indexOf(current_played_path_);
-    if (pos < 0) pos = playlist_.current_index() < 0 ? 0 : qMax(0, playlist_.current_index());
+    if (pos < 0) {
+        const int row = playlist_.current_index();
+        const int mapped = playlist_row_to_seq(playlist_.items(), row);
+        pos = mapped >= 0 ? mapped : 0;
+    }
     int target = pos - 1;
     if (target < 0 && playlist_.repeat == PlaylistModel::RepeatMode::All) target = seq_.size() - 1;
     if (target < 0) { status(QStringLiteral("Beginning of playlist")); return; }
-    int row = -1;
-    int seen = 0;
-    for (int i = 0; i < playlist_.size() && row < 0; ++i) {
-        const PlaylistItem& item = playlist_.items()[i];
-        int count = 1;
-        if (item.is_playlist) {
-            PlaylistModel tmp;
-            if (PlaylistModel::load_file(item.path, &tmp).empty()) count = tmp.size();
-        }
-        if (target < seen + count) row = i;
-        seen += count;
-    }
+    const int row = playlist_seq_owner_row(playlist_.items(), target);
     if (row < 0) return;
     play_seq_entry(seq_[target], row, false);
 }
@@ -2831,10 +2877,15 @@ void MainWindow::load_playlist_file() {
 
 void MainWindow::save_playlist_file() {
     if (playlist_.empty()) return;
+    if (playlist_.empty()) {
+        toast(QStringLiteral("The queue is empty — nothing to save."));
+        return;
+    }
     QString file = QFileDialog::getSaveFileName(this, QStringLiteral("Save playlist"),
                                                 QDir::homePath() + "/queue.m3u",
-                                                QStringLiteral("M3U (*.m3u);;PLS (*.pls)"));
+                                                QStringLiteral("M3U (*.m3u *.m3u8);;PLS (*.pls);;XSPF (*.xspf);;MPCASU JSON (*.json)"));
     if (file.isEmpty()) return;
+    if (!file.contains(QLatin1Char('.'))) file += QStringLiteral(".m3u");
     // Save the queue as ONE flat playlist: playlist groups are resolved into
     // their entries so the file contains real media/URLs, never references.
     PlaylistModel flat;
@@ -2848,8 +2899,7 @@ void MainWindow::save_playlist_file() {
         }
         flat.add(item.path, item.title);
     }
-    std::string err = file.toLower().endsWith(".pls") ? PlaylistModel::save_pls(file, flat)
-                                                      : PlaylistModel::save_m3u(file, flat);
+    std::string err = PlaylistModel::save_file(file, flat);
     if (!err.empty()) status(QStringLiteral("Playlist error: %1").arg(QString::fromStdString(err)));
     else status(QStringLiteral("Playlist saved"));
 }
@@ -2882,6 +2932,10 @@ void MainWindow::playlist_context_menu(const QPoint& pos) {
             playlist_.clear();
             invalidate_seq();
             refresh_playlist();
+            // Linux parity (_on_playlist_remove with no indices): playback
+            // stops and the now-playing state resets.
+            stop_playback();
+            status(QStringLiteral("Playlist cleared"));
         });
         menu.exec(playlist_view_->viewport()->mapToGlobal(pos));
         return;
@@ -2897,9 +2951,32 @@ void MainWindow::playlist_context_menu(const QPoint& pos) {
     const int count = rows.size();
     QString play_label = count == 1 ? QStringLiteral("Play") :
                                       QStringLiteral("Play (%1 items)").arg(count);
-    menu.addAction(play_label, this, [this, rows] {
-        play_queue_index(rows.first(), false);
-    });
+    // Linux parity (_on_queue_child_play): "Play" on a selected CHILD plays
+    // exactly that entry — never the group's first entry.
+    QStringList child_entries;
+    for (auto* it : playlist_view_->selectedItems())
+        if (it->parent() != nullptr && !it->data(0, Qt::UserRole).toString().isEmpty())
+            child_entries.append(it->data(0, Qt::UserRole).toString());
+    if (!child_entries.isEmpty()) {
+        menu.addAction(play_label, this, [this, child_entries] {
+            for (const QString& entry : child_entries) {
+                int row = -1;
+                for (int i = 0; i < playlist_.size(); ++i) {
+                    const PlaylistItem& pl = playlist_.items()[i];
+                    if (!pl.is_playlist || !QFileInfo::exists(pl.path)) continue;
+                    PlaylistModel tmp;
+                    if (!PlaylistModel::load_file(pl.path, &tmp).empty()) continue;
+                    if (tmp.index_of(entry) >= 0) { row = i; break; }
+                }
+                play_seq_entry(entry, row < 0 ? 0 : row, false);
+                return;  // single entry starts playback; queue continues in sequence
+            }
+        });
+    } else {
+        menu.addAction(play_label, this, [this, rows] {
+            play_queue_index(rows.first(), false);
+        });
+    }
 
     if (count == 1 && !child && playlist_.is_playlist_row(rows.first())) {
         QTreeWidgetItem* g = playlist_view_->topLevelItem(rows.first());
@@ -2935,10 +3012,10 @@ void MainWindow::playlist_context_menu(const QPoint& pos) {
     menu.addAction(QStringLiteral("Move down"), this, [this, rows] { move_playlist_rows(rows, 1); });
     QString remove_label = count == 1 ? QStringLiteral("Remove selected")
                                       : QStringLiteral("Remove (%1 items)").arg(count);
+    // Linux parity (_on_playlist_remove): rows that were marked but not
+    // removed stay marked (persistent selection).
     menu.addAction(remove_label, this, [this, rows] {
-        playlist_.remove_many(rows);
-        invalidate_seq();
-        refresh_playlist();
+        remove_selected_rows(rows);
     });
     menu.exec(playlist_view_->viewport()->mapToGlobal(pos));
 }
@@ -3071,14 +3148,16 @@ void MainWindow::merge_selection_into_playlist() {
     for (const QString& entry : entries) {
         if (merged.index_of(entry) < 0) { merged.add(entry); ++added; }
     }
-    err = target.toLower().endsWith(".pls")
-              ? PlaylistModel::save_pls(target, merged)
-              : PlaylistModel::save_m3u(target, merged);
+    err = PlaylistModel::save_file(target, merged);
     if (!err.empty()) { status(QStringLiteral("Could not save playlist: %1").arg(QString::fromStdString(err))); return; }
     app_settings_.last_playlist = target;
     settings_->save(app_settings_);
     status(QStringLiteral("Added %1 item(s) to %2").arg(added).arg(QFileInfo(target).fileName()));
     toast(QStringLiteral("Playlist updated · %1").arg(QFileInfo(target).fileName()));
+    // Linux parity: the logical playback sequence must reflect the new
+    // playlist contents, and an already-queued group refreshes in place.
+    invalidate_seq();
+    if (playlist_.index_of(target) >= 0) refresh_playlist_group(target);
 }
 
 void MainWindow::remove_children_from_playlist(const QStringList& entries) {
@@ -3098,9 +3177,7 @@ void MainWindow::remove_children_from_playlist(const QStringList& entries) {
         if (to_remove.isEmpty()) continue;
         const int before = tmp.size();
         tmp.remove_many(to_remove);
-        std::string err = item.path.toLower().endsWith(".pls")
-                              ? PlaylistModel::save_pls(item.path, tmp)
-                              : PlaylistModel::save_m3u(item.path, tmp);
+        std::string err = PlaylistModel::save_file(item.path, tmp);
         if (!err.empty()) { status(QStringLiteral("Could not save playlist: %1").arg(QString::fromStdString(err))); return; }
         removed += before - tmp.size();
         refresh_playlist_group(item.path);
@@ -3135,8 +3212,32 @@ void MainWindow::move_children_to_playlist(const QStringList& entries) {
     } else {
         target = QFileDialog::getSaveFileName(this, QStringLiteral("New target playlist"),
                                               QDir::homePath() + "/queue.m3u",
-                                              QStringLiteral("M3U (*.m3u);;PLS (*.pls)"));
+                                              QStringLiteral("M3U (*.m3u *.m3u8);;PLS (*.pls);;XSPF (*.xspf);;MPCASU JSON (*.json)"));
         if (target.isEmpty()) return;
+    }
+
+    // Linux parity (_on_child_move_to_playlist): remove the children from
+    // their SOURCE playlists FIRST (never from the chosen target), then append
+    // them to the target. Removing after adding would wipe them out of the
+    // target again and lose the entries entirely.
+    int removed_total = 0;
+    QStringList touched;
+    for (int i = 0; i < playlist_.items().size(); ++i) {
+        const PlaylistItem& item = playlist_.items()[i];
+        if (!item.is_playlist || !QFileInfo::exists(item.path)) continue;
+        if (item.path == target) continue;  // never strip the target again
+        PlaylistModel tmp;
+        if (!PlaylistModel::load_file(item.path, &tmp).empty()) continue;
+        QVector<int> to_remove;
+        for (int k = 0; k < tmp.items().size(); ++k)
+            if (entries.contains(tmp.items()[k].path)) to_remove.append(k);
+        if (to_remove.isEmpty()) continue;
+        const int before = tmp.size();
+        tmp.remove_many(to_remove);
+        std::string err = PlaylistModel::save_file(item.path, tmp);
+        if (!err.empty()) { status(QStringLiteral("Could not update %1: %2").arg(QFileInfo(item.path).fileName()).arg(QString::fromStdString(err))); continue; }
+        removed_total += before - tmp.size();
+        touched.append(item.path);
     }
 
     PlaylistModel tmp;
@@ -3149,15 +3250,13 @@ void MainWindow::move_children_to_playlist(const QStringList& entries) {
     for (const QString& entry : entries) {
         if (tmp.index_of(entry) < 0) { tmp.add(entry); ++added; }
     }
-    err = target.toLower().endsWith(".pls") ? PlaylistModel::save_pls(target, tmp)
-                                            : PlaylistModel::save_m3u(target, tmp);
+    err = PlaylistModel::save_file(target, tmp);
     if (!err.empty()) { status(QStringLiteral("Could not save playlist: %1").arg(QString::fromStdString(err))); return; }
     app_settings_.last_playlist = target;
     settings_->save(app_settings_);
-    // Remove the moved children from their original playlist ("out of one,
-    // into the other").
-    remove_children_from_playlist(entries);
+    for (const QString& path : touched) refresh_playlist_group(path);
     refresh_playlist_group(target);
+    invalidate_seq();
     status(QStringLiteral("Moved %1 item(s) to %2").arg(added).arg(QFileInfo(target).fileName()));
 }
 
@@ -3294,34 +3393,19 @@ void MainWindow::persist_media_preferences() {
 
 void MainWindow::add_files(const QStringList& paths) {
     int added = 0;
-    // A media file that is already available as a child of a playlist in this
-    // batch must not be added a second time as a separate top-level row
-    // (choosing a playlist together with its own files must not double-load).
-    QStringList covered;
-    for (const QString& path : paths) {
-        if (!PlaylistModel::looks_like_playlist(path) || !QFileInfo::exists(path)) continue;
-        PlaylistModel tmp;
-        if (!PlaylistModel::load_file(path, &tmp).empty()) continue;
-        for (const PlaylistItem& item : tmp.items()) covered.append(item.path);
-    }
-    for (const QString& path : paths) {
-        // Playlist files are added as ONE visible GROUP row (never flattened
-        // away); their entries are played through the logical sequence.
-        if (PlaylistModel::looks_like_playlist(path) && QFileInfo::exists(path)) {
-            if (playlist_.index_of(path) < 0) {
-                playlist_.add(path);
-                ++added;
-            }
-            continue;
-        }
-        // Plain media files and stream URLs are queued as-is, deduplicated
-        // (against the queue AND against the children of playlists chosen
-        // together in this batch).
-        if (!covered.contains(path) && playlist_.index_of(path) < 0) {
+    // Linux parity (batch add with covered-set + existing_only): playlists
+    // become ONE visible group row each, entries of batch-playlists are
+    // "covered" so choosing a playlist together with its own files never
+    // double-loads, non-existent local files are skipped, everything is
+    // deduplicated against the queue.
+    const PlaylistBatchPlan plan = playlist_batch_plan(paths);
+    for (const QString& path : plan.rows) {
+        if (playlist_.index_of(path) < 0) {
             playlist_.add(path);
             ++added;
         }
     }
+    if (added == 0) return;
     invalidate_seq();
     refresh_playlist();
 }
@@ -3846,12 +3930,12 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
             event->accept();
             return;
         case Qt::Key_Right:
-            if (event->modifiers() & Qt::ShiftModifier) seek_to(controller_->position() + 10.0);
-            else seek_to(controller_->position() + 5.0);
+            // Linux parity: arrow keys seek ±10 seconds.
+            seek_to(controller_->position() + 10.0);
             event->accept();
             return;
         case Qt::Key_Left:
-            seek_to(controller_->position() - 5.0);
+            seek_to(controller_->position() - 10.0);
             event->accept();
             return;
         case Qt::Key_Up:
