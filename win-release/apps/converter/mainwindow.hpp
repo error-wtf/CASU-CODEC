@@ -15,11 +15,14 @@
 
 class QCheckBox;
 class QComboBox;
+class QDoubleSpinBox;
+class QFrame;
 class QLabel;
 class QLineEdit;
 class QListWidget;
 class QProgressBar;
 class QPushButton;
+class QSpinBox;
 
 namespace casu::conv {
 
@@ -40,7 +43,11 @@ private:
     void clearQueue();
     void syncDirectionOptions();
     void startConversion();
+    void runJobs(std::vector<ConversionJob> jobs);
     void cancelConversion();
+    void pauseQueue();
+    void verifyOutput();
+    void showLastReport();
     void onProgress(const ConversionProgress& progress);
     void onFinished(const QString& summary);
 
@@ -67,13 +74,31 @@ private:
     QCheckBox* overwrite_ = nullptr;
     QWidget* media_options_ = nullptr;
     QWidget* casu_options_ = nullptr;
+    // Linux parity: collapsible "Advanced options" frame.
+    QPushButton* advanced_btn_ = nullptr;
+    QWidget* advanced_frame_ = nullptr;
+    QComboBox* analysis_mode_ = nullptr;
+    QDoubleSpinBox* analysis_fps_ = nullptr;
+    QSpinBox* retries_ = nullptr;
+    QSpinBox* tile_size_ = nullptr;
+    QDoubleSpinBox* key_interval_ = nullptr;
+    QCheckBox* all_tracks_ = nullptr;
+    QCheckBox* preserve_metadata_ = nullptr;
+    QCheckBox* resume_jobs_ = nullptr;
+    // Inline overwrite confirmation (Linux parity: no popup).
+    QFrame* confirm_frame_ = nullptr;
+    QLabel* confirm_label_ = nullptr;
     QProgressBar* progress_ = nullptr;
     QPushButton* convert_button_ = nullptr;
     QPushButton* cancel_button_ = nullptr;
+    QPushButton* pause_button_ = nullptr;
 
     bool busy_ = false;
+    bool paused_ = false;
+    std::vector<ConversionJob> pending_jobs_;  // awaiting "Replace files" confirm
     std::thread worker_thread_;
     std::shared_ptr<std::atomic<bool>> cancel_ = std::make_shared<std::atomic<bool>>(false);
+    std::shared_ptr<std::atomic<bool>> pause_ = std::make_shared<std::atomic<bool>>(false);
     std::shared_ptr<std::vector<ConversionResult>> results_;
 };
 

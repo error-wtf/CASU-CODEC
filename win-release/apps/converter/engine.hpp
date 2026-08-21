@@ -25,6 +25,11 @@ struct ConversionProfile {
     bool preserve_metadata = true;
     std::string output_extension = ".mp4";   // media output extension (leading dot)
     bool force = false;
+    // Linux parity (casu_converter advanced options):
+    std::string analysis_mode = "strict";    // strict|visually_lossless|adaptive
+    double analysis_fps = 10.0;              // 0.1..120
+    int tile_size = 64;                      // 8..1024
+    double key_interval_seconds = 3.0;       // 0.1..3600
 };
 
 struct ConversionJob {
@@ -96,12 +101,22 @@ public:
     static std::vector<std::string> build_ffmpeg_args(const ConversionJob& job);
 
     // Run a whole batch. Result order matches job order. Throws
-    // ConversionCancelled when the caller requests cancellation.
-    std::vector<ConversionResult> run(const std::vector<ConversionJob>& jobs,
-                                      const FfmpegExecutor& executor,
-                                      const std::function<void(const ConversionProgress&)>& progress,
-                                      const std::function<bool()>& cancelled);
+    // ConversionCancelled when the caller requests cancellation. `paused` is
+    // polled between/inside jobs (Linux parity: Pause queue). Failed jobs are
+    // retried up to `retries` times (0..10).
+    std::vector<ConversionResult> run(
+        const std::vector<ConversionJob>& jobs, const FfmpegExecutor& executor,
+        const std::function<void(const ConversionProgress&)>& progress,
+        const std::function<bool()>& cancelled,
+        const std::function<bool()>& paused = {},
+        int retries = 0);
 };
+
+// Linux parity (write_conversion_report): casu_batch_report.json next to the
+// outputs; consumed by "Last report" and "Resume verified jobs".
+void write_batch_report(const std::string& output_dir, const std::string& state,
+                        const ConversionProfile& profile, int retries,
+                        const std::vector<ConversionResult>& results);
 
 // Blocking executor backed by casu::codec::Ffmpeg::run_checked (no live
 // progress, no mid-run cancel). Used by the headless engine test.
