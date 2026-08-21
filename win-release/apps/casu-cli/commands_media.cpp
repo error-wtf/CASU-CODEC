@@ -14,6 +14,7 @@
 #include "casu/sidecar.hpp"
 #include "casu/sha256.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -75,7 +76,8 @@ JsonValue conversion_result_entry(const std::string& source, const std::string& 
                                   long long output_size, long long source_size,
                                   const std::string& source_sha256,
                                   const std::string& output_sha256,
-                                  const std::string& verification) {
+                                  const std::string& verification,
+                                  int attempts = 1) {
     JsonObject entry;
     entry.items["source"] = JsonValue(source);
     entry.items["output"] = JsonValue(output);
@@ -83,7 +85,8 @@ JsonValue conversion_result_entry(const std::string& source, const std::string& 
     entry.items["container"] = JsonValue(container);
     entry.items["duration_s"] = json_null();
     entry.items["error"] = error.empty() ? json_null() : JsonValue(error);
-    entry.items["attempts"] = JsonValue(int64_t(1));
+    // Linux parity (jobs.py): failed entries carry the failure diagnostics.
+    entry.items["attempts"] = JsonValue((int64_t)std::max(1, attempts));
     entry.items["output_size"] = output_size < 0 ? json_null() : JsonValue((int64_t)output_size);
     entry.items["output_sha256"] = output_sha256.empty() ? json_null() : JsonValue(output_sha256);
     entry.items["resumed"] = JsonValue(false);
@@ -246,39 +249,56 @@ int cmd_convert(const Args& args) {
             write_journal(journal_path, "RUNNING", jobs, JsonValue(files));
             continue;
         }
-        const auto started = std::chrono::steady_clock::now();
+        // Linux parity (jobs.py run): failed jobs are retried up to `retries`
+        // times; every attempt is recorded in the result entry.
+        int attempts = 0;
+        double seconds = 0.0;
         std::string error;
-        try {
-            if (container == "native-v2")
-                throw CasuError("convert --container native-v2: CASUNAT2 writer folgt "
-                                "(casu_core provides a CASUNAT2 reader only; the segmented "
-                                "writer is a later port step)");
-            if (path_size(target) >= 0 && !force)
-                throw CasuError("output exists (use force): " + target);
-            const JsonValue manifest = build_manifest(source, mode);
-            if (container == "sidecar") {
-                atomic_write_text(target, compact_json(manifest));
-            } else if (container == "native") {
-                casu::casunat1::write_native(target, source, manifest);
-            } else {
-                throw CasuError("unknown conversion container: " + container);
+        std::string verification;
+        while (true) {
+            ++attempts;
+            const auto started = std::chrono::steady_clock::now();
+            try {
+                if (container == "native-v2")
+                    throw CasuError("convert --container native-v2: CASUNAT2 writer folgt "
+                                    "(casu_core provides a CASUNAT2 reader only; the segmented "
+                                    "writer is a later port step)");
+                if (path_size(target) >= 0 && !force)
+                    throw CasuError("output exists (use force): " + target);
+                const JsonValue manifest = build_manifest(source, mode);
+                if (container == "sidecar") {
+                    atomic_write_text(target, compact_json(manifest));
+                    // jobs.py: sidecar results are MANIFEST_VALIDATED.
+                    verification = "MANIFEST_VALIDATED";
+                } else if (container == "native") {
+                    casu::casunat1::write_native(target, source, manifest);
+                    // jobs.py: native containers are re-read and verified
+                    // after writing (read_native verify_payload=True).
+                    casu::casunat1::read_native(target, true);
+                    verification = "CASUNAT1_FULLY_VERIFIED";
+                } else {
+                    throw CasuError("unknown conversion container: " + container);
+                }
+            } catch (const std::exception& exc) {
+                error = exc.what();
+                verification.clear();
+                if (attempts <= retries) continue;  // retry
             }
-        } catch (const std::exception& exc) {
-            error = exc.what();
+            seconds = std::chrono::duration<double>(
+                          std::chrono::steady_clock::now() - started)
+                          .count();
+            break;
         }
-        const double seconds =
-            std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
-        long long output_size = path_size(target);
-        if (!error.empty()) output_size = -1;
+        long long output_size = error.empty() ? path_size(target) : -1;
         std::string source_sha256;
         if (error.empty()) source_sha256 = casu::sha256_file(source);
         files->items.push_back(conversion_result_entry(
             source, target, error.empty() ? "converted" : "failed", container, error,
             round6(seconds), output_size, path_size(source), source_sha256,
-            error.empty() ? casu::sha256_file(target) : "",
-            error.empty() ? "VERIFIED" : ""));
+            error.empty() && !verification.empty() ? casu::sha256_file(target) : "",
+            verification.empty() && !error.empty() ? "FAILED" : verification,
+            attempts));
         write_journal(journal_path, "RUNNING", jobs, JsonValue(files));
-        (void)retries;
     }
     write_journal(journal_path, "COMPLETE", jobs, JsonValue(files));
 
@@ -388,6 +408,8 @@ int cmd_transcode(const Args& args) {
 
     const std::string destination = abs_path(args.get("-o", args.get("--output", "")));
     if (destination.empty()) throw CasuError("transcode requires an output path (-o/--output)");
+    const bool force = args.flag("--force");
+    const int retries = static_cast<int>(args.get_long("--retry", 0));
 
     bool single_file = sources.size() == 1 && args.positional.size() == 1 &&
                        std::filesystem::is_regular_file(sources[0]) &&
@@ -448,33 +470,45 @@ int cmd_transcode(const Args& args) {
             write_journal(journal_path, "RUNNING", jobs, JsonValue(files));
             continue;
         }
-        const auto started = std::chrono::steady_clock::now();
-        std::string error;
+        // Linux parity (jobs.py): --force gates the overwrite, failed jobs
+        // are retried up to `retries` times.
+        int attempts = 0;
+        double seconds = 0.0;
         double duration = 0.0;
-        try {
-            casu::codec::BuiltTranscodeCommand built;
+        std::string error;
+        while (true) {
+            ++attempts;
+            const auto started = std::chrono::steady_clock::now();
             try {
-                built = casu::codec::build_transcode_command(source, target, options);
-            } catch (const casu::codec::MediaTranscodeError& exc) {
-                throw CasuError(std::string("transcode build failed: ") + exc.what());
+                if (path_size(target) >= 0 && !force)
+                    throw CasuError("output exists (use force): " + target);
+                casu::codec::BuiltTranscodeCommand built;
+                try {
+                    built = casu::codec::build_transcode_command(source, target, options);
+                } catch (const casu::codec::MediaTranscodeError& exc) {
+                    throw CasuError(std::string("transcode build failed: ") + exc.what());
+                }
+                if (const JsonValue* format = built.probe.find("format"))
+                    if (const JsonValue* d = format->find("duration"))
+                        if (d->is_number()) duration = d->as_double();
+                // transcode_media parity: temp file + verify + atomic publish
+                // (never expose a partial destination).
+                casu::codec::transcode_atomic(built.args, target);
+            } catch (const std::exception& exc) {
+                error = exc.what();
+                if (attempts <= retries) continue;  // retry
             }
-            casu::codec::Ffmpeg ffmpeg;
-            ffmpeg.run_checked(built.args);
-            if (const JsonValue* format = built.probe.find("format"))
-                if (const JsonValue* d = format->find("duration"))
-                    if (d->is_number()) duration = d->as_double();
-        } catch (const std::exception& exc) {
-            error = exc.what();
+            seconds = std::chrono::duration<double>(
+                          std::chrono::steady_clock::now() - started)
+                          .count();
+            break;
         }
-        const double seconds =
-            std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
-        long long output_size = path_size(target);
-        if (!error.empty()) output_size = -1;
+        long long output_size = error.empty() ? path_size(target) : -1;
 JsonObject entry = conversion_result_entry(
             source, target, error.empty() ? "converted" : "failed", selected_format, error,
             round6(seconds), output_size, path_size(source), error.empty() ? casu::sha256_file(source) : "",
             error.empty() ? casu::sha256_file(target) : "",
-            error.empty() ? "FFPROBE_VERIFIED" : "").as_object_mut();
+            error.empty() ? "FFPROBE_VERIFIED" : "", attempts).as_object_mut();
         entry.items["duration_s"] = JsonValue(duration);
         files->items.push_back(JsonValue(std::make_shared<JsonObject>(std::move(entry))));
         write_journal(journal_path, "RUNNING", jobs, JsonValue(files));

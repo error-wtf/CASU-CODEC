@@ -15,6 +15,9 @@
 #include <QByteArray>
 #include <QFile>
 #include <QHostAddress>
+
+#include <cstdio>
+#include <algorithm>
 #include <QTcpServer>
 #include <QTcpSocket>
 
@@ -579,6 +582,10 @@ public:
         ensure("Cache-Control", "no-store");
         resp.add("Access-Control-Allow-Origin", "*");
         resp.add("Connection", "close");
+        // Linux parity (web_casu.py log_message): access log on stderr.
+        std::fprintf(stderr, "MPCASU Web: %s %s %d\n",
+                     head.method.c_str(), head.path.c_str(), resp.status);
+        std::fflush(stderr);
         std::vector<uint8_t> bytes = render_response(resp);
         socket->write(reinterpret_cast<const char*>(bytes.data()),
                       static_cast<qint64>(bytes.size()));

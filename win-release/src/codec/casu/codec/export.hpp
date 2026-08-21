@@ -6,6 +6,7 @@
 #pragma once
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace casu::codec {
 
@@ -17,5 +18,13 @@ public:
 // Export source (CASUNAT1 / MP5 / sidecar manifest) to destination. Throws
 // CasuExportError on any verification or encoding failure.
 void export_casu(const std::string& source, const std::string& destination);
+
+// casu/transcode.py transcode_media parity: run ffmpeg (args WITHOUT the
+// output path) to a temporary file in the destination directory, verify the
+// result (non-empty, probe-readable, has a playable stream) and atomically
+// rename it over the destination. Throws CasuExportError; the temporary is
+// always cleaned up.
+std::string transcode_atomic(const std::vector<std::string>& args,
+                             const std::string& destination);
 
 }  // namespace casu::codec
