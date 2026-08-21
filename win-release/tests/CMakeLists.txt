@@ -151,7 +151,7 @@ set(MPCASU_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../apps/mpcasu")
 add_executable(casu_playlist_test casu_playlist_test.cpp
   "${MPCASU_SRC_DIR}/playlist.cpp")
 target_include_directories(casu_playlist_test PRIVATE "${MPCASU_SRC_DIR}")
-target_link_libraries(casu_playlist_test PRIVATE Qt6::Core)
+target_link_libraries(casu_playlist_test PRIVATE Qt6::Core casu_core)
 target_compile_features(casu_playlist_test PRIVATE cxx_std_20)
 if(CMAKE_CROSSCOMPILING)
   add_custom_command(TARGET casu_playlist_test POST_BUILD

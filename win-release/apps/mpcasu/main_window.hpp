@@ -90,6 +90,9 @@ explicit MainWindow(const QStringList& initial_files = {},
     double playback_duration() const { return controller_->duration(); }
     bool has_playback_backend() const { return static_cast<bool>(backend_); }
 
+    // Test/parity helper: switch to a named page (used by --page).
+    void navigate_to(const QString& page) { navigate(page); }
+
 protected:
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dragMoveEvent(QDragMoveEvent* event) override;

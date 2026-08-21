@@ -190,3 +190,16 @@ Pakete : DEBs 3.0.0 neu gebaut + installiert (web/ byte-identisch verifiziert)
 - Commit+Push dieser Änderungen; GitHub-Release-Assets hochladen (Token
   `/home/error/gittoken.env`, `gh release upload --clobber`); v5.0.0-Versionsbump.
 - MSVC/QtWebEngine-Endbuild nur auf echtem Windows; BLOCKER-004/005 offen.
+
+## 10. Nachfolge-Fixes 2026-08-21 (v3.0.0 neu)
+- **Kritischer Navigations-Bug:** `navigate()`-Index-Map zeigte bei mehreren Seiten
+  die falsche QStackedWidget-Seite (Build-Reihenfolge ≠ Map). Folge: „WEB PLAYERS"
+  (Spotify/HearThis/Tidal/Netflix/Browse) schien zu fehlen — eigentlich wurde
+  YOUTUBE angezeigt. Map auf tatsächliche Build-Reihenfolge korrigiert; per
+  `--page`-Screenshot unter Wine für alle Seiten verifiziert.
+- **Playlist-Formate:** `PlaylistModel` parst jetzt WPL/XSPF/JSPF/ASX/RMP/RAM/
+  MPCASU-JSON zusätzlich zu M3U/PLS (vorher nur M3U/PLS) — `playlist.cpp`.
+  `casu_playlist_test` erweitert (XSPF/WPL/JSPF/JSON/ASX/RAM, ALL PASS).
+- Testflag `--page <Name>` + `MainWindow::navigate_to()` (Screenshot-Verifikation).
+- Release-Pipeline grün (ctest 16/16, Gate 14/14), installiert unter Wine,
+  Web-Tabs im installierten Paket nachgewiesen.

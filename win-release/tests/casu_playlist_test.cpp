@@ -237,6 +237,76 @@ int main() {
         check(PlaylistModel::save_m3u(dstPl, target).empty(), "target playlist persisted");
     }
 
+    // --- Extra playlist formats (Linux parity: XSPF/WPL/JSPF/ASX/RAM/JSON) ---
+    {
+        // XSPF
+        const QString xspf = dirPath + "/p.xspf";
+        { QFile f(xspf); f.open(QIODevice::WriteOnly);
+          f.write("<playlist xmlns=\"http://xspf.org/ns/0/\"><trackList>"
+                  "<track><title>T1</title><location>a.mp3</location></track>"
+                  "<track><title>T2</title><location>b.mp3</location></track>"
+                  "</trackList></playlist>"); }
+        PlaylistModel mX;
+        check(PlaylistModel::load_file(xspf, &mX).empty(), "load XSPF ok");
+        check(mX.size() == 2 && mX.index_of(a) == 0 && mX.index_of(b) == 1,
+              "XSPF resolves relative entries against base dir");
+
+        // WPL
+        const QString wpl = dirPath + "/p.wpl";
+        { QFile f(wpl); f.open(QIODevice::WriteOnly);
+          f.write("<smil><body><seq>"
+                  "<media src=\"a.mp3\" title=\"W1\"/>"
+                  "<media src=\"b.mp3\" title=\"W2\"/>"
+                  "</seq></body></smil>"); }
+        PlaylistModel mW;
+        check(PlaylistModel::load_file(wpl, &mW).empty(), "load WPL ok");
+        check(mW.size() == 2 && mW.items()[0].title == "W1", "WPL titles read");
+
+        // JSPF
+        const QString jspf = dirPath + "/p.jspf";
+        { QFile f(jspf); f.open(QIODevice::WriteOnly);
+          f.write("{\"playlist\":{\"track\":["
+                  "{\"title\":\"J1\",\"location\":\"a.mp3\"},"
+                  "{\"title\":\"J2\",\"location\":\"b.mp3\"}"
+                  "]}}"); }
+        PlaylistModel mJ;
+        check(PlaylistModel::load_file(jspf, &mJ).empty(), "load JSPF ok");
+        check(mJ.size() == 2 && mJ.index_of(a) == 0 && mJ.index_of(b) == 1,
+              "JSPF tracks parsed");
+
+        // MPCASU JSON
+        const QString json = dirPath + "/p.json";
+        { QFile f(json); f.open(QIODevice::WriteOnly);
+          f.write("{\"version\":1,\"items\":[\"a.mp3\",\"b.mp3\"]}"); }
+        PlaylistModel mJson;
+        check(PlaylistModel::load_file(json, &mJson).empty(), "load MPCASU JSON ok");
+        check(mJson.size() == 2 && mJson.index_of(a) == 0, "MPCASU JSON items parsed");
+
+        // ASX
+        const QString asx = dirPath + "/p.asx";
+        { QFile f(asx); f.open(QIODevice::WriteOnly);
+          f.write("<asx version=\"3.0\"><title>P</title>"
+                  "<entry><title>A1</title><ref href=\"a.mp3\"/></entry>"
+                  "<entry><title>A2</title><ref href=\"b.mp3\"/></entry>"
+                  "</asx>"); }
+        PlaylistModel mA;
+        check(PlaylistModel::load_file(asx, &mA).empty(), "load ASX ok");
+        check(mA.size() == 2 && mA.index_of(a) == 0 && mA.index_of(b) == 1,
+              "ASX entries parsed");
+
+        // RAM (plain text)
+        const QString ram = dirPath + "/p.ram";
+        { QFile f(ram); f.open(QIODevice::WriteOnly);
+          f.write("# comment\na.mp3\nb.mp3\n"); }
+        PlaylistModel mR;
+        check(PlaylistModel::load_file(ram, &mR).empty(), "load RAM ok");
+        check(mR.size() == 2 && mR.index_of(a) == 0, "RAM entries parsed");
+
+        check(PlaylistModel::looks_like_playlist(xspf) &&
+              PlaylistModel::looks_like_playlist(json) &&
+              PlaylistModel::looks_like_playlist(asx), "new formats recognized as playlists");
+    }
+
     std::printf(failures == 0 ? "ALL PASS\n" : "%d FAILURES\n", failures);
     return failures == 0 ? 0 : 1;
 }
