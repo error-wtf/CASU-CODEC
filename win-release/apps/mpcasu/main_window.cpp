@@ -276,8 +276,8 @@ void MainWindow::build_sidebar() {
         section->setObjectName("SidebarSection");
         layout->addWidget(section);
     };
-    auto add_nav = [&](const QString& name) {
-        auto* btn = new QPushButton(name, sidebar_);
+    auto add_nav = [&](const QString& name, const QString& icon) {
+        auto* btn = new QPushButton(icon + QStringLiteral("  ") + name, sidebar_);
         btn->setObjectName("NavItem");
         btn->setCheckable(true);
         btn->setToolTip(name);
@@ -289,19 +289,27 @@ void MainWindow::build_sidebar() {
                 [this, name] { navigate(name); });
     };
 
-    add_section(QStringLiteral("NOW PLAYING"));
-    add_nav(QStringLiteral("NOW PLAYING"));
-    add_section(QStringLiteral("MEDIA"));
-    add_nav(QStringLiteral("LIBRARY"));
-    add_nav(QStringLiteral("YOUTUBE"));
-    add_nav(QStringLiteral("EPG"));
-    add_nav(QStringLiteral("WEB PLAYERS"));
-    add_section(QStringLiteral("TOOLS"));
-    add_nav(QStringLiteral("VISUALIZER"));
-    add_nav(QStringLiteral("RECORDING"));
+    // Linux parity (main_window.py nav_items/NAV_ICONS): identical sections,
+    // entries and icons.
+    add_section(QStringLiteral("LIBRARY"));
+    add_nav(QStringLiteral("NOW PLAYING"), QStringLiteral("▶"));
+    add_nav(QStringLiteral("LIBRARY"), QStringLiteral("▣"));
+    add_nav(QStringLiteral("WEB & STREAMS"), QStringLiteral("▤"));
+    add_nav(QStringLiteral("PLAYLISTS"), QStringLiteral("≡"));
+    add_nav(QStringLiteral("IPTV / EPG"), QStringLiteral("▦"));
+    add_section(QStringLiteral("SEARCH"));
+    add_nav(QStringLiteral("YOUTUBE"), QStringLiteral("▷"));
+    add_section(QStringLiteral("CASU"));
+    add_nav(QStringLiteral("CASU FILES"), QStringLiteral("◈"));
+    add_section(QStringLiteral("WEB PLAYERS"));
+    add_nav(QStringLiteral("SPOTIFY"), QStringLiteral("♪"));
+    add_nav(QStringLiteral("HEARTHIS"), QStringLiteral("↗"));
+    add_nav(QStringLiteral("TIDAL"), QStringLiteral("≋"));
+    add_nav(QStringLiteral("NETFLIX"), QStringLiteral("▣"));
+    add_nav(QStringLiteral("BROWSE"), QStringLiteral("◎"));
     add_section(QStringLiteral("SYSTEM"));
-    add_nav(QStringLiteral("SETTINGS"));
-    add_nav(QStringLiteral("ABOUT"));
+    add_nav(QStringLiteral("OPTIONS"), QStringLiteral("⚙"));
+    add_nav(QStringLiteral("ABOUT"), QStringLiteral("ⓘ"));
     layout->addStretch();
     auto* backend = new QLabel(QStringLiteral("libVLC backend"), sidebar_);
     backend->setObjectName("StatusText");
@@ -930,6 +938,21 @@ void MainWindow::apply_queue_filter() {
         if (show) ++visible;
     }
     if (empty_hint_) empty_hint_->setVisible(visible == 0);
+}
+
+void MainWindow::set_queue_view_filter(const QString& view) {
+    if (!view_filter_) return;
+    static const QStringList keys = {
+        QStringLiteral("all"), QStringLiteral("local"), QStringLiteral("streams"),
+        QStringLiteral("playlists"), QStringLiteral("casu"), QStringLiteral("youtube"),
+        QStringLiteral("spotify"),
+    };
+    const int idx = keys.indexOf(view.toLower());
+    if (idx >= 0 && view_filter_->currentIndex() != idx) {
+        view_filter_->setCurrentIndex(idx);  // triggers apply_queue_filter()
+    } else if (idx >= 0) {
+        apply_queue_filter();
+    }
 }
 
 void MainWindow::build_playlist_pane() {
@@ -1748,16 +1771,46 @@ void MainWindow::navigate(const QString& page) {
         {"EPG", 4}, {"RECORDING", 5}, {"VISUALIZER", 6}, {"YOUTUBE", 7},
         {"WEB PLAYERS", 8},
     };
-    int idx = pages.value(page, 0);
+    // Sidebar entries that are not stacked pages mirror the reference
+    // _navigate(): they redirect to a page + view/queue filter.
+    QString target = page;
+    if (page == QStringLiteral("WEB & STREAMS")) target = QStringLiteral("YOUTUBE");
+    else if (page == QStringLiteral("PLAYLISTS") ||
+             page == QStringLiteral("CASU FILES")) {
+        target = QStringLiteral("NOW PLAYING");
+    } else if (page == QStringLiteral("SPOTIFY") ||
+               page == QStringLiteral("HEARTHIS") ||
+               page == QStringLiteral("TIDAL") ||
+               page == QStringLiteral("NETFLIX") ||
+               page == QStringLiteral("BROWSE")) {
+        open_web_player(page.toLower());
+        for (QPushButton* b : nav_buttons_) b->setChecked(false);
+        if (QPushButton* b = nav_map_.value(page)) b->setChecked(true);
+        return;
+    } else if (page == QStringLiteral("OPTIONS")) {
+        target = QStringLiteral("SETTINGS");
+    }
+    int idx = pages.value(target, 0);
     pages_->setCurrentIndex(idx);
+    if (target == QStringLiteral("LIBRARY")) refresh_library();
+    if (target == QStringLiteral("SETTINGS") && backend_info_label_)
+        backend_info_label_->setText(provider_status_text());
+    if (target == QStringLiteral("YOUTUBE")) set_queue_view_filter(
+        page == QStringLiteral("WEB & STREAMS")
+            ? QStringLiteral("streams") : QString());
+    if (target == QStringLiteral("NOW PLAYING") &&
+        (page == QStringLiteral("PLAYLISTS") ||
+         page == QStringLiteral("CASU FILES"))) {
+        set_queue_view_filter(page == QStringLiteral("PLAYLISTS")
+                                  ? QStringLiteral("playlists")
+                                  : QStringLiteral("casu"));
+    }
     for (QPushButton* b : nav_buttons_) b->setChecked(false);
     if (QPushButton* b = nav_map_.value(page)) b->setChecked(true);
-    if (page == "YOUTUBE" && youtube_url_ && youtube_status_) {
+    if (page == QStringLiteral("YOUTUBE") && youtube_url_ && youtube_status_) {
         youtube_status_->setText(QStringLiteral("Enter a YouTube URL (resolved via yt-dlp) or a "
                                                 "local file path (loopback transport test)."));
     }
-    if (page == "SETTINGS" && backend_info_label_)
-        backend_info_label_->setText(provider_status_text());
 }
 
 // ------------------------------------------------------------------ status/toast
@@ -2014,6 +2067,7 @@ void MainWindow::open_backend_and_play(const QString& source, const QString& tit
     surface_->set_video_active(!audio);
     if (visualizer_) static_cast<VisualizerWidget*>(visualizer_)->set_playing(true);
     if (audio) surface_->clear();
+    load_cover_art(source);
 
     // Diagnostics bar (Linux parity): describe container capabilities.
     QString diag_support = QStringLiteral("Legacy backend");
@@ -3289,6 +3343,29 @@ void MainWindow::on_visualizer_toggle() {
         stage_stack_->setCurrentIndex(viz_btn_->isChecked() ? 1 : 0);
         static_cast<VisualizerWidget*>(visualizer_)->set_active(viz_btn_->isChecked());
     }
+}
+
+// Linux parity (main_window.py _cover_for / set_cover): extract embedded cover
+// art for local media into a temp PNG (background thread), then load it on the
+// UI thread and hand it to the visualizer. Clears the previous cover.
+void MainWindow::load_cover_art(const QString& source) {
+    if (cover_pixmap_) { delete cover_pixmap_; cover_pixmap_ = nullptr; }
+    if (visualizer_) static_cast<VisualizerWidget*>(visualizer_)->set_cover(nullptr);
+    if (source.isEmpty() || is_network_like(source)) return;
+    if (!QFileInfo::exists(source)) return;
+    const QString key = source;
+    std::thread([this, key] {
+        const QString tmp = QDir::tempPath() + QStringLiteral("/mpcasu_cover_") +
+                            QString::number(QCoreApplication::applicationPid()) + QStringLiteral(".png");
+        const bool ok = casu::media::extract_cover(key.toStdString(), tmp.toStdString());
+        QMetaObject::invokeMethod(this, [this, key, tmp, ok] {
+            if (!ok || key != current_source_) return;
+            if (cover_pixmap_) { delete cover_pixmap_; cover_pixmap_ = nullptr; }
+            cover_pixmap_ = new QPixmap(tmp);
+            if (visualizer_) static_cast<VisualizerWidget*>(visualizer_)->set_cover(cover_pixmap_);
+            QFile::remove(tmp);
+        }, Qt::QueuedConnection);
+    }).detach();
 }
 
 void MainWindow::on_youtube_play() {

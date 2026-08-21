@@ -10,6 +10,8 @@
 
 #include <vector>
 
+class QPixmap;
+
 namespace mpcasu {
 
 class VisualizerWidget final : public QWidget {
@@ -19,6 +21,7 @@ public:
     void set_playing(bool playing);
     void set_active(bool active);
     void set_mode(const QString& mode);
+    void set_cover(const QPixmap* pixmap);  // borrowed; drawn centered when set
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -32,6 +35,7 @@ private:
     QString mode_ = "spectrum";
     double phase_ = 0.0;
     QVector<double> smoothed_bands_;  // analyser 0.85 smoothing
+    const QPixmap* cover_ = nullptr; // non-owning; owned by MainWindow
 };
 
 }  // namespace mpcasu

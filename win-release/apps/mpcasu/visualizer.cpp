@@ -4,6 +4,8 @@
 #include "theme.hpp"
 
 #include <QPainter>
+#include <QPainterPath>
+#include <QPixmap>
 #include <QtMath>
 
 namespace mpcasu {
@@ -49,6 +51,11 @@ void VisualizerWidget::set_mode(const QString& mode) {
     update();
 }
 
+void VisualizerWidget::set_cover(const QPixmap* pixmap) {
+    cover_ = pixmap;
+    update();
+}
+
 void VisualizerWidget::tick() {
     phase_ += 0.06;
     update();
@@ -71,6 +78,22 @@ void VisualizerWidget::paintEvent(QPaintEvent* event) {
     bg.setColorAt(0.0, QColor(P.bg));
     bg.setColorAt(1.0, QColor(P.stage));
     p.fillRect(rect(), bg);
+
+    // Linux parity (VisualizerWidget): centered rounded cover art above the
+    // gradient, before the spectrum bars.
+    if (cover_ && !cover_->isNull()) {
+        const int size = qBound(40, int(qMin(width(), height()) * 0.44), 480);
+        const QPixmap scaled = cover_->scaled(size, size, Qt::KeepAspectRatio,
+                                              Qt::SmoothTransformation);
+        const int px = (width() - scaled.width()) / 2;
+        const int py = (height() - scaled.height()) / 2;
+        QPainterPath clip;
+        clip.addRoundedRect(QRectF(px, py, scaled.width(), scaled.height()), 10.0, 10.0);
+        p.save();
+        p.setClipPath(clip);
+        p.drawPixmap(px, py, scaled);
+        p.restore();
+    }
 
     const bool show_bars = mode_ == "spectrum" || mode_ == "both";
     const bool show_wave = mode_ == "waveform" || mode_ == "both";

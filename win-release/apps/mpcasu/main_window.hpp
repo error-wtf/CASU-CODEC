@@ -18,6 +18,7 @@
 
 #include <QMainWindow>
 #include <QEvent>
+#include <QPixmap>
 #include <QGridLayout>
 #include <QHash>
 #include <QListWidgetItem>
@@ -184,6 +185,8 @@ private:
     void on_recording_toggle();
     void show_record_settings_dialog();
     void on_visualizer_toggle();
+    void load_cover_art(const QString& source);
+    void set_queue_view_filter(const QString& view);
     void rename_queue_entry();
     void commit_queue_rename(QTreeWidgetItem* item, QLineEdit* editor);
     void apply_viz_mode();
@@ -262,6 +265,7 @@ private:
     QLabel* drop_overlay_ = nullptr;
     QTimer* toast_timer_ = nullptr;
     QWidget* visualizer_ = nullptr;
+    QPixmap* cover_pixmap_ = nullptr;  // owned cover art shown in visualizer
 
     // playlist pane
     QTreeWidget* playlist_view_ = nullptr;
