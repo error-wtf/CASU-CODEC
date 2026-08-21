@@ -156,8 +156,9 @@ std::string legacy_source(const std::string& casu_path,
 
 // Run ffmpeg to a temporary file in the destination directory, verify the
 // output, then atomically rename it over the destination.
-std::string atomic_ffmpeg(const std::vector<std::string>& args,
-                          const std::string& destination) {
+std::string atomic_ffmpeg_impl(const std::vector<std::string>& args,
+                               const std::string& destination,
+                               bool append_output_arg) {
     const std::filesystem::path dest(destination);
     std::filesystem::path parent = dest.parent_path();
     if (parent.empty()) parent = ".";
@@ -165,7 +166,8 @@ std::string atomic_ffmpeg(const std::vector<std::string>& args,
     const std::string temporary =
         unique_temp_path(parent, "." + dest.stem().string() + ".", suffix);
     std::vector<std::string> command = args;
-    command.push_back(temporary);
+    if (append_output_arg) command.push_back(temporary);
+    else if (!command.empty()) command.back() = temporary;  // replace output arg
     try {
         Ffmpeg ffmpeg;
         ffmpeg.run_checked(command);
@@ -193,8 +195,15 @@ std::string atomic_ffmpeg(const std::vector<std::string>& args,
         throw;
     }
 }
+}
 
-}  // namespace
+// Public transcode_media parity entry point: args carry the FINAL output as
+// last argument (build_transcode_command form); it is swapped for a temp path
+// and published atomically after verification.
+std::string transcode_atomic(const std::vector<std::string>& args,
+                             const std::string& destination) {
+    return atomic_ffmpeg_impl(args, destination, /*append_output_arg=*/false);
+}
 
 void export_casu(const std::string& source, const std::string& destination) {
     std::error_code ec;
@@ -240,7 +249,7 @@ void export_casu(const std::string& source, const std::string& destination) {
         const std::vector<std::string> options =
             codec_options(dest_abs.string(), has_video, has_audio, has_subtitles, false);
         args.insert(args.end(), options.begin(), options.end());
-        atomic_ffmpeg(args, dest_abs.string());
+        atomic_ffmpeg_impl(args, dest_abs.string(), /*append_output_arg=*/true);
     } catch (...) {
         std::error_code cleanup;
         std::filesystem::remove_all(work_dir, cleanup);
