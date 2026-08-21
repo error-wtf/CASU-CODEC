@@ -49,12 +49,12 @@ dist/MPCASU-Windows-x86_64.zip
     web/pure/        (byte-identical Pure Web Release 3.0.0)
     LICENSE, THIRD_PARTY_LICENSES/, README_WINDOWS.md
 
-dist/MPCASU-Setup-3.0.0.exe      (NSIS installer: full install + shortcuts + uninstaller)
+dist/MPCASU-Setup-5.0.0.exe      (NSIS installer: full install + shortcuts + uninstaller)
 ```
 
 ## Installation (Windows)
 
-Einfachste Variante: **`MPCASU-Setup-3.0.0.exe`** ausführen. Der NSIS-Installer
+Einfachste Variante: **`MPCASU-Setup-5.0.0.exe`** ausführen. Der NSIS-Installer
 (mit CASU-Icon) legt alles nach `%ProgramFiles%\MPCASU`, erstellt Startmenü- und
 Desktop-Verknüpfungen und einen Uninstaller. Alternativ das ZIP nach einem
 beliebigen Ordner entpacken und `MPCASU.exe` starten (portable).

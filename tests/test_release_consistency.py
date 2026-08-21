@@ -41,5 +41,12 @@ def test_version_consistent_across_release_files():
 
 
 def test_schema_accepts_current_version():
+    from casu.core import CASU_FORMAT_VERSION
     from casu.schema import SUPPORTED_CASU_VERSIONS
-    assert casu.__version__ in SUPPORTED_CASU_VERSIONS
+
+    # The CONTAINER format version (written into manifests) must stay a
+    # supported CASU version. It is deliberately decoupled from the app
+    # release version: the format did not change with 5.0.0, and older
+    # players must keep accepting newly written files.
+    assert CASU_FORMAT_VERSION in SUPPORTED_CASU_VERSIONS
+    assert CASU_FORMAT_VERSION == "3.0.0"

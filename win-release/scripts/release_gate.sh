@@ -14,7 +14,7 @@ RESULTS="test-results"
 OUT="dist/WINDOWS_RELEASE_GATE.json"
 mkdir -p dist
 
-version="3.0.0"
+version="5.0.0"
 date_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 # helper: gate result from an on-disk marker (exit-code driven checks below).
