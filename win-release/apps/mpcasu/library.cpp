@@ -85,4 +85,50 @@ void MediaLibrary::clear() {
     save();
 }
 
+// --- per-media playback preferences (Linux parity) -------------------------
+
+void MediaLibrary::load_prefs() const {
+    if (prefs_loaded_) return;
+    prefs_loaded_ = true;
+    QFile f(path_ + ".prefs.json");
+    if (!f.open(QIODevice::ReadOnly)) return;
+    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
+    if (!doc.isObject()) return;
+    const QJsonObject root = doc.object();
+    for (auto it = root.begin(); it != root.end(); ++it) {
+        const QJsonObject o = it.value().toObject();
+        PlaybackPreferences p;
+        p.audio_track = o.value("audio_track").toInt(-1);
+        p.video_track = o.value("video_track").toInt(-1);
+        p.subtitle_track = o.value("subtitle_track").toInt(-1);
+        p.audio_delay_ms = o.value("audio_delay_ms").toDouble(0.0);
+        p.subtitle_delay_ms = o.value("subtitle_delay_ms").toDouble(0.0);
+        prefs_.insert(it.key(), p);
+    }
+}
+
+PlaybackPreferences MediaLibrary::playback_preferences(const QString& path) const {
+    load_prefs();
+    return prefs_.value(path);
+}
+
+void MediaLibrary::set_playback_preferences(const QString& path,
+                                            const PlaybackPreferences& prefs) {
+    load_prefs();
+    prefs_.insert(path, prefs);
+    QJsonObject root;
+    for (auto it = prefs_.begin(); it != prefs_.end(); ++it) {
+        QJsonObject o;
+        o["audio_track"] = it->audio_track;
+        o["video_track"] = it->video_track;
+        o["subtitle_track"] = it->subtitle_track;
+        o["audio_delay_ms"] = it->audio_delay_ms;
+        o["subtitle_delay_ms"] = it->subtitle_delay_ms;
+        root[it.key()] = o;
+    }
+    QFile f(path_ + ".prefs.json");
+    if (!f.open(QIODevice::WriteOnly)) return;
+    f.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+}
+
 }  // namespace mpcasu

@@ -187,6 +187,11 @@ private:
     void on_visualizer_toggle();
     void load_cover_art(const QString& source);
     void set_queue_view_filter(const QString& view);
+    void request_queue_thumbnails();
+    void apply_thumb(const QString& path, const QString& thumb);
+    void apply_media_preferences();
+    void persist_media_preferences();
+    void update_stage();
     void rename_queue_entry();
     void commit_queue_rename(QTreeWidgetItem* item, QLineEdit* editor);
     void apply_viz_mode();
@@ -206,6 +211,8 @@ private:
 
     VideoSurface* surface_ = nullptr;
     QStackedLayout* stage_stack_ = nullptr;
+    QFrame* stage_empty_ = nullptr;  // Linux parity "Drop media here" placeholder
+    bool stage_media_active_ = false;  // media loaded -> video/viz instead of empty
     QFrame* transport_frame_ = nullptr;
     QFrame* topbar_ = nullptr;
     QFrame* sidebar_ = nullptr;
@@ -224,6 +231,8 @@ private:
     EpgCatalog epg_;
     QString current_source_;
     QString current_title_;
+    double audio_delay_ms_ = 0.0;     // Linux parity: per-media A/V delays
+    double subtitle_delay_ms_ = 0.0;
     QString output_dir_;
     QString vout_;
     QString aout_;
@@ -260,7 +269,8 @@ private:
     QLabel* fs_time_ = nullptr;
     QPushButton* fs_play_btn_ = nullptr;
     QTimer* fs_hide_timer_ = nullptr;
-    QLabel* status_label_ = nullptr;
+    QLabel* status_label_ = nullptr;    // left: version (MPCASU 3.0.0)
+    QLabel* status_center_ = nullptr;   // center: transient status messages
     QLabel* toast_label_ = nullptr;
     QLabel* drop_overlay_ = nullptr;
     QTimer* toast_timer_ = nullptr;
