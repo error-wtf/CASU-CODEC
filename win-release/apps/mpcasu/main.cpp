@@ -81,6 +81,7 @@ int main(int argc, char** argv) {
     QString vout;
     QString aout;
     QString screenshot;
+    QString page;
     QStringList media;
     for (int i = 1; i < argc; ++i) {
         QString arg = QString::fromLocal8Bit(argv[i]);
@@ -88,6 +89,7 @@ int main(int argc, char** argv) {
         else if (arg == "--proxy") proxy = true;
         else if (arg == "--play-test") play_test = true;
         else if (arg == "--screenshot" && i + 1 < argc) screenshot = QString::fromLocal8Bit(argv[++i]);
+        else if (arg == "--page" && i + 1 < argc) page = QString::fromLocal8Bit(argv[++i]);
         else if (arg == "--vout" && i + 1 < argc) vout = QString::fromLocal8Bit(argv[++i]);
         else if (arg == "--aout" && i + 1 < argc) aout = QString::fromLocal8Bit(argv[++i]);
         else if (!arg.startsWith("--")) media << arg;    }
@@ -103,6 +105,7 @@ int main(int argc, char** argv) {
 
     mpcasu::MainWindow window(media, proxy, vout, aout, play_test);
     window.show();
+    if (!page.isEmpty()) window.navigate_to(page);
     log_startup(QStringLiteral("started pid=%1 exe=%2").arg(QCoreApplication::applicationPid())
                     .arg(QDir::toNativeSeparators(QCoreApplication::applicationFilePath())));
 

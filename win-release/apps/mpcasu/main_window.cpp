@@ -1744,9 +1744,9 @@ void MainWindow::open_web_player(const QString& provider, const QString& query,
 
 void MainWindow::navigate(const QString& page) {
     static const QMap<QString, int> pages = {
-        {"NOW PLAYING", 0}, {"LIBRARY", 1}, {"YOUTUBE", 2}, {"EPG", 3},
-        {"VISUALIZER", 4}, {"RECORDING", 5}, {"SETTINGS", 6}, {"WEB PLAYERS", 7},
-        {"ABOUT", 8},
+        {"NOW PLAYING", 0}, {"ABOUT", 1}, {"LIBRARY", 2}, {"SETTINGS", 3},
+        {"EPG", 4}, {"RECORDING", 5}, {"VISUALIZER", 6}, {"YOUTUBE", 7},
+        {"WEB PLAYERS", 8},
     };
     int idx = pages.value(page, 0);
     pages_->setCurrentIndex(idx);

@@ -5,10 +5,34 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QRegularExpression>
+#include <QSet>
 #include <QTextStream>
 #include <QUrl>
+#include <QXmlStreamReader>
+
+#include "casu/json.hpp"
 
 namespace mpcasu {
+
+// Resolve one playlist entry against the playlist's base directory,
+// mirroring casu/playlist.py _entry: remote URLs stay verbatim, file:// and
+// relative paths are resolved against base. Empty input yields an empty
+// QString (skip). Uses a side-channel to detect "skip".
+namespace {
+QString resolve_entry(QString text, const QDir& base) {
+    text = text.trimmed();
+    if (text.isEmpty()) return QString();
+    if (text.contains("://")) return text;
+    if (text.startsWith("file://")) {
+        text = QUrl(text).toLocalFile();
+    }
+    QFileInfo cand(text);
+    if (cand.isRelative()) {
+        text = QFileInfo(base.filePath(text)).absoluteFilePath();
+    }
+    return text;
+}
+}  // namespace
 
 QString display_title_for_path(const QString& path) {
     if (path.contains("://")) return path;
@@ -128,15 +152,8 @@ std::string PlaylistModel::load_m3u(const QString& file, PlaylistModel* out) {
             }
             continue;
         }
-        QString target = line;
-        if (target.startsWith("file://")) {
-            target = QUrl(target).toLocalFile();
-        } else if (!target.contains("://")) {
-            QFileInfo cand(target);
-            if (cand.isRelative())
-                target = QFileInfo(base.filePath(target)).absoluteFilePath();
-        }
-        out->add(target, pending_title);
+        QString target = resolve_entry(line, base);
+        if (!target.isEmpty()) out->add(target, pending_title);
         pending_title.clear();
     }
     return {};
@@ -157,11 +174,8 @@ std::string PlaylistModel::load_pls(const QString& file, PlaylistModel* out) {
         QRegularExpression reTitle("^Title(\\d+)=(.*)$");
         auto m = reFile.match(line);
         if (m.hasMatch()) {
-            QString target = m.captured(2).trimmed();
-            if (target.startsWith("file://")) target = QUrl(target).toLocalFile();
-            else if (!target.contains("://") && QFileInfo(target).isRelative())
-                target = QFileInfo(base.filePath(target)).absoluteFilePath();
-            entries.append({m.captured(1).toInt(), target});
+            QString target = resolve_entry(m.captured(2), base);
+            if (!target.isEmpty()) entries.append({m.captured(1).toInt(), target});
             continue;
         }
         m = reTitle.match(line);
@@ -178,7 +192,250 @@ std::string PlaylistModel::load_pls(const QString& file, PlaylistModel* out) {
 std::string PlaylistModel::load_file(const QString& file, PlaylistModel* out) {
     QString lower = file.toLower();
     if (lower.endsWith(".pls")) return load_pls(file, out);
+    if (lower.endsWith(".xspf")) return load_xspf(file, out);
+    if (lower.endsWith(".wpl")) return load_wpl(file, out);
+    if (lower.endsWith(".jspf")) return load_jspf(file, out);
+    if (lower.endsWith(".asx") || lower.endsWith(".wmx") ||
+        lower.endsWith(".wvx") || lower.endsWith(".axs")) return load_asx(file, out);
+    if (lower.endsWith(".rmp")) return load_rmp(file, out);
+    if (lower.endsWith(".ram")) return load_ram(file, out);
+    if (lower.endsWith(".json")) return load_mpcasu_json(file, out);
     return load_m3u(file, out);
+}
+
+// XSPF (http://xspf.org/ns/0/) — casu/playlist.py _parse_xspf_entries.
+std::string PlaylistModel::load_xspf(const QString& file, PlaylistModel* out) {
+    QFile f(file);
+    if (!f.open(QIODevice::ReadOnly))
+        return ("could not open playlist: " + file).toStdString();
+    const QDir base = QFileInfo(file).absoluteDir();
+    QXmlStreamReader xml(&f);
+    out->clear();
+    QString title;
+    while (!xml.atEnd()) {
+        xml.readNext();
+        if (xml.isStartElement()) {
+            const auto name = xml.name();
+            if (name == QLatin1String("title")) {
+                title = xml.readElementText().trimmed().left(300);
+            } else if (name == QLatin1String("location")) {
+                const QString target = resolve_entry(xml.readElementText(), base);
+                if (!target.isEmpty()) out->add(target, title);
+            }
+        } else if (xml.isEndElement() && xml.name() == QLatin1String("track")) {
+            title.clear();
+        }
+    }
+    if (xml.hasError() && xml.error() != QXmlStreamReader::PrematureEndOfDocumentError)
+        return ("invalid XSPF playlist: " + file).toStdString();
+    return {};
+}
+
+// WPL (Windows Media Player) — casu/playlist.py _parse_wpl_entries.
+std::string PlaylistModel::load_wpl(const QString& file, PlaylistModel* out) {
+    QFile f(file);
+    if (!f.open(QIODevice::ReadOnly))
+        return ("could not open playlist: " + file).toStdString();
+    const QDir base = QFileInfo(file).absoluteDir();
+    QXmlStreamReader xml(&f);
+    out->clear();
+    while (!xml.atEnd()) {
+        xml.readNext();
+        if (xml.isStartElement() && xml.name() == "media") {
+            const QString src = xml.attributes().value("src").toString();
+            QString t = xml.attributes().value("title").toString().trimmed().left(300);
+            const QString target = resolve_entry(src, base);
+            if (!target.isEmpty()) out->add(target, t);
+        }
+    }
+    if (xml.hasError() && xml.error() != QXmlStreamReader::PrematureEndOfDocumentError)
+        return ("invalid WPL playlist: " + file).toStdString();
+    return {};
+}
+
+// JSPF (JSON XSPF) — casu/playlist.py _parse_jspf_entries.
+std::string PlaylistModel::load_jspf(const QString& file, PlaylistModel* out) {
+    QFile f(file);
+    if (!f.open(QIODevice::ReadOnly))
+        return ("could not open playlist: " + file).toStdString();
+    const QByteArray raw = f.readAll();
+    const QDir base = QFileInfo(file).absoluteDir();
+    out->clear();
+    casu::JsonValue doc;
+    try {
+        doc = casu::parse_json(raw.constData(), static_cast<std::size_t>(raw.size()));
+    } catch (const casu::JsonError& e) {
+        return ("invalid JSPF playlist: " + file).toStdString();
+    }
+    const casu::JsonValue* playlist = doc.is_object() ? doc.find("playlist") : nullptr;
+    const casu::JsonValue* tracks = nullptr;
+    if (playlist && playlist->is_object()) tracks = playlist->find("track");
+    if (!tracks) tracks = doc.is_object() ? doc.find("track") : nullptr;
+    if (tracks && tracks->is_array()) {
+        for (const casu::JsonValue& track : tracks->as_array().items) {
+            if (!track.is_object()) continue;
+            const casu::JsonValue* tv = track.find("title");
+            QString title = tv && tv->is_string()
+                ? QString::fromStdString(tv->as_string()).trimmed().left(300) : QString();
+            const casu::JsonValue* loc = track.find("location");
+            if (loc && loc->is_array()) {
+                for (const casu::JsonValue& item : loc->as_array().items) {
+                    if (!item.is_string()) continue;
+                    const QString target = resolve_entry(QString::fromStdString(item.as_string()), base);
+                    if (!target.isEmpty()) out->add(target, title);
+                }
+            } else if (loc && loc->is_string()) {
+                const QString target = resolve_entry(QString::fromStdString(loc->as_string()), base);
+                if (!target.isEmpty()) out->add(target, title);
+            }
+        }
+    }
+    return {};
+}
+
+// ASX/WMX/WVX — casu/playlist.py _parse_asx_entries.
+std::string PlaylistModel::load_asx(const QString& file, PlaylistModel* out) {
+    QFile f(file);
+    if (!f.open(QIODevice::ReadOnly))
+        return ("could not open playlist: " + file).toStdString();
+    const QDir base = QFileInfo(file).absoluteDir();
+    QXmlStreamReader xml(&f);
+    out->clear();
+    QSet<QString> seen;
+
+    struct AsxSource { QString title; QString target; };
+    QVector<AsxSource> collected;
+
+    // Walk <entry> nodes. For each, capture its <title> then all descendant
+    // <ref href> and <param name=url value> as sources.
+    while (!xml.atEnd()) {
+        xml.readNext();
+        if (xml.isStartElement()) {
+            const QString name = xml.name().toString().toLower();
+            if (name != "entry") continue;
+            QString entryTitle;
+            QVector<QString> sources;
+            while (!xml.atEnd()) {
+                xml.readNext();
+                if (xml.isEndElement() && xml.name().toString().toLower() == "entry") break;
+                if (!xml.isStartElement()) continue;
+                const QString cname = xml.name().toString().toLower();
+                if (cname == "title") {
+                    entryTitle = xml.readElementText().trimmed().left(300);
+                } else if (cname == "ref") {
+                    const QString href = xml.attributes().value("href").toString();
+                    if (!href.isEmpty()) sources.append(href);
+                } else if (cname == "param") {
+                    const QString pname = xml.attributes().value("name").toString().toLower();
+                    const QString pval = xml.attributes().value("value").toString();
+                    if (pname == "url" && !pval.isEmpty()) sources.append(pval);
+                }
+            }
+            for (const QString& s : sources) {
+                const QString target = resolve_entry(s, base);
+                if (!target.isEmpty() && !seen.contains(target)) {
+                    seen.insert(target);
+                    collected.append({entryTitle, target});
+                }
+            }
+        }
+    }
+
+    // Fall back to root-level <ref href> only if no entry produced anything.
+    if (collected.isEmpty()) {
+        QXmlStreamReader xml2(&f);
+        while (!xml2.atEnd()) {
+            xml2.readNext();
+            if (xml2.isStartElement() && xml2.name().toString().toLower() == "ref") {
+                const QString href = xml2.attributes().value("href").toString();
+                const QString target = resolve_entry(href, base);
+                if (!target.isEmpty() && !seen.contains(target)) {
+                    seen.insert(target);
+                    collected.append({QString(), target});
+                }
+            }
+        }
+    }
+
+    for (const AsxSource& s : collected) out->add(s.target, s.title);
+    if (xml.hasError() && xml.error() != QXmlStreamReader::PrematureEndOfDocumentError)
+        return ("invalid ASX playlist: " + file).toStdString();
+    return {};
+}
+
+// RMP (RealMedia metafile, XML) — casu/playlist.py _parse_rmp_entries; on
+// parse failure falls back to RAM (plain text).
+std::string PlaylistModel::load_rmp(const QString& file, PlaylistModel* out) {
+    QFile f(file);
+    if (!f.open(QIODevice::ReadOnly))
+        return ("could not open playlist: " + file).toStdString();
+    const QByteArray raw = f.readAll();
+    const QDir base = QFileInfo(file).absoluteDir();
+    out->clear();
+    QXmlStreamReader xml(raw);
+    while (!xml.atEnd()) {
+        xml.readNext();
+        if (xml.isStartElement()) {
+            const QString name = xml.name().toString().toLower();
+            const bool isRef = name.endsWith("ref") || name == "audio" ||
+                               name == "video" || name == "media" || name == "entry";
+            if (isRef) {
+                QString src = xml.attributes().value("src").toString();
+                if (src.isEmpty()) src = xml.attributes().value("href").toString();
+                const QString target = resolve_entry(src, base);
+                if (!target.isEmpty()) out->add(target, QString());
+            }
+        }
+    }
+    if (xml.hasError() && xml.error() != QXmlStreamReader::PrematureEndOfDocumentError)
+        return load_ram(file, out);  // not XML → treat as RAM text
+    return {};
+}
+
+// RAM (RealAudio metafile, plain text) — casu/playlist.py _parse_ram_entries.
+std::string PlaylistModel::load_ram(const QString& file, PlaylistModel* out) {
+    QFile f(file);
+    if (!f.open(QIODevice::ReadOnly))
+        return ("could not open playlist: " + file).toStdString();
+    QTextStream ts(&f);
+    ts.setEncoding(QStringConverter::Utf8);
+    const QDir base = QFileInfo(file).absoluteDir();
+    out->clear();
+    while (!ts.atEnd()) {
+        QString line = ts.readLine().trimmed();
+        if (line.isEmpty() || line.startsWith('#')) continue;
+        const QString target = resolve_entry(line, base);
+        if (!target.isEmpty()) out->add(target, QString());
+    }
+    return {};
+}
+
+// MPCASU JSON — casu/playlist.py PlaylistModel.from_payload
+// ({ "version": 1, "items": [...] }).
+std::string PlaylistModel::load_mpcasu_json(const QString& file, PlaylistModel* out) {
+    QFile f(file);
+    if (!f.open(QIODevice::ReadOnly))
+        return ("could not open playlist: " + file).toStdString();
+    const QByteArray raw = f.readAll();
+    const QDir base = QFileInfo(file).absoluteDir();
+    out->clear();
+    casu::JsonValue doc;
+    try {
+        doc = casu::parse_json(raw.constData(), static_cast<std::size_t>(raw.size()));
+    } catch (const casu::JsonError& e) {
+        return ("invalid playlist document: " + file).toStdString();
+    }
+    if (!doc.is_object() || !doc.find("items") || !doc.find("items")->is_array())
+        return ("unsupported playlist document: " + file).toStdString();
+    const casu::JsonValue* version = doc.find("version");
+    if (!version || !version->is_int() || version->as_int() != 1)
+        return ("unsupported playlist document: " + file).toStdString();
+    for (const casu::JsonValue& item : doc.find("items")->as_array().items) {
+        if (!item.is_string()) continue;
+        const QString target = resolve_entry(QString::fromStdString(item.as_string()), base);
+        if (!target.isEmpty()) out->add(target, QString());
+    }
+    return {};
 }
 
 std::string PlaylistModel::save_m3u(const QString& file, const PlaylistModel& model) {
@@ -213,7 +470,10 @@ std::string PlaylistModel::save_pls(const QString& file, const PlaylistModel& mo
 
 bool PlaylistModel::looks_like_playlist(const QString& path) {
     QString lower = path.toLower();
-    return lower.endsWith(".m3u") || lower.endsWith(".m3u8") || lower.endsWith(".pls");
+    return lower.endsWith(".m3u") || lower.endsWith(".m3u8") || lower.endsWith(".pls") ||
+           lower.endsWith(".xspf") || lower.endsWith(".wpl") || lower.endsWith(".jspf") ||
+           lower.endsWith(".asx") || lower.endsWith(".wmx") || lower.endsWith(".wvx") ||
+           lower.endsWith(".rmp") || lower.endsWith(".ram") || lower.endsWith(".json");
 }
 
 }  // namespace mpcasu

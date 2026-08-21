@@ -55,6 +55,13 @@ public:
     // Load/save. Returns error string (empty = ok).
     static std::string load_m3u(const QString& file, PlaylistModel* out);
     static std::string load_pls(const QString& file, PlaylistModel* out);
+    static std::string load_xspf(const QString& file, PlaylistModel* out);
+    static std::string load_wpl(const QString& file, PlaylistModel* out);
+    static std::string load_jspf(const QString& file, PlaylistModel* out);
+    static std::string load_asx(const QString& file, PlaylistModel* out);
+    static std::string load_rmp(const QString& file, PlaylistModel* out);
+    static std::string load_ram(const QString& file, PlaylistModel* out);
+    static std::string load_mpcasu_json(const QString& file, PlaylistModel* out);
     static std::string load_file(const QString& file, PlaylistModel* out);
     static std::string save_m3u(const QString& file, const PlaylistModel& model);
     static std::string save_pls(const QString& file, const PlaylistModel& model);
