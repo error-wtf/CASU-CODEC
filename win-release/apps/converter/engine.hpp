@@ -103,13 +103,16 @@ public:
     // Run a whole batch. Result order matches job order. Throws
     // ConversionCancelled when the caller requests cancellation. `paused` is
     // polled between/inside jobs (Linux parity: Pause queue). Failed jobs are
-    // retried up to `retries` times (0..10).
+    // retried up to `retries` times (0..10). When `resume` is true, previously
+    // verified outputs recorded in the journal are skipped and marked resumed.
     std::vector<ConversionResult> run(
         const std::vector<ConversionJob>& jobs, const FfmpegExecutor& executor,
         const std::function<void(const ConversionProgress&)>& progress,
         const std::function<bool()>& cancelled,
         const std::function<bool()>& paused = {},
-        int retries = 0);
+        int retries = 0,
+        bool resume = false,
+        const std::string& output_dir = "");
 };
 
 // Linux parity (write_conversion_report): casu_batch_report.json next to the
@@ -117,6 +120,18 @@ public:
 void write_batch_report(const std::string& output_dir, const std::string& state,
                         const ConversionProfile& profile, int retries,
                         const std::vector<ConversionResult>& results);
+
+// Export conversion report to spreadsheet-safe CSV (matching Python casu/jobs.py)
+void export_conversion_report_csv(const std::string& report_json_path,
+                                  const std::string& target_csv_path,
+                                  const std::string& status_filter = "all",
+                                  const std::string& query = "");
+
+// Export conversion report to Markdown table (matching Python casu/jobs.py)
+void export_conversion_report_markdown(const std::string& report_json_path,
+                                       const std::string& target_md_path,
+                                       const std::string& status_filter = "all",
+                                       const std::string& query = "");
 
 // Blocking executor backed by casu::codec::Ffmpeg::run_checked (no live
 // progress, no mid-run cancel). Used by the headless engine test.

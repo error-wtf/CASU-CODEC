@@ -33,6 +33,12 @@ install(DIRECTORY "${CASU_THIRD_PARTY}/qt/6.8.3/mingw_64/plugins/"
         COMPONENT qt
         FILES_MATCHING PATTERN "*.dll")
 
+# --- Microsoft Edge WebView2 runtime loader -------------------------------
+if(EXISTS "${CASU_THIRD_PARTY}/webview2/x64/WebView2Loader.dll")
+  install(FILES "${CASU_THIRD_PARTY}/webview2/x64/WebView2Loader.dll"
+          DESTINATION . COMPONENT qt)
+endif()
+
 # --- libVLC ---------------------------------------------------------------
 # The DLLs live at the package root (Windows loads them next to the exe); the
 # plugin module tree stays in vlc/plugins and is found via VLC_PLUGIN_PATH

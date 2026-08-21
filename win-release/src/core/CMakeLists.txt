@@ -10,6 +10,7 @@ add_library(casu_core STATIC
     casu/native_v2.cpp
     casu/mp5.cpp
     casu/sidecar.cpp
+    casu/journal.cpp
 )
 # Link zlib STATICALLY (libz.a) so the package stays self-contained (no
 # zlib1.dll dependency, REQ-PORT-002). The default `z` target would pick the

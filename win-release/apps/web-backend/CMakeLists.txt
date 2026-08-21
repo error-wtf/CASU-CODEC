@@ -11,6 +11,23 @@ target_compile_features(casu_web_backend PRIVATE cxx_std_20)
 set_target_properties(casu_web_backend PROPERTIES RUNTIME_OUTPUT_NAME "CASU-Web-Backend")
 casu_stage_app("CASU-Web-Backend.exe" casu_web_backend)
 
+# Application icon resource (embedded into the exe; same icon as the Start
+# Menu shortcut and the Linux desktop entry).
+find_program(MINGW_WINDRES x86_64-w64-mingw32-windres)
+if(MINGW_WINDRES)
+  add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/app_res.o
+    COMMAND ${MINGW_WINDRES}
+      ${CMAKE_CURRENT_SOURCE_DIR}/app.rc -O coff
+      -o ${CMAKE_CURRENT_BINARY_DIR}/app_res.o
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/app.rc
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets/web_casu_icon.ico)
+  target_sources(casu_web_backend PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/app_res.o)
+endif()
+
+# Shortcut/installer icon shipped inside the package (setup.nsi references it).
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/assets/web_casu_icon.ico
+        DESTINATION assets COMPONENT web)
+
 # Stage the Qt + MinGW runtime DLLs next to the exe so Wine can run it
 # directly from the build tree (same pattern as the test harness).
 set(CASU_QT_BIN_DIR "${CASU_THIRD_PARTY}/qt/6.8.3/mingw_64/bin")

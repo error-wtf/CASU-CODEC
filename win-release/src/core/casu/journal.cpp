@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
-#include "journal.hpp"
+#include "casu/journal.hpp"
 
 #include "casu/formats.hpp"
 #include "casu/sha256.hpp"
@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-namespace casu::cli {
+namespace casu {
 
 using casu::CasuError;
 using casu::JsonArray;
@@ -21,9 +21,6 @@ using casu::JsonValue;
 namespace {
 
 constexpr std::size_t MAX_JOURNAL_BYTES = 8 * 1024 * 1024;
-constexpr std::size_t MAX_REPORT_RESULTS = 10'000;
-
-JsonValue json_null() { return JsonValue(std::nullptr_t{}); }
 
 JsonValue job_record(const JournalJob& job) {
     JsonObject record;
@@ -151,7 +148,7 @@ std::map<std::pair<std::string, std::string>, JsonValue> load_resume(
         const JsonValue* src = item.find("source");
         const JsonValue* size_v = item.find("output_size");
         const JsonValue* digest_v = item.find("output_sha256");
-        if (!status || !status->is_string() || status->as_string() != "converted") continue;
+        if (!status || !status->is_string() || (status->as_string() != "converted" && status->as_string() != "exported")) continue;
         if (!out || !out->is_string() || !src || !src->is_string()) continue;
         if (!size_v || !size_v->is_int() || !digest_v || !digest_v->is_string()) continue;
         const std::string expected_digest = digest_v->as_string();
@@ -171,4 +168,4 @@ std::map<std::pair<std::string, std::string>, JsonValue> load_resume(
     return reusable;
 }
 
-}  // namespace casu::cli
+}  // namespace casu
