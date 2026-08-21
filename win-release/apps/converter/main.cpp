@@ -6,6 +6,7 @@
 #include "theme.hpp"
 
 #include <QApplication>
+#include <QPixmap>
 #include <QStringList>
 #include <QTimer>
 
@@ -20,11 +21,27 @@ int main(int argc, char** argv) {
     casu::conv::MainWindow window;
     window.show();
 
-    const bool smoke_test = app.arguments().contains("--smoke-test");
+    const QStringList args = app.arguments();
+    const bool smoke_test = args.contains("--smoke-test");
+    QString screenshot;
+    for (int i = 1; i < args.size(); ++i) {
+        if (args[i] == "--screenshot" && i + 1 < args.size()) {
+            screenshot = args[++i];
+            break;
+        }
+    }
     if (smoke_test) {
         std::printf("SMOKE converter window shown\n");
         std::fflush(stdout);
         QTimer::singleShot(1500, &app, &QCoreApplication::quit);
+    }
+    if (!screenshot.isEmpty()) {
+        QTimer::singleShot(1500, &window, [&app, &window, screenshot] {
+            const bool ok = window.grab().save(screenshot, "PNG");
+            std::printf("MPCASU_SCREENSHOT=%s ok=%d\n", qPrintable(screenshot), ok ? 1 : 0);
+            std::fflush(stdout);
+            app.exit(ok ? 0 : 3);
+        });
     }
     return app.exec();
 }

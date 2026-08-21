@@ -20,6 +20,7 @@
 #include <map>
 #include <random>
 #include <set>
+#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -274,7 +275,9 @@ ConversionResult convert_media(const ConversionJob& job, const FfmpegExecutor& e
 ConversionResult convert_to_casu(const ConversionJob& job,
                                  const std::function<bool()>& cancelled) {
     if (cancelled && cancelled()) throw ConversionCancelled{};
-    const std::string mode = "strict";
+    const std::string mode = job.profile.analysis_mode.empty()
+                                 ? "strict"
+                                 : job.profile.analysis_mode;
     const JsonValue manifest = build_casu_manifest(job.source, mode);
     if (cancelled && cancelled()) throw ConversionCancelled{};
     if (job.profile.casu_container == CasuContainer::Sidecar) {
@@ -304,6 +307,41 @@ ConversionResult export_from_casu(const ConversionJob& job,
 }
 
 }  // namespace
+
+void write_batch_report(const std::string& output_dir, const std::string& state,
+                        const ConversionProfile& profile, int retries,
+                        const std::vector<ConversionResult>& results) {
+    casu::JsonObject root;
+    root.items["version"] = JsonValue((int64_t)1);
+    root.items["state"] = JsonValue(state);
+    root.items["mode"] = JsonValue(profile.analysis_mode);
+    root.items["container"] = JsonValue(container_name(profile));
+    if (profile.direction == Direction::MediaToMedia)
+        root.items["preset"] = JsonValue(profile.media_preset);
+    root.items["analysis_fps"] = JsonValue(profile.analysis_fps);
+    root.items["retries"] = JsonValue((int64_t)retries);
+    root.items["tile_size"] = JsonValue((int64_t)profile.tile_size);
+    root.items["key_interval_seconds"] = JsonValue(profile.key_interval_seconds);
+    casu::JsonArray files;
+    for (const ConversionResult& r : results) {
+        casu::JsonObject entry;
+        entry.items["source"] = JsonValue(r.source);
+        entry.items["output"] = JsonValue(r.output);
+        entry.items["status"] = JsonValue(r.status);
+        entry.items["container"] = JsonValue(r.container);
+        if (!r.error.empty()) entry.items["error"] = JsonValue(r.error);
+        if (!r.output_sha256.empty())
+            entry.items["output_sha256"] = JsonValue(r.output_sha256);
+        if (r.output_size >= 0) entry.items["output_size"] = JsonValue(r.output_size);
+        files.items.push_back(
+            JsonValue(std::make_shared<casu::JsonObject>(std::move(entry))));
+    }
+    root.items["files"] =
+        JsonValue(std::make_shared<casu::JsonArray>(std::move(files)));
+    atomic_write_text((fs::path(output_dir) / "casu_batch_report.json").string(),
+                      casu::dump_json(JsonValue(std::make_shared<casu::JsonObject>(
+                          std::move(root)))));
+}
 
 std::string container_name(const ConversionProfile& profile) {
     switch (profile.direction) {
@@ -362,7 +400,14 @@ std::vector<std::string> ConversionEngine::build_ffmpeg_args(const ConversionJob
 std::vector<ConversionResult> ConversionEngine::run(
     const std::vector<ConversionJob>& jobs, const FfmpegExecutor& executor,
     const std::function<void(const ConversionProgress&)>& progress,
-    const std::function<bool()>& cancelled) {
+    const std::function<bool()>& cancelled, const std::function<bool()>& paused,
+    int retries) {
+    if (retries < 0) retries = 0;
+    if (retries > 10) retries = 10;
+    auto wait_while_paused = [&]() {
+        while (paused && paused() && !(cancelled && cancelled()))
+            std::this_thread::sleep_for(std::chrono::milliseconds(120));
+    };
     std::vector<ConversionResult> results;
     results.reserve(jobs.size());
     const int count = (int)jobs.size();
@@ -393,32 +438,46 @@ std::vector<ConversionResult> ConversionEngine::run(
 
     for (int i = 0; i < count; ++i) {
         if (cancelled && cancelled()) throw ConversionCancelled{};
+        wait_while_paused();
+        if (cancelled && cancelled()) throw ConversionCancelled{};
         const ConversionJob& job = jobs[(std::size_t)i];
         notify(i, job.source, 0.0, "RUNNING");
         const auto job_started = std::chrono::steady_clock::now();
         ConversionResult result;
-        try {
-            if (job.profile.direction == Direction::FromCasu)
-                result = export_from_casu(job, cancelled);
-            else if (job.profile.direction == Direction::ToCasu)
-                result = convert_to_casu(job, cancelled);
-            else
-                result = convert_media(
-                    job, executor,
-                    [&](double fraction) { notify(i, job.source, fraction, "RUNNING"); },
-                    cancelled);
-            result.conversion_seconds = std::chrono::duration<double>(
-                std::chrono::steady_clock::now() - job_started)
-                                            .count();
-        } catch (const ConversionCancelled&) {
-            throw;
-        } catch (const std::exception& exc) {
-            result = result_base(job);
-            result.status = "failed";
-            result.error = exc.what();
-            result.conversion_seconds = std::chrono::duration<double>(
-                std::chrono::steady_clock::now() - job_started)
-                                            .count();
+        // Linux parity: failed jobs are retried up to `retries` times.
+        for (int attempt = 0; attempt <= retries; ++attempt) {
+            try {
+                if (job.profile.direction == Direction::FromCasu)
+                    result = export_from_casu(job, cancelled);
+                else if (job.profile.direction == Direction::ToCasu)
+                    result = convert_to_casu(job, cancelled);
+                else
+                    result = convert_media(
+                        job, executor,
+                        [&](double fraction) { notify(i, job.source, fraction, "RUNNING"); },
+                        [&] {
+                            wait_while_paused();
+                            return cancelled && cancelled();
+                        });
+                result.conversion_seconds = std::chrono::duration<double>(
+                    std::chrono::steady_clock::now() - job_started)
+                                                .count();
+                break;
+            } catch (const ConversionCancelled&) {
+                throw;
+            } catch (const std::exception& exc) {
+                if (attempt == retries) {
+                    result = result_base(job);
+                    result.status = "failed";
+                    result.error = exc.what();
+                    result.conversion_seconds = std::chrono::duration<double>(
+                        std::chrono::steady_clock::now() - job_started)
+                                                    .count();
+                } else {
+                    wait_while_paused();
+                    if (cancelled && cancelled()) throw ConversionCancelled{};
+                }
+            }
         }
         results.push_back(result);
         const std::string state =
