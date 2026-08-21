@@ -203,3 +203,36 @@ Pakete : DEBs 3.0.0 neu gebaut + installiert (web/ byte-identisch verifiziert)
 - Testflag `--page <Name>` + `MainWindow::navigate_to()` (Screenshot-Verifikation).
 - Release-Pipeline grün (ctest 16/16, Gate 14/14), installiert unter Wine,
   Web-Tabs im installierten Paket nachgewiesen.
+
+## 2026-08-21 (II) — Windows: volle UI-Parität mit Linux-Referenz (Commit ac2b7e8)
+
+Vorgehen: PySide6 installiert → Linux-App unter xvfb gestartet + Screenshot;
+Windows-Screenshot unter Wine; OCR-/Pixel-/Geometrie-Vergleich beider Apps.
+
+Strukturelle Fixes:
+- Topbar = Linux: ‹ Zurück, NOW PLAYING + Titel, „Search queue…"-Feld (aus dem
+  Pane in den Topbar verschoben), ☰ Nav-Toggle, ☷ Queue-Toggle.
+- Statusbar = Linux 3 Slots (Version | Tagline | Telemetry); `status()` schreibt
+  ins Center-Slot; „N item(s) in queue" entfernt (existiert in Linux nicht).
+- Playlist-Pane: PLAYLIST-Titel+Sub, View-Labels (All items…Spotify),
+  Shuffle/Repeat-Footer (Semantik wie Linux: Text spiegelt Zustand).
+- Leerzustand „Drop media here" (Radial-Gradient, Icon, Meta) als Stage-Index 2;
+  `update_stage()` routet leer/Video/Visualizer nach Play-State
+  (`stage_media_active_`); Stop → leer.
+
+Neue Features (Parität):
+- Queue-Thumbnails: `request_queue_thumbnails()`/`apply_thumb()` — Video-Zeilen
+  (.mp4/.mkv/.webm/.mov/.avi) bekommen PPM-Cache-Thumbnails (54×38,
+  KeepAspectRatioByExpanding) via `casu::media::thumbnail_for`; verifiziert
+  (Cache-Dateien + sichtbare Icons im Screenshot).
+- Per-Media-Preferences: `PlaybackPreferences` in library.hpp/cpp (separate
+  `<lib>.prefs.json`), `apply_media_preferences()` nach Backend-Open,
+  `persist_media_preferences()` bei Track-Wahl/Delay-Dialog/closeEvent.
+  Hinweis: C++-Backend-Delays geben void zurück (anders als Python).
+- Spotify-URLs werden in `on_youtube_play` via `casu::network::expand_spotify`
+  zu abspielbaren Zeilen expandiert (Linux `_expand_spotify_url`).
+
+Verifikation: ctest grün (youtube_live flaky→Rerun ok), Release Gate PASS,
+Wine-Install-Smoke ok, Web-Tabs + Playback per Screenshot bestätigt.
+Assets auf v3.0.0 neu hochgeladen (--clobber, 10 Dateien), Release-Notes
+„Update 2026-08-21 (II)" angehängt. PORT_STATUS.md Zeile „UI-Parität Struktur".
