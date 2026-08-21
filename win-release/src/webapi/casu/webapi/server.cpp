@@ -36,6 +36,10 @@ std::string to_lower(const std::string& s) {
     return r;
 }
 
+bool equals_ignore_case(const std::string& a, const std::string& b) {
+    return to_lower(a) == to_lower(b);
+}
+
 std::string trim(const std::string& s) {
     std::string r = s;
     while (!r.empty() && std::isspace(static_cast<unsigned char>(r.front()))) r.erase(r.begin());
@@ -553,6 +557,26 @@ public:
     }
 
     void send(QTcpSocket* socket, const HttpRequestHead& head, HttpResponse resp) {
+        // Linux parity (web_casu.py end_headers): every response carries the
+        // conservative browser security headers. Existing values win.
+        auto ensure = [&resp](const std::string& name, const std::string& value) {
+            for (const auto& h : resp.headers) {
+                if (equals_ignore_case(h.name, name)) return;
+            }
+            resp.add(name, value);
+        };
+        ensure("X-Content-Type-Options", "nosniff");
+        ensure("Referrer-Policy", "no-referrer");
+        ensure("Cross-Origin-Opener-Policy", "same-origin");
+        ensure("Content-Security-Policy",
+               "default-src 'self'; script-src 'self'; style-src 'self'; "
+               "img-src 'self' blob: data:; media-src 'self' blob: http: https:; "
+               "connect-src 'self' http: https:; frame-src https://www.youtube.com "
+               "https://www.youtube-nocookie.com; object-src 'none'; base-uri 'none'; "
+               "form-action 'self'; frame-ancestors 'none'");
+        ensure("Permissions-Policy",
+               "camera=(), microphone=(), geolocation=(), payment=()");
+        ensure("Cache-Control", "no-store");
         resp.add("Access-Control-Allow-Origin", "*");
         resp.add("Connection", "close");
         std::vector<uint8_t> bytes = render_response(resp);

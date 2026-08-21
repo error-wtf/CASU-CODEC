@@ -6,6 +6,7 @@
 #include "casu/codec/ffmpeg.hpp"
 #include "casu/codec/presets.hpp"
 #include "casu/formats.hpp"
+#include "casu/journal.hpp"
 #include "casu/json.hpp"
 #include "casu/media/mediainfo.hpp"
 #include "casu/mp5.hpp"
@@ -119,7 +120,9 @@ double probe_duration_seconds(const JsonValue& probe) {
 }
 
 void write_mp5_container(const std::string& source, const std::string& output,
-                         const std::string& mode) {
+                         const ConversionProfile& profile) {
+    const std::string mode = profile.analysis_mode.empty() ? "strict"
+                                                           : profile.analysis_mode;
     constexpr std::size_t kPartBytes = 16ULL * 1024 * 1024;
     std::error_code ec;
     const std::uintmax_t size = fs::file_size(source, ec);
@@ -133,7 +136,9 @@ void write_mp5_container(const std::string& source, const std::string& output,
     std::fclose(f);
     if (!ok) throw CasuError("could not read source: " + source);
 
-    const JsonValue manifest = build_casu_manifest(source, mode);
+    const JsonValue manifest =
+        build_casu_manifest(source, mode, profile.analysis_fps, profile.tile_size,
+                            profile.key_interval_seconds);
     casu::media::MediaInfo info;
     try {
         info = casu::media::probe(source);
@@ -225,6 +230,69 @@ ConversionResult result_base(const ConversionJob& job) {
     return out;
 }
 
+// Journal identity helpers (Linux parity: Path.resolve() + asdict(profile)).
+std::string normalized_path(const std::string& path) {
+    std::error_code ec;
+    fs::path canonical = fs::weakly_canonical(fs::path(path), ec);
+    if (ec) canonical = fs::absolute(fs::path(path), ec).lexically_normal();
+    return ec ? path : canonical.string();
+}
+
+JsonValue profile_to_json(const ConversionProfile& profile) {
+    auto object = std::make_shared<casu::JsonObject>();
+    object->items["all_tracks"] = JsonValue(profile.all_tracks);
+    object->items["analysis_fps"] = JsonValue(profile.analysis_fps);
+    object->items["analysis_mode"] = JsonValue(profile.analysis_mode);
+    object->items["audio_codec"] = JsonValue(profile.audio_codec);
+    object->items["casu_container"] = JsonValue(container_name(profile));
+    object->items["force"] = JsonValue(profile.force);
+    object->items["key_interval_seconds"] = JsonValue(profile.key_interval_seconds);
+    object->items["media_preset"] = JsonValue(profile.media_preset);
+    object->items["output_extension"] = JsonValue(profile.output_extension);
+    object->items["preserve_metadata"] = JsonValue(profile.preserve_metadata);
+    object->items["subtitle_mode"] = JsonValue(profile.subtitle_mode);
+    object->items["tile_size"] = JsonValue((int64_t)profile.tile_size);
+    object->items["video_codec"] = JsonValue(profile.video_codec);
+    return JsonValue(std::move(object));
+}
+
+JsonValue result_to_json(const ConversionResult& result) {
+    auto object = std::make_shared<casu::JsonObject>();
+    object->items["container"] = JsonValue(result.container);
+    object->items["conversion_seconds"] = JsonValue(result.conversion_seconds);
+    object->items["error"] = JsonValue(result.error);
+    object->items["output"] = JsonValue(result.output);
+    if (result.output_sha256.empty())
+        object->items["output_sha256"] = JsonValue(nullptr);
+    else
+        object->items["output_sha256"] = JsonValue(result.output_sha256);
+    object->items["output_size"] =
+        result.output_size < 0 ? JsonValue(nullptr) : JsonValue((int64_t)result.output_size);
+    object->items["resumed"] = JsonValue(result.resumed);
+    object->items["source"] = JsonValue(result.source);
+    object->items["status"] = JsonValue(result.status);
+    object->items["verification"] = JsonValue(result.verification);
+    return JsonValue(std::move(object));
+}
+
+ConversionResult result_from_json(const JsonValue& value, const ConversionJob& job) {
+    ConversionResult out = result_base(job);
+    if (const JsonValue* v = value.find("status"); v && v->is_string())
+        out.status = v->as_string();
+    if (const JsonValue* v = value.find("error"); v && v->is_string())
+        out.error = v->as_string();
+    if (const JsonValue* v = value.find("conversion_seconds"); v && v->is_number())
+        out.conversion_seconds = v->as_double();
+    if (const JsonValue* v = value.find("output_size"); v && v->is_int())
+        out.output_size = (long long)v->as_int();
+    if (const JsonValue* v = value.find("output_sha256"); v && v->is_string())
+        out.output_sha256 = v->as_string();
+    if (const JsonValue* v = value.find("verification"); v && v->is_string())
+        out.verification = v->as_string();
+    out.resumed = true;
+    return out;
+}
+
 ConversionResult convert_media(const ConversionJob& job, const FfmpegExecutor& executor,
                                const std::function<void(double)>& job_progress,
                                const std::function<bool()>& cancelled) {
@@ -278,7 +346,11 @@ ConversionResult convert_to_casu(const ConversionJob& job,
     const std::string mode = job.profile.analysis_mode.empty()
                                  ? "strict"
                                  : job.profile.analysis_mode;
-    const JsonValue manifest = build_casu_manifest(job.source, mode);
+    // Advanced options (Linux parity) must land in the manifest identity.
+    const JsonValue manifest =
+        build_casu_manifest(job.source, mode, job.profile.analysis_fps,
+                            job.profile.tile_size,
+                            job.profile.key_interval_seconds);
     if (cancelled && cancelled()) throw ConversionCancelled{};
     if (job.profile.casu_container == CasuContainer::Sidecar) {
         atomic_write_text(job.output, casu::dump_json(manifest));
@@ -286,7 +358,7 @@ ConversionResult convert_to_casu(const ConversionJob& job,
         casu::casunat1::write_native(job.output, job.source, manifest);
         casu::casunat1::read_native(job.output, true);
     } else {
-        write_mp5_container(job.source, job.output, mode);
+        write_mp5_container(job.source, job.output, job.profile);
     }
     ConversionResult out = result_base(job);
     out.status = "converted";
@@ -401,18 +473,46 @@ std::vector<ConversionResult> ConversionEngine::run(
     const std::vector<ConversionJob>& jobs, const FfmpegExecutor& executor,
     const std::function<void(const ConversionProgress&)>& progress,
     const std::function<bool()>& cancelled, const std::function<bool()>& paused,
-    int retries) {
+    int retries, bool resume, const std::string& output_dir) {
     if (retries < 0) retries = 0;
     if (retries > 10) retries = 10;
     auto wait_while_paused = [&]() {
         while (paused && paused() && !(cancelled && cancelled()))
             std::this_thread::sleep_for(std::chrono::milliseconds(120));
     };
+
+    // Linux parity (casu/jobs.py): a crash-aware batch journal keyed by the
+    // exact job set. `resume` reuses hash-verified results from a previous run
+    // of the identical job set; every state change is journaled.
+    std::vector<casu::JournalJob> journal_jobs;
+    std::string journal_path;
+    if (!output_dir.empty()) {
+        for (const ConversionJob& job : jobs) {
+            journal_jobs.push_back(casu::JournalJob{
+                normalized_path(job.source), normalized_path(job.output),
+                profile_to_json(job.profile)});
+        }
+        journal_path = casu::conversion_journal_path(output_dir, journal_jobs);
+    }
+    const std::map<std::pair<std::string, std::string>, casu::JsonValue> resumed =
+        (resume && !journal_path.empty())
+            ? casu::load_resume(journal_path, journal_jobs)
+            : std::map<std::pair<std::string, std::string>, casu::JsonValue>{};
+
     std::vector<ConversionResult> results;
     results.reserve(jobs.size());
     const int count = (int)jobs.size();
     const auto started_at = std::chrono::steady_clock::now();
     double overall = 0.0;
+
+    auto journal_write = [&](const std::string& state) {
+        if (journal_path.empty()) return;
+        auto recorded = std::make_shared<casu::JsonArray>();
+        for (const ConversionResult& r : results)
+            recorded->items.push_back(result_to_json(r));
+        casu::write_journal(journal_path, state, journal_jobs,
+                            JsonValue(std::move(recorded)));
+    };
 
     auto notify = [&](int index, const std::string& source, double fraction,
                       const std::string& state) {
@@ -436,11 +536,28 @@ std::vector<ConversionResult> ConversionEngine::run(
         progress(p);
     };
 
+    journal_write("RUNNING");
     for (int i = 0; i < count; ++i) {
-        if (cancelled && cancelled()) throw ConversionCancelled{};
+        if (cancelled && cancelled()) {
+            journal_write("CANCELLED");
+            throw ConversionCancelled{};
+        }
         wait_while_paused();
-        if (cancelled && cancelled()) throw ConversionCancelled{};
+        if (cancelled && cancelled()) {
+            journal_write("CANCELLED");
+            throw ConversionCancelled{};
+        }
         const ConversionJob& job = jobs[(std::size_t)i];
+        // Linux parity ("Resume verified jobs"): reuse a hash-verified result
+        // recorded by a previous run of this exact batch.
+        auto reuse_it =
+            resumed.find({normalized_path(job.source), normalized_path(job.output)});
+        if (reuse_it != resumed.end()) {
+            results.push_back(result_from_json(reuse_it->second, job));
+            notify(i, job.source, 1.0, "RESUMED");
+            journal_write("RUNNING");
+            continue;
+        }
         notify(i, job.source, 0.0, "RUNNING");
         const auto job_started = std::chrono::steady_clock::now();
         ConversionResult result;
@@ -464,6 +581,7 @@ std::vector<ConversionResult> ConversionEngine::run(
                                                 .count();
                 break;
             } catch (const ConversionCancelled&) {
+                journal_write("CANCELLED");
                 throw;
             } catch (const std::exception& exc) {
                 if (attempt == retries) {
@@ -475,7 +593,10 @@ std::vector<ConversionResult> ConversionEngine::run(
                                                     .count();
                 } else {
                     wait_while_paused();
-                    if (cancelled && cancelled()) throw ConversionCancelled{};
+                    if (cancelled && cancelled()) {
+                        journal_write("CANCELLED");
+                        throw ConversionCancelled{};
+                    }
                 }
             }
         }
@@ -483,7 +604,9 @@ std::vector<ConversionResult> ConversionEngine::run(
         const std::string state =
             result.status == "failed" ? "FAILED" : (result.status == "exported" ? "EXPORTED" : "DONE");
         notify(i, job.source, 1.0, state);
+        journal_write("RUNNING");
     }
+    journal_write("COMPLETE");
     return results;
 }
 

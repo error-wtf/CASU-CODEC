@@ -59,20 +59,41 @@ Einfachste Variante: **`MPCASU-Setup-3.0.0.exe`** ausführen. Der NSIS-Installer
 Desktop-Verknüpfungen und einen Uninstaller. Alternativ das ZIP nach einem
 beliebigen Ordner entpacken und `MPCASU.exe` starten (portable).
 
+### Update & Rechte (ab diesem Build)
+
+- **Auto-Update:** Eine bestehende Installation wird erkannt (Registry,
+  Machine- UND Per-User-Scope) und **in-place aktualisiert** — laufende
+  Apps werden automatisch geschlossen, es entsteht keine Zweitinstallation.
+- **Kein Administrator nötig:** Der Installer erzwingt keine UAC-Erhöhung.
+  - Gestartet mit Admin-Rechten → Machine-Installation
+    (`C:\Program Files\MPCASu`, HKLM, System-PATH).
+  - Gestartet ohne Admin-Rechte → **Per-User-Installation**
+    (`%LocalAppData%\MPCASU`, HKCU, Benutzer-PATH) — vollständig ohne
+    Rechteausweisung nutzbar.
+  - Ist eine alte Machine-Installation vorhanden, aber ohne Schreibrecht,
+    fällt der Installer auf eine frische Per-User-Installation zurück statt
+    zu scheitern.
+- **Pro-App-Icons:** Jede App hat ihr eigenes Icon (EXE-Ressource +
+  Verknüpfung): MPCASU = Player-Icon, Converter = Converter-Icon,
+  Web-Backend = Web-CASU-Icon — identisch zu den Linux-Desktop-Einträgen.
+
 ## Embedded web-player browser
 
-Die Web-Provider-Tabs (Spotify/Hearthis/Tidal/Netflix/BROWSE) laufen **im
-eingebetteten QtWebEngine-Browser** direkt in der App — exakt wie die
-Linux-Version, kein externer Browser, kein Link-out. YouTube läuft **nicht**
-über einen Browser-Tab, sondern über die yt-dlp → Loopback → libVLC-Pipeline.
+Die Web-Provider-Tabs (Spotify/Hearthis/Tidal/Netflix/BROWSE) laufen im
+**eingebetteten Browser direkt in der App** — exakt wie die Linux-Version,
+kein externer Browser, kein Link-out.
 
-- **MinGW-Paket:** QtWebEngine wird von Qt nur für MSVC ausgeliefert, daher ist
-  der eingebettete Browser im MinGW-Build als Stub enthalten (App läuft, Tabs
-  vorhanden, aber ohne Browser-Engine).
-- **MSVC/QtWebEngine-Build (exakt Linux-Verhalten):** `scripts/build-msvc.bat`
-  auf einem Windows-PC mit Visual Studio 2022 + Python ausführen. Es lädt
-  Qt 6.8.3 MSVC x64 inkl. QtWebEngine automatisch (aqtinstall) und baut die
-  App mit dem echten eingebetteten Chromium. Siehe CMakePresets.json.
+- **Windows (MinGW-Build):** Microsoft Edge **WebView2** (auf Windows 10/11
+  praktisch immer vorhanden, inklusive DRM/Widevine → Netflix/Tidal/Spotify
+  spielen wirklich ab). Persistente Logins je Provider
+  (`%APPDATA%\CASU\webview2\<provider>`), wie beim Linux-QWebEngine-Profil.
+  Fehlt die WebView2-Runtime, zeigt der Tab einen Hinweis + Button „im
+  Standardbrowser öffnen" (kein leerer Tab).
+- **MSVC/QtWebEngine-Build (alternativ):** `scripts/build-msvc.bat` auf einem
+  Windows-PC mit Visual Studio 2022 + Python ausführen. Siehe CMakePresets.json.
+
+YouTube läuft **nicht** über einen Browser-Tab, sondern über die
+yt-dlp → Loopback → libVLC-Pipeline (identisch zu Linux).
 
 ## Apps
 

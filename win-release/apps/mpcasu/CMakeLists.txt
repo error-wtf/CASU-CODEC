@@ -27,22 +27,30 @@ target_link_libraries(casu_mpcasu PRIVATE
     Qt6::Widgets Qt6::Gui Qt6::Core Qt6::Network
     "${CASU_THIRD_PARTY}/vlc/libvlc.a")
 
-# Embedded web-player tabs use QtWebEngine (Chromium) exactly like Linux.
-# QtWebEngine is only shipped by Qt for MSVC toolchains, so it is enabled only
-# when the target provides it (the native Windows MSVC build). The MinGW
-# cross build compiles the tabs as a disabled stub. Enabled/disabled is
-# exposed to the sources via CASU_HAVE_WEBENGINE.
+# Embedded web-player tabs: support Microsoft Edge WebView2 on Windows (MinGW & MSVC)
+# and QtWebEngine when available.
+set(WEBVIEW2_INCLUDE_DIR "${CASU_THIRD_PARTY}/webview2/include")
+set(WEBVIEW2_LOADER_DLL "${CASU_THIRD_PARTY}/webview2/x64/WebView2Loader.dll")
+if(EXISTS "${WEBVIEW2_INCLUDE_DIR}/WebView2.h" AND EXISTS "${WEBVIEW2_LOADER_DLL}")
+  message(STATUS "MPCASU: Microsoft Edge WebView2 found — embedded web-player tabs ENABLED via WebView2")
+  target_include_directories(casu_mpcasu PRIVATE "${WEBVIEW2_INCLUDE_DIR}")
+  target_compile_definitions(casu_mpcasu PRIVATE CASU_HAVE_WEBVIEW2=1)
+  target_link_libraries(casu_mpcasu PRIVATE ole32 uuid)
+  if(CMAKE_CROSSCOMPILING)
+    add_custom_command(TARGET casu_mpcasu POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${WEBVIEW2_LOADER_DLL}"
+        $<TARGET_FILE_DIR:casu_mpcasu>
+      COMMAND_EXPAND_LISTS)
+  endif()
+endif()
+
 find_package(Qt6 COMPONENTS WebEngineWidgets QUIET)
 if(Qt6WebEngineWidgets_FOUND)
   message(STATUS "MPCASU: QtWebEngine found — embedded web-player tabs ENABLED")
   target_link_libraries(casu_mpcasu PRIVATE Qt6::WebEngineWidgets)
   target_compile_definitions(casu_mpcasu PRIVATE CASU_HAVE_WEBENGINE=1)
-  # Native MSVC build: Qt's own moc.exe is present, so AUTOMOC can run. The
-  # QWebEngineView subclasses need the meta-object compiler.
   set_target_properties(casu_mpcasu PROPERTIES AUTOMOC ON AUTOUIC ON)
-  # Deploy the QtWebEngine runtime (QtWebEngineProcess.exe + resources) next
-  # to the exe so the embedded browser works in the packaged app. Only valid on
-  # a native MSVC/Windows build where the Qt install tree is on this host.
   if(NOT CMAKE_CROSSCOMPILING)
     get_target_property(_qwe_bin Qt6::WebEngineWidgets IMPORTED_LOCATION)
     get_filename_component(_qt_bin_dir "${_qwe_bin}" DIRECTORY)
@@ -58,9 +66,6 @@ if(Qt6WebEngineWidgets_FOUND)
         "$<TARGET_FILE_DIR:casu_mpcasu>/translations/qtwebengine_locales"
       COMMAND_EXPAND_LISTS)
   endif()
-else()
-  message(STATUS "MPCASU: QtWebEngine not available on this toolchain — "
-                 "embedded web-player tabs compiled as disabled stub")
 endif()
 
 target_include_directories(casu_mpcasu PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -89,7 +94,8 @@ add_custom_command(TARGET casu_mpcasu POST_BUILD
     ${CMAKE_CURRENT_SOURCE_DIR}/assets
     $<TARGET_FILE_DIR:casu_mpcasu>/assets
   COMMAND_EXPAND_LISTS)
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/assets
+# Trailing slash: contents land directly in <pkg>/assets (no assets/assets).
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/assets/
         DESTINATION assets COMPONENT assets)
 
 if(CMAKE_CROSSCOMPILING)

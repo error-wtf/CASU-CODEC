@@ -68,7 +68,8 @@ JsonValue segments_section(const std::vector<const casu::media::MediaStreamInfo*
 
 }  // namespace
 
-JsonValue build_casu_manifest(const std::string& source, const std::string& mode) {
+JsonValue build_casu_manifest(const std::string& source, const std::string& mode,
+                               double fps, int tile_size, double key_interval_seconds) {
     casu::media::MediaInfo info;
     try {
         info = casu::media::probe(source);
@@ -103,6 +104,9 @@ JsonValue build_casu_manifest(const std::string& source, const std::string& mode
     casu_identity.items["container_extension"] = JsonValue(std::string(".casu"));
     casu_identity.items["version"] = JsonValue(std::string("3.0.0"));
     casu_identity.items["analysis_mode"] = JsonValue(mode);
+    casu_identity.items["analysis_fps"] = JsonValue(fps);
+    casu_identity.items["tile_size"] = JsonValue(static_cast<int64_t>(tile_size));
+    casu_identity.items["key_interval_seconds"] = JsonValue(key_interval_seconds);
     casu_identity.items["compatibility"] =
         JsonValue(std::string("legacy media remains canonical; sidecar is optional"));
 

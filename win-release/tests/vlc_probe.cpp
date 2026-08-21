@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace {
 // Convert a POSIX path into the Wine drive form libVLC's media_new_path
@@ -38,8 +39,24 @@ int main(int argc, char** argv) {
 
     const std::string media = wine_path(argv[1]);
     std::printf("probe media=%s\n", media.c_str());
+    // Optional extra libVLC options (semicolon-separated). The Wine test
+    // harness sets CASU_VLC_OPTIONS=--aout=dummy so playback verification does
+    // not depend on a working host audio stack (decode + clock is the point).
+    std::vector<std::string> options;
+    if (const char* extra = std::getenv("CASU_VLC_OPTIONS")) {
+        std::string current;
+        for (const char* p = extra;; ++p) {
+            if (*p == ';' || *p == '\0') {
+                if (!current.empty()) options.push_back(current);
+                current.clear();
+                if (*p == '\0') break;
+            } else {
+                current.push_back(*p);
+            }
+        }
+    }
     try {
-        casu::playback::LibVLCBackend backend(nullptr);
+        casu::playback::LibVLCBackend backend(nullptr, options);
         std::printf("libvlc version=%s\n", backend.backend_version().c_str());
         std::printf("opening...\n");
         backend.open_source(media);

@@ -196,6 +196,10 @@ if(CMAKE_CROSSCOMPILING)
   add_test(NAME casu_playback_vlc_test COMMAND bash "${WINE_RUN}"
     "$<TARGET_FILE:casu_playback_vlc_test>"
     "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/demo_clip.mp4")
+  # Deterministic under Wine: verify decode + clock, not the host audio stack
+  # (pipewire/ALSA flakiness must not fail the pipeline).
+  set_tests_properties(casu_playback_vlc_test PROPERTIES
+    ENVIRONMENT "CASU_VLC_OPTIONS=--aout=dummy")
   add_test(NAME casu_playback_youtube_test COMMAND bash "${WINE_RUN}"
     "$<TARGET_FILE:casu_playback_youtube_test>"
     "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/demo_clip.mp4")

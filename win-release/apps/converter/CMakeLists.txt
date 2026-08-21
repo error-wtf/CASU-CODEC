@@ -18,6 +18,23 @@ set_target_properties(casu_converter PROPERTIES RUNTIME_OUTPUT_NAME "CASU-Conver
 
 casu_stage_app("CASU-Converter.exe" casu_converter)
 
+# Application icon resource (embedded into the exe; same icon as the Start
+# Menu shortcut and the Linux desktop entry).
+find_program(MINGW_WINDRES x86_64-w64-mingw32-windres)
+if(MINGW_WINDRES)
+  add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/app_res.o
+    COMMAND ${MINGW_WINDRES}
+      ${CMAKE_CURRENT_SOURCE_DIR}/app.rc -O coff
+      -o ${CMAKE_CURRENT_BINARY_DIR}/app_res.o
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/app.rc
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets/casu_converter_icon.ico)
+  target_sources(casu_converter PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/app_res.o)
+endif()
+
+# Shortcut/installer icon shipped inside the package (setup.nsi references it).
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/assets/casu_converter_icon.ico
+        DESTINATION assets COMPONENT apps)
+
 if(CMAKE_CROSSCOMPILING)
   # Stage the Qt runtime (DLLs + platform plugin) next to the exe so it runs
   # under Wine and in the packaged zip without a PATH/registry dependency.

@@ -2,7 +2,6 @@
 add_executable(casu_cli
     main.cpp
     cli_util.cpp
-    journal.cpp
     commands_inspect.cpp
     commands_pack.cpp
     commands_media.cpp

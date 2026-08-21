@@ -565,19 +565,9 @@ void MainWindow::startConversion() {
         return;
     }
 
-    // Linux parity ("Resume verified jobs"): skip outputs that a previous
-    // batch already converted successfully and that still exist.
-    int resumed = 0;
-    if (resume_jobs_->isChecked()) {
-        std::vector<ConversionJob> kept;
-        for (const ConversionJob& job : jobs) {
-            std::error_code ec;
-            if (std::filesystem::exists(job.output, ec)) ++resumed;
-            else kept.push_back(job);
-        }
-        jobs = std::move(kept);
-    }
-
+    // Linux parity ("Resume verified jobs"): reuse hash-verified results from
+    // a previous identical batch via the conversion journal inside the engine.
+    // The job set stays complete so the journal identity matches.
     bool any_exists = false;
     for (const ConversionJob& job : jobs) {
         std::error_code ec;
@@ -621,7 +611,9 @@ void MainWindow::runJobs(std::vector<ConversionJob> jobs) {
                     jobs, sync_ffmpeg_executor(),
                     [this](const ConversionProgress& p) { onProgress(p); },
                     [this]() { return cancel_->load(); },
-                    [this]() { return pause_->load(); }, retries);
+                    [this]() { return pause_->load(); }, retries,
+                    resume_jobs_ && resume_jobs_->isChecked(),
+                    output_dir_->text().trimmed().toUtf8().toStdString());
                 write_batch_report(output_dir_->text().trimmed().toUtf8().toStdString(),
                                    "COMPLETE", profile, retries, *results_);
                 summary = "done";

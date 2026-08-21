@@ -12,6 +12,8 @@ namespace casu::conv {
 // Builds a structurally-valid CASU manifest from an ffprobe of the source.
 // Temporal segmentation is reduced to one whole-duration segment per playable
 // stream. Throws casu::CasuError on probe/validation failure.
-casu::JsonValue build_casu_manifest(const std::string& source, const std::string& mode);
+casu::JsonValue build_casu_manifest(const std::string& source, const std::string& mode,
+                                    double fps = 10.0, int tile_size = 64,
+                                    double key_interval_seconds = 3.0);
 
 }  // namespace casu::conv
