@@ -17,7 +17,7 @@ get_filename_component(CASU_THIRD_PARTY "${CMAKE_CURRENT_LIST_DIR}/../third_part
 set(CPACK_GENERATOR ZIP)
 set(CPACK_PACKAGE_NAME "MPCASU-Windows")
 set(CPACK_PACKAGE_FILE_NAME "MPCASU-Windows-x86_64")
-set(CPACK_PACKAGE_VERSION "3.0.0")
+set(CPACK_PACKAGE_VERSION "5.0.0")
 # Single self-contained zip (all components installed into one archive).
 set(CPACK_ARCHIVE_COMPONENT_INSTALL OFF)
 

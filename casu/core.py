@@ -17,6 +17,12 @@ from .tiles import compare_tile_frames, tile_regions
 from .strict import StrictDecoderError, iter_source_frames, iter_state_map
 from .probe import ProbeError, run_json
 
+# CASU CONTAINER format version written into manifests. Deliberately decoupled
+# from the app release version (__version__): the container format did not
+# change with 5.0.0, and older players must keep accepting newly written
+# files (legacy-compatibility). Mirrors the C++ writer (manifest.cpp).
+CASU_FORMAT_VERSION = "3.0.0"
+
 
 class CasuError(RuntimeError):
     pass
@@ -572,7 +578,7 @@ def analyze(path: Path, analysis_fps: float = 10.0, mode: str = "strict",
     seek_entries.sort(key=lambda item: (item["timestamp_s"], item["stream"]))
     manifest = {
         "format": {"magic": "MPCASU\\0", "kind": "CASU sidecar manifest", "schema": "0.2"},
-        "casu": {"name": "CASU", "acronym": "Codec for All Segmented Units", "short_name": "CASU", "container_extension": ".casu", "version": __version__, "analysis_mode": mode,
+        "casu": {"name": "CASU", "acronym": "Codec for All Segmented Units", "short_name": "CASU", "container_extension": ".casu", "version": CASU_FORMAT_VERSION, "analysis_mode": mode,
                         "compatibility": "legacy media remains canonical; sidecar is optional"},
         "source": {"filename": path.name, "path": str(path), "size_bytes": stat.st_size,
                    "sha256": digest,

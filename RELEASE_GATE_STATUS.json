@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "product_version": "3.0.0",
-  "release_status": "RELEASE_3_0_0",
+  "product_version": "5.0.0",
+  "release_status": "RELEASE_5_0_0",
   "updated": "2026-08-14",
   "gates": [
     {
@@ -54,7 +54,7 @@
         "Text, native libass RGBA and typed PGS/DVD/DVB/XSub bitmap subtitle presentation/clearing/seek with bounded embedded-font registration, chapter seek, clickable bounded chapter timeline, transactional live track/device selection, runtime track menus and bounded PipeWire Audio/Sink inventory are implemented",
         "Instrumented behavior tests prove native A/V/subtitle delivery, serialized fail-closed seek invalidation, blocked-write restart refusal, four-direction final-generation delivery, EOF replay, explicit playback-intent preservation, six-stream live track isolation with Pulse PCM-format reopen, PipeWire filtering/offline fallback and USB-DAC node selection, transient sink-error cleanup/replay with concrete UI error, and zero tempfile calls",
         "pytest -q tests/test_native_player_backend.py: 23 passed; the previously timing-sensitive rapid-seek case plus EOF replay passed 20 consecutive repetitions; a 21,600-block/six-hour 1.5x changing-latency simulation has zero cumulative drift; transactional live-rate/channel-alignment/track/device-switch/error-replay, chapter-marker unit and clickable real-Tk/Xvfb behavior tests pass; pitch-preserving time-stretch, physical hotplug and real-device long-run drift remain open",
-        "1.0.3 acceptance (installed packages, Xvfb): tools/acceptance_qt.py 16/16 — MP4/MP3/CASUNAT2/CASUNAT1/MP5 playback >1s, pause/seek, fullscreen real-state enter/exit, visualizer with measured bands, Escape state machine, resize; standalone CASUNAT2 test verify/info/play/seek in clean dir passed"
+        "1.0.3 acceptance (installed packages, Xvfb): tools/acceptance_qt.py 16/16 \u2014 MP4/MP3/CASUNAT2/CASUNAT1/MP5 playback >1s, pause/seek, fullscreen real-state enter/exit, visualizer with measured bands, Escape state machine, resize; standalone CASUNAT2 test verify/info/play/seek in clean dir passed"
       ]
     },
     {
