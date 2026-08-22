@@ -17,7 +17,7 @@
 
 namespace casu::webapi {
 
-inline constexpr const char* kWebApiVersion = "3.0.0";
+inline constexpr const char* kWebApiVersion = "5.0.0";
 
 class EndpointHandler {
 public:

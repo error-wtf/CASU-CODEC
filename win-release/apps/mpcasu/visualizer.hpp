@@ -10,7 +10,6 @@
 #include <QTimer>
 #include <QWidget>
 
-#include <atomic>
 #include <functional>
 #include <vector>
 
@@ -27,8 +26,10 @@ public:
     void set_mode(const QString& mode);
     void set_cover(const QPixmap* pixmap);  // borrowed; drawn centered when set
 
-    // PCM sources (mutually exclusive).
-    void set_audio_file(const QString& path);   // full decode in background
+    // PCM sources (mutually exclusive). Both use a QProcess pipe drained
+    // by the tick timer — NO background threads (a detached decode thread
+    // kept the process alive on exit under Wine).
+    void set_audio_file(const QString& path);   // full decode via pipe
     void set_stream_url(const QString& url);    // live s16le pipe (~40 Hz)
     void clear_audio();
     // Current playback position in seconds (playhead for FFT windows).
@@ -48,8 +49,8 @@ private:
     const float* ring_tail(std::size_t* count) const;
 
     QTimer timer_;
-    QTimer stream_timer_;
-    QProcess* stream_pipe_ = nullptr;
+    QProcess* pipe_ = nullptr;        // file-decode OR live stream pipe
+    bool pipe_is_live_ = false;
     bool playing_ = false;
     bool active_ = true;
     bool visible_ = true;
@@ -62,12 +63,13 @@ private:
 
     // Decoded audio state.
     QString pcm_source_;
-    std::vector<float> pcm_;          // mono samples in [-1,1]
-    std::vector<float> stream_ring_;  // live pipe ring buffer
+    std::vector<float> pcm_;          // mono samples in [-1,1] (file mode)
+    std::vector<float> stream_ring_;  // live ring buffer (stream mode)
     std::size_t ring_write_pos_ = 0;
     int sample_rate_ = 44100;
-    std::atomic<bool> decoding_{false};
     std::function<double()> position_;
+    void start_pipe(const QStringList& args, bool live);
+    void drain_pipe();
 };
 
 }  // namespace mpcasu
