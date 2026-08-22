@@ -2227,7 +2227,14 @@ void MainWindow::open_backend_and_play(const QString& source, const QString& tit
 
     bool audio = !is_network_like(source) && is_audio_ext(source);
     surface_->set_video_active(!audio);
-    if (visualizer_) static_cast<VisualizerWidget*>(visualizer_)->set_playing(true);
+    if (visualizer_) {
+        auto* viz = static_cast<VisualizerWidget*>(visualizer_);
+        if (is_network_like(source)) viz->set_stream_url(source);
+        else viz->set_audio_file(source);
+        viz->set_position_provider(
+            [this] { return controller_ ? controller_->position() : 0.0; });
+        viz->set_playing(true);
+    }
     if (audio) surface_->clear();
     stage_media_active_ = true;
     // Linux parity: audio-only media shows the visualizer stage, video the surface.

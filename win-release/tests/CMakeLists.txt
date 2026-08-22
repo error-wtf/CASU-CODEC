@@ -56,6 +56,18 @@ if(Qt6_FOUND)
   target_link_libraries(casu_settings_parity_test PRIVATE Qt6::Core)
 endif()
 
+# Visualizer FFT parity test (viz_fft.hpp; QtCore only).
+add_executable(casu_viz_parity_test casu_viz_parity_test.cpp)
+target_include_directories(casu_viz_parity_test PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/../apps/mpcasu"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../src/core")
+target_link_libraries(casu_viz_parity_test PRIVATE casu_core)
+target_compile_features(casu_viz_parity_test PRIVATE cxx_std_20)
+find_package(Qt6 COMPONENTS Core QUIET)
+if(Qt6_FOUND)
+  target_link_libraries(casu_viz_parity_test PRIVATE Qt6::Core)
+endif()
+
 # Recording parity test (app-level recording controller; needs casu_codec).
 add_executable(casu_recording_parity_test casu_recording_parity_test.cpp
   "${CMAKE_CURRENT_SOURCE_DIR}/../apps/mpcasu/recording.cpp")
@@ -269,6 +281,9 @@ if(CMAKE_CROSSCOMPILING)
     "$<TARGET_FILE:casu_recording_parity_test>"
     "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/natv2"
     "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/natv2/convert_source.mkv")
+  add_test(NAME casu_viz_parity_test COMMAND bash "${WINE_RUN}"
+    "$<TARGET_FILE:casu_viz_parity_test>"
+    "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/natv2")
   set_tests_properties(casu_natv2_parity_test casu_natv2_convert_test PROPERTIES
     ENVIRONMENT "CASU_FFMPEG=${CMAKE_CURRENT_SOURCE_DIR}/../third_party/tools/ffmpeg.exe;CASU_FFPROBE=${CMAKE_CURRENT_SOURCE_DIR}/../third_party/tools/ffprobe.exe")
   add_test(NAME casu_codec_test COMMAND bash "${WINE_RUN}" "$<TARGET_FILE:casu_codec_test>")
