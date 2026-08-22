@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
-// Visualizer widget (WP-MPCASU-034). Documented placeholder: libVLC owns the
-// audio output, so no QAudioBuffer is available for a real spectrum; the
-// widget draws animated spectrum bars while playback is active as visual
-// feedback, with a documented note in the UI. A real FFT path can be wired
-// when a native audio sink (NativeCasuBackend/QAudioSink) is active.
+// Visualizer widget — REAL FFT over decoded PCM (casu/waveform.py parity):
+// local files are decoded once via an ffmpeg s16le/44100 Hz mono pipe
+// (decode_all_pcm), network streams feed a live ~40 Hz pipe into a ring
+// buffer; bars come from live_fft (2048-sample Hann window ending at the
+// playhead, rfft, max-normalized) and the oscilloscope from window_wave.
+// CPU-throttle parity: ticking only while visible AND playing.
 #pragma once
+#include <QProcess>
 #include <QTimer>
 #include <QWidget>
 
+#include <atomic>
+#include <functional>
 #include <vector>
 
 class QPixmap;
@@ -23,19 +27,47 @@ public:
     void set_mode(const QString& mode);
     void set_cover(const QPixmap* pixmap);  // borrowed; drawn centered when set
 
+    // PCM sources (mutually exclusive).
+    void set_audio_file(const QString& path);   // full decode in background
+    void set_stream_url(const QString& url);    // live s16le pipe (~40 Hz)
+    void clear_audio();
+    // Current playback position in seconds (playhead for FFT windows).
+    void set_position_provider(std::function<double()> provider) {
+        position_ = std::move(provider);
+    }
+
 protected:
     void paintEvent(QPaintEvent* event) override;
+    bool event(QEvent* event) override;
 
 private:
     void tick();
+    void compute_frame();
+    QVector<double> live_fft_bars(int bins) const;
+    QVector<double> wave_samples(int points) const;
+    const float* ring_tail(std::size_t* count) const;
 
     QTimer timer_;
+    QTimer stream_timer_;
+    QProcess* stream_pipe_ = nullptr;
     bool playing_ = false;
     bool active_ = true;
+    bool visible_ = true;
     QString mode_ = "spectrum";
     double phase_ = 0.0;
     QVector<double> smoothed_bands_;  // analyser 0.85 smoothing
-    const QPixmap* cover_ = nullptr; // non-owning; owned by MainWindow
+    QVector<double> current_bars_;
+    QVector<double> current_wave_;
+    const QPixmap* cover_ = nullptr;  // non-owning; owned by MainWindow
+
+    // Decoded audio state.
+    QString pcm_source_;
+    std::vector<float> pcm_;          // mono samples in [-1,1]
+    std::vector<float> stream_ring_;  // live pipe ring buffer
+    std::size_t ring_write_pos_ = 0;
+    int sample_rate_ = 44100;
+    std::atomic<bool> decoding_{false};
+    std::function<double()> position_;
 };
 
 }  // namespace mpcasu
