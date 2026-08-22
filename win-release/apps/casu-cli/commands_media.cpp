@@ -178,7 +178,7 @@ int cmd_analyze(const Args& args) {
     if (output.string() == source)
         throw CasuError("output must differ from the source media; refusing to overwrite input");
 
-    const JsonValue manifest = build_manifest(source, mode);
+    const JsonValue manifest = build_manifest(source, mode, analysis_fps);
     atomic_write_text(output.string(), compact_json(manifest));
 
     JsonObject summary;
@@ -265,7 +265,7 @@ int cmd_convert(const Args& args) {
                                     "writer is a later port step)");
                 if (path_size(target) >= 0 && !force)
                     throw CasuError("output exists (use force): " + target);
-                const JsonValue manifest = build_manifest(source, mode);
+                const JsonValue manifest = build_manifest(source, mode, analysis_fps);
                 if (container == "sidecar") {
                     atomic_write_text(target, compact_json(manifest));
                     // jobs.py: sidecar results are MANIFEST_VALIDATED.
@@ -325,7 +325,7 @@ int cmd_benchmark(const Args& args) {
         throw CasuError("input media does not exist: " + input);
 
     const auto started = std::chrono::steady_clock::now();
-    const JsonValue manifest = build_manifest(source, mode);
+    const JsonValue manifest = build_manifest(source, mode, analysis_fps);
     const double elapsed =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
     const JsonValue* source_info = manifest.find("source");

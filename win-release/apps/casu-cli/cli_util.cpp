@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
 #include "cli_util.hpp"
 
+#include "casu/codec/analyze.hpp"
 #include "casu/manifest.hpp"
 #include "casu/media/mediainfo.hpp"
 #include "casu/sha256.hpp"
@@ -129,7 +130,7 @@ JsonValue json_string_or_null(const char* value) {
 JsonValue stream_entry(const JsonValue& stream) {
     JsonObject entry;
     static const char* keys[] = {"index", "codec_type", "codec_name", "width",
-                                 "height", "sample_rate", "time_base"};
+                                 "height", "sample_rate", "channels", "time_base"};
     for (const char* key : keys) {
         const JsonValue* value = stream.find(key);
         if (value && !value->is_null()) entry.items[key] = *value;
@@ -428,7 +429,16 @@ std::vector<std::string> plan_format_targets(
 // ---------------------------------------------------------------------------
 // Probe-based analysis
 // ---------------------------------------------------------------------------
-JsonValue build_manifest(const std::string& source, const std::string& mode) {
+JsonValue build_manifest(const std::string& source, const std::string& mode,
+                         double analysis_fps_value) {
+    // core.py:522-525 parity — validate before anything else.
+    static const char* kModes[] = {"strict", "visually_lossless", "adaptive"};
+    if (std::find(std::begin(kModes), std::end(kModes), mode) == std::end(kModes)) {
+        throw CasuError("unknown analysis mode: " + mode +
+                        "; choose one of {adaptive, strict, visually_lossless}");
+    }
+    if (!std::isfinite(analysis_fps_value) || analysis_fps_value <= 0.0)
+        throw CasuError("analysis FPS must be finite and positive");
     casu::media::MediaInfo info;
     try {
         info = casu::media::probe(source);
@@ -454,7 +464,15 @@ JsonValue build_manifest(const std::string& source, const std::string& mode) {
             ? (long long)std::filesystem::file_size(abs_source, ec)
             : 0;
     const std::string digest = sha256_hex(source);
-    const double duration = casu::media::duration_s(info);
+    // core.py duration(): ONLY format.duration (never stream maxima).
+    double duration = 0.0;
+    if (const JsonValue* fmt = info.raw.find("format"))
+        if (const JsonValue* d = fmt->find("duration")) {
+            if (d->is_number()) duration = d->as_double();
+            else if (d->is_string()) {
+                try { duration = std::stod(d->as_string()); } catch (const std::exception&) {}
+            }
+        }
 
     JsonObject casu_identity;
     casu_identity.items["name"] = JsonValue(std::string("CASU"));
@@ -487,27 +505,53 @@ JsonValue build_manifest(const std::string& source, const std::string& mode) {
             for (const JsonValue& stream : raw_streams->as_array().items)
                 streams->items.push_back(stream_entry(stream));
 
+    // ---- REAL analysis (casu/core.py analyze): decoded pipelines instead of
+    // placeholder segments. NOTE: the STRICT source-resolution pipeline is
+    // not ported yet; every mode currently runs the reference preview
+    // pipeline, whose records honestly carry state_is_hint_only=true /
+    // strict_pixel_identical_available=false.
+    JsonValue video_data;
+    JsonValue audio_data;
+    if (!video_streams.empty())
+        video_data = casu::analyze::preview_activity_analysis(abs_str, info.raw,
+                                                              analysis_fps_value,
+                                                              mode);
+    if (!audio_streams.empty())
+        audio_data = casu::analyze::analyze_audio(abs_str, info.raw);
+
     JsonObject seek_index;
     seek_index.items["method"] = JsonValue(std::string("deterministic segment-boundary index"));
     auto seek_entries = std::make_shared<JsonArray>();
-    if (duration > 0) {
-        for (const auto* stream : video_streams) {
+    const auto collect_seek = [&](const JsonValue& data, const char* stream_name) {
+        if (!data.is_object()) return;
+        const JsonValue* segments = data.find("segments");
+        if (!segments || !segments->is_array()) return;
+        for (const JsonValue& segment : segments->as_array().items) {
             JsonObject entry;
-            entry.items["timestamp_s"] = JsonValue(0.0);
-            entry.items["stream"] = JsonValue(std::string("video"));
-            entry.items["segment_id"] = JsonValue(std::string("video-000000"));
-            entry.items["state"] = JsonValue(std::string("active"));
-            seek_entries->items.push_back(JsonValue(std::make_shared<JsonObject>(std::move(entry))));
+            double ts = 0.0;
+            if (const JsonValue* s = segment.find("start_s"); s && s->is_number()) ts = s->as_double();
+            entry.items["timestamp_s"] = JsonValue(ts);
+            entry.items["stream"] = JsonValue(std::string(stream_name));
+            entry.items["segment_id"] = segment.find("segment_id")
+                                            ? *segment.find("segment_id")
+                                            : JsonValue(nullptr);
+            entry.items["state"] = segment.find("state")
+                                       ? *segment.find("state")
+                                       : JsonValue(nullptr);
+            seek_entries->items.push_back(
+                JsonValue(std::make_shared<JsonObject>(std::move(entry))));
         }
-        for (const auto* stream : audio_streams) {
-            JsonObject entry;
-            entry.items["timestamp_s"] = JsonValue(0.0);
-            entry.items["stream"] = JsonValue(std::string("audio"));
-            entry.items["segment_id"] = JsonValue(std::string("audio-000000"));
-            entry.items["state"] = JsonValue(std::string("active"));
-            seek_entries->items.push_back(JsonValue(std::make_shared<JsonObject>(std::move(entry))));
-        }
-    }
+    };
+    collect_seek(video_data, "video");
+    collect_seek(audio_data, "audio");
+    std::sort(seek_entries->items.begin(), seek_entries->items.end(),
+              [](const JsonValue& a, const JsonValue& b) {
+                  const double ta = a.as_object().items.at("timestamp_s").as_double();
+                  const double tb = b.as_object().items.at("timestamp_s").as_double();
+                  if (ta != tb) return ta < tb;
+                  return a.as_object().items.at("stream").as_string() <
+                         b.as_object().items.at("stream").as_string();
+              });
     seek_index.items["entries"] = JsonValue(std::move(seek_entries));
     seek_index.items["native_key_states"] = JsonValue(false);
     seek_index.items["note"] = JsonValue(std::string(
@@ -525,14 +569,12 @@ JsonValue build_manifest(const std::string& source, const std::string& mode) {
     root.items["casu"] = JsonValue(std::make_shared<JsonObject>(std::move(casu_identity)));
     root.items["source"] = JsonValue(std::make_shared<JsonObject>(std::move(source_obj)));
     root.items["streams"] = JsonValue(std::move(streams));
-    if (video_streams.empty())
-        root.items["video"] = segments_section({}, duration);
-    else
-        root.items["video"] = segments_section(video_streams, duration);
-    if (audio_streams.empty())
-        root.items["audio"] = segments_section({}, duration);
-    else
-        root.items["audio"] = segments_section(audio_streams, duration);
+    root.items["video"] = video_data.is_object()
+                              ? video_data
+                              : segments_section({}, duration);
+    root.items["audio"] = audio_data.is_object()
+                              ? audio_data
+                              : segments_section({}, duration);
     root.items["seek_index"] = JsonValue(std::make_shared<JsonObject>(std::move(seek_index)));
     root.items["integrity"] = JsonValue(std::make_shared<JsonObject>(std::move(integrity)));
 
