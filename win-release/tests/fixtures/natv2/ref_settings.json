@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "player": {
+    "volume": 137,
+    "muted": true,
+    "rate": 1.75,
+    "audio_device": "pulse:alsa_output.test",
+    "watched_folders": [
+      "/home/tester/Musik",
+      "/home/tester/Videos"
+    ],
+    "ytdlp_consent": true,
+    "visualizer": "both",
+    "resume_playback": false,
+    "cache_limit_mib": 4096,
+    "recordings_dir": "/home/tester/Aufnahmen",
+    "record_split_minutes": 30,
+    "record_format": "mp3",
+    "shuffle": true,
+    "repeat_mode": "one"
+  }
+}

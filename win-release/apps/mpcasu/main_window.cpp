@@ -131,19 +131,24 @@ MainWindow::MainWindow(const QStringList& initial_files, bool force_proxy,
     recorder_ = new RecordingController(this);
     library_ = new MediaLibrary(app_config_dir() + "/library.json");
     library_->load();
-    settings_ = new SettingsStore(app_config_dir() + "/settings.json");
-    app_settings_ = settings_->load();
-    volume_ = app_settings_.volume;
-    muted_ = app_settings_.muted;
-    rate_ = app_settings_.rate;
-    playlist_.shuffle = app_settings_.shuffle;
-    playlist_.repeat = app_settings_.repeat == "one"
+    settings_ = new SettingsStore(app_config_dir() + "/settings.json",
+                                  app_config_dir() + "/session.json");
+    app_settings_.player = settings_->load();
+    session_ = settings_->load_session();
+    app_settings_.snapshot_dir = session_.snapshot_dir;
+    app_settings_.library_dir = session_.library_dir;
+    app_settings_.last_playlist = session_.last_playlist;
+    volume_ = app_settings_.player.volume;
+    muted_ = app_settings_.player.muted;
+    rate_ = app_settings_.player.rate;
+    playlist_.shuffle = app_settings_.player.shuffle;
+    playlist_.repeat = app_settings_.player.repeat_mode == "one"
                            ? PlaylistModel::RepeatMode::One
-                           : (app_settings_.repeat == "all"
+                           : (app_settings_.player.repeat_mode == "all"
                                   ? PlaylistModel::RepeatMode::All
                                   : PlaylistModel::RepeatMode::Off);
-    output_dir_ = app_settings_.record_dir.isEmpty() ? default_output_dir()
-                                                     : app_settings_.record_dir;
+    output_dir_ = app_settings_.player.recordings_dir.isEmpty() ? default_output_dir()
+                                                     : app_settings_.player.recordings_dir;
 
     build_ui();
 
@@ -182,19 +187,18 @@ MainWindow::MainWindow(const QStringList& initial_files, bool force_proxy,
         resume_after_seek();
     });
 
-    // Session restore (Linux parity): geometry + last queue + resume position.
-    if (!app_settings_.geometry.isEmpty()) restoreGeometry(app_settings_.geometry);
-    resume_source_ = app_settings_.session_index >= 0 &&
-                             app_settings_.session_index < app_settings_.session_queue.size()
-                         ? app_settings_.session_queue.at(app_settings_.session_index)
-                         : QString();
-    resume_position_ = app_settings_.session_position;
-    if (!play_test_mode_ && app_settings_.resume_playback && !app_settings_.session_queue.isEmpty()) {
-        add_files(app_settings_.session_queue);
-        if (app_settings_.session_index >= 0 &&
-            app_settings_.session_index < playlist_.items().size())
-            playlist_.set_current(app_settings_.session_index);
-        refresh_playlist();
+    // Session restore (Linux parity): WxH+X+Y geometry, last queue,
+    // current source and resume position come from session.json.
+    if (!play_test_mode_) {
+        if (session_.width > 0 && session_.height > 0)
+            resize(session_.width, session_.height);
+        resume_source_ = session_.current;
+        resume_position_ = session_.position;
+        if (app_settings_.player.resume_playback &&
+            !session_.playlist.isEmpty()) {
+            add_files(session_.playlist);
+            refresh_playlist();
+        }
     }
 
     if (!initial_files.isEmpty()) {
@@ -675,8 +679,8 @@ void MainWindow::build_transport() {
                                                       : QStringLiteral("false"));
     connect(shuffle_btn_, &QPushButton::toggled, this, [this](bool on) {
         playlist_.shuffle = on;
-        app_settings_.shuffle = on;
-        settings_->save(app_settings_);
+        app_settings_.player.shuffle = on;
+        settings_->save(app_settings_.player);
         // Linux parity: highlight the active state via TransportButton[on=true].
         shuffle_btn_->setProperty("on", on ? QStringLiteral("true") : QStringLiteral("false"));
         shuffle_btn_->style()->unpolish(shuffle_btn_);
@@ -1315,7 +1319,7 @@ void MainWindow::build_library_page() {
     library_folders_ = new QListWidget(page);
     library_folders_->setObjectName("QueueTree");
     library_folders_->setMaximumHeight(110);
-    for (const QString& folder : app_settings_.watched_folders)
+    for (const QString& folder : app_settings_.player.watched_folders)
         library_folders_->addItem(folder);
     layout->addWidget(library_folders_);
     auto* folder_row = new QHBoxLayout();
@@ -1325,10 +1329,10 @@ void MainWindow::build_library_page() {
         const QString folder = QFileDialog::getExistingDirectory(
             this, QStringLiteral("Add library folder"));
         if (folder.isEmpty()) return;
-        for (const QString& f : app_settings_.watched_folders)
+        for (const QString& f : app_settings_.player.watched_folders)
             if (f == folder) return;
-        app_settings_.watched_folders.append(folder);
-        settings_->save(app_settings_);
+        app_settings_.player.watched_folders.append(folder);
+        settings_->save(app_settings_.player);
         library_folders_->addItem(folder);
     });
     folder_row->addWidget(add_folder_btn);
@@ -1337,8 +1341,8 @@ void MainWindow::build_library_page() {
     connect(remove_folder_btn, &QPushButton::clicked, this, [this] {
         const int row = library_folders_->currentRow();
         if (row < 0) return;
-        app_settings_.watched_folders.removeAt(row);
-        settings_->save(app_settings_);
+        app_settings_.player.watched_folders.removeAt(row);
+        settings_->save(app_settings_.player);
         delete library_folders_->takeItem(row);
     });
     folder_row->addWidget(remove_folder_btn);
@@ -1362,7 +1366,7 @@ void MainWindow::on_library_add_selected(QListWidgetItem* item) {
 
 void MainWindow::scan_library_folders() {
     int added = 0;
-    for (const QString& folder : app_settings_.watched_folders) {
+    for (const QString& folder : app_settings_.player.watched_folders) {
         QDirIterator it(folder, {"*.mp3", "*.flac", "*.wav", "*.ogg", "*.opus",
                                  "*.m4a", "*.aac", "*.mp4", "*.mkv", "*.webm",
                                  "*.avi", "*.mov", "*.m3u", "*.m3u8", "*.pls"},
@@ -1435,17 +1439,17 @@ void MainWindow::build_settings_page() {
     row3->addWidget(new QLabel(QStringLiteral("Repeat")));
     settings_repeat_ = new QComboBox(content);
     settings_repeat_->addItems({"off", "all", "one"});
-    settings_repeat_->setCurrentText(app_settings_.repeat);
+    settings_repeat_->setCurrentText(app_settings_.player.repeat_mode);
     row3->addWidget(settings_repeat_);
     row3->addStretch();
     layout->addLayout(row3);
     auto* row4 = new QHBoxLayout();
     settings_muted_ = new QCheckBox(QStringLiteral("Muted"), content);
-    settings_muted_->setChecked(app_settings_.muted);
+    settings_muted_->setChecked(app_settings_.player.muted);
     row4->addWidget(settings_muted_);
     row4->addSpacing(18);
     settings_resume_ = new QCheckBox(QStringLiteral("Resume playback on startup"), content);
-    settings_resume_->setChecked(app_settings_.resume_playback);
+    settings_resume_->setChecked(app_settings_.player.resume_playback);
     row4->addWidget(settings_resume_);
     row4->addStretch();
     layout->addLayout(row4);
@@ -1457,7 +1461,7 @@ void MainWindow::build_settings_page() {
     settings_viz_->addItem(QStringLiteral("Waveform"), QStringLiteral("waveform"));
     settings_viz_->addItem(QStringLiteral("Both"), QStringLiteral("both"));
     settings_viz_->addItem(QStringLiteral("Off"), QStringLiteral("off"));
-    const int viz_index = settings_viz_->findData(app_settings_.visualizer);
+    const int viz_index = settings_viz_->findData(app_settings_.player.visualizer);
     settings_viz_->setCurrentIndex(qMax(0, viz_index));
     viz_row->addWidget(settings_viz_);
     viz_row->addStretch();
@@ -1468,7 +1472,7 @@ void MainWindow::build_settings_page() {
     settings_cache_ = new QSpinBox(content);
     settings_cache_->setRange(64, 8192);
     settings_cache_->setSuffix(QStringLiteral(" MiB"));
-    settings_cache_->setValue(app_settings_.cache_limit_mib);
+    settings_cache_->setValue(app_settings_.player.cache_limit_mib);
     cache_row->addWidget(settings_cache_);
     auto* clear_cache_btn = new QPushButton(QStringLiteral("Clear yt-dlp temp cache"), content);
     clear_cache_btn->setObjectName("IconButton");
@@ -1498,7 +1502,7 @@ void MainWindow::build_settings_page() {
     settings_folders_->setObjectName("QueueTree");
     settings_folders_->setMinimumHeight(110);
     settings_folders_->setMaximumHeight(180);
-    for (const QString& folder : app_settings_.watched_folders)
+    for (const QString& folder : app_settings_.player.watched_folders)
         settings_folders_->addItem(folder);
     layout->addWidget(settings_folders_);
     auto* folder_row = new QHBoxLayout();
@@ -1540,14 +1544,14 @@ void MainWindow::build_settings_page() {
     settings_split_->setRange(0, 24 * 60);
     settings_split_->setSuffix(QStringLiteral(" min"));
     settings_split_->setSpecialValueText(QStringLiteral("no splitting"));
-    settings_split_->setValue(app_settings_.record_split_minutes);
+    settings_split_->setValue(app_settings_.player.record_split_minutes);
     split_row->addWidget(settings_split_);
     split_row->addSpacing(12);
     split_row->addWidget(new QLabel(QStringLiteral("Format")));
     settings_format_ = new QComboBox(content);
     for (const QString& fmt : {"mkv", "mp4", "ts", "webm", "ogg", "mp3", "flac", "wav"})
         settings_format_->addItem(fmt);
-    const int fmt_index = settings_format_->findText(app_settings_.record_format);
+    const int fmt_index = settings_format_->findText(app_settings_.player.record_format);
     settings_format_->setCurrentIndex(qMax(0, fmt_index));
     split_row->addWidget(settings_format_);
     split_row->addStretch();
@@ -1558,7 +1562,7 @@ void MainWindow::build_settings_page() {
         QStringLiteral("I understand that YouTube uses yt-dlp and Spotify uses "
                        "spotDL (personal use only)"),
         content);
-    settings_consent_->setChecked(app_settings_.ytdlp_consent);
+    settings_consent_->setChecked(app_settings_.player.ytdlp_consent);
     layout->addWidget(settings_consent_);
 
     add_section(QStringLiteral("PROVIDERS"));
@@ -1851,13 +1855,13 @@ void MainWindow::build_youtube_page() {
         QStringLiteral("Accept and enable yt-dlp features"), yt_consent_frame_);
     accept_btn->setObjectName("PrimaryButton");
     connect(accept_btn, &QPushButton::clicked, this, [this] {
-        app_settings_.ytdlp_consent = true;
-        settings_->save(app_settings_);
+        app_settings_.player.ytdlp_consent = true;
+        settings_->save(app_settings_.player);
         if (yt_consent_frame_) yt_consent_frame_->hide();
         status(QStringLiteral("yt-dlp features enabled"));
     });
     consent_layout->addWidget(accept_btn, 0, Qt::AlignLeft);
-    yt_consent_frame_->setVisible(!app_settings_.ytdlp_consent);
+    yt_consent_frame_->setVisible(!app_settings_.player.ytdlp_consent);
     layout->addWidget(yt_consent_frame_);
 
     youtube_url_ = new QLineEdit(page);
@@ -2559,9 +2563,9 @@ void MainWindow::set_volume(int value) {
         try { backend_->set_volume(volume_); } catch (const casu::playback::PlaybackError&) {}
     }
     // Linux parity: live values survive a restart (saved on every change).
-    if (app_settings_.volume != volume_) {
-        app_settings_.volume = volume_;
-        settings_->save(app_settings_);
+    if (app_settings_.player.volume != volume_) {
+        app_settings_.player.volume = volume_;
+        settings_->save(app_settings_.player);
     }
 }
 
@@ -2571,9 +2575,9 @@ void MainWindow::toggle_mute() {
         try { backend_->set_mute(muted_); } catch (const casu::playback::PlaybackError&) {}
     }
     mute_btn_->setText(muted_ ? QStringLiteral("×") : QStringLiteral("♪"));
-    if (app_settings_.muted != muted_) {
-        app_settings_.muted = muted_;
-        settings_->save(app_settings_);
+    if (app_settings_.player.muted != muted_) {
+        app_settings_.player.muted = muted_;
+        settings_->save(app_settings_.player);
     }
 }
 
@@ -2591,9 +2595,9 @@ void MainWindow::cycle_rate() {
     if (backend_) {
         try { backend_->set_rate(rate_); } catch (const casu::playback::PlaybackError&) {}
     }
-    if (qAbs(app_settings_.rate - rate_) > 0.001) {
-        app_settings_.rate = rate_;
-        settings_->save(app_settings_);
+    if (qAbs(app_settings_.player.rate - rate_) > 0.001) {
+        app_settings_.player.rate = rate_;
+        settings_->save(app_settings_.player);
     }
 }
 
@@ -2745,9 +2749,9 @@ void MainWindow::cycle_repeat() {
     repeat_btn_->setText(playlist_.repeat == R::Off ? QStringLiteral("↻")
                          : playlist_.repeat == R::One ? QStringLiteral("↻1")
                                                       : QStringLiteral("↻∞"));
-    app_settings_.repeat = playlist_.repeat == R::Off ? "off"
+    app_settings_.player.repeat_mode = playlist_.repeat == R::Off ? "off"
                            : playlist_.repeat == R::One ? "one" : "all";
-    settings_->save(app_settings_);
+    settings_->save(app_settings_.player);
 }
 
 void MainWindow::on_backend_state(casu::playback::PlaybackState s) {
@@ -2875,7 +2879,7 @@ void MainWindow::load_playlist_file() {
     // their playlist, the group stays movable).
     if (playlist_.index_of(file) < 0) playlist_.add(file);
     app_settings_.last_playlist = file;
-    settings_->save(app_settings_);
+    settings_->save(app_settings_.player);
     invalidate_seq();
     refresh_playlist();
     status(QStringLiteral("Added %1 as playlist group · %2 entry/ies").arg(QFileInfo(file).fileName()).arg(tmp.size()));
@@ -3157,7 +3161,7 @@ void MainWindow::merge_selection_into_playlist() {
     err = PlaylistModel::save_file(target, merged);
     if (!err.empty()) { status(QStringLiteral("Could not save playlist: %1").arg(QString::fromStdString(err))); return; }
     app_settings_.last_playlist = target;
-    settings_->save(app_settings_);
+    settings_->save(app_settings_.player);
     status(QStringLiteral("Added %1 item(s) to %2").arg(added).arg(QFileInfo(target).fileName()));
     toast(QStringLiteral("Playlist updated · %1").arg(QFileInfo(target).fileName()));
     // Linux parity: the logical playback sequence must reflect the new
@@ -3259,7 +3263,7 @@ void MainWindow::move_children_to_playlist(const QStringList& entries) {
     err = PlaylistModel::save_file(target, tmp);
     if (!err.empty()) { status(QStringLiteral("Could not save playlist: %1").arg(QString::fromStdString(err))); return; }
     app_settings_.last_playlist = target;
-    settings_->save(app_settings_);
+    settings_->save(app_settings_.player);
     for (const QString& path : touched) refresh_playlist_group(path);
     refresh_playlist_group(target);
     invalidate_seq();
@@ -3518,34 +3522,34 @@ void MainWindow::refresh_library() {
 }
 
 void MainWindow::on_settings_save() {
-    app_settings_.volume = settings_volume_->value();
-    app_settings_.rate = settings_rate_->value();
-    app_settings_.shuffle = settings_shuffle_->isChecked();
-    app_settings_.repeat = settings_repeat_->currentText();
-    app_settings_.record_dir = settings_record_dir_->text().trimmed();
-    app_settings_.muted = settings_muted_->isChecked();
-    app_settings_.resume_playback = settings_resume_->isChecked();
-    app_settings_.visualizer = settings_viz_->currentData().toString();
-    app_settings_.cache_limit_mib = settings_cache_->value();
-    app_settings_.watched_folders.clear();
+    app_settings_.player.volume = settings_volume_->value();
+    app_settings_.player.rate = settings_rate_->value();
+    app_settings_.player.shuffle = settings_shuffle_->isChecked();
+    app_settings_.player.repeat_mode = settings_repeat_->currentText();
+    app_settings_.player.recordings_dir = settings_record_dir_->text().trimmed();
+    app_settings_.player.muted = settings_muted_->isChecked();
+    app_settings_.player.resume_playback = settings_resume_->isChecked();
+    app_settings_.player.visualizer = settings_viz_->currentData().toString();
+    app_settings_.player.cache_limit_mib = settings_cache_->value();
+    app_settings_.player.watched_folders.clear();
     for (int i = 0; i < settings_folders_->count(); ++i)
-        app_settings_.watched_folders.append(settings_folders_->item(i)->text());
-    app_settings_.record_split_minutes = settings_split_->value();
-    app_settings_.record_format = settings_format_->currentText();
-    app_settings_.ytdlp_consent = settings_consent_->isChecked();
-    settings_->save(app_settings_);
-    volume_ = app_settings_.volume;
-    rate_ = app_settings_.rate;
-    playlist_.shuffle = app_settings_.shuffle;
-    playlist_.repeat = app_settings_.repeat == "one"
+        app_settings_.player.watched_folders.append(settings_folders_->item(i)->text());
+    app_settings_.player.record_split_minutes = settings_split_->value();
+    app_settings_.player.record_format = settings_format_->currentText();
+    app_settings_.player.ytdlp_consent = settings_consent_->isChecked();
+    settings_->save(app_settings_.player);
+    volume_ = app_settings_.player.volume;
+    rate_ = app_settings_.player.rate;
+    playlist_.shuffle = app_settings_.player.shuffle;
+    playlist_.repeat = app_settings_.player.repeat_mode == "one"
                            ? PlaylistModel::RepeatMode::One
-                           : (app_settings_.repeat == "all"
+                           : (app_settings_.player.repeat_mode == "all"
                                   ? PlaylistModel::RepeatMode::All
                                   : PlaylistModel::RepeatMode::Off);
-    output_dir_ = app_settings_.record_dir;
+    output_dir_ = app_settings_.player.recordings_dir;
     if (record_dir_) record_dir_->setText(output_dir_);
     if (volume_slider_) volume_slider_->setValue(volume_);
-    if (mute_btn_) mute_btn_->setChecked(app_settings_.muted);
+    if (mute_btn_) mute_btn_->setChecked(app_settings_.player.muted);
     shuffle_btn_->setChecked(playlist_.shuffle);
     if (playlist_.repeat == PlaylistModel::RepeatMode::Off) repeat_btn_->setText(QStringLiteral("↻"));
     else if (playlist_.repeat == PlaylistModel::RepeatMode::One) repeat_btn_->setText(QStringLiteral("↻1"));
@@ -3582,13 +3586,13 @@ void MainWindow::show_record_settings_dialog() {
     format_combo->setObjectName("IconButton");
     for (const char* fmt : {"mkv", "mp4", "ts", "webm", "ogg", "mp3", "flac", "wav"})
         format_combo->addItem(QString::fromLatin1(fmt));
-    format_combo->setCurrentText(app_settings_.record_format);
+    format_combo->setCurrentText(app_settings_.player.record_format);
     format_row->addWidget(format_combo);
     format_row->addStretch();
     layout->addLayout(format_row);
 
     auto* split_cb = new QCheckBox(QStringLiteral("Aufzeichnung automatisch teilen"));
-    split_cb->setChecked(app_settings_.record_split_minutes > 0);
+    split_cb->setChecked(app_settings_.player.record_split_minutes > 0);
     layout->addWidget(split_cb);
     auto* split_row = new QHBoxLayout();
     split_row->addWidget(new QLabel(QStringLiteral("Alle")));
@@ -3596,7 +3600,7 @@ void MainWindow::show_record_settings_dialog() {
     split_spin->setObjectName("IconButton");
     split_spin->setRange(1, 24 * 60);
     split_spin->setSuffix(QStringLiteral(" min"));
-    split_spin->setValue(qMax(1, app_settings_.record_split_minutes));
+    split_spin->setValue(qMax(1, app_settings_.player.record_split_minutes));
     split_spin->setEnabled(split_cb->isChecked());
     connect(split_cb, &QCheckBox::toggled, split_spin, &QSpinBox::setEnabled);
     split_row->addWidget(split_spin);
@@ -3609,11 +3613,11 @@ void MainWindow::show_record_settings_dialog() {
     layout->addWidget(buttons);
 
     if (dlg.exec() != QDialog::Accepted) return;
-    app_settings_.record_dir = folder_entry->text().trimmed();
-    app_settings_.record_format = format_combo->currentText();
-    app_settings_.record_split_minutes = split_cb->isChecked() ? split_spin->value() : 0;
-    settings_->save(app_settings_);
-    output_dir_ = app_settings_.record_dir;
+    app_settings_.player.recordings_dir = folder_entry->text().trimmed();
+    app_settings_.player.record_format = format_combo->currentText();
+    app_settings_.player.record_split_minutes = split_cb->isChecked() ? split_spin->value() : 0;
+    settings_->save(app_settings_.player);
+    output_dir_ = app_settings_.player.recordings_dir;
     if (record_dir_) record_dir_->setText(output_dir_);
     if (settings_record_dir_) settings_record_dir_->setText(output_dir_);
     toast(QStringLiteral("Recording settings gespeichert"));
@@ -3647,11 +3651,11 @@ void MainWindow::update_stage() {
 }
 
 void MainWindow::apply_viz_mode() {
-    const bool on = app_settings_.visualizer != "off";
+    const bool on = app_settings_.player.visualizer != "off";
     if (viz_btn_) viz_btn_->setChecked(on);
     update_stage();
     if (visualizer_) {
-        static_cast<VisualizerWidget*>(visualizer_)->set_mode(app_settings_.visualizer);
+        static_cast<VisualizerWidget*>(visualizer_)->set_mode(app_settings_.player.visualizer);
         static_cast<VisualizerWidget*>(visualizer_)->set_active(on);
     }
 }
@@ -3760,7 +3764,7 @@ void MainWindow::on_youtube_play() {
         return;
     }
     // Anything else is a search term (yt-dlp ytsearch).
-    if (!app_settings_.ytdlp_consent) {
+    if (!app_settings_.player.ytdlp_consent) {
         youtube_status_->setText(
             QStringLiteral("YouTube search needs the yt-dlp consent above."));
         return;
@@ -4003,13 +4007,23 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     // Session restore: persist queue + resume position + geometry BEFORE the
     // backend is torn down (position must be read while still valid).
     persist_media_preferences();  // Linux parity: save per-media prefs on exit
-    app_settings_.session_queue.clear();
+    mpcasu::SessionState session_state;
     for (const PlaylistItem& item : playlist_.items())
-        app_settings_.session_queue.append(item.path);
-    app_settings_.session_index = playlist_.current_index();
-    app_settings_.session_position = controller_ ? controller_->position() : -1.0;
-    app_settings_.geometry = saveGeometry();
-    settings_->save(app_settings_);
+        session_state.playlist.append(item.path);
+    session_state.current = resume_source_;
+    session_state.position =
+        controller_ ? std::max(0.0, controller_->position()) : 0.0;
+    session_state.volume = volume_;
+    session_state.muted = muted_;
+    session_state.rate = rate_;
+    session_state.width = width();
+    session_state.height = height();
+    session_state.x = x();
+    session_state.y = y();
+    session_state.snapshot_dir = app_settings_.snapshot_dir;
+    session_state.library_dir = app_settings_.library_dir;
+    session_state.last_playlist = app_settings_.last_playlist;
+    settings_->save_session(session_state);
     stop_playback();
     if (recorder_) recorder_->kill();
     if (poll_timer_) poll_timer_->stop();
