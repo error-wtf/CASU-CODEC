@@ -80,3 +80,11 @@ wine ./tests/casu_natv2_convert_test.exe 'Z:\...\tests\fixtures\natv2'  # Byte-I
 Beide müssen ALL PASS melden — sie sind der Paritätsnachweis für den
 CASUNAT2-Stack (§0b Tier 1.1 + CASU-5). Fixtures: `tests/fixtures/natv2/`
 (gen1/gen2 = Writer-Vergleich, convert_source.mkv = lossless Konvertier-Fixture).
+
+## Funktions-Verifikation (nach §0b-Arbeit, verbindlich)
+
+1. `ctest -E youtube` → 21/21 PASS (inkl. smoke = Start+Play+CleanExit).
+2. Web-API live: `/api/version` → 5.0.0; fremd-Origin-POST → 403.
+3. GUI-Screenshots je Seite (`--page NAME --screenshot ...`) erzeugen
+   unterschiedliche Inhalte; App verlässt sich sauber (pgrep leer).
+4. Keine hängenden MPCASU/ffmpeg-Prozesse danach (Single-Instance-Lock!).
