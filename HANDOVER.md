@@ -111,7 +111,7 @@ atomar+force+verification_result, Web-Access-Log, Versionstrings, Seek ±10s.
    stop≤start-Filter fehlt, Sortierung fehlt, category fehlt (sub-title
    stattdessen), naiver Attribut-/Entity-Parser.
 
-### TIER 2 (App-Features) — Stand: Items 4–8 ✅ (`2e95e1d`,`2d74211`,`5daf7c8`,`7bf9194`,`9ea8cad`); Items 9–10 offen
+### TIER 2 (App-Features) — Stand: Items 4–9 ✅ (`2e95e1d`,`2d74211`,`5daf7c8`,`7bf9194`,`9ea8cad`,`717186f`* — *9 Teil 1, Rest s. Notiz); Item 10 offen
 4. **Recording**: -map_metadata/-map_chapters fehlen; KEIN Temp-Write+
    ffprobe-Verify+atomarer Publish (direkt ins Ziel); record_format-Setting
    wirkungslos (Quell-Suffix!); Splitting (record_split_minutes) komplett
