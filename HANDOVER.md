@@ -57,7 +57,7 @@ Playlist-Parser/Format-Byte-Parität, move_children-Datenverlust, Child-Play,
 Merge-Staleness, Markierungspersistenz, Delay-µs-Bug, CLI --retry/transcode
 atomar+force+verification_result, Web-Access-Log, Versionstrings, Seek ±10s.
 
-### OFFEN — TIER 1 (Kernfunktionen, größter Block)
+### TIER 1 — ABGESCHLOSSEN ✅ (2026-08-22: CASU-0..5 `9fb279d`+`e64ed63`, ANA-STRICT `7c873e2`, EPG `3142918`)
 1. **CASUNAT2 gesamt** (Audit 9): C++ hat nur „Integrity-Reader light“.
    FEHLEND: NativeV2PayloadValidator (feed/finalize: Topologie+Semantik),
    _decode_recovery_point (checkpoint/prefix-hash/offset-ref-Checks),
@@ -388,7 +388,7 @@ Checkliste (abzuhaken):
 [x] CASU-4 Reader(seek/reconstruct/recover) ✅ `9fb279d` (R21/R23, offset-keyed Hash-Vergleich, read_chunk_at/audio_meta, TileStateCache, recover/repair)
 [x] CASU-5 Converter ✅ `e64ed63` (converter.py-Komplettport über strict::FrameSource; Konvertierung BYTE-IDENTISCH auf lossless-Fixture — casu_natv2_convert_test ALL PASS)
 [x] ANA-STRICT decoder/canonical/state_builder ✅ `7c873e2` — iter_state_map 3er-Fenster + valid_until + as_dict-Records RECORD-IDENTISCH zur Python-Referenz (120/120 auf Fixture); analyze_strict_video-Struktur komplett; CLI mode=strict läuft jetzt produktiv
-[ ] EPG-offset+tvg
+[x] EPG-offset+tvg ✅ `3142918` — Extended-M3U+XMLTV-Komplettport; UTC-Offsets, tvg-Matching, Sortierung, Limits, Entities; casu_epg_parity_test IDENTISCH zur Referenz
 [ ] REC verify/split/format [ ] SET atomic/audio_device/session
 [ ] LIB felder/extensions/casefold [ ] WEB proxy-policy/trusted/media-token
 [ ] VIZ FFT [ ] PLAYBACK consent/hw/async [ ] UI-Texte+Breite370
