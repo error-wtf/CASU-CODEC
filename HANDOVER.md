@@ -111,7 +111,7 @@ atomar+force+verification_result, Web-Access-Log, Versionstrings, Seek ±10s.
    stop≤start-Filter fehlt, Sortierung fehlt, category fehlt (sub-title
    stattdessen), naiver Attribut-/Entity-Parser.
 
-### TIER 2 (App-Features) — Stand: Items 4,5,6 ✅ (`2e95e1d`, `2d74211`, `5daf7c8`); Items 7–10 offen
+### TIER 2 (App-Features) — Stand: Items 4–7 ✅ (`2e95e1d`, `2d74211`, `5daf7c8`, `7bf9194`); Items 8–10 offen
 4. **Recording**: -map_metadata/-map_chapters fehlen; KEIN Temp-Write+
    ffprobe-Verify+atomarer Publish (direkt ins Ziel); record_format-Setting
    wirkungslos (Quell-Suffix!); Splitting (record_split_minutes) komplett
@@ -390,5 +390,5 @@ Checkliste (abzuhaken):
 [x] ANA-STRICT decoder/canonical/state_builder ✅ `7c873e2` — iter_state_map 3er-Fenster + valid_until + as_dict-Records RECORD-IDENTISCH zur Python-Referenz (120/120 auf Fixture); analyze_strict_video-Struktur komplett; CLI mode=strict läuft jetzt produktiv
 [x] EPG-offset+tvg ✅ `3142918` — Extended-M3U+XMLTV-Komplettport; UTC-Offsets, tvg-Matching, Sortierung, Limits, Entities; casu_epg_parity_test IDENTISCH zur Referenz
 [ ] REC verify/split/format [x] SET atomic/audio_device/session ✅ `2d74211` — Versionhülle+14 Referenzfelder inkl. audio_device; exakte Klemmen (rate 0.25–4.0, cache [0,65536], Split [0,1440]); 1MiB-Bound; atomar tmp+fsync+replace; settings.json BYTE-IDENTISCH zum Python-Writer; session.json getrennt im Linux-Format; casu_settings_parity_test ALL PASS
-[ ] LIB felder/extensions/casefold [ ] WEB proxy-policy/trusted/media-token
+[ ] LIB felder/extensions/casefold [x] WEB proxy-policy/trusted/media-token ✅ `7bf9194` — POST-Mutation-Guard (Sec-Fetch-Site/Origin→403), Proxy-Policy aktiviert (Radio-Proxy lebt; SSRF-Guard bleibt), kind video/audio via ffprobe-_media_shape, Upload >64MiB Disk-Spill statt 16GiB-RAM; web_backend+webapi Tests ALL PASS
 [ ] VIZ FFT [ ] PLAYBACK consent/hw/async [ ] UI-Texte+Breite370
