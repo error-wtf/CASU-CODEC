@@ -21,7 +21,7 @@ bauen wollen. In jedem Unterordner liegen die **äquivalenten Hilfsdateien**
 
 | Unterordner | OS | Zielartefakt | Status |
 |-------------|----|--------------|--------|
-| `Windows/` | Windows x86_64 | `MPCASU-Setup-5.0.0.exe`, `MPCASU-Windows-x86_64.zip` | **v3.0.0 fertig** (14/14 Gate PASS), v5.0 geplant |
+| `Windows/` | Windows x86_64 | `MPCASU-Setup-5.0.0.exe`, `MPCASU-Windows-x86_64.zip` | **v3.0.0 fertig** (14/14 Gate PASS); v5: CASUNAT2-Stack + nativ-v2-Converter **BYTE-PARITÄTISCH** zur Linux-Referenz verifiziert (Commits `9fb279d`+`e64ed63`, 2026-08-22); §0b-Tierliste Rest: Strict P2–P5, EPG, Tier 2 |
 | `Linux/` | Linux (Debian/Ubuntu, x86_64) | `.deb`-Pakete (casu-codec, casu-converter, mpcasu, web-casu) + Pure-Web-ZIP | **v3.0.0 fertig**, v5.0 geplant |
 | `Mac-OS/` | macOS (arm64 + x86_64) | `.dmg` (geplant) | geplant, noch nicht gebaut |
 | `Android/` | Android (arm64-v8a, armeabi-v7a, x86_64) | `.apk` / `.aab` (geplant) | geplant, noch nicht gebaut |
@@ -41,6 +41,15 @@ liegen äquivalente Dateien (gleiche Namen, OS-spezifischer Inhalt):
 | `FEATURE_MATRIX.md` | Feature-Parität zum Linux-Referenzplayer |
 | `INSTALL_AND_CODEC.md` | Installation + Dateityp-/Codec-Verhalten je OS |
 | `START_HIER.md` | Start-Prompt für die nächste Session |
+
+## HARTE REGEL (VERBINDLICH, Nutzer-Direktive ab 2026-08-22)
+
+**VOLLSTÄNDIGE PARITÄT ZUERST.** Keine Android-/macOS-Arbeit, kein
+v5.0.0-GitHub-Release und keine neuen Features, BEVOR die §0b-Tierliste aus
+`HANDOVER.md` vollständig abgearbeitet ist und Linux↔Windows deckungsgleich
+sind (Nachweis: ctest grün + neue Paritätstests + Audit-Checkliste je Punkt).
+Reihenfolge: CASUNAT2 (erledigt ✅) → Strict-Analyse → EPG → Tier 2 Items
+4–10. Erst danach: Release v5.0.0 → Android → macOS.
 
 ## Regeln
 

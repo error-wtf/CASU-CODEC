@@ -10,7 +10,8 @@
 | MIME | `.casu` registriert (casu-codec-mime.xml, postinst) — verifiziert im DEB |
 | DEBs | casu-codec/casu-converter/mpcasu/web-casu 3.0.0 — gebaut + Release hochgeladen (DEB-Neubau nach Gruppen-Arbeit läuft/offen) |
 | Pure Web | 3.0.0 frozen (SHA `b71b5d0b…`), byte-identisch in Windows-Paket |
-| Offen | optional: AppImage/Snap/Flatpak, arm64 (Nutzer-Entscheid); v5.0-Versionsbump |
+| **CASUNAT2-Parität (Referenzseite)** | (2026-08-22) Die Linux-Python-Module (`casu/native_v2/*`, `casu/strict/*`) sind die VERIFIZIERUNGSREFERENZ des neuen C++-Stacks unter `win-release/src/`: Writer-Ausgabe byte-identisch (`casu_natv2_parity_test`), Konvertierung byte-identisch (`casu_natv2_convert_test`). Commits `9fb279d`+`e64ed63` |
+| Offen | optional: AppImage/Snap/Flatpak, arm64 (Nutzer-Entscheid); v5.0-Versionsbump NACH §0b-Tierliste |
 
 ## Nächste Schritte (v5.0.0)
 1. Versionsbump 3.0.0 → 5.0.0 (DEB-Versionen, Doku, Release-Body).

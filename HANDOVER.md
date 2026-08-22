@@ -381,9 +381,14 @@ gegentestet (gleiche Inputs → identische Outputs/Felder); (c) ctest 16/16
 grün; (d) Eintrag hier mit ✅+Commit-Hash. Reihenfolge zwingend:
 1.CASUNAT2 Stufe 0→5  2.Strict P2–P5  3.EPG  4–10 Tier2  → Gate → v5.0.0.
 Checkliste (abzuhaken):
-[ ] CASU-0 JSON-Härtung [ ] CASU-1 Tile-Hash/repr [ ] CASU-2 Validator
-[ ] CASU-3 Writer [ ] CASU-4 Reader(seek/reconstruct/recover) [ ] CASU-5 Converter
-[ ] ANA-STRICT decoder/canonical/state_builder [ ] EPG-offset+tvg
+[x] CASU-0 JSON-Härtung ✅ `9fb279d` (Duplikat-Keys/Surrogates/errno/ensure_ascii/CasuLimits; Tests in casu_natv2_parity_test)
+[x] CASU-1 Tile-Hash/repr ✅ `9fb279d` (CASU-STRICT-TILE-v1\0, Tuple-repr exakt, digest()-"None"-Suffix)
+[x] CASU-2 Validator ✅ `9fb279d` (validate_manifest + feed/finalize, exakte Referenz-Semantik)
+[x] CASU-3 Writer ✅ `9fb279d` (kanon. STREAM_CONFIGs, Recovery-Checkpoint-Doppeltserialisierung, INTEGRITY_TABLE pts=index_offset) — Writer-Ausgabe BYTE-IDENTISCH zur Referenz (gen1/gen2)
+[x] CASU-4 Reader(seek/reconstruct/recover) ✅ `9fb279d` (R21/R23, offset-keyed Hash-Vergleich, read_chunk_at/audio_meta, TileStateCache, recover/repair)
+[x] CASU-5 Converter ✅ `e64ed63` (converter.py-Komplettport über strict::FrameSource; Konvertierung BYTE-IDENTISCH auf lossless-Fixture — casu_natv2_convert_test ALL PASS)
+[~] ANA-STRICT decoder/canonical/state_builder — decoder ✅ `e64ed63` (strict_frames.cpp, 30 Formate, nativ-pixfmt-Pipe), canonical+Tiles ✅ `9fb279d`; OFFEN: state_builder/Manifest-Felder P2–P5 (iter_state_map 3er-Fenster, valid_until-Logik, video.*/audio.*-Manifestfelder)
+[ ] EPG-offset+tvg
 [ ] REC verify/split/format [ ] SET atomic/audio_device/session
 [ ] LIB felder/extensions/casefold [ ] WEB proxy-policy/trusted/media-token
 [ ] VIZ FFT [ ] PLAYBACK consent/hw/async [ ] UI-Texte+Breite370
