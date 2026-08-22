@@ -1,0 +1,10 @@
+#EXTM3U url-tvg="http://epg.example/guide.xml, https://backup.example/g.xml.gz" x-tvg-url="http://old.example/x.xml"
+#EXTINF:-1 tvg-id="ard.de" tvg-name="Das Erste" group-title="Öffentlich-Rechtlich" tvg-logo="http://logo.example/ard.png",ARD HD
+http://stream.example/ard.m3u8
+#EXTINF:0, ZDF
+https://zdf.example/live
+#EXTINF:-1 tvg-id="radio.ch" group-title='Radio',Radio SRF
+rtmp://srf.example/live
+#EXTINF:-1 tvg-name="Lokal",Lokal FF
+relative/file.ts
+javascript:alert(1)

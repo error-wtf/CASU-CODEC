@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
 #include "main_window.hpp"
+#include "epg.hpp"
 
 #include "casu/codec/tools.hpp"
 #include "casu/formats.hpp"
@@ -1661,18 +1662,18 @@ void MainWindow::load_epg_source(const QString& source) {
             }
             data = f.readAll();
         }
-        err = parse_xmltv(data, &epg_);
+        err = parse_xmltv(data, &epg_, &epg_guide_);
         if (!err.isEmpty()) {
             epg_status_->setText(QStringLiteral("EPG error: %1").arg(err));
             return;
         }
-        epg_status_->setText(QStringLiteral("Guide loaded: %1 programmes").arg(epg_.programs.size()));
+        epg_status_->setText(QStringLiteral("Guide loaded: %1 programmes").arg(epg_guide_.programmes.size()));
         update_diagnostics_guide();
         render_epg_cards();
         return;
     }
     // M3U / playlist catalog (local or fetched over HTTP).
-    EpgCatalog catalog;
+    mpcasu::StreamCatalog catalog;
     if (lower.startsWith(QStringLiteral("http://")) ||
         lower.startsWith(QStringLiteral("https://"))) {
         const casu::network::HttpResponse res =
@@ -1681,22 +1682,20 @@ void MainWindow::load_epg_source(const QString& source) {
             epg_status_->setText(QStringLiteral("Fetch failed: %1").arg(QString::fromStdString(res.error)));
             return;
         }
-        QTemporaryFile tmp;
-        if (!tmp.open()) return;
-        tmp.write(QByteArray(reinterpret_cast<const char*>(res.body.data()),
-                             static_cast<int>(res.body.size())));
-        tmp.flush();
-        PlaylistModel tmp_model;
-        if (PlaylistModel::load_file(tmp.fileName(), &tmp_model).empty())
-            for (const PlaylistItem& item : tmp_model.items())
-                catalog.channels.append(
-                    EpgChannel{item.path, item.title.isEmpty() ? QFileInfo(item.path).fileName() : item.title, item.path});
+        const QString parse_err =
+            mpcasu::parse_m3u(QByteArray(reinterpret_cast<const char*>(res.body.data()),
+                                         static_cast<int>(res.body.size())),
+                              QString(), &catalog);
+        if (!parse_err.isEmpty()) {
+            epg_status_->setText(QStringLiteral("EPG error: %1").arg(parse_err));
+            return;
+        }
     } else {
-        PlaylistModel tmp_model;
-        if (PlaylistModel::load_file(source, &tmp_model).empty())
-            for (const PlaylistItem& item : tmp_model.items())
-                catalog.channels.append(
-                    EpgChannel{item.path, item.title.isEmpty() ? QFileInfo(item.path).fileName() : item.title, item.path});
+        const QString parse_err = mpcasu::load_m3u_file(source, &catalog);
+        if (!parse_err.isEmpty()) {
+            epg_status_->setText(QStringLiteral("EPG error: %1").arg(parse_err));
+            return;
+        }
     }
     if (catalog.channels.isEmpty()) {
         epg_status_->setText(QStringLiteral("No channels found in %1").arg(source));
@@ -1716,7 +1715,7 @@ void MainWindow::render_epg_cards() {
     }
     const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
     for (int index = 0; index < epg_.channels.size(); ++index) {
-        const EpgChannel& ch = epg_.channels[index];
+        const mpcasu::StreamChannel& ch = epg_.channels[index];
         auto* card = new QFrame(epg_grid_->parentWidget());
         card->setObjectName("EpgChannel");
         card->setCursor(Qt::PointingHandCursor);
@@ -1728,8 +1727,15 @@ void MainWindow::render_epg_cards() {
         name->setWordWrap(true);
         cl->addWidget(name);
         QString now_text;
-        const QVector<EpgProgram> picks = now_and_next(epg_, ch.id, now_ms);
-        if (!picks.isEmpty()) now_text = picks.first().title;
+        if (!epg_guide_.programmes.isEmpty()) {
+            const QString key =
+                ch.epg_id.isEmpty() ? ch.name : ch.epg_id;
+            const mpcasu::Programme* active = nullptr;
+            const mpcasu::Programme* upcoming = nullptr;
+            epg_guide_.now_next(key, now_ms, &active, &upcoming);
+            if (active) now_text = active->title;
+        }
+        if (now_text.isEmpty()) now_text = ch.group;
         auto* meta = new QLabel(now_text, card);
         meta->setObjectName("NowPlayingMeta");
         meta->setWordWrap(true);
@@ -3811,42 +3817,44 @@ void MainWindow::set_diagnostics(const QString& support, const QString& integrit
 }
 
 void MainWindow::update_diagnostics_guide() {
+    // Linux parity: first catalog channel's now/next schedule preview.
     if (epg_.channels.isEmpty()) {
         set_diagnostics(QString(), QString(), QString(), QStringLiteral("no EPG loaded"));
         return;
     }
-    QString channel;
-    if (!epg_.channels.isEmpty()) channel = epg_.channels.first().id;
-    QVector<EpgProgram> picks = now_and_next(epg_, channel, QDateTime::currentMSecsSinceEpoch());
-    if (!picks.isEmpty()) {
-        QStringList parts;
-        for (const EpgProgram& p : picks)
-            parts << QStringLiteral("%1 · %2")
-                         .arg(QDateTime::fromMSecsSinceEpoch(p.start_ms).toString("HH:mm"), p.title);
-        set_diagnostics(QString(), QString(), QString(), parts.join(QStringLiteral("  |  ")));
-        return;
+    const mpcasu::StreamChannel& channel = epg_.channels.first();
+    const QString key = channel.epg_id.isEmpty() ? channel.name : channel.epg_id;
+    const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
+    if (!epg_guide_.programmes.isEmpty()) {
+        const QVector<mpcasu::Programme> picks =
+            epg_guide_.schedule(key, now_ms, 3);
+        if (!picks.isEmpty()) {
+            QStringList parts;
+            for (const mpcasu::Programme& p : picks)
+                parts << QStringLiteral("%1 · %2")
+                             .arg(QDateTime::fromMSecsSinceEpoch(p.start_ms).toString("HH:mm"), p.title);
+            set_diagnostics(QString(), QString(), QString(), parts.join(QStringLiteral("  |  ")));
+            return;
+        }
     }
-    const QString name = std::find_if(epg_.channels.cbegin(), epg_.channels.cend(),
-                                      [&](const EpgChannel& c) { return c.id == channel; }) !=
-                                 epg_.channels.cend()
-                             ? std::find_if(epg_.channels.cbegin(), epg_.channels.cend(),
-                                            [&](const EpgChannel& c) { return c.id == channel; })
-                                   ->name
-                             : channel;
-    set_diagnostics(QString(), QString(), QString(), name.isEmpty() ? QStringLiteral("EPG loaded") : name);
+    set_diagnostics(QString(), QString(), QString(),
+                    channel.name.isEmpty() ? QStringLiteral("EPG loaded") : channel.name);
 }
 
 QString MainWindow::epg_now_next_text(const QString& source) {
     // Linux parity (main_window.py _epg_now_next): channel · now: title line.
-    if (epg_.channels.isEmpty() && epg_.programs.isEmpty())
+    if (epg_.channels.isEmpty())
         return QStringLiteral("no EPG loaded");
-    for (const EpgChannel& c : epg_.channels) {
+    const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
+    for (const mpcasu::StreamChannel& c : epg_.channels) {
         if (c.url != source) continue;
-        if (!epg_.programs.isEmpty()) {
-            const QVector<EpgProgram> picks =
-                now_and_next(epg_, c.id, QDateTime::currentMSecsSinceEpoch());
-            if (!picks.isEmpty())
-                return QStringLiteral("%1 · now: %2").arg(c.name, picks.first().title);
+        if (!epg_guide_.programmes.isEmpty()) {
+            const QString key = c.epg_id.isEmpty() ? c.name : c.epg_id;
+            const mpcasu::Programme* active = nullptr;
+            const mpcasu::Programme* upcoming = nullptr;
+            epg_guide_.now_next(key, now_ms, &active, &upcoming);
+            if (active)
+                return QStringLiteral("%1 · now: %2").arg(c.name, active->title);
         }
         return c.name;
     }
