@@ -5,8 +5,14 @@ Legende: ✅ fertig+verifiziert · 🟡 teilweise (MSVC-only) · 🔲 geplant ·
 | Feature | Linux-Referenz | Windows |
 |---------|---------------|---------|
 | Container CASUNAT1/NAT2/MP5 (zstd+zlib) | ✅ | ✅ (Golden byte-identisch) |
+| **CASUNAT2 Writer** (kanon. STREAM_CONFIGs, Recovery-Punkte, atomar) | ✅ `casu/native_v2/writer.py` | ✅ **BYTE-IDENTISCH** (`casu_natv2_parity_test`, Commit `9fb279d`) |
+| **CASUNAT2 Reader** (Topologie+Semantik, R21/R23, seek/reconstruct/recover/repair) | ✅ `casu/native_v2/reader.py` | ✅ **BYTE-IDENTISCH** (Cross-Lesen beidseitig verifiziert) |
+| **CASUNAT2 Payload-Codecs** (Video-Key/Tile/Format-Change, Audio s16le, WebVTT-Text, Bitmap-RGBA, Chapters, Attachments) | ✅ | ✅ Byte-Parität inkl. Tile-Hash mit Python-repr-Kompatibilität |
+| **Strict-Decoder** (nativ-pixfmt-Quellauflösung, 30 Formate) | ✅ `casu/strict/decoder.py` | ✅ Portiert (`strict::FrameSource`, Commit `e64ed63`) |
+| **Converter nativ-v2-Pipeline** (Tiles+Memo, Audio-Sync, ASS-Attachment, Bitmap-Pfad, Cover-Normalisierung) | ✅ `casu/native_v2/converter.py` | ✅ **Konvertierung BYTE-IDENTISCH** (`casu_natv2_convert_test`) |
+| JSON-Härtung (Duplikat-Keys/Surrogates/Overflow fail-closed) | ✅ `jsonutil.py` | ✅ `parse_strict_json` + Tests |
 | CLI `casu` (alle Subcommands) | ✅ | ✅ |
-| Converter (Qt-GUI, Batch, Presets) | ✅ | ✅ |
+| Converter (Qt-GUI, Batch, Presets) | ✅ | ✅ (Engine nativ-v2 jetzt byte-paritätisch) |
 | Player MPCASU (libVLC) | ✅ | ✅ (echter Decode unter Wine) |
 | YouTube (yt-dlp → Loopback → libVLC) | ✅ | ✅ (Live-Gate: Full-Stream 28,5 MB byte-exakt) |
 | Web-Backend `/api/*` + Stream-Proxy | ✅ | ✅ |

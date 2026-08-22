@@ -65,3 +65,18 @@ Ein WP nach dem anderen, immer derselbe Loop. "VERIFIED" nur mit Nachweis.
 - HWND-Lifetime, qwindows.dll, vlc/plugins, ffmpeg arg-arrays, Unicode/Spaces.
 - Threading: Qt-GUI nur GUI-Thread, Worker→Signals. Audio: WASAPI/Qt.
 - Wine ≠ Windows: Wine-Workarounds nicht als universelle Lösung coden.
+## CASUNAT2-Paritätstests (ab 2026-08-22 verbindlich)
+
+Nach jedem Build zusätzlich zu ctest:
+
+```bash
+cd win-release/build-win64
+export CASU_FFMPEG='Z:\home\error\Codec-Casu\win-release\third_party\tools\ffmpeg.exe'
+export CASU_FFPROBE='Z:\home\error\Codec-Casu\win-release\third_party\tools\ffprobe.exe'
+wine ./tests/casu_natv2_parity_test.exe 'Z:\...\tests\fixtures\natv2'   # 19 Checks
+wine ./tests/casu_natv2_convert_test.exe 'Z:\...\tests\fixtures\natv2'  # Byte-Identität zur Python-Konvertierung
+```
+
+Beide müssen ALL PASS melden — sie sind der Paritätsnachweis für den
+CASUNAT2-Stack (§0b Tier 1.1 + CASU-5). Fixtures: `tests/fixtures/natv2/`
+(gen1/gen2 = Writer-Vergleich, convert_source.mkv = lossless Konvertier-Fixture).

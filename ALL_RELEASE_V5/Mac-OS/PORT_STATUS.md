@@ -1,5 +1,7 @@
 # PORT_STATUS — macOS (ALL_RELEASE_V5)
 
+> **HARTE REGEL (2026-08-22):** Arbeit an diesem Ziel-OS erst NACH abschlossener §0b-Paritäts-Tierliste (Linux↔Windows deckungsgleich, Nachweis ctest + Paritätstests). Fortschritt der Tierliste siehe `HANDOVER.md` §0b — CASUNAT2-Stack bereits ✅ (Commits `9fb279d`, `e64ed63`).
+
 | Field | Value |
 |-------|-------|
 | Current version | — (kein macOS-Build) |

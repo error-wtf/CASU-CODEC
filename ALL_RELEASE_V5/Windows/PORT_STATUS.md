@@ -16,15 +16,20 @@
 | **Navigation-Fix + Web-Tabs** | (2026-08-21) Seiten-Index-Map in `navigate()` korrigiert (WEB PLAYERS/LIBRARY/YOUTUBE/EPG/SETTINGS/ABOUT zeigten zuvor die falsche Seite — Ursache „fehlende" Web-Player-Tabs). Jetzt per `--page`-Screenshot unter Wine verifiziert: SPOTIFY/HEARTHIS/TIDAL/NETFLIX/BROWSE-Tabs erscheinen. Alle Seiten navigieren korrekt |
 | **Playlist-Formate** | `PlaylistModel` parst jetzt vollständig M3U/M3U8, PLS, WPL, XSPF, JSPF, ASX/WMX/WVX, RMP/RAM und MPCASU-JSON (vorher nur M3U/PLS) — `casu_playlist_test` um XSPF/WPL/JSPF/JSON/ASX/RAM erweitert (ALL PASS) |
 | **UI-Parität Struktur** | (2026-08-21, Commit `ac2b7e8`) Side-by-Side-OCR-Vergleich Linux↔Windows: Topbar identisch (‹ Zurück, „Search queue…"-Feld statt Pane-Suche, ☰-Nav-/☷-Queue-Toggle), Statusbar 3-slotig (`MPCASU 3.0.0 \| Optimized… \| CPU/RAM telemetry unavailable`, Transient-Center wie Linux `status()`), Playlist-Pane (PLAYLIST-Titel+Sub, View-Labels All items…Spotify, Shuffle off/on + Repeat off/all/one-Footer), Leerzustand „Drop media here" mit Stage-Routing (leer/Video/Visualizer nach Play-State). **Neu**: Queue-Thumbnails (PPM-Cache via `thumbnail_for`, 54×38-Icons in Video-Zeilen), Per-Media-Preferences (Track+A/V-Delays pro Datei in `.prefs.json`, Apply bei Play, Persist bei Track/Delay/Close), Spotify-URL-Expansion via spotDL-Metadaten in der Sources-Seite. Release Gate PASS, ctest grün, Assets + Notes aktualisiert |
-| Offen | MSVC/QtWebEngine-Endbuild (nur auf echtem Windows); BLOCKER-004 (PATH/Registry auf echtem Windows); BLOCKER-005 (MF/DirectShow-Decoder geplant, nicht gebaut) |
+| **CASUNAT2-Stack (§0b Tier 1.1)** | (2026-08-22, Commits `9fb279d` + `e64ed63`) **VOLLSTÄNDIGE BYTE-PARITÄT ZUM PYTHON-REFERENZBAUM ERREICHT**: CASU-0 JSON-Härtung (Duplikat-Keys, Surrogate-Pairs, int64-Overflow fail-closed, `ensure_ascii`-Modus), CASU-1 Tile-Hash mit Python-repr-Kompatibilität (`CASU-STRICT-TILE-v1\0`, Tuple-repr exakt), CASU-2 NativeV2PayloadValidator (feed/finalize, Topologie+Semantik), CASU-3 Writer (kanonische STREAM_CONFIGs, Recovery-Punkte mit checkpoint-Doppeltserialisierung, INTEGRITY_TABLE pts=index_offset, atomar+fsync), CASU-4 Reader (R21/R23-Cross-Checks, offset-keyed Hash-Vergleich, seek_video/reconstruct_video via TileStateCache, recover_native_v2/repair_native_v2). SHA256-Fix: nicht-destruktive Finalisierung (laufende Digest-Snapshots). Tests: `casu_natv2_parity_test` 19/19 — C++-Writer-Ausgabe ist **BYTE-IDENTISCH** mit `casu.native_v2.writer`; Cross-Lesen in beide Richtungen verifiziert |
+| **Converter nativ-v2 (CASU-5 + Strict-Decoder)** | (2026-08-22, Commit `e64ed63`) `strict::FrameSource` = Port von casu/strict/decoder.py (30-Format-Tabelle, FFprobe-Inventar, NATIV-pixfmt-Rawvideo-Pipe, `-fps_mode passthrough` für neue FFmpeg-Builds); `convert_media_to_native_v2` = kompletter converter.py-Port (bounded Tags, Cover-Art-Erkennung, s16le-Audio-Pipe synchron zum Inventar, WebVTT-Fallback mit Backtracking-Cue-Parser, ASS-Rich-Attachment, Bitmap-sub2video→FFV1→RGBA-Pfad, Chapter-ns, Font-Rollen, PNG-Cover-Normalisierung) über Streaming-Provider (speichergebunden). **Paritätstest `casu_natv2_convert_test`: C++-Konvertierung ist BYTE-IDENTISCH zur Python-Referenzkonvertierung** auf lossless Fixture (FFV1 gray8 / pcm_s16le / SRT). Wine/Qt-Fix: `waitForFinished`-Quirk bei bereits beendetem Prozess |
+| Offen | MSVC/QtWebEngine-Endbuild (nur auf echtem Windows); BLOCKER-004 (PATH/Registry auf echtem Windows); BLOCKER-005 (MF/DirectShow-Decoder geplant, nicht gebaut); §0b-Rest: ANA-STRICT P2–P5 (canonical/state_builder-Manifest-Felder), EPG-Zeitoffset+tvg-M3U, Tier 2 Items 4–10 (Recording/Settings/Library/Web-Backend/Visualizer/Playback/UI) |
 
 ## Nächste Schritte (v5.0.0)
-1. Versionsbump 3.0.0 → 5.0.0 überall (setup.nsi, Paketversion, Doku).
-2. MSVC/QtWebEngine-Endbuild auf Windows-PC (`scripts/build-msvc.bat`) — echter
-   eingebetteter Browser (MinGW = Stub).
-3. BLOCKER-004 auf echtem Windows verifizieren (PATH + `.casu`/`.mp5`-Registry).
-4. BLOCKER-005: MF/DirectShow-Decoder (CODEC-001) — geplant.
-5. Release-Pipeline wie in v3.0.0 (SAFE-GUARD.md Abschnitt 6), dann GitHub-Release.
+1. **§0b-Tierliste weiter abarbeiten** (HARTE REGEL: volle Parität VOR Release):
+   ANA-STRICT P2–P5 → EPG-Fixes → Tier 2 (4–10). Reihenfolge + Abnahmekriterien
+   siehe `/home/error/HANDOVER.md` §0c Execution Contract.
+2. Versionsbump 5.0.0 Assets erst NACH grünem Gesamt-Gate neu bauen.
+3. MSVC/QtWebEngine-Endbuild auf Windows-PC (`scripts/build-msvc.bat`) — echter
+   eingebetteter Browser (MinGW nutzt WebView2-Pfad, siehe §2 Option B).
+4. BLOCKER-004 auf echtem Windows verifizieren (PATH + `.casu`/`.mp5`-Registry).
+5. BLOCKER-005: MF/DirectShow-Decoder (CODEC-001) — geplant.
+6. Release-Pipeline wie in v3.0.0 (SAFE-GUARD.md Abschnitt 6), dann GitHub-Release.
 
 ## Verlauf (v3.0.0)
 - Phase A Foundation, B Shared-Core, C Apps, D Packaging+Gate — alle VERIFIED.
