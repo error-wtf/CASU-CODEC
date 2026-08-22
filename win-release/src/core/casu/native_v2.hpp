@@ -9,6 +9,7 @@
 #include "casu/formats.hpp"
 #include "casu/native_v2_payloads.hpp"
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -125,6 +126,15 @@ std::string repair_native_v2(const std::string& source,
 std::string write_native_v2(
     const std::string& path, const JsonValue& manifest,
     const std::vector<Chunk>& chunks,
+    uint64_t recovery_interval = 32, const CasuLimits* limits = nullptr);
+
+// Streaming variant mirroring the reference generator contract: chunks are
+// pulled lazily so huge sources never buffer fully in memory. Return
+// nullopt to end the stream. Ordering/bytes are identical to the vector
+// overload.
+std::string write_native_v2_streamed(
+    const std::string& path, const JsonValue& manifest,
+    const std::function<std::optional<Chunk>()>& next_chunk,
     uint64_t recovery_interval = 32, const CasuLimits* limits = nullptr);
 
 }  // namespace casunat2

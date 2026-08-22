@@ -38,6 +38,11 @@ target_compile_features(casu_codec_test PRIVATE cxx_std_20)
 add_executable(casu_natv2_parity_test casu_natv2_parity_test.cpp)
 target_link_libraries(casu_natv2_parity_test PRIVATE casu_core)
 target_compile_features(casu_natv2_parity_test PRIVATE cxx_std_20)
+
+# Converter byte-parity test (needs casu_codec: strict decoder + ffmpeg).
+add_executable(casu_natv2_convert_test casu_natv2_convert_test.cpp)
+target_link_libraries(casu_natv2_convert_test PRIVATE casu_codec)
+target_compile_features(casu_natv2_convert_test PRIVATE cxx_std_20)
 casu_stage_qt_test_dlls(casu_codec_test)
 
 # casu_media unit tests (Phase B2).
@@ -197,6 +202,11 @@ if(CMAKE_CROSSCOMPILING)
   add_test(NAME casu_natv2_parity_test COMMAND bash "${WINE_RUN}"
     "$<TARGET_FILE:casu_natv2_parity_test>"
     "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/natv2")
+  add_test(NAME casu_natv2_convert_test COMMAND bash "${WINE_RUN}"
+    "$<TARGET_FILE:casu_natv2_convert_test>"
+    "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/natv2")
+  set_tests_properties(casu_natv2_parity_test casu_natv2_convert_test PROPERTIES
+    ENVIRONMENT "CASU_FFMPEG=${CMAKE_CURRENT_SOURCE_DIR}/../third_party/tools/ffmpeg.exe;CASU_FFPROBE=${CMAKE_CURRENT_SOURCE_DIR}/../third_party/tools/ffprobe.exe")
   add_test(NAME casu_codec_test COMMAND bash "${WINE_RUN}" "$<TARGET_FILE:casu_codec_test>")
   add_test(NAME casu_media_test COMMAND bash "${WINE_RUN}" "$<TARGET_FILE:casu_media_test>")
   add_test(NAME casu_network_test COMMAND bash "${WINE_RUN}" "$<TARGET_FILE:casu_network_test>")
