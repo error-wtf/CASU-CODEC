@@ -5,6 +5,7 @@
 // fps-filtered preview; unsupported pixel formats fail closed.
 #pragma once
 #include "casu/native_v2_payloads.hpp"
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -64,5 +65,12 @@ private:
 // One-shot convenience: decode up to max_frames frames into a vector.
 std::vector<StrictFrame> read_all_frames(const std::string& path,
                                          int stream_index = 0);
+
+// Port of casu/strict/state_builder.py iter_state_map: sliding three-frame
+// window over pulled frames; emits one serialized record per tile region
+// (StrictTileState.as_dict parity). Throws on non-monotonic PTS.
+std::vector<JsonValue> iter_state_map(
+    const std::function<bool(StrictFrame&)>& pull, int64_t tile_width = 64,
+    int64_t tile_height = 64);
 
 }  // namespace casu::strict

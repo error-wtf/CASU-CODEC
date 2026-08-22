@@ -504,4 +504,103 @@ std::vector<StrictFrame> read_all_frames(const std::string& path,
     return frames;
 }
 
+
+// ---------------------------------------------------------------------------
+// iter_state_map (casu/strict/state_builder.py)
+// ---------------------------------------------------------------------------
+}  // namespace casu::strict
+
+namespace casu::strict {
+
+std::vector<JsonValue> iter_state_map(
+    const std::function<bool(StrictFrame&)>& pull, int64_t tile_width,
+    int64_t tile_height) {
+    std::vector<JsonValue> out;
+    StrictFrame current;
+    if (!pull(current)) return out;
+    std::optional<StrictFrame> previous;
+    while (true) {
+        StrictFrame following_frame;
+        const bool has_following = pull(following_frame);
+        if (previous.has_value() &&
+            current.time() < previous->time())
+            throw StrictDecoderError(
+                "source PTS must be monotonic in presentation order");
+        if (has_following && following_frame.time() < current.time())
+            throw StrictDecoderError(
+                "source PTS must be monotonic in presentation order");
+        // valid_until: following frame time, else pts+duration_pts when set.
+        std::optional<std::pair<int64_t, int64_t>> valid_until_pts;
+        int64_t vu_num = 0, vu_den = 1;
+        bool have_valid_until = false;
+        int64_t vu_pts = 0;
+        if (has_following) {
+            vu_pts = following_frame.pts;
+            vu_num = following_frame.time_base_num;
+            vu_den = following_frame.time_base_den;
+            have_valid_until = true;
+        } else if (current.duration_pts.has_value() &&
+                   *current.duration_pts > 0) {
+            vu_pts = current.pts + *current.duration_pts;
+            vu_num = current.time_base_num;
+            vu_den = current.time_base_den;
+            have_valid_until = true;
+        }
+        (void)valid_until_pts;
+        const CanonicalFrame* prev_frame =
+            previous.has_value() ? &previous->frame : nullptr;
+        const std::vector<natv2::StrictTileState> states = natv2::compare_frames(
+            prev_frame, current.frame, tile_width, tile_height, nullptr);
+        for (const natv2::StrictTileState& st : states) {
+            auto record = std::make_shared<JsonObject>();
+            record->items["tile_id"] = JsonValue(st.tile_id);
+            auto region = std::make_shared<JsonObject>();
+            region->items["x"] = JsonValue(st.x);
+            region->items["y"] = JsonValue(st.y);
+            region->items["w"] = JsonValue(st.w);
+            region->items["h"] = JsonValue(st.h);
+            record->items["region"] = JsonValue(std::move(region));
+            record->items["state"] = JsonValue(st.state);
+            record->items["lifecycle"] = JsonValue(st.state);
+            auto vf = std::make_shared<JsonObject>();
+            vf->items["pts"] = JsonValue(current.pts);
+            vf->items["time_base_num"] = JsonValue(current.time_base_num);
+            vf->items["time_base_den"] = JsonValue(current.time_base_den);
+            record->items["valid_from"] = JsonValue(std::move(vf));
+            if (have_valid_until) {
+                auto vu = std::make_shared<JsonObject>();
+                vu->items["pts"] = JsonValue(vu_pts);
+                vu->items["time_base_num"] = JsonValue(vu_num);
+                vu->items["time_base_den"] = JsonValue(vu_den);
+                record->items["valid_until"] = JsonValue(std::move(vu));
+            } else {
+                record->items["valid_until"] = JsonValue(nullptr);
+            }
+            const double vfs = static_cast<double>(current.pts *
+                                                   current.time_base_num) /
+                               static_cast<double>(current.time_base_den);
+            record->items["valid_from_s"] = JsonValue(vfs);
+            if (have_valid_until)
+                record->items["valid_until_s"] = JsonValue(
+                    static_cast<double>(vu_pts * vu_num) /
+                    static_cast<double>(vu_den));
+            else
+                record->items["valid_until_s"] = JsonValue(nullptr);
+            record->items["state_hash"] = JsonValue(st.state_hash);
+            record->items["reference_hash"] =
+                st.has_reference ? JsonValue(st.reference_hash)
+                                 : JsonValue(nullptr);
+            record->items["plane_count"] = JsonValue(int64_t(st.plane_count));
+            record->items["format_change"] = JsonValue(st.format_change);
+            record->items["fidelity"] =
+                JsonValue(std::string("SOURCE_RESOLUTION_STRICT"));
+            out.push_back(JsonValue(std::make_shared<JsonObject>(
+                std::move(*record))));
+        }
+        if (!has_following) break;
+        previous = std::move(current);
+        current = std::move(following_frame);
+    }
+    return out;
+}
 }  // namespace casu::strict
