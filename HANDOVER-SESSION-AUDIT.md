@@ -189,6 +189,13 @@ GitHub-Release veröffentlicht (Tag v5.0.0 existiert nicht), bis Tier-Liste
 abgearbeitet ist. Android/Mac-OS: Planungsdokumente komplett in
 ALL_RELEASE_V5/{Android,Mac-OS}/, keine Builds yet.
 
+HARTE REGEL (NUTZER, VERBINDLICH ab 22.08.):
+VOLLSTÄNDIGE PARITÄT ZUERST. Keine Android-/macOS-Arbeit, kein v5.0.0-
+GitHub-Release und keine neuen Features, BEVOR die komplette §0b-Tier-Liste
+abgearbeitet ist und Linux↔Windows deckungsgleich sind (Nachweis: ctest
+16/16 + neue Paritätstests + Audit-Checkliste je Punkt abgehakt).
+Erst danach: Release v5.0.0 → Android → macOS.
+
 REIHENFOLGE nächste Sessions: Tier 1 (1 CASUNAT2-Stack, 2 Analyse-Kern,
 3 EPG-Fixes schnell), dann Tier 2 (4→10). Erst bei Abschluss: GitHub-Release
 v5.0.0 anlegen (Tag existiert bewusst NICHT). Danach Android (Entscheide §0).
