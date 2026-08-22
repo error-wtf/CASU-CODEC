@@ -41,6 +41,11 @@ public:
                              const std::string& target = "mp4");
     std::string upload(const uint8_t* data, uint64_t length, const std::string& filename,
                        const std::string& target = "mp4");
+    // Large uploads: adopt an already-spilled temp file instead of buffering
+    // the body in RAM. The file is MOVED into the store root.
+    std::string upload_from_file(const std::string& spilled_path,
+                                 const std::string& filename,
+                                 const std::string& target);
     std::string upload(const std::string& bytes, const std::string& filename,
                        const std::string& target = "mp4");
 

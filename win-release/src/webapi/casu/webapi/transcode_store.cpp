@@ -165,6 +165,37 @@ std::string TranscodeStore::upload(const uint8_t* data, uint64_t length,
     return token;
 }
 
+
+std::string TranscodeStore::upload_from_file(const std::string& spilled_path,
+                                             const std::string& filename,
+                                             const std::string& target) {
+    std::error_code ec;
+    const uint64_t size = std::filesystem::file_size(spilled_path, ec);
+    const uint64_t kMaxUpload = 16ULL * 1024 * 1024 * 1024;
+    if (ec || size == 0 || size > kMaxUpload) {
+        std::remove(spilled_path.c_str());
+        throw WebApiError("upload size is invalid or exceeds 16 GiB");
+    }
+    std::string token = new_token();
+    std::string suffix = file_suffix(sanitize_filename(filename));
+    std::string path = root_ + "/upload-" + token +
+                       (suffix.empty() ? ".media" : suffix);
+    std::filesystem::rename(spilled_path, path, ec);
+    if (ec) {
+        std::remove(spilled_path.c_str());
+        throw WebApiError("upload could not be stored");
+    }
+    TranscodeSession s;
+    s.token = token;
+    s.kind = "file";
+    s.path = path;
+    s.target = target;
+    s.size_bytes = static_cast<int64_t>(size);
+    std::lock_guard<std::mutex> lock(mtx_);
+    add_locked(std::move(s));
+    return token;
+}
+
 std::string TranscodeStore::upload(const std::string& bytes, const std::string& filename,
                                    const std::string& target) {
     return upload(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), filename, target);
