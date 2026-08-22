@@ -65,3 +65,8 @@ dist/*.deb
 # 3.0.0 working copy (source is promoted into the repository root)
 # ---------------------------------------------------------------------------
 linux-release/
+
+# CASUNAT2-Paritätstest-Artefakte (werden von den Tests erzeugt)
+win-release/tests/fixtures/natv2/cpp_convert.casu
+win-release/tests/fixtures/natv2/repaired.casu
+win-release/tests/fixtures/natv2/truncated.casu
