@@ -162,6 +162,24 @@ atomar+force+verification_result, Web-Access-Log, Versionstrings, Seek ±10s.
     statt stdout, benchmark --output-Langform defekt, pack-mp5 512MB-Cap+
     STREAM_CONFIG-Metadaten, argparse-Strenge (unbekannte Flags geschluckt).
 
+START-PROMPT NÄCHSTE SESSION (kopieren):
+„Lies /home/error/HANDOVER.md §0b. Arbeitet die Tier-Liste ab:
+(1) CASUNAT2-Stack nach Blaupause Audit-9 (Stufe 0: JSON-Duplikat-Keys+
+    strtoll-errno+Surrogates+zlib-exact+CasuLimits; Stufe 1: Tile-Hash mit
+    Python-repr-Kompatibilität; Stufe 2: Validator feed/finalize; Stufe 3:
+    Writer; Stufe 4: Reader seek_video/reconstruct/recover; Stufe 5:
+    Converter-Pipeline). Danach (2) STRICT-Analyse-Pipeline nach Blaupause
+    Audit-8 P2-P5. Dann Tier 2 Items 3-10. Wine-GUI-Tests nur bei ruhigem
+    Desktop serial fahren (ZapZap-Last = Flaky-Timeouts). Erst bei
+    vollständig grünem Gate + ctest 16/16: GitHub-Release v5.0.0 anlegen,
+    dann Android (APK-Sideload, yt-dlp-bundled, Touch-UI) und macOS.“
+
+STATUS V5-VERSIONEN: Windows+Linux v5.0.0 GEBAUT (Version-Bump komplett,
+Assets lokal in win-release/dist + dist/) — aber BEWUSST noch NICHT als
+GitHub-Release veröffentlicht (Tag v5.0.0 existiert nicht), bis Tier-Liste
+abgearbeitet ist. Android/Mac-OS: Planungsdokumente komplett in
+ALL_RELEASE_V5/{Android,Mac-OS}/, keine Builds yet.
+
 REIHENFOLGE nächste Sessions: Tier 1 (1 CASUNAT2-Stack, 2 Analyse-Kern,
 3 EPG-Fixes schnell), dann Tier 2 (4→10). Erst bei Abschluss: GitHub-Release
 v5.0.0 anlegen (Tag existiert bewusst NICHT). Danach Android (Entscheide §0).
