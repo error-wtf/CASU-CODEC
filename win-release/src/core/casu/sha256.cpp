@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
 // Self-contained SHA-256 implementation (public-domain FIPS 180-4 algorithm).
 #include "casu/sha256.hpp"
+#include <array>
 #include <cstdio>
 #include <cstring>
 
@@ -72,7 +73,20 @@ std::string Sha256::oneshot(const void* data, std::size_t length) {
 }
 
 std::vector<uint8_t> Sha256::digest() {
-    // Finalize (pad) once; subsequent calls recompute on the same state.
+    // Non-destructive finalization: snapshot the streaming state so callers
+    // can keep updating (the CASUNAT2 reader takes per-chunk prefix
+    // snapshots via hexdigest()) and so repeated calls return the same
+    // digest.
+    const std::array<uint32_t, 8> h_save = {h_[0], h_[1], h_[2], h_[3],
+                                            h_[4], h_[5], h_[6], h_[7]};
+    const uint64_t bit_len_save = bit_len_;
+    const std::array<uint8_t, 64> buffer_save = [&] {
+        std::array<uint8_t, 64> copy{};
+        std::memcpy(copy.data(), buffer_, 64);
+        return copy;
+    }();
+    const std::size_t buffer_len_save = buffer_len_;
+
     uint64_t total_bits = bit_len_ + buffer_len_ * 8;
     uint8_t pad = 0x80;
     update(&pad, 1);
@@ -90,6 +104,12 @@ std::vector<uint8_t> Sha256::digest() {
         out[i * 4 + 2] = uint8_t(h_[i] >> 8);
         out[i * 4 + 3] = uint8_t(h_[i]);
     }
+
+    // Restore the pre-finalization state.
+    std::memcpy(h_, h_save.data(), sizeof h_);
+    bit_len_ = bit_len_save;
+    std::memcpy(buffer_, buffer_save.data(), 64);
+    buffer_len_ = buffer_len_save;
     return out;
 }
 

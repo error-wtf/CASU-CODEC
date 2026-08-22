@@ -40,6 +40,8 @@ public:
 
     JsonValue() : kind_(Kind::Null), scalar_(std::nullptr_t{}) {}
     JsonValue(std::nullptr_t) : kind_(Kind::Null), scalar_(std::nullptr_t{}) {}
+    // Explicit C-string overload so "literal" never decays to bool.
+    JsonValue(const char* s) : kind_(Kind::String), scalar_(std::string(s)) {}
     JsonValue(bool b) : kind_(Kind::Bool), scalar_(b) {}
     JsonValue(int64_t i) : kind_(Kind::Int), scalar_(i) {}
     JsonValue(double d) : kind_(Kind::Double), scalar_(d) {}
@@ -51,6 +53,7 @@ public:
     bool is_null() const { return kind_ == Kind::Null; }
     bool is_bool() const { return kind_ == Kind::Bool; }
     bool is_int() const { return kind_ == Kind::Int; }
+    bool is_double() const { return kind_ == Kind::Double; }
     bool is_number() const { return kind_ == Kind::Int || kind_ == Kind::Double; }
     bool is_string() const { return kind_ == Kind::String; }
     bool is_array() const { return kind_ == Kind::Array; }
@@ -82,12 +85,23 @@ private:
     Scalar scalar_;
 };
 
+// Strict mode (strict_json_loads semantics): duplicate object keys are a
+// hard error and unpaired \\uD800-\\uDFFF escapes are rejected, matching the
+// reference jsonutil.py object_pairs_hook / strict Unicode decoding.
+JsonValue parse_strict_json(const std::string& text, const JsonLimits& limits = JsonLimits());
+JsonValue parse_strict_json(const char* data, std::size_t n, const JsonLimits& limits = JsonLimits());
+
 // Parse a complete JSON document (no trailing garbage, bounded depth/nodes).
+// Legacy permissive mode kept for non-security call sites.
 JsonValue parse_json(const std::string& text, const JsonLimits& limits = JsonLimits());
 JsonValue parse_json(const char* data, std::size_t n, const JsonLimits& limits = JsonLimits());
 
 // Compact, deterministic serialization (sort_keys=True, separators=(",",":"),
-// allow_nan=False) matching the reference writer.
-std::string dump_json(const JsonValue& v, bool sort_keys = true);
+// allow_nan=False) matching the reference writer. With ensure_ascii=true
+// (Python json.dumps default) every non-ASCII character is emitted as
+// \\uXXXX/\\uXXXX\\uXXXX escapes so output is byte-identical to the Python
+// writer payloads; ensure_ascii=false matches _json_bytes() in text.py.
+std::string dump_json(const JsonValue& v, bool sort_keys = true,
+                      bool ensure_ascii = true);
 
 }  // namespace casu

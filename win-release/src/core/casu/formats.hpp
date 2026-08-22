@@ -47,6 +47,24 @@ struct CasuLimits {
     uint32_t max_height = 32'768;
     uint32_t max_channels = 64;
     uint32_t max_sample_rate = 768'000;
+    uint64_t max_dependency_depth = 1'000'000;
+    uint32_t max_json_depth = 32;
+    uint64_t max_json_nodes = 1'000'000;
+    uint64_t max_audio_meta_bytes = 64ULL * 1024;
+
+    void validate() const {
+        const bool positive =
+            max_file_bytes > 0 && max_manifest_bytes > 0 && max_streams > 0 &&
+            max_chunks > 0 && max_chunk_bytes > 0 && max_attachment_bytes > 0 &&
+            max_total_uncompressed_frame_bytes > 0 && max_width > 0 &&
+            max_height > 0 && max_channels > 0 && max_sample_rate > 0 &&
+            max_dependency_depth > 0 && max_json_depth > 0 &&
+            max_json_nodes > 0 && max_audio_meta_bytes > 0;
+        if (!positive)
+            throw CasuError("CASUNAT2 limits must be positive integers");
+        if (max_streams > 255)
+            throw CasuError("CASUNAT2 stream limit cannot exceed uint8 capacity");
+    }
 };
 
 // ---------------------------------------------------------------------------

@@ -8,6 +8,7 @@ add_library(casu_core STATIC
     casu/manifest.cpp
     casu/native.cpp
     casu/native_v2.cpp
+    casu/native_v2_payloads.cpp
     casu/mp5.cpp
     casu/sidecar.cpp
     casu/journal.cpp
