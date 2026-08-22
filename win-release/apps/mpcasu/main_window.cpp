@@ -3493,11 +3493,15 @@ void MainWindow::refresh_library() {
                                              : QStringLiteral("genre");
     library_groups_->setEnabled(true);
     library_groups_->clear();
-    QStringList groups;
+    // Linux parity: case-insensitive grouping with an "(unknown)" bucket.
+    QMap<QString, QString> groups_by_key;  // casefold -> representative value
     for (const LibraryEntry* e : entries) {
-        const QString v = meta_of(e->path, field).trimmed();
-        if (!v.isEmpty() && !groups.contains(v)) groups.append(v);
+        const QString key =
+            mpcasu::library_group_key(meta_of(e->path, field));
+        if (!groups_by_key.contains(key.toCaseFolded()))
+            groups_by_key.insert(key.toCaseFolded(), key);
     }
+    QStringList groups = groups_by_key.values();
     groups.sort(Qt::CaseInsensitive);
     library_groups_->addItems(groups);
     const QString selected = library_groups_->currentItem()
@@ -3509,7 +3513,9 @@ void MainWindow::refresh_library() {
     if (!selected.isEmpty()) {
         for (const LibraryEntry* e : entries) {
             if (!matches(*e)) continue;
-            if (meta_of(e->path, field).trimmed() != selected) continue;
+            const QString group_value =
+                mpcasu::library_group_key(meta_of(e->path, field));
+            if (group_value.compare(selected, Qt::CaseInsensitive) != 0) continue;
             QString text = e->title.isEmpty() ? QFileInfo(e->path).fileName() : e->title;
             auto* item = new QListWidgetItem((e->favorite ? QStringLiteral("★ ") : QString()) + text);
             item->setData(Qt::UserRole, e->path);
