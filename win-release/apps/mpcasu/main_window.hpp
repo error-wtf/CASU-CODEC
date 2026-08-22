@@ -225,6 +225,7 @@ private:
     MediaLibrary* library_ = nullptr;
     SettingsStore* settings_ = nullptr;
     AppSettings app_settings_;
+    mpcasu::SessionState session_;
     YoutubeProxy* yt_proxy_ = nullptr;
     WebPlayerTabs* web_player_tabs_ = nullptr;
     RecordingController* recorder_ = nullptr;
