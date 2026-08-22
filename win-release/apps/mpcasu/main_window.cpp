@@ -2214,15 +2214,19 @@ void MainWindow::open_backend_and_play(const QString& source, const QString& tit
     if (ab_btn_) { ab_btn_->setChecked(false); }
     // Resume playback at the saved position (Linux parity).
     if (!resume_source_.isEmpty() && resume_source_ == source && resume_position_ > 5.0) {
-        QTimer::singleShot(600, this, [this, source] {
-            try { backend_->seek(resume_position_); } catch (const casu::playback::PlaybackError&) {}
-            controller_->seek(resume_position_);
-            status(QStringLiteral("Resumed %1 at %2 s")
-                       .arg(QFileInfo(source).fileName())
-                       .arg(resume_position_, 0, 'f', 1));
-            resume_source_.clear();
+        // Reference record_progress clamp: a resume point within the last
+        // 5 seconds of the duration restarts from the beginning.
+        const double dur = duration_;
+        if (dur > 0.0 && resume_position_ >= std::max(0.0, dur - 5.0)) {
             resume_position_ = -1.0;
-        });
+            return;
+        }
+        try { backend_->seek(resume_position_); } catch (const casu::playback::PlaybackError&) {}
+        controller_->seek(resume_position_);
+        status(QStringLiteral("Resume at %1 s")
+                   .arg(resume_position_, 0, 'f', 1));
+        resume_source_.clear();
+        resume_position_ = -1.0;
     }
 
     bool audio = !is_network_like(source) && is_audio_ext(source);
@@ -2318,6 +2322,15 @@ void MainWindow::open_network_source(const QString& source, const QString& title
     stop_playback();  // stop old session incl. any old proxy (order matters)
     QString effective = source;
     if (casu::network::is_youtube_url(source.toStdString())) {
+        // Reference consent gate: playback-time yt-dlp resolution requires
+        // the user's consent, exactly like the search path.
+        if (!app_settings_.player.ytdlp_consent) {
+            youtube_status_->setText(
+                QStringLiteral("YouTube requires consent (Options → yt-dlp)"));
+            status(QStringLiteral(
+                "yt-dlp consent required — enable it in Options first"));
+            return;
+        }
         youtube_status_->setText(QStringLiteral("Resolving YouTube via yt-dlp…"));
         try {
             std::string resolved = casu::network::YtDlp().resolve(source.toStdString(), 45000);

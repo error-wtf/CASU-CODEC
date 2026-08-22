@@ -163,7 +163,19 @@ void LibVLCBackend::apply_source(const std::string& source) {
     last_error_detail_.clear();
     play_requested_at_ = -1.0;
 
-    if (is_location(source)) {
+    if (source.rfind("file://", 0) == 0) {
+        // file:// URIs were broken at the backend (VLC needs a proper
+        ///C:/ form on Windows); route them through the native-path branch.
+        std::string path = source.substr(7);
+        if (path.rfind("localhost/", 0) == 0) path = path.substr(10);
+        if (!path.empty() && path[0] != '/') path.insert(path.begin(), '/');
+#ifdef _WIN32
+        if (path.size() >= 3 && path[0] == '/' && path[2] == ':')
+            path.erase(0, 1);  // /C:/... -> C:/...
+#endif
+        std::replace(path.begin(), path.end(), '/', '\\');
+        media_ = libvlc_media_new_path(instance_, path.c_str());
+    } else if (is_location(source)) {
         media_ = libvlc_media_new_location(instance_, source.c_str());
     } else {
         std::string native = to_native_path(source);
@@ -174,6 +186,11 @@ void LibVLCBackend::apply_source(const std::string& source) {
         last_error_detail_ = "libVLC could not create the media object for the source";
         throw PlaybackError("libVLC could not open the media source");
     }
+    // Reference SAFE_MEDIA_OPTIONS parity: some VLC 3 builds let the
+    // persisted user preference override the instance argument, so the
+    // safety setting is repeated as a per-media option.
+    if (libvlc_media_add_option)
+        libvlc_media_add_option(media_, ":avcodec-hw=none");
 
     player_ = libvlc_media_player_new_from_media(media_);
     if (!player_) {
