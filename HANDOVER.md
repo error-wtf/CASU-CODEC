@@ -387,7 +387,7 @@ Checkliste (abzuhaken):
 [x] CASU-3 Writer ✅ `9fb279d` (kanon. STREAM_CONFIGs, Recovery-Checkpoint-Doppeltserialisierung, INTEGRITY_TABLE pts=index_offset) — Writer-Ausgabe BYTE-IDENTISCH zur Referenz (gen1/gen2)
 [x] CASU-4 Reader(seek/reconstruct/recover) ✅ `9fb279d` (R21/R23, offset-keyed Hash-Vergleich, read_chunk_at/audio_meta, TileStateCache, recover/repair)
 [x] CASU-5 Converter ✅ `e64ed63` (converter.py-Komplettport über strict::FrameSource; Konvertierung BYTE-IDENTISCH auf lossless-Fixture — casu_natv2_convert_test ALL PASS)
-[~] ANA-STRICT decoder/canonical/state_builder — decoder ✅ `e64ed63` (strict_frames.cpp, 30 Formate, nativ-pixfmt-Pipe), canonical+Tiles ✅ `9fb279d`; OFFEN: state_builder/Manifest-Felder P2–P5 (iter_state_map 3er-Fenster, valid_until-Logik, video.*/audio.*-Manifestfelder)
+[x] ANA-STRICT decoder/canonical/state_builder ✅ `7c873e2` — iter_state_map 3er-Fenster + valid_until + as_dict-Records RECORD-IDENTISCH zur Python-Referenz (120/120 auf Fixture); analyze_strict_video-Struktur komplett; CLI mode=strict läuft jetzt produktiv
 [ ] EPG-offset+tvg
 [ ] REC verify/split/format [ ] SET atomic/audio_device/session
 [ ] LIB felder/extensions/casefold [ ] WEB proxy-policy/trusted/media-token
