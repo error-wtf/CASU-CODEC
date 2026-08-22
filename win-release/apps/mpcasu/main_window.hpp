@@ -183,6 +183,7 @@ private:
     void render_epg_cards();
     bool eventFilter(QObject* watched, QEvent* event) override;
     void on_recording_toggle();
+    void on_recording_toggle_restart_after_rotate();
     void show_record_settings_dialog();
     void on_visualizer_toggle();
     void load_cover_art(const QString& source);
@@ -229,6 +230,11 @@ private:
     YoutubeProxy* yt_proxy_ = nullptr;
     WebPlayerTabs* web_player_tabs_ = nullptr;
     RecordingController* recorder_ = nullptr;
+    QTimer* record_timer_ = nullptr;
+    int record_part_ = 1;
+    int record_split_minutes_ = 0;
+    bool pending_rotate_ = false;
+    QString record_stem_;
     mpcasu::StreamCatalog epg_;
     mpcasu::EpgGuide epg_guide_;
     QString current_source_;
