@@ -170,8 +170,15 @@ MainWindow::MainWindow(const QStringList& initial_files, bool force_proxy,
         record_btn_->setChecked(recorder_->is_recording());
     };
     recorder_->on_finished = [this](const QString& out, bool ok, const QString& detail) {
-        toast(ok ? QStringLiteral("Recording saved: %1").arg(out)
-                 : QStringLiteral("Recording failed: %1").arg(detail));
+        if (pending_rotate_ && ok) {
+            pending_rotate_ = false;
+            ++record_part_;
+            on_recording_toggle_restart_after_rotate();
+            return;
+        }
+        pending_rotate_ = false;
+        if (ok) status(QStringLiteral("Recording saved: %1").arg(out));
+        else status(QStringLiteral("Recording failed: %1").arg(detail));
     };
 
     poll_timer_ = new QTimer(this);
@@ -3630,25 +3637,95 @@ void MainWindow::show_record_settings_dialog() {
 }
 
 void MainWindow::on_recording_toggle() {
+    // Linux parity (main_window.py toggle_recording/_record_destination).
     if (recorder_->is_recording()) {
         recorder_->stop();
         return;
     }
     if (current_source_.isEmpty()) { status(QStringLiteral("Nothing to record.")); return; }
+    const QString lower = current_source_.toLower();
+    if (lower.endsWith(QStringLiteral(".casu")) ||
+        lower.endsWith(QStringLiteral(".mp5"))) {
+        status(QStringLiteral("CASU sources are stored already — use Export instead"));
+        return;
+    }
     QString dir = record_dir_ ? record_dir_->text().trimmed() : output_dir_;
     if (dir.isEmpty()) dir = output_dir_;
     QDir().mkpath(dir);
-    QString base = QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss");
-    QString ext = current_source_.contains("://") ? "mkv" : QFileInfo(current_source_).suffix();
-    if (ext.isEmpty()) ext = "mkv";
-    QString out = dir + "/" + base + "." + ext;
+    QString fmt = app_settings_.player.record_format.toLower();
+    static const QStringList formats = {"mkv", "mp4", "ts", "webm",
+                                        "ogg", "mp3", "flac", "wav"};
+    if (!formats.contains(fmt)) fmt = QStringLiteral("mkv");
+    record_split_minutes_ = app_settings_.player.record_split_minutes;
+    record_part_ = 1;
+    QString stem_src = current_source_;
+    if (!stem_src.contains(QStringLiteral("://")))
+        stem_src = QFileInfo(stem_src).completeBaseName();
+    else
+        stem_src = QStringLiteral("stream");
+    record_stem_ = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss")) +
+                   QStringLiteral("-") + stem_src;
+
+    auto destination = [this, dir, fmt] {
+        const QString suffix = QStringLiteral(".") + fmt;
+        if (record_split_minutes_ > 0)
+            return dir + QStringLiteral("/") + record_stem_ +
+                   QStringLiteral("-part%1").arg(record_part_, 3, 10, u'0') +
+                   suffix;
+        return dir + QStringLiteral("/") + record_stem_ + suffix;
+    };
+
     QString err;
-    if (!recorder_->start(current_source_, out, &err)) status(QStringLiteral("Recording start failed: %1").arg(err));
-    else status(QStringLiteral("Recording to %1").arg(out));
+    if (!recorder_->start(current_source_, destination(), &err)) {
+        status(QStringLiteral("Recording start failed: %1").arg(err));
+        return;
+    }
+    if (record_split_minutes_ > 0) {
+        if (!record_timer_) {
+            record_timer_ = new QTimer(this);
+            record_timer_->setSingleShot(true);
+            connect(record_timer_, &QTimer::timeout, this, [this] {
+                // Rotate: finalize this part, then start the next one.
+                recorder_->stop();
+                pending_rotate_ = true;
+            });
+        }
+        record_timer_->start(record_split_minutes_ * 60 * 1000);
+    }
+    status(QStringLiteral("Recording to %1").arg(destination()));
 }
 
 // Stage routing with the Linux "Drop media here" placeholder:
 // 2 = empty hint (no media), 0 = video surface, 1 = visualizer.
+namespace {
+bool formats_contains(const QString& fmt) {
+    static const QStringList formats = {"mkv", "mp4", "ts",   "webm",
+                                        "ogg", "mp3", "flac", "wav"};
+    return formats.contains(fmt);
+}
+}  // namespace
+
+void MainWindow::on_recording_toggle_restart_after_rotate() {
+    // Continue with the next part of a split recording (Linux _rotate_recording).
+    if (current_source_.isEmpty()) return;
+    QString dir = record_dir_ ? record_dir_->text().trimmed() : output_dir_;
+    if (dir.isEmpty()) dir = output_dir_;
+    const QString suffix = QStringLiteral(".") +
+                           (formats_contains(app_settings_.player.record_format)
+                                ? app_settings_.player.record_format
+                                : QStringLiteral("mkv"));
+    const QString destination =
+        dir + QStringLiteral("/") + record_stem_ +
+        QStringLiteral("-part%1").arg(record_part_, 3, 10, u'0') + suffix;
+    QString err;
+    if (!recorder_->start(current_source_, destination, &err)) {
+        status(QStringLiteral("Recording rotate failed: %1").arg(err));
+        return;
+    }
+    if (record_split_minutes_ > 0 && record_timer_)
+        record_timer_->start(record_split_minutes_ * 60 * 1000);
+}
+
 void MainWindow::update_stage() {
     if (!stage_stack_) return;
     if (!stage_media_active_) { stage_stack_->setCurrentIndex(2); return; }
