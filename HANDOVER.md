@@ -374,6 +374,19 @@ Windows — dort ist der Web-Player-Stub sofort sichtbar. Wine-Grün heißt nur
 Kontakt-Punkte im Repo: `ALL_RELEASE_V5/Windows/PORT_STATUS.md`,
 `SESSION_HANDOVER.md`, `AGENTS.md`.
 
+## 0d. FUNKTIONS-VERIFIKATION (22.08., spät) — Commit `dd3e5bd`
+
+Vollständiger Funktionstest nach allen Paritätsarbeiten:
+- **ctest 21/21 PASSED** (ohne nur-netzwerk-flaky youtube_live): alle 7 neuen
+  Paritätssuiten, mpcasu_smoke_test (Start+Play+CleanExit mit FINALEM Code),
+  golden_verify (Container weiterhin byte-exakt), cli/converter/web/playback.
+- **Web-API live unter Wine**: /api/version → {"version":"5.0.0"}; POST mit
+  fremder Origin → 403 (Mutation-Gate arbeitet real).
+- **GUI-Screenshots**: SETTINGS/EPG rendern nach den RewritesDistinct-Inhalte;
+  MPCASU beendet sich SAUBER (Fix: Visualizer-Detached-Thread hielt Wine am
+  Leben → unified QProcess-Pipe-Modell ohne Background-Threads).
+- **Versions-Fix**: Web-Backend meldete noch 3.0.0 → kWebApiVersion auf 5.0.0.
+
 ## 0c. EXECUTION CONTRACT (maximal bindend)
 Pro Punkt aus §0b gilt ABNAHME nur bei: (a) vollständige Portierung laut
 Blaupause — keine Stubs/TODOs; (b) Verhalten gegen Python-Referenz
