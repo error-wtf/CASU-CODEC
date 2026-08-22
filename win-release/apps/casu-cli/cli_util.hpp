@@ -87,7 +87,8 @@ std::vector<std::string> plan_format_targets(
 // segmentation is reduced to one whole-duration segment per playable stream
 // (the reference's numpy/ffmpeg state analysis is a separate port step).
 // Throws casu::CasuError.
-casu::JsonValue build_manifest(const std::string& source, const std::string& mode);
+casu::JsonValue build_manifest(const std::string& source, const std::string& mode,
+                         double analysis_fps = 10.0);
 
 // A report payload is a JSON object with a "files" array of entries that carry
 // a "status" field. Returns true when no entry has status "failed".

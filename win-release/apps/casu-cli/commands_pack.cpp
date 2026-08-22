@@ -85,7 +85,7 @@ int cmd_pack(const Args& args) {
         throw CasuError("source media does not exist: " + source);
     const std::uintmax_t size = std::filesystem::file_size(source_abs, ec);
 
-    const JsonValue manifest = build_manifest(source_abs, mode);
+    const JsonValue manifest = build_manifest(source_abs, mode, analysis_fps);
     casu::casunat1::write_native(output_abs, source_abs, manifest);
 
     JsonObject summary;
@@ -98,6 +98,8 @@ int cmd_pack(const Args& args) {
 }
 
 int cmd_pack_mp5(const Args& args) {
+    const double analysis_fps = args.get_double("--analysis-fps", 10.0);
+
     const std::string source = args.positional.at(0);
     const std::string output = args.get("-o", args.get("--output", ""));
     if (output.empty()) throw CasuError("pack-mp5 requires an output path (-o/--output)");
@@ -110,7 +112,7 @@ int cmd_pack_mp5(const Args& args) {
         throw CasuError("source media does not exist: " + source);
     const std::uintmax_t size = std::filesystem::file_size(source_abs, ec);
 
-    const JsonValue manifest = build_manifest(source_abs, mode);
+    const JsonValue manifest = build_manifest(source_abs, mode, analysis_fps);
     const std::vector<uint8_t> source_bytes = read_source(source_abs);
     const std::string filename = std::filesystem::path(source_abs).filename().string();
 
