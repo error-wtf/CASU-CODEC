@@ -283,6 +283,13 @@ int main(int argc, char** argv) {
     auto handler = std::make_shared<casu::webapi::WebBackendHandler>();
     casu::webapi::HTTPServer server;
     server.set_handler(handler);
+    // Radio/stream proxy parity (web_casu.py _stream_proxy): relay any
+    // http(s) target. The hardened ProxyPolicy keeps its SSRF guard for
+    // loopback/private hosts.
+    casu::webapi::ProxyPolicy proxy_policy;
+    proxy_policy.allow_any_http = true;
+    proxy_policy.allow_any_https = true;
+    handler->set_proxy_policy(proxy_policy);
     server.set_static_root(exe_dir);
 
     std::string error;

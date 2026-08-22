@@ -33,6 +33,13 @@ public:
     virtual HttpResponse handle_transcode_file(const HttpRequestHead& req, const uint8_t* data,
                                                size_t n, const std::string& filename,
                                                const std::string& target);
+    virtual HttpResponse handle_transcode_file_spilled(
+        const HttpRequestHead&, const std::string& spilled_path,
+        const std::string& filename, const std::string&) {
+        (void)spilled_path;
+        (void)filename;
+        return HttpResponse{};  // 501: not implemented on this handler
+    }
     virtual HttpResponse handle_stream_proxy(const HttpRequestHead& req, const std::string& target_url);
     virtual HttpResponse handle_media(const HttpRequestHead& req, const std::string& token);
 };
@@ -55,6 +62,10 @@ public:
     HttpResponse handle_transcode_file(const HttpRequestHead& req, const uint8_t* data,
                                        size_t n, const std::string& filename,
                                        const std::string& target) override;
+    HttpResponse handle_transcode_file_spilled(const HttpRequestHead& req,
+                                               const std::string& spilled_path,
+                                               const std::string& filename,
+                                               const std::string& target) override;
     HttpResponse handle_stream_proxy(const HttpRequestHead& req, const std::string& target_url) override;
     HttpResponse handle_media(const HttpRequestHead& req, const std::string& token) override;
 

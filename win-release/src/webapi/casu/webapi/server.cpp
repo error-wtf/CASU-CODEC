@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
 #include "casu/webapi/server.hpp"
 
+#include "casu/codec/ffprobe.hpp"
 #include "casu/json.hpp"
 #include "casu/network/http.hpp"
 #include "casu/network/network_error.hpp"
@@ -12,6 +13,8 @@
 #include "casu/webapi/media_serve.hpp"
 #include "casu/webapi/webapi_error.hpp"
 
+#include <QCoreApplication>
+#include <QDir>
 #include <QByteArray>
 #include <QFile>
 #include <QHostAddress>
@@ -121,6 +124,41 @@ std::string content_type_for(const std::string& path) {
 }  // namespace
 
 // --- EndpointHandler default: unimplemented endpoints answer 501 -----------
+
+
+// casu/web_casu.py _media_shape parity: probe a location and classify it.
+// Returns "video"/"audio"; sets ok=false when nothing playable was found.
+static std::string media_kind_of(const std::string& location, bool* ok) {
+    *ok = false;
+    try {
+        const casu::JsonValue probe = casu::codec::probe_json(location);
+        bool video = false, audio = false;
+        if (const casu::JsonValue* streams = probe.find("streams");
+            streams && streams->is_array()) {
+            for (const casu::JsonValue& s : streams->as_array().items) {
+                if (!s.is_object()) continue;
+                const casu::JsonValue* kind = s.find("codec_type");
+                if (!kind || !kind->is_string()) continue;
+                if (kind->as_string() == "video") {
+                    const casu::JsonValue* disp = s.find("disposition");
+                    const casu::JsonValue* pic =
+                        disp && disp->is_object() ? disp->find("attached_pic")
+                                                  : nullptr;
+                    if (!(pic && pic->is_int() && pic->as_int() == 1))
+                        video = true;
+                } else if (kind->as_string() == "audio") {
+                    audio = true;
+                }
+            }
+        }
+        if (!video && !audio) return {};
+        *ok = true;
+        return video ? "video" : "audio";
+    } catch (const std::exception&) {
+        return {};
+    }
+}
+
 
 HttpResponse EndpointHandler::handle_version(const HttpRequestHead&) {
     return json_response(501, json_error("not implemented"));
@@ -318,10 +356,15 @@ HttpResponse BasicEndpointHandler::handle_transcode_url(const HttpRequestHead&,
         if (target != "mp4" && target != "webm") {
             throw casu::webapi::WebApiError("unsupported browser transcode target");
         }
+        bool shape_ok = false;
+        const std::string kind = media_kind_of(url, &shape_ok);
+        if (!shape_ok)
+            throw casu::webapi::WebApiError(
+                "source has no playable audio or video stream");
         std::string token = store_.register_url(url, "video/mp4", target);
         return json_response(200, casu::dump_json(jobj({
             {"url", jstr("/api/media/" + token)},
-            {"kind", jstr("media")},
+            {"kind", jstr(kind)},
         })));
     } catch (const casu::webapi::WebApiError& e) {
         return json_response(400, json_error(e.what()));
@@ -340,9 +383,42 @@ HttpResponse BasicEndpointHandler::handle_transcode_file(const HttpRequestHead&,
             throw casu::webapi::WebApiError("unsupported browser transcode target");
         }
         std::string token = store_.upload(data, n, filename, t);
+        TranscodeSession session;
+        std::string kind = "video";
+        if (store_.get(token, &session)) {
+            bool shape_ok = false;
+            kind = media_kind_of(session.path, &shape_ok);
+            if (!shape_ok) kind = t == "webm" ? "video" : "audio";
+        }
         return json_response(200, casu::dump_json(jobj({
             {"url", jstr("/api/media/" + token)},
-            {"kind", jstr("media")},
+            {"kind", jstr(kind)},
+        })));
+    } catch (const casu::webapi::WebApiError& e) {
+        return json_response(400, json_error(e.what()));
+    }
+}
+
+HttpResponse BasicEndpointHandler::handle_transcode_file_spilled(
+    const HttpRequestHead&, const std::string& spilled_path,
+    const std::string& filename, const std::string& target) {
+    try {
+        std::string t = to_lower(target);
+        if (t != "mp4" && t != "webm") {
+            throw casu::webapi::WebApiError(
+                "unsupported browser transcode target");
+        }
+        std::string token = store_.upload_from_file(spilled_path, filename, t);
+        TranscodeSession session;
+        std::string kind = t == "webm" ? "video" : "audio";
+        if (store_.get(token, &session)) {
+            bool shape_ok = false;
+            kind = media_kind_of(session.path, &shape_ok);
+            if (!shape_ok) kind = t == "webm" ? "video" : "audio";
+        }
+        return json_response(200, casu::dump_json(jobj({
+            {"url", jstr("/api/media/" + token)},
+            {"kind", jstr(kind)},
         })));
     } catch (const casu::webapi::WebApiError& e) {
         return json_response(400, json_error(e.what()));
@@ -426,13 +502,70 @@ public:
         }
     }
 
+    // Large-upload disk spill: bodies above kInlineBodyLimit go straight to
+    // a temp file instead of buffering up to 16 GiB in RAM (HANDOVER fix).
+    struct Spill {
+        HttpRequestHead head;
+        std::string path;
+        QFile file;
+        uint64_t length = 0;
+        uint64_t received = 0;
+    };
+    std::map<QTcpSocket*, Spill> spills;
+    static constexpr uint64_t kInlineBodyLimit = 64ULL * 1024 * 1024;
+
+    void finish_spill(QTcpSocket* socket) {
+        auto it = spills.find(socket);
+        if (it == spills.end()) return;
+        Spill& spill = it->second;
+        spill.file.close();
+        HttpResponse resp;
+        try {
+            resp = handler->handle_transcode_file_spilled(
+                spill.head, spill.path,
+                trim(spill.head.header("X-MPCASU-Filename")),
+                to_lower(trim(spill.head.header("X-MPCASU-Target"))));
+        } catch (const std::exception&) {
+            resp = text_response(400, "upload failed");
+        }
+        std::error_code rm_ec;
+        std::filesystem::remove(spill.path, rm_ec);
+        spills.erase(it);
+        send(socket, spill.head, resp);
+        close_after_response(socket);
+    }
+
+    void abort_spill(QTcpSocket* socket) {
+        auto it = spills.find(socket);
+        if (it == spills.end()) return;
+        it->second.file.close();
+        std::error_code rm_ec;
+        std::filesystem::remove(it->second.path, rm_ec);
+        spills.erase(it);
+    }
+
     void on_ready_read(QTcpSocket* socket) {
         QByteArray& buf = buffers[socket];
         buf.append(socket->readAll());
+        if (spills.count(socket)) {
+            auto it = spills.find(socket);
+            const qint64 remaining =
+                static_cast<qint64>(it->second.length - it->second.received);
+            const QByteArray chunk =
+                buf.mid(0, static_cast<int>(std::min<qint64>(
+                                buf.size(), remaining)));
+            it->second.file.write(chunk);
+            it->second.received += static_cast<uint64_t>(chunk.size());
+            buf.remove(0, chunk.size());
+            if (it->second.received >= it->second.length)
+                finish_spill(socket);
+            return;
+        }
         process_buffer(socket);
     }
 
     void on_disconnected(QTcpSocket* socket) {
+        abort_spill(socket);
         buffers.erase(socket);
         socket->deleteLater();
     }
@@ -448,6 +581,37 @@ public:
         ParseStatus st = parse_request_head(reinterpret_cast<const uint8_t*>(buf.constData()),
                                             static_cast<size_t>(buf.size()), limits, &head);
         if (st == ParseStatus::Incomplete) {
+            const uint64_t declared_length =
+                head.error.empty() ? head.content_length() : 0;
+            if (head.path == "/api/transcode-file" &&
+                declared_length > kInlineBodyLimit &&
+                declared_length <= body_cap(head)) {
+                Spill& spill = spills[socket];
+                spill.head = head;
+                spill.length = declared_length;
+                spill.path = QDir::tempPath().toStdString() +
+                             "/mpcasu-web-upload-" +
+                             std::to_string(
+                                 QCoreApplication::applicationPid()) +
+                             "-" +
+                             std::to_string(
+                                 reinterpret_cast<uintptr_t>(socket)) +
+                             ".spill";
+                spill.received = 0;
+                spill.file.setFileName(QString::fromStdString(spill.path));
+                if (!spill.file.open(QIODevice::WriteOnly |
+                                     QIODevice::Truncate)) {
+                    spills.erase(socket);
+                } else {
+                    const QByteArray first =
+                        buf.mid(static_cast<int>(head.head_bytes));
+                    spill.file.write(first);
+                    spill.received += static_cast<uint64_t>(first.size());
+                    buf.clear();
+                    if (spill.received >= spill.length) finish_spill(socket);
+                    return;
+                }
+            }
             if (buf.size() > limits.max_header_bytes + 64 * 1024) {
                 send(socket, head, text_response(413, "request too large"));
                 close_after_response(socket);
@@ -482,9 +646,43 @@ public:
         return limits.max_json_bytes;
     }
 
+    static std::string rstrip_slash_lower(std::string v) {
+        while (!v.empty() && (v.back() == '/' || v.back() == ' ' ||
+                              v.back() == '\t' || v.back() == '\r'))
+            v.pop_back();
+        for (char& c : v)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return v;
+    }
+
+    // web_casu.py _trusted_request(mutation=True): reject cross-site writes
+    // to loopback APIs via Sec-Fetch-Site / Origin.
+    HttpResponse check_mutation(const HttpRequestHead& head) {
+        const std::string host =
+            to_lower(trim(head.header("Host")));
+        const std::string fetch_site =
+            to_lower(trim(head.header("Sec-Fetch-Site")));
+        const std::string origin = trim(head.header("Origin"));
+        if (fetch_site == "cross-site")
+            return text_response(403, "cross-origin API request rejected");
+        if (!origin.empty() &&
+            rstrip_slash_lower(origin) != "http://" + host)
+            return text_response(403, "cross-origin API request rejected");
+        return HttpResponse{};
+    }
+
+
     HttpResponse route(const HttpRequestHead& head, const QByteArray& body) {
         if (!is_trusted_loopback_host(head.header("Host"), port)) {
             return text_response(421, "untrusted loopback host");
+        }
+        if (head.method == "POST") {
+            HttpResponse rejected = check_mutation(head);
+            if (rejected.status == 403) return rejected;
+        }
+        if (head.method == "POST") {
+            HttpResponse rejected = check_mutation(head);
+            if (rejected.status == 403) return rejected;
         }
         std::string p = head.path;
         if (head.method == "GET" || head.method == "HEAD") {
