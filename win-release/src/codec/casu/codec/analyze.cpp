@@ -3,11 +3,13 @@
 
 #include "casu/sha256.hpp"
 #include "casu/codec/tools.hpp"
+#include "casu/codec/strict_frames.hpp"
 
 #include <QProcess>
 #include <QTemporaryFile>
 
 #include <algorithm>
+#include <optional>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -600,4 +602,135 @@ JsonValue analyze_audio(const std::string& path, const JsonValue& probe,
     return JsonValue(std::move(build));
 }
 
+// ---------------------------------------------------------------------------
+// analyze_strict_video (casu/core.py) — production STRICT state map
+// ---------------------------------------------------------------------------
+JsonValue strict_activity_analysis(const std::string& path,
+                                   const JsonValue& probe, int64_t tile_width,
+                                   int64_t tile_height,
+                                   const std::function<void(double)>& progress) {
+    using casu::JsonObject;
+    using casu::JsonArray;
+    const JsonValue* video = first_stream(probe, "video");
+    if (!video || !video->is_object()) {
+        auto empty = std::make_shared<JsonObject>();
+        return JsonValue(std::move(empty));  // falsy {} like the reference
+    }
+    const int video_ordinal = stream_ordinal(probe, "video");
+
+    // expected frame count: nb_frames or duration*avg_frame_rate fallback.
+    auto int_field = [&](const char* key) -> std::optional<int64_t> {
+        const JsonValue* v = video->find(key);
+        if (!v || v->is_null() || v->is_bool() || !v->is_number())
+            return std::nullopt;
+        return v->is_int() ? v->as_int()
+                           : static_cast<int64_t>(v->as_double());
+    };
+    int64_t expected = int_field("nb_frames").value_or(0);
+    if (expected <= 0) {
+        try {
+            const JsonValue* rate = video->find("avg_frame_rate");
+            std::string rate_text = rate && rate->is_string()
+                                        ? rate->as_string()
+                                        : "0/1";
+            const std::size_t slash = rate_text.find('/');
+            if (slash == std::string::npos) throw std::invalid_argument("");
+            const int64_t rn = std::stoll(rate_text.substr(0, slash));
+            const int64_t rd = std::stoll(rate_text.substr(slash + 1));
+            expected = std::max<int64_t>(
+                1, static_cast<int64_t>(manifest_duration(probe) *
+                                        static_cast<double>(rn) /
+                                        static_cast<double>(std::max<int64_t>(rd, 1))));
+        } catch (const std::exception&) {
+            expected = 1;
+        }
+    }
+
+    int64_t decoded = 0;
+    strict::FrameSource source(path, video_ordinal);
+    auto pull = [&](strict::StrictFrame& frame) -> bool {
+        if (!source.next(frame)) return false;
+        ++decoded;
+        if (progress && expected > 0)
+            progress(std::min(0.99, static_cast<double>(decoded) /
+                                       static_cast<double>(expected)));
+        return true;
+    };
+    std::vector<JsonValue> state_map;
+    try {
+        state_map = strict::iter_state_map(pull, tile_width, tile_height);
+    } catch (const strict::StrictDecoderError& exc) {
+        fail(std::string("STRICT source decoding failed: ") + exc.what());
+    }
+    if (progress) progress(1.0);
+
+    // state_counts.
+    auto counts_obj = std::make_shared<JsonObject>();
+    for (const char* name : {"KEY_STATE", "UPDATE", "HOLD"}) {
+        int64_t n = 0;
+        for (const JsonValue& item : state_map) {
+            const JsonValue* s = item.find("state");
+            if (s && s->is_string() && s->as_string() == name) ++n;
+        }
+        counts_obj->items[name] = JsonValue(n);
+    }
+
+    const auto width = int_field("width").value_or(0);
+    const auto height = int_field("height").value_or(0);
+
+    auto build = std::make_shared<JsonObject>();
+    build->items["method"] = JsonValue(
+        std::string("source-resolution canonical plane identity"));
+    build->items["analysis_mode"] = JsonValue(std::string("strict"));
+    // Explicit field mapping (reference: source_* keys).
+    auto copy_or_null = [&](const char* from, const std::string& to) {
+        const JsonValue* v = video->find(from);
+        build->items[to] = v ? *v : JsonValue(nullptr);
+    };
+    copy_or_null("width", "source_width");
+    copy_or_null("height", "source_height");
+    copy_or_null("codec_name", "source_codec");
+    copy_or_null("pix_fmt", "source_pixel_format");
+    copy_or_null("time_base", "source_time_base");
+    build->items["decoded_frame_count"] = JsonValue(decoded);
+    {
+        auto segments = std::make_shared<JsonArray>();
+        build->items["segments"] = JsonValue(std::move(segments));
+    }
+    build->items["state_is_hint_only"] = JsonValue(false);
+    build->items["strict_pixel_identical_available"] = JsonValue(true);
+    {
+        auto spatial = std::make_shared<JsonObject>();
+        spatial->items["method"] = JsonValue(std::string(
+            "exact source-resolution canonical plane tile identity"));
+        auto tile_size = std::make_shared<JsonArray>();
+        tile_size->items.push_back(JsonValue(tile_width));
+        tile_size->items.push_back(JsonValue(tile_height));
+        spatial->items["tile_size"] = JsonValue(std::move(tile_size));
+        auto grid = std::make_shared<JsonArray>();
+        grid->items.push_back(JsonValue(
+            static_cast<int64_t>(std::ceil(static_cast<double>(width) /
+                                           static_cast<double>(tile_width)))));
+        grid->items.push_back(JsonValue(
+            static_cast<int64_t>(std::ceil(static_cast<double>(height) /
+                                           static_cast<double>(tile_height)))));
+        spatial->items["tile_grid"] = JsonValue(std::move(grid));
+        spatial->items["strict_pixel_identical_available"] = JsonValue(true);
+        auto smap = std::make_shared<JsonArray>();
+        smap->items = std::move(state_map);
+        const int64_t state_map_count =
+            static_cast<int64_t>(smap->items.size());
+        spatial->items["state_map"] = JsonValue(std::move(smap));
+        spatial->items["state_map_count"] = JsonValue(state_map_count);
+        spatial->items["state_counts"] = JsonValue(counts_obj);
+        spatial->items["state_map_coordinate_system"] =
+            JsonValue(std::string("source-display-pixels"));
+        spatial->items["state_map_identity_scope"] = JsonValue(std::string(
+            "all active native decoded planes and relevant color metadata"));
+        spatial->items["timing"] =
+            JsonValue(std::string("rational source PTS/time_base"));
+        build->items["spatial_analysis"] = JsonValue(std::move(spatial));
+    }
+    return JsonValue(std::move(build));
+}
 }  // namespace casu::analyze

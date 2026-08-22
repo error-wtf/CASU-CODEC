@@ -506,16 +506,20 @@ JsonValue build_manifest(const std::string& source, const std::string& mode,
                 streams->items.push_back(stream_entry(stream));
 
     // ---- REAL analysis (casu/core.py analyze): decoded pipelines instead of
-    // placeholder segments. NOTE: the STRICT source-resolution pipeline is
-    // not ported yet; every mode currently runs the reference preview
-    // pipeline, whose records honestly carry state_is_hint_only=true /
-    // strict_pixel_identical_available=false.
+    // placeholder segments. mode=strict runs the production source-resolution
+    // pipeline (iter_state_map over strict::FrameSource); other modes run the
+    // reference preview pipeline, whose records honestly carry
+    // state_is_hint_only=true / strict_pixel_identical_available=false.
     JsonValue video_data;
     JsonValue audio_data;
-    if (!video_streams.empty())
-        video_data = casu::analyze::preview_activity_analysis(abs_str, info.raw,
-                                                              analysis_fps_value,
-                                                              mode);
+    if (!video_streams.empty()) {
+        if (mode == "strict")
+            video_data = casu::analyze::strict_activity_analysis(abs_str,
+                                                                 info.raw);
+        else
+            video_data = casu::analyze::preview_activity_analysis(
+                abs_str, info.raw, analysis_fps_value, mode);
+    }
     if (!audio_streams.empty())
         audio_data = casu::analyze::analyze_audio(abs_str, info.raw);
 

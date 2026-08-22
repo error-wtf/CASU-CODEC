@@ -4,6 +4,8 @@
 // requires byte-identical output to the Python reference conversion
 // (tests/fixtures/natv2/ref_convert.casu).
 #include "casu/codec/native_convert.hpp"
+#include "casu/codec/ffprobe.hpp"
+#include "casu/codec/analyze.hpp"
 #include "casu/native_v2.hpp"
 #include "casu/sha256.hpp"
 
@@ -84,6 +86,46 @@ int main(int argc, char** argv) {
         std::printf("  verify error: %s\n", exc.what());
     }
     check(valid, "converted file passes strict verification");
+
+    // --- Strict analysis state-map parity (iter_state_map) ------------------
+    bool strict_ok = false;
+    try {
+        const JsonValue probe = casu::codec::probe_json(source);
+        const JsonValue analysis =
+            casu::analyze::strict_activity_analysis(source, probe, 16, 16);
+        const JsonValue* spatial = analysis.find("spatial_analysis");
+        const JsonValue* state_map = spatial && spatial->is_object()
+                                         ? spatial->find("state_map")
+                                         : nullptr;
+        const std::string ref_text = read_file(dir + "/ref_strict_state_map.json");
+        const JsonValue ref_map = parse_json(ref_text);
+        if (state_map && state_map->is_array() && ref_map.is_array()) {
+            // Compare as canonical sorted dumps (record order is deterministic).
+            const std::string mine_dump = dump_json(*state_map, true, false);
+            const std::string ref_dump = dump_json(ref_map, true, false);
+            strict_ok = mine_dump == ref_dump;
+            if (!strict_ok) {
+                std::printf("  strict records: mine=%zu ref=%zu\n",
+                            state_map->as_array().items.size(),
+                            ref_map.as_array().items.size());
+                for (std::size_t i = 0; i < std::min(
+                         mine_dump.size(), ref_dump.size());
+                     ++i) {
+                    if (mine_dump[i] != ref_dump[i]) {
+                        std::printf("  first diff at char %zu: cpp=%c py=%c\n",
+                                    i, mine_dump[i], ref_dump[i]);
+                        break;
+                    }
+                }
+            }
+        }
+        const JsonValue* hint = analysis.find("state_is_hint_only");
+        strict_ok = strict_ok && hint && hint->is_bool() &&
+                    !hint->as_bool();
+    } catch (const CasuError& exc) {
+        std::printf("  strict error: %s\n", exc.what());
+    }
+    check(strict_ok, "strict state map IDENTICAL to python iter_state_map");
 
     if (failures == 0) std::printf("ALL PASS\n");
     return failures == 0 ? 0 : 1;

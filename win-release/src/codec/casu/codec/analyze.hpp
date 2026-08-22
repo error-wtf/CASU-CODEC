@@ -10,6 +10,7 @@
 #pragma once
 #include "casu/json.hpp"
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -50,5 +51,15 @@ JsonValue preview_activity_analysis(const std::string& path,
 // thresholds silence<-55 dB / low_level<-38 dB / active.
 JsonValue analyze_audio(const std::string& path, const JsonValue& probe,
                         int sample_rate = 16000, int window_ms = 20);
+
+// casu/core.py analyze_strict_video(): production source-resolution,
+// plane-aware STRICT state map (iter_state_map three-frame window over
+// strict::FrameSource). Records carry state_is_hint_only=false /
+// strict_pixel_identical_available=true. Throws on decoder failure.
+JsonValue strict_activity_analysis(const std::string& path,
+                                   const JsonValue& probe,
+                                   int64_t tile_width = 64,
+                                   int64_t tile_height = 64,
+                                   const std::function<void(double)>& progress = {});
 
 }  // namespace casu::analyze
