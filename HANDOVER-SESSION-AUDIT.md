@@ -162,6 +162,15 @@ atomar+force+verification_result, Web-Access-Log, Versionstrings, Seek ±10s.
     statt stdout, benchmark --output-Langform defekt, pack-mp5 512MB-Cap+
     STREAM_CONFIG-Metadaten, argparse-Strenge (unbekannte Flags geschluckt).
 
+ANDROID-TOOLCHAIN-STAND (22.08., installiert unter /opt/android-sdk):
+cmdline-tools latest ✓ · platform-tools ✓ · platforms;android-34 ✓ ·
+build-tools;34.0.0 ✓ · NDK 26.3.11579264 ✓ · JDK 25 (System) ✓.
+GESAMT nur 2,5 GB (Platte: 72 GB frei). NOCH OFFEN: Qt 6 for Android
+(aqtinstall, ABIs arm64-v8a + armeabi-v7a + x86_64; WebEngine nur arm64
+sinnvoll) + libVLC-Android-Binaries + Gradle via androiddeployqt.
+NÄCHSTER ANDROID-SCHRITT: aqt install-qt android qt_6_8_3 (?) → Hello-APK
+nach ALL_RELEASE_V5/Android/RUN_CHECKLIST Gate 1.
+
 START-PROMPT NÄCHSTE SESSION (kopieren):
 „Lies /home/error/HANDOVER.md §0b. Arbeitet die Tier-Liste ab:
 (1) CASUNAT2-Stack nach Blaupause Audit-9 (Stufe 0: JSON-Duplikat-Keys+
