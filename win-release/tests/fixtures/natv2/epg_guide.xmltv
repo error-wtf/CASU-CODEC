@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tv>
+  <channel id="ard.de"><display-name>Das &amp; Erste</display-name></channel>
+  <programme start="20260822020000 +0200" stop="20260822030000 +0200" channel="ard.de">
+    <title>Tagesschau &#8211; Ausgabe</title>
+    <desc>Nachrichten &lt;hier&gt; mit „Umlauten“</desc>
+    <category>Nachrichten</category>
+  </programme>
+  <programme start="20260821235959" stop="20260822005959" channel="zdf.de">
+    <title>heute journal</title>
+  </programme>
+  <programme start="20260822030000 +0200" stop="20260822025959 +0200" channel="ard.de">
+    <title>NEGATIV wird übersprungen</title>
+  </programme>
+  <channel id="zdf.de"><display-name>ZDF</display-name></channel>
+  <programme start="20260822011500Z" stop="20260822013000Z" channel="ard.de">
+    <title>Nachtmagazin</title>
+    <category>Kultur</category>
+  </programme>
+</tv>

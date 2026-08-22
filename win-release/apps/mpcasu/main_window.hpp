@@ -228,7 +228,8 @@ private:
     YoutubeProxy* yt_proxy_ = nullptr;
     WebPlayerTabs* web_player_tabs_ = nullptr;
     RecordingController* recorder_ = nullptr;
-    EpgCatalog epg_;
+    mpcasu::StreamCatalog epg_;
+    mpcasu::EpgGuide epg_guide_;
     QString current_source_;
     QString current_title_;
     double audio_delay_ms_ = 0.0;     // Linux parity: per-media A/V delays
