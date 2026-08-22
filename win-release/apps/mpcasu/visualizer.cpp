@@ -87,14 +87,15 @@ void VisualizerWidget::set_cover(const QPixmap* pixmap) {
 }
 
 void VisualizerWidget::clear_audio() {
-    if (stream_pipe_) {
-        if (stream_pipe_->state() != QProcess::NotRunning) {
-            stream_pipe_->terminate();
-            if (!stream_pipe_->waitForFinished(2000)) stream_pipe_->kill();
+    if (pipe_) {
+        if (pipe_->state() != QProcess::NotRunning) {
+            pipe_->terminate();
+            if (!pipe_->waitForFinished(2000)) pipe_->kill();
         }
-        stream_pipe_->deleteLater();
-        stream_pipe_ = nullptr;
+        pipe_->deleteLater();
+        pipe_ = nullptr;
     }
+    pipe_is_live_ = false;
     pcm_.clear();
     stream_ring_.assign(stream_ring_.size(), 0.0f);
     ring_write_pos_ = 0;
@@ -106,58 +107,19 @@ void VisualizerWidget::clear_audio() {
 
 void VisualizerWidget::set_audio_file(const QString& path) {
     if (pcm_source_ == path && !pcm_.empty()) return;
-    clear_audio();
-    pcm_source_ = path;
     if (path.isEmpty() || !QFile::exists(path)) return;
-    if (decoding_.exchange(true)) return;
-    const QString source = path;
-    // decode_all_pcm: ffmpeg -> mono s16le @44100 -> float32 in [-1,1].
-    std::thread([this, source] {
-        QProcess proc;
-        proc.setProgram(QString::fromStdString(
-            casu::codec::ffmpeg_path().empty()
-                ? std::string("ffmpeg")
-                : casu::codec::ffmpeg_path()));
-        proc.setArguments(QStringList{
-            QStringLiteral("-nostdin"), QStringLiteral("-v"),
-            QStringLiteral("error"), QStringLiteral("-i"), source,
-            QStringLiteral("-map"), QStringLiteral("0:a:0"),
-            QStringLiteral("-ac"), QStringLiteral("1"),
-            QStringLiteral("-ar"), QStringLiteral("44100"),
-            QStringLiteral("-f"), QStringLiteral("s16le"),
-            QStringLiteral("-acodec"), QStringLiteral("pcm_s16le"),
-            QStringLiteral("pipe:1")});
-        proc.setProcessChannelMode(QProcess::SeparateChannels);
-        proc.start();
-        std::vector<float> decoded;
-        if (proc.waitForStarted(10000)) {
-            while (true) {
-                const QByteArray chunk =
-                    proc.read(64 * 1024 * 4);
-                if (!chunk.isEmpty()) {
-                    const int16_t* samples =
-                        reinterpret_cast<const int16_t*>(chunk.constData());
-                    const qsizetype count = chunk.size() / 2;
-                    decoded.reserve(decoded.size() +
-                                    static_cast<std::size_t>(count));
-                    for (qsizetype i = 0; i < count; ++i)
-                        decoded.push_back(
-                            static_cast<float>(samples[i]) / 32768.0f);
-                    if (decoded.size() > 8'000'000) break;  // reference cap
-                    continue;
-                }
-                if (proc.state() != QProcess::Running &&
-                    proc.bytesAvailable() == 0)
-                    break;
-                proc.waitForReadyRead(500);
-            }
-            proc.terminate();
-            if (!proc.waitForFinished(3000)) proc.kill();
-        }
-        sample_rate_ = 44100;
-        pcm_ = std::move(decoded);
-        decoding_ = false;
-    }).detach();
+    pcm_source_ = path;
+    // decode_all_pcm parity: ffmpeg -> mono s16le @44100, drained by tick().
+    start_pipe(QStringList{
+        QStringLiteral("-nostdin"), QStringLiteral("-v"),
+        QStringLiteral("error"), QStringLiteral("-i"), path,
+        QStringLiteral("-map"), QStringLiteral("0:a:0"),
+        QStringLiteral("-ac"), QStringLiteral("1"),
+        QStringLiteral("-ar"), QStringLiteral("44100"),
+        QStringLiteral("-f"), QStringLiteral("s16le"),
+        QStringLiteral("-acodec"), QStringLiteral("pcm_s16le"),
+        QStringLiteral("pipe:1")},
+        false);
 }
 
 const float* VisualizerWidget::ring_tail(std::size_t* count) const {
@@ -166,14 +128,9 @@ const float* VisualizerWidget::ring_tail(std::size_t* count) const {
 }
 
 void VisualizerWidget::set_stream_url(const QString& url) {
-    clear_audio();
     if (url.isEmpty()) return;
-    const std::string exe = casu::codec::ffmpeg_path().empty()
-                                ? std::string("ffmpeg")
-                                : casu::codec::ffmpeg_path();
-    stream_pipe_ = new QProcess(this);
-    stream_pipe_->setProgram(QString::fromStdString(exe));
-    stream_pipe_->setArguments(QStringList{
+    // Live pipe drained at ~40 Hz into the ring buffer.
+    start_pipe(QStringList{
         QStringLiteral("-nostdin"), QStringLiteral("-v"),
         QStringLiteral("error"), QStringLiteral("-i"), url,
         QStringLiteral("-map"), QStringLiteral("0:a:0"),
@@ -181,35 +138,13 @@ void VisualizerWidget::set_stream_url(const QString& url) {
         QStringLiteral("-ar"), QStringLiteral("44100"),
         QStringLiteral("-f"), QStringLiteral("s16le"),
         QStringLiteral("-acodec"), QStringLiteral("pcm_s16le"),
-        QStringLiteral("pipe:1")});
-    stream_pipe_->setProcessChannelMode(QProcess::SeparateChannels);
-    stream_pipe_->start();
-    constexpr std::size_t kRingSeconds = 10;
-    constexpr std::size_t kRingCapacity = 44100 * kRingSeconds;
-    stream_ring_.assign(kRingCapacity, 0.0f);
-    ring_write_pos_ = 0;
-    // ~40 Hz drain of the pipe into the ring buffer.
-    connect(&stream_timer_, &QTimer::timeout, this, [this] {
-        if (!stream_pipe_ ||
-            stream_pipe_->state() == QProcess::NotRunning)
-            return;
-        const QByteArray chunk = stream_pipe_->readAll();
-        if (chunk.isEmpty()) return;
-        const int16_t* samples =
-            reinterpret_cast<const int16_t*>(chunk.constData());
-        const qsizetype count = chunk.size() / 2;
-        for (qsizetype i = 0; i < count; ++i) {
-            stream_ring_[ring_write_pos_] =
-                static_cast<float>(samples[i]) / 32768.0f;
-            ring_write_pos_ = (ring_write_pos_ + 1) % stream_ring_.size();
-        }
-    });
-    stream_timer_.setInterval(25);
-    stream_timer_.start();
+        QStringLiteral("pipe:1")},
+        true);
 }
 
 void VisualizerWidget::tick() {
     phase_ += 0.06;
+    drain_pipe();
     if (playing_) compute_frame();
     update();
 }
@@ -297,6 +232,56 @@ QVector<double> VisualizerWidget::wave_samples(int points) const {
     return current_wave_;
 }
 
+
+void VisualizerWidget::start_pipe(const QStringList& args, bool live) {
+    clear_audio();
+    const std::string exe = casu::codec::ffmpeg_path().empty()
+                                ? std::string("ffmpeg")
+                                : casu::codec::ffmpeg_path();
+    pipe_ = new QProcess(this);
+    pipe_->setProgram(QString::fromStdString(exe));
+    pipe_->setArguments(args);
+    pipe_->setProcessChannelMode(QProcess::SeparateChannels);
+    pipe_is_live_ = live;
+    if (live) {
+        constexpr std::size_t kRingSeconds = 10;
+        stream_ring_.assign(44100 * kRingSeconds, 0.0f);
+        ring_write_pos_ = 0;
+    }
+    pipe_->start();
+}
+
+// Read whatever the decoder produced since the last tick. File mode
+// appends to pcm_ until EOF; live mode feeds the ring buffer.
+void VisualizerWidget::drain_pipe() {
+    if (!pipe_) return;
+    const QByteArray chunk =
+        pipe_->read(256 * 1024);
+    if (chunk.isEmpty()) {
+        if (!pipe_is_live_ &&
+            pipe_->state() == QProcess::NotRunning &&
+            pipe_->bytesAvailable() == 0) {
+            pipe_->deleteLater();
+            pipe_ = nullptr;
+        }
+        return;
+    }
+    const int16_t* samples =
+        reinterpret_cast<const int16_t*>(chunk.constData());
+    const qsizetype count = chunk.size() / 2;
+    if (pipe_is_live_) {
+        for (qsizetype i = 0; i < count; ++i) {
+            stream_ring_[ring_write_pos_] =
+                static_cast<float>(samples[i]) / 32768.0f;
+            ring_write_pos_ = (ring_write_pos_ + 1) % stream_ring_.size();
+        }
+    } else {
+        pcm_.reserve(pcm_.size() + static_cast<std::size_t>(count));
+        for (qsizetype i = 0; i < count; ++i)
+            pcm_.push_back(static_cast<float>(samples[i]) / 32768.0f);
+    }
+}
+
 void VisualizerWidget::paintEvent(QPaintEvent* event) {
     Q_UNUSED(event);
     const Palette& P = mpcasu::palette();
@@ -372,7 +357,7 @@ void VisualizerWidget::paintEvent(QPaintEvent* event) {
     f.setPointSize(9);
     p.setFont(f);
     p.drawText(rect().adjusted(8, 0, -8, -4), Qt::AlignBottom | Qt::AlignLeft,
-               pcm_.empty() && stream_pipe_ == nullptr
+               pcm_.empty() && pipe_ == nullptr
                    ? QStringLiteral(
                          "Visualizer: open media to enable the spectrum")
                    : QStringLiteral("FFT 2048 · 128 bins · decoded PCM"));
