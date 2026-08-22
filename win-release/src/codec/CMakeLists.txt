@@ -9,6 +9,8 @@ add_library(casu_codec STATIC
     casu/codec/ffmpeg.cpp
     casu/codec/presets.cpp
     casu/codec/analyze.cpp
+    casu/codec/strict_frames.cpp
+    casu/codec/native_convert.cpp
     casu/codec/export.cpp
 )
 

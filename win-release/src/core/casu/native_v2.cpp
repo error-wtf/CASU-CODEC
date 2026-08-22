@@ -1033,10 +1033,11 @@ std::string repair_native_v2(const std::string& source,
 // ---------------------------------------------------------------------------
 // Writer
 // ---------------------------------------------------------------------------
-std::string write_native_v2(const std::string& path, const JsonValue& manifest,
-                            const std::vector<Chunk>& chunks,
-                            uint64_t recovery_interval,
-                            const CasuLimits* limits_ptr) {
+std::string write_native_v2_streamed(
+    const std::string& path, const JsonValue& manifest,
+    const std::function<std::optional<Chunk>()>& next_chunk,
+    uint64_t recovery_interval, const CasuLimits* limits_ptr) {
+    std::vector<Chunk> chunks;
     CasuLimits limits;
     if (limits_ptr) limits = *limits_ptr;
     else limits.max_chunk_bytes = 512ULL * 1024 * 1024;
@@ -1132,12 +1133,12 @@ std::string write_native_v2(const std::string& path, const JsonValue& manifest,
                                       Sha256::oneshot(packed));
         }
 
-        for (std::size_t ordinal_index = 0; ordinal_index < chunks.size();
-             ++ordinal_index) {
-            const uint64_t ordinal = ordinal_index + 1;
+        for (uint64_t ordinal = 1;; ++ordinal) {
             if (ordinal > limits.max_chunks)
                 fail("chunk count exceeds CASUNAT2 limit");
-            const Chunk& chunk = chunks[ordinal_index];
+            auto maybe = next_chunk();
+            if (!maybe.has_value()) break;
+            Chunk chunk = std::move(*maybe);
             if (chunk.payload.size() > limits.max_chunk_bytes)
                 fail("chunk exceeds CASUNAT2 limit");
             if (chunk.chunk_type == STREAM_CONFIG) {
@@ -1291,6 +1292,21 @@ std::string write_native_v2(const std::string& path, const JsonValue& manifest,
         fail("could not publish CASUNAT2 file");
     }
     return target.string();
+}
+
+
+std::string write_native_v2(const std::string& path, const JsonValue& manifest,
+                            const std::vector<Chunk>& chunks,
+                            uint64_t recovery_interval,
+                            const CasuLimits* limits_ptr) {
+    std::size_t index = 0;
+    return write_native_v2_streamed(
+        path, manifest,
+        [&]() -> std::optional<Chunk> {
+            if (index >= chunks.size()) return std::nullopt;
+            return chunks[index++];
+        },
+        recovery_interval, limits_ptr);
 }
 
 }  // namespace casunat2

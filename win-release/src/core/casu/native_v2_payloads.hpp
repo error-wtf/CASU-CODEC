@@ -255,6 +255,27 @@ std::string encode_attachment(const std::string& filename,
                               const char* role);
 Attachment decode_attachment(const std::string& payload);
 
+// Port of strict/tiles.py compare_frames: tile-level HOLD/UPDATE comparison
+// with an optional previous-hashes memo (region -> hash). Returns one record
+// per tile region; state is KEY_STATE on format change.
+struct StrictTileState {
+    std::string tile_id;
+    int64_t x = 0;
+    int64_t y = 0;
+    int64_t w = 0;
+    int64_t h = 0;
+    std::string state;
+    std::string state_hash;
+    bool has_reference = false;
+    std::string reference_hash;
+    int plane_count = 0;
+    bool format_change = false;
+};
+std::vector<StrictTileState> compare_frames(
+    const CanonicalFrame* previous, const CanonicalFrame& current,
+    int64_t tile_width, int64_t tile_height,
+    const std::map<std::array<int64_t, 4>, std::string>* previous_hashes);
+
 // ---------------------------------------------------------------------------
 // Structural + semantic validation (casu/native_v2/validation.py)
 // ---------------------------------------------------------------------------

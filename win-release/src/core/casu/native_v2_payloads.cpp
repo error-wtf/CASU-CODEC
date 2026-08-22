@@ -2072,4 +2072,69 @@ void NativeV2PayloadValidator::finalize(bool require_system) {
             "CASUNAT2 structural chunks are incomplete");
 }
 
+
+std::vector<StrictTileState> compare_frames(
+    const CanonicalFrame* previous, const CanonicalFrame& current,
+    int64_t tile_width, int64_t tile_height,
+    const std::map<std::array<int64_t, 4>, std::string>* previous_hashes) {
+    if (tile_width <= 0 || tile_height <= 0)
+        throw CasuError("tile dimensions must be positive");
+    bool format_change = previous == nullptr;
+    if (previous != nullptr &&
+        !(previous->format_identity() == current.format_identity()))
+        format_change = true;
+    const std::string current_prefix = frame_identity_prefix(current);
+    std::optional<std::string> previous_prefix;
+    if (previous != nullptr && !format_change && previous_hashes == nullptr)
+        previous_prefix = frame_identity_prefix(*previous);
+    std::vector<StrictTileState> result;
+    const auto [height, width] = current.shape();
+    int64_t ordinal = 0;
+    for (int64_t y = 0; y < height; y += tile_height) {
+        for (int64_t x = 0; x < width; x += tile_width) {
+            const int64_t tw = std::min(tile_width, width - x);
+            const int64_t th = std::min(tile_height, height - y);
+            char tile_id[32];
+            std::snprintf(tile_id, sizeof(tile_id), "tile-%08lld",
+                          static_cast<long long>(ordinal));
+            ++ordinal;
+            StrictTileState state;
+            state.tile_id = tile_id;
+            state.x = x;
+            state.y = y;
+            state.w = tw;
+            state.h = th;
+            state.state_hash =
+                tile_digest_with_prefix(current, x, y, tw, th, current_prefix);
+            state.plane_count = static_cast<int>(current.planes.size());
+            state.format_change = format_change;
+            if (previous != nullptr && !format_change) {
+                const std::array<int64_t, 4> region{x, y, tw, th};
+                if (previous_hashes != nullptr) {
+                    auto it = previous_hashes->find(region);
+                    if (it != previous_hashes->end()) {
+                        state.has_reference = true;
+                        state.reference_hash = it->second;
+                    } else {
+                        state.has_reference = true;
+                        state.reference_hash =
+                            canonical_tile_hash(*previous, x, y, tw, th);
+                    }
+                } else if (previous_prefix.has_value()) {
+                    state.has_reference = true;
+                    state.reference_hash = tile_digest_with_prefix(
+                        *previous, x, y, tw, th, *previous_prefix);
+                }
+                state.state = state.state_hash == state.reference_hash
+                                  ? "HOLD"
+                                  : "UPDATE";
+            } else {
+                state.state = "KEY_STATE";
+            }
+            result.push_back(std::move(state));
+        }
+    }
+    return result;
+}
+
 }  // namespace casu::natv2
