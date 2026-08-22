@@ -79,7 +79,18 @@ atomar+force+verification_result, Web-Access-Log, Versionstrings, Seek ±10s.
    abgelehnt werden), strtoll ohne errno (Clamping statt Fehler), ftell>2GiB
    auf MinGW (32-bit long!), Limits hartkodiert statt CasuLimits-Struct,
    positioneller statt offset-keyed Hash-Vergleich, max_file_bytes ungeprüft.
-2. **Analyse-Kern** (Audit 8): cli_util build_manifest schreibt Fake-Segment
+2. **Analyse-Kern** (Audit 8) — ✅ TEILWEISE ERLIEDIGT (Commit 895b5ca):
+   Preview-Pfad + Audio-Analyse + RLE + Tile-Vergleiche + Seek-Index aus
+   echten Segmentgrenzen jetzt REAL in src/codec/casu/analyze.{hpp,cpp};
+   gegen Python-Referenz verifiziert (mean_delta 8-Dekimalen identisch,
+   1419 Tiles identisch). P0-Fixes drin (channels, format-only duration,
+   mode-Validierung, fps-Plumbing). VERBLEIBT: strict-Pipeline (native-
+   pixfmt-Rawvideo-Decodierung + CanonicalFrame/PlaneLayouts + Identity-
+   Metadata; decoder.py/canonical.py/state_builder.py) — alle Modi laufen
+   bis dahin ehrlich über die Hint-only-Pipeline. Flaky-Hinweis: Wine-GUI-
+   Tests (smoke/converter) unter Desktop-Last zeitouten — serial + idle
+   laufen lassen; kein Codefehler.
+   URSPRÜNGLICH: cli_util build_manifest schrieb Fake-Segment
    „active“ statt echter Segmentierung. FEHLEND: strict-Pipeline (decoder.py
    Pixelformattabelle ~30 Formate, rawvideo-Pipe NATIV pix_fmt, CanonicalFrame
    PlaneLayouts, SHA256-Tile-Digest HOLD/UPDATE, iter_state_map 3er-Fenster,
