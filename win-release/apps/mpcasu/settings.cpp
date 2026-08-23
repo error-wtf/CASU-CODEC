@@ -395,6 +395,10 @@ QString app_config_dir() {
             QDir(legacy).entryInfoList(QDir::Files);
         bool copied_any = false;
         for (const QFileInfo& fi : entries) {
+            // NEVER migrate lock files: a stale admin-owned mpcasu.lock in
+            // the old folder made non-elevated starts report "already
+            // running" although nothing was running.
+            if (fi.fileName().endsWith(".lock")) continue;
             const QString target = dir.absoluteFilePath(fi.fileName());
             if (!QFileInfo::exists(target)) {
                 QFile::copy(fi.absoluteFilePath(), target);

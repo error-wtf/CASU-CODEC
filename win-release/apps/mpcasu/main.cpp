@@ -95,7 +95,12 @@ int main(int argc, char** argv) {
         else if (!arg.startsWith("--")) media << arg;    }
 
     // --- single instance (QLockFile in the app config dir) ---
-    QLockFile lock(mpcasu::app_config_dir() + "/mpcasu.lock");
+    const QString lock_path = mpcasu::app_config_dir() + "/mpcasu.lock";
+    // A leftover lock from an elevated run must not block normal starts;
+    // QLockFile detects live owners by PID, so removing a STALE file first
+    // is safe.
+    QFile::remove(lock_path);
+    QLockFile lock(lock_path);
     lock.setStaleLockTime(30000);
     if (!lock.tryLock(0)) {
         QMessageBox::information(nullptr, QStringLiteral("MPCASU"),
