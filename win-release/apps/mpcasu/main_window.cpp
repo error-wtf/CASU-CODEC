@@ -155,6 +155,8 @@ MainWindow::MainWindow(const QStringList& initial_files, bool force_proxy,
 
     surface_->on_double_click = [this] { toggle_fullscreen(); };
     surface_->on_click = [this] { toggle_playback(); };
+    // Reference parity: mouse wheel over the video changes the volume.
+    surface_->on_wheel = [this](int step) { change_volume(step * 5); };
     bridge_->on_state = [this](casu::playback::PlaybackState s) {
         on_backend_state(s);
     };
@@ -4115,6 +4117,7 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
             return;
         case Qt::Key_Escape:
             if (isFullScreen()) {
+                showNormal();          // actually LEAVE fullscreen
                 exit_fullscreen_ui();
                 event->accept();
                 return;
@@ -4136,7 +4139,8 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
                 event->accept();
                 return;
             case Qt::Key_L:
-                open_url_dialog();
+                // Reference parity: Ctrl+L shows the Sources view.
+                navigate(QStringLiteral("YOUTUBE"));
                 event->accept();
                 return;
             case Qt::Key_I:
