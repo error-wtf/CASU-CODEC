@@ -342,6 +342,12 @@ void MainWindow::build_sidebar() {
     auto* backend = new QLabel(QStringLiteral("libVLC backend"), sidebar_);
     backend->setObjectName("StatusText");
     layout->addWidget(backend);
+    // Reference Sidebar footer: version label pinned to the bottom.
+    auto* sidebar_version = new QLabel(QStringLiteral("MPCASU 5.0.0"), sidebar_);
+    sidebar_version->setObjectName("NowPlayingMeta");
+    sidebar_version->setContentsMargins(16, 8, 16, 8);
+    sidebar_version->setAlignment(Qt::AlignLeft | Qt::AlignBottom);
+    layout->addWidget(sidebar_version);
 }
 
 void MainWindow::build_about_page() {
@@ -912,9 +918,13 @@ void MainWindow::build_transport() {
     fs_overlay_ = new QWidget(this);
     fs_overlay_->setObjectName("FsOverlay");
     fs_overlay_->setAttribute(Qt::WA_StyledBackground, true);
+    // Reference styling: translucent dark fill, hairline border, r8.
+    fs_overlay_->setStyleSheet(QStringLiteral(
+        "background: #07090bdd; border: 1px solid #252a30; "
+        "border-radius: 8px;"));
     auto* fs_layout = new QHBoxLayout(fs_overlay_);
-    fs_layout->setContentsMargins(12, 6, 12, 6);
-    fs_layout->setSpacing(8);
+    fs_layout->setContentsMargins(10, 6, 10, 6);
+    fs_layout->setSpacing(6);
     fs_title_ = new QLabel(QStringLiteral(""), fs_overlay_);
     fs_title_->setStyleSheet(QStringLiteral("color: #e8ecf1;"));
     fs_layout->addWidget(fs_title_, 1);
