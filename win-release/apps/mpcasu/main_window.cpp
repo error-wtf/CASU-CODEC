@@ -2791,9 +2791,12 @@ void MainWindow::save_snapshot() {
     if (!backend_) { status(QStringLiteral("No media loaded")); return; }
     QString dir = app_settings_.snapshot_dir.isEmpty() ? output_dir_ : app_settings_.snapshot_dir;
     QDir().mkpath(dir);
-    QString name = QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss") + ".png";
+    const QString stamp =
+        QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
+    const QString name = QStringLiteral("snapshot-%1.png").arg(stamp);
     try {
         backend_->snapshot((dir + "/" + name).toStdString());
+        toast(QStringLiteral("Snapshot saved · %1").arg(name));
         status(QStringLiteral("Snapshot saved: %1/%2").arg(dir, name));
     } catch (const casu::playback::PlaybackError& e) {
         status(QStringLiteral("Snapshot failed: %1").arg(QString::fromStdString(e.what())));
@@ -2838,23 +2841,26 @@ void MainWindow::on_backend_state(casu::playback::PlaybackState s) {
 }
 
 void MainWindow::cycle_ab_loop() {
-    // A → B → loop on → off (Linux cycle_ab_loop semantics with toasts).
+    // Reference cycle_ab_loop: exact toast texts/semantics; "B before A" is
+    // an ERROR message and does NOT move the A point.
+    if (!controller_) return;
+    const double position = controller_->position();
     if (ab_loop_a_ < 0.0) {
-        ab_loop_a_ = controller_->position();
+        ab_loop_a_ = position;
         ab_loop_b_ = -1.0;
-        toast(QStringLiteral("A point set at %1").arg(format_duration(ab_loop_a_)));
+        toast(QStringLiteral("A point set at %1s")
+                  .arg(ab_loop_a_, 0, 'f', 1));
         return;
     }
     if (ab_loop_b_ < 0.0) {
-        const double pos = controller_->position();
-        if (pos <= ab_loop_a_ + 0.5) {
-            ab_loop_a_ = pos;
-            toast(QStringLiteral("A point set at %1").arg(format_duration(pos)));
+        if (position <= ab_loop_a_) {
+            toast(QStringLiteral("B point must be after A point"));
             return;
         }
-        ab_loop_b_ = pos;
-        toast(QStringLiteral("A–B loop active (%1 → %2)")
-                  .arg(format_duration(ab_loop_a_), format_duration(ab_loop_b_)));
+        ab_loop_b_ = position;
+        toast(QStringLiteral("A–B loop active · %1s – %2s")
+                  .arg(ab_loop_a_, 0, 'f', 1)
+                  .arg(ab_loop_b_, 0, 'f', 1));
         return;
     }
     ab_loop_a_ = -1.0;
