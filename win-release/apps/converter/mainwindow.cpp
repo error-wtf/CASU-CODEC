@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
 #include "mainwindow.hpp"
+#include <cmath>
 
 #include "theme.hpp"
 #include "worker.hpp"
@@ -781,11 +782,18 @@ void MainWindow::cancelConversion() {
 void MainWindow::onProgress(const ConversionProgress& p) {
     progress_->setValue(int(p.overall * 1000.0));
     const QString name = QFileInfo(QString::fromUtf8(p.source.c_str())).fileName();
-    status_->setText(QString("%1 · %2 (%3/%4)")
+    // Reference report() parity: "<State> <name> (i/n) · <elapsed> s · ETA <x> s".
+    const QString eta = p.eta_seconds < 0.0
+                            ? QStringLiteral("ETA --")
+                            : QStringLiteral("ETA %1 s")
+                                  .arg(int(std::lround(p.eta_seconds)));
+    status_->setText(QString("%1 %2 (%3/%4) · %5 s · %6")
                          .arg(state_name(p.state))
                          .arg(name)
                          .arg(p.job_index + 1)
-                         .arg(p.job_count));
+                         .arg(p.job_count)
+                         .arg(p.elapsed_seconds, 0, 'f', 1)
+                         .arg(eta));
 }
 
 void MainWindow::onFinished(const QString& summary) {
