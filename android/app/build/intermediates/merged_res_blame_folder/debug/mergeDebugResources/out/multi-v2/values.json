@@ -1,0 +1,38 @@
+{
+    "logs": [
+        {
+            "outputFile": "org.casu.mpcasu.app-mergeDebugResources-2:/values/values.xml",
+            "map": [
+                {
+                    "source": "/home/error/Codec-Casu/android/app/src/main/res/values/styles.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endLines": "6",
+                        "endColumns": "12",
+                        "endOffsets": "327"
+                    },
+                    "to": {
+                        "startLines": "4",
+                        "startColumns": "4",
+                        "startOffsets": "135",
+                        "endLines": "8",
+                        "endColumns": "12",
+                        "endOffsets": "407"
+                    }
+                },
+                {
+                    "source": "/home/error/Codec-Casu/android/app/src/main/res/values/colors.xml",
+                    "from": {
+                        "startLines": "2,3",
+                        "startColumns": "4,4",
+                        "startOffsets": "55,95",
+                        "endColumns": "39,39",
+                        "endOffsets": "90,130"
+                    }
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,13 @@
+# ninja log v5
+0	1499	1787492293857160746	CMakeFiles/casucore.dir/home/error/Codec-Casu/win-release/src/core/casu/sha256.cpp.o	b37542c071a26098
+1	1998	1787492294367174126	CMakeFiles/casucore.dir/home/error/Codec-Casu/win-release/src/core/casu/formats.cpp.o	ef5a9be57245c487
+1	2035	1787492294380174466	CMakeFiles/casucore.dir/home/error/Codec-Casu/win-release/src/core/casu/json.cpp.o	ed21202702bd7347
+7	2096	1787492294449176276	CMakeFiles/casucore.dir/home/error/Codec-Casu/win-release/src/core/casu/sidecar.cpp.o	8e084d96198a25b3
+0	2340	1787492294704182963	CMakeFiles/casucore.dir/casu_jni.cpp.o	6f4b1017d50405e
+5	2726	1787492295088193028	CMakeFiles/casucore.dir/home/error/Codec-Casu/win-release/src/core/casu/mp5.cpp.o	c8baeb4a7da51d34
+1	2738	1787492295102193395	CMakeFiles/casucore.dir/home/error/Codec-Casu/win-release/src/core/casu/manifest.cpp.o	57182271cfbe48c6
+2	2823	1787492295189195672	CMakeFiles/casucore.dir/home/error/Codec-Casu/win-release/src/core/casu/native.cpp.o	9e669e5f043bad02
+1500	3668	1787492296034217792	CMakeFiles/casucore.dir/home/error/Codec-Casu/win-release/src/core/casu/journal.cpp.o	2d0eba4740fff880
+4	4140	1787492296493229787	CMakeFiles/casucore.dir/home/error/Codec-Casu/win-release/src/core/casu/native_v2.cpp.o	35d9c481f127cb91
+6	4717	1787492297069244838	CMakeFiles/casucore.dir/home/error/Codec-Casu/win-release/src/core/casu/native_v2_payloads.cpp.o	67e20f5a877a204a
+4717	4774	1787492297146246847	/home/error/Codec-Casu/android/app/build/intermediates/cxx/Debug/3tu1w592/obj/x86_64/libcasucore.so	60f8f5df3bd1602c

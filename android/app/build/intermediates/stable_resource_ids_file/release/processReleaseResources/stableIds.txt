@@ -1,0 +1,4 @@
+org.casu.mpcasu:style/Theme.Casu = 0x7f030000
+org.casu.mpcasu:mipmap/ic_launcher = 0x7f020000
+org.casu.mpcasu:color/ic_fg = 0x7f010001
+org.casu.mpcasu:color/ic_bg = 0x7f010000

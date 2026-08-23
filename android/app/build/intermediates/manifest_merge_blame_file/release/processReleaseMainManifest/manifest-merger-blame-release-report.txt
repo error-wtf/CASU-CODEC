@@ -1,0 +1,50 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<!-- SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4 -->
+3<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+4    package="org.casu.mpcasu"
+5    android:versionCode="5"
+6    android:versionName="5.0.0" >
+7
+8    <uses-sdk
+9        android:minSdkVersion="24"
+10        android:targetSdkVersion="34" />
+11
+12    <uses-permission android:name="android.permission.INTERNET" />
+12-->/home/error/Codec-Casu/android/app/src/main/AndroidManifest.xml:4:5-66
+12-->/home/error/Codec-Casu/android/app/src/main/AndroidManifest.xml:4:22-64
+13
+14    <application
+14-->/home/error/Codec-Casu/android/app/src/main/AndroidManifest.xml:5:5-19:19
+15        android:extractNativeLibs="false"
+16        android:hardwareAccelerated="true"
+16-->/home/error/Codec-Casu/android/app/src/main/AndroidManifest.xml:10:9-43
+17        android:icon="@mipmap/ic_launcher"
+17-->/home/error/Codec-Casu/android/app/src/main/AndroidManifest.xml:7:9-43
+18        android:label="MPCASU"
+18-->/home/error/Codec-Casu/android/app/src/main/AndroidManifest.xml:6:9-31
+19        android:theme="@style/Theme.Casu"
+19-->/home/error/Codec-Casu/android/app/src/main/AndroidManifest.xml:8:9-42
+20        android:usesCleartextTraffic="true" >
+20-->/home/error/Codec-Casu/android/app/src/main/AndroidManifest.xml:9:9-44
+21        <activity
+21-->/home/error/Codec-Casu/android/app/src/main/AndroidManifest.xml:11:9-18:20
+22            android:name="org.casu.mpcasu.MainActivity"
+22-->/home/error/Codec-Casu/android/app/src/main/AndroidManifest.xml:11:19-47
+23            android:configChanges="orientation|screenSize|keyboardHidden"
+23-->/home/error/Codec-Casu/android/app/src/main/AndroidManifest.xml:13:19-80
+24            android:exported="true" >
+24-->/home/error/Codec-Casu/android/app/src/main/AndroidManifest.xml:12:19-42
+25            <intent-filter>
+25-->/home/error/Codec-Casu/android/app/src/main/AndroidManifest.xml:14:13-17:29
+26                <action android:name="android.intent.action.MAIN" />
+26-->/home/error/Codec-Casu/android/app/src/main/AndroidManifest.xml:15:17-68
+26-->/home/error/Codec-Casu/android/app/src/main/AndroidManifest.xml:15:25-66
+27
+28                <category android:name="android.intent.category.LAUNCHER" />
+28-->/home/error/Codec-Casu/android/app/src/main/AndroidManifest.xml:16:17-76
+28-->/home/error/Codec-Casu/android/app/src/main/AndroidManifest.xml:16:27-74
+29            </intent-filter>
+30        </activity>
+31    </application>
+32
+33</manifest>

@@ -1,0 +1,2 @@
+ninja: Entering directory `/home/error/Codec-Casu/android/app/.cxx/RelWithDebInfo/51534o2e/x86_64'
+ninja: no work to do.

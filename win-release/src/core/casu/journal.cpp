@@ -82,7 +82,7 @@ void write_journal(const std::string& path, const std::string& state,
     JsonObject payload;
     payload.items["version"] = JsonValue(int64_t(1));
     payload.items["state"] = JsonValue(state);
-    payload.items["updated_ns"] = JsonValue(updated_ns);
+    payload.items["updated_ns"] = JsonValue(static_cast<int64_t>(updated_ns));
     auto recorded_jobs = std::make_shared<JsonArray>();
     for (const JournalJob& job : jobs) recorded_jobs->items.push_back(job_record(job));
     payload.items["jobs"] = JsonValue(std::move(recorded_jobs));
