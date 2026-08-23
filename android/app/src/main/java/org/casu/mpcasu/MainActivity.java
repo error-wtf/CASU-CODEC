@@ -65,7 +65,14 @@ public class MainActivity extends Activity {
         webView.loadUrl("http://127.0.0.1:" + server.port() + "/web/index.html");
 
         // Warm up the native core so the .so + verification are ready.
-        CasuCore.detectKind("/nonexistent");
+        // The probe path is intentionally unreadable; detectKind reports
+        // that as an "ERROR: …" string (never throws across JNI).
+        try {
+            CasuCore.detectKind("/nonexistent");
+        } catch (Throwable ignored) {
+            // A missing/wrong native core must not take the app down:
+            // the web player degrades gracefully without casu_core.
+        }
 
         // Surface layer: MediaSession for system transport controls
         // (lock screen, headsets, assistant) plus state polling that also

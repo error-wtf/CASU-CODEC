@@ -32,13 +32,19 @@ jstring to_jni(JNIEnv* env, const std::string& s) {
 extern "C" JNIEXPORT jstring JNICALL
 Java_org_casu_mpcasu_CasuCore_detectKind(JNIEnv* env, jclass,
                                         jstring path) {
-    const casu::CasuKind kind = casu::detect_casu_kind(to_std(env, path));
-    switch (kind) {
-        case casu::CasuKind::Casunat1: return to_jni(env, "CASUNAT1");
-        case casu::CasuKind::Casunat2: return to_jni(env, "CASUNAT2");
-        case casu::CasuKind::Mp5: return to_jni(env, "MP5");
-        case casu::CasuKind::Sidecar: return to_jni(env, "SIDECAR");
-        default: return to_jni(env, "NONE");
+    // A C++ exception must never escape across JNI: it would terminate the
+    // whole app (uncaught casu::CasuError -> std::terminate -> SIGABRT).
+    try {
+        const casu::CasuKind kind = casu::detect_casu_kind(to_std(env, path));
+        switch (kind) {
+            case casu::CasuKind::Casunat1: return to_jni(env, "CASUNAT1");
+            case casu::CasuKind::Casunat2: return to_jni(env, "CASUNAT2");
+            case casu::CasuKind::Mp5: return to_jni(env, "MP5");
+            case casu::CasuKind::Sidecar: return to_jni(env, "SIDECAR");
+            default: return to_jni(env, "NONE");
+        }
+    } catch (const std::exception& e) {
+        return to_jni(env, std::string("ERROR: ") + e.what());
     }
 }
 
