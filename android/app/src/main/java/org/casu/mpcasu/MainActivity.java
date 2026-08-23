@@ -16,9 +16,14 @@ import java.io.InputStream;
  * MPCASU Android: the pure-web touch UI (same app as the desktop web
  * player) served same-origin from APK assets over a loopback server, with
  * the byte-parity casu_core available via JNI for container verification.
+ *
+ * The activity also owns the Android surface layer: a MediaSession and the
+ * home-screen widget are kept in sync with the web player through
+ * {@link PlayerBridge} (JS forwarding out, polled state back).
  */
 public class MainActivity extends Activity {
     private LoopbackServer server;
+    private McasuMediaSession mediaSession;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override protected void onCreate(Bundle savedInstanceState) {
@@ -61,9 +66,23 @@ public class MainActivity extends Activity {
 
         // Warm up the native core so the .so + verification are ready.
         CasuCore.detectKind("/nonexistent");
+
+        // Surface layer: MediaSession for system transport controls
+        // (lock screen, headsets, assistant) plus state polling that also
+        // refreshes the home-screen widget.
+        mediaSession = new McasuMediaSession(this);
+        PlayerBridge.attach(webView, (title, playing) -> {
+            if (mediaSession != null) mediaSession.pushState(title, playing);
+            McasuWidgetProvider.pushState(getApplicationContext(), title, playing);
+        });
     }
 
     @Override protected void onDestroy() {
+        PlayerBridge.detach();
+        if (mediaSession != null) {
+            mediaSession.release();
+            mediaSession = null;
+        }
         if (server != null) server.stop();
         super.onDestroy();
     }

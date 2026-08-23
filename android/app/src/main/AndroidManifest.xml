@@ -16,5 +16,19 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+
+        <!-- Home-screen widget (4×1): transport broadcasts + state push -->
+        <receiver android:name=".McasuWidgetProvider"
+                  android:exported="true"
+                  android:label="MPCASU">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+                <action android:name="org.casu.mpcasu.WIDGET_PREV"/>
+                <action android:name="org.casu.mpcasu.WIDGET_PLAY"/>
+                <action android:name="org.casu.mpcasu.WIDGET_NEXT"/>
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                       android:resource="@xml/widget_info"/>
+        </receiver>
     </application>
 </manifest>
