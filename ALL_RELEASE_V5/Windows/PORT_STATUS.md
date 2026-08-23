@@ -30,6 +30,7 @@
 | **§0b-Fazit** | Tier 1 KOMPLETT + Tier 2 Items 4–8 KOMPLETT + 9 Teil 1 — **6 neue Paritätstest-Exes, alle ALL PASS**; nur noch Playback-Reste + UI-Politur (Item 10) vor dem v5.0.0-Gate |
 | **UI (Tier 2.10, Teil 1–2)** | (`c923b8d`, `aaea380`) right_panel_width 310→370 (Referenzbreite), Esc-Fullscreen-Fix (showNormal), Ctrl+L→SourcesView, Wheel-Volume über Video, A-B-Referenzsemantik (B-vor-A=Fehltoast OHNE A-Reset), snapshot-<stamp>.png |
 | **UI (Tier 2.10, Teil 3)** | (`d286cc4`) FsOverlay-Referenzstyling (transluzent #07090bdd, r8) statt opak; Sidebar-Versionsfooter MPCASU 5.0.0 |
+| **UI (Tier 2.10, Teil 5)** | (`583caa9`) Startstatus '{name} · Playing · <vlc-version>' mit live libvlc_get_version() (neue Backend-API version_string), Resume-Text 'Resumed <name> at <x> s' |
 | Offen | MSVC/QtWebEngine-Endbuild (nur auf echtem Windows); BLOCKER-004 (PATH/Registry auf echtem Windows); BLOCKER-005 (MF/DirectShow-Decoder geplant, nicht gebaut); **§0b-Rest nur noch Tier 2**: Items 4–10 (Recording/Settings/Library/Web-Backend/Visualizer/Playback/UI-Restpunkte) |
 
 ## Nächste Schritte (v5.0.0)
