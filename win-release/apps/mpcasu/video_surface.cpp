@@ -55,6 +55,16 @@ void VideoSurface::mouseDoubleClickEvent(QMouseEvent* event) {
     QWidget::mouseDoubleClickEvent(event);
 }
 
+void VideoSurface::wheelEvent(QWheelEvent* event) {
+    if (on_wheel) {
+        const int dy = event->angleDelta().y();
+        if (dy != 0) on_wheel(dy > 0 ? 1 : -1);
+        event->accept();
+        return;
+    }
+    QWidget::wheelEvent(event);
+}
+
 void VideoSurface::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
         if (on_click) on_click();

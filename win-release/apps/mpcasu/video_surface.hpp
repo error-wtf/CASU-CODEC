@@ -24,10 +24,12 @@ public:
 
     std::function<void()> on_double_click;
     std::function<void()> on_click;
+    std::function<void(int)> on_wheel;  // delta steps (+/-)
 
 protected:
     void paintEvent(QPaintEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
 
 private:
