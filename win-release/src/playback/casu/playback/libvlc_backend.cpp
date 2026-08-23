@@ -133,6 +133,7 @@ LibVLCBackend::LibVLCBackend(void* hwnd, std::vector<std::string> runtime_option
 }
 
 LibVLCBackend::~LibVLCBackend() {
+    cleanup_temp_sinks();
     close();
 }
 
@@ -149,7 +150,18 @@ bool LibVLCBackend::is_location(const std::string& value) {
     return true;
 }
 
+
+void LibVLCBackend::cleanup_temp_sinks() {
+    for (const std::string& sink : temp_sinks_) {
+        std::error_code ec;
+        fs::remove(sink, ec);
+    }
+    temp_sinks_.clear();
+}
+
 void LibVLCBackend::apply_source(const std::string& source) {
+    // Previous extraction sinks are stale once the media changes.
+    cleanup_temp_sinks();
     detach_events();
     if (player_) {
         libvlc_media_player_stop(player_);
@@ -226,11 +238,15 @@ void LibVLCBackend::open_casu(const std::string& path) {
     state_ = PlaybackState::LOADING;
     switch (casu::detect_casu_kind(path)) {
         case casu::CasuKind::Mp5: {
-            apply_source(extract_mp5_source(path));
+            const std::string sink = extract_mp5_source(path);
+            temp_sinks_.push_back(sink);
+            apply_source(sink);
             break;
         }
         case casu::CasuKind::Casunat1: {
-            apply_source(extract_casunat1_source(path));
+            const std::string sink = extract_casunat1_source(path);
+            temp_sinks_.push_back(sink);
+            apply_source(sink);
             break;
         }
         case casu::CasuKind::Casunat2: {

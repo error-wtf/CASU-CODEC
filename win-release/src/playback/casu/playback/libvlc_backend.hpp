@@ -104,6 +104,13 @@ private:
     double play_requested_at_ = -1.0;
     PlaybackState state_ = PlaybackState::EMPTY;
     std::string last_error_detail_;
+    std::vector<std::string> temp_sinks_;
+    void cleanup_temp_sinks();
+
+public:
+    std::string last_error_detail() const override {
+        return last_error_detail_;
+    }
 };
 
 }  // namespace casu::playback
