@@ -374,6 +374,19 @@ Windows — dort ist der Web-Player-Stub sofort sichtbar. Wine-Grün heißt nur
 Kontakt-Punkte im Repo: `ALL_RELEASE_V5/Windows/PORT_STATUS.md`,
 `SESSION_HANDOVER.md`, `AGENTS.md`.
 
+## 0e. FINALE VERIFIKATION + GATE (23.08., früh) — Commit `2510be6`+Gate
+
+Nach §0b-Abschluss (Politur Teil 6 `d2a668c`):
+- **ctest komplett: 21/21 PASSED** (2× gefahren, finaler Code).
+- **RELEASE GATE: PASS — 14/14 Bereiche** (build/unit_tests/compatibility/
+  codec/converter/player/youtube/network/web_backend/pure_web/packaging/
+  installer/wine/licenses), dist/WINDOWS_RELEASE_GATE.json regenerated,
+  version 5.0.0.
+- §0b-Politur KOMPLETT: Converter-ETA-Zeile (`d2a668c`) war der letzte Punkt.
+- OFFEN (bewusst, große Native-Features): Equalizer-API +
+  QtVideoSurfaceSink (videoframe.py:177-262) — dokumentiert, nicht Gate-
+  relevant für die bestehenden Features.
+
 ## 0d. FUNKTIONS-VERIFIKATION (22.08., spät) — Commit `dd3e5bd`
 
 Vollständiger Funktionstest nach allen Paritätsarbeiten:
