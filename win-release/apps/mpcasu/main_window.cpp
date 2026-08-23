@@ -2644,6 +2644,8 @@ void MainWindow::toggle_mute() {
         try { backend_->set_mute(muted_); } catch (const casu::playback::PlaybackError&) {}
     }
     mute_btn_->setText(muted_ ? QStringLiteral("×") : QStringLiteral("♪"));
+    status(muted_ ? QStringLiteral("Muted")
+                  : QStringLiteral("Volume %1%").arg(volume_));
     if (app_settings_.player.muted != muted_) {
         app_settings_.player.muted = muted_;
         settings_->save(app_settings_.player);
@@ -2668,6 +2670,8 @@ void MainWindow::cycle_rate() {
         app_settings_.player.rate = rate_;
         settings_->save(app_settings_.player);
     }
+    status(QStringLiteral("Playback rate %1× (applies on next media)")
+               .arg(rate_, 0, 'g', 3));
 }
 
 void MainWindow::toggle_fullscreen() {
@@ -2824,6 +2828,7 @@ void MainWindow::cycle_repeat() {
     app_settings_.player.repeat_mode = playlist_.repeat == R::Off ? "off"
                            : playlist_.repeat == R::One ? "one" : "all";
     settings_->save(app_settings_.player);
+    status(QStringLiteral("Repeat %1").arg(app_settings_.player.repeat_mode));
 }
 
 void MainWindow::on_backend_state(casu::playback::PlaybackState s) {
