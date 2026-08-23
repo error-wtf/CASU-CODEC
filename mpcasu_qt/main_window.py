@@ -17,8 +17,8 @@ from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import (
-    QEasingCurve, QObject, QPropertyAnimation, QRect, QRectF, QPointF, Qt, QTimer,
-    Signal, Slot, QSize, QLineF,
+    QEasingCurve, QObject, Property, QPropertyAnimation, QRect, QRectF, QPointF,
+    Qt, QTimer, Signal, Slot, QSize, QLineF,
 )
 from PySide6.QtGui import (
     QAction, QColor, QFont, QIcon, QKeySequence, QPainter, QPen, QPixmap,
@@ -2377,6 +2377,7 @@ class MainWindow(QMainWindow):
         self._poll_timer = QTimer(self)
         self._poll_timer.timeout.connect(self._poll)
         self._poll_timer.start(200)
+        self._mpris_notifier = _register_mpris(self)
 
         if initial:
             self.add_files(initial)
@@ -3043,6 +3044,8 @@ class MainWindow(QMainWindow):
                 self.backend.play()
             self._seek_slider.set_position(pos)
             self._update_time_labels(pos)
+            if self._mpris_notifier is not None:
+                self._mpris_notifier.seeked(pos)
         except (BackendError, CasuError, OSError) as exc:
             self.status(f"Cannot seek — {exc}")
 
@@ -3254,19 +3257,24 @@ class MainWindow(QMainWindow):
             self._shuffle_btn.setChecked(checked)
         self.status(f"Shuffle {'on' if checked else 'off'}")
 
-    def _cycle_repeat(self) -> None:
-        values = ("off", "all", "one")
-        self._repeat_mode = values[(values.index(self._repeat_mode) + 1) % len(values)]
+    def _set_repeat_mode(self, mode: str) -> None:
+        if mode not in ("off", "all", "one") or mode == self._repeat_mode:
+            return
+        self._repeat_mode = mode
         settings = self.settings_store.load()
-        self.settings_store.save(replace(settings, repeat_mode=self._repeat_mode))
-        self._playlist_pane.repeat_btn.setText(f"Repeat {self._repeat_mode}")
+        self.settings_store.save(replace(settings, repeat_mode=mode))
+        self._playlist_pane.repeat_btn.setText(f"Repeat {mode}")
         if hasattr(self, "_repeat_btn"):
-            self._repeat_btn.setText("↻" if self._repeat_mode == "off" else
-                                     ("↻1" if self._repeat_mode == "one" else "↻∞"))
-            self._repeat_btn.setProperty("on", "true" if self._repeat_mode != "off" else "false")
+            self._repeat_btn.setText("↻" if mode == "off" else
+                                     ("↻1" if mode == "one" else "↻∞"))
+            self._repeat_btn.setProperty("on", "true" if mode != "off" else "false")
             self._repeat_btn.style().unpolish(self._repeat_btn)
             self._repeat_btn.style().polish(self._repeat_btn)
-        self.status(f"Repeat mode: {self._repeat_mode}")
+        self.status(f"Repeat mode: {mode}")
+
+    def _cycle_repeat(self) -> None:
+        values = ("off", "all", "one")
+        self._set_repeat_mode(values[(values.index(self._repeat_mode) + 1) % len(values)])
 
     def play_next(self, automatic: bool = False):
         count = len(self.playlist_model)
@@ -5790,6 +5798,8 @@ class MainWindow(QMainWindow):
             self._save_effective_settings()
         except OSError:
             pass
+        if self._mpris_notifier is not None:
+            self._mpris_notifier.close()
         self.controller.close()
         self.backend = None
         self.media_library.close()
@@ -5885,6 +5895,8 @@ class MainWindow(QMainWindow):
         self._time_total.setText(format_duration(self.duration if self.duration > 0 else None))
 
     def _poll(self):
+        if self._mpris_notifier is not None:
+            self._mpris_notifier.refresh()
         if self.backend and not self._dragging and not self._paused:
             self._sync_position()
             state = self.backend.state()
@@ -5897,3 +5909,358 @@ class MainWindow(QMainWindow):
 
     def _backend_event(self, state: PlaybackState):
         QTimer.singleShot(0, lambda s=state: self._apply_backend_event(s))
+
+
+# --- MPRIS D-Bus (org.mpris.MediaPlayer2.*) — desktop remote control -------
+#
+# Exposes the player on the session bus so GNOME Shell (top-right media
+# menu), playerctl and every other MPRIS client can Play/Pause/Next/Previous,
+# read status/metadata and control volume/loop/shuffle. Registration is best
+# effort: without a session bus (or QtDBus) the player simply runs without it.
+
+_MPRIS_SERVICE = "org.mpris.MediaPlayer2.casu"
+_MPRIS_PATH = "/org/mpris/MediaPlayer2"
+_MPRIS_PLAYER_INTERFACE = "org.mpris.MediaPlayer2.Player"
+
+try:
+    from PySide6.QtDBus import (
+        QDBusAbstractAdaptor, QDBusConnection, QDBusMessage, QDBusObjectPath,
+    )
+    _HAVE_QTDBUS = True
+except ImportError:  # headless or minimal PySide6 builds
+    QDBusAbstractAdaptor = None  # type: ignore[assignment]
+    _HAVE_QTDBUS = False
+
+try:
+    from PySide6.QtCore import ClassInfo as _QtClassInfo  # PySide6 >= 6.10
+except ImportError:
+    _QtClassInfo = None
+try:
+    from PySide6.QtCore import Q_CLASSINFO as _QtQClassInfo  # PySide6 < 6.10
+except ImportError:
+    _QtQClassInfo = None
+
+
+def _mpris_iface_decorator(name: str):
+    """Class decorator registering the 'D-Bus Interface' class info."""
+    if _QtClassInfo is not None:
+        return _QtClassInfo(**{"D-Bus Interface": name})
+    return lambda cls: cls
+
+
+def _mpris_iface_body(name: str):
+    """Legacy in-class-body spelling of the same 'D-Bus Interface' info."""
+    if _QtQClassInfo is not None:
+        return _QtQClassInfo("D-Bus Interface", name)
+    return None
+
+
+if _HAVE_QTDBUS:
+
+    @_mpris_iface_decorator("org.mpris.MediaPlayer2")
+    class _MprisRoot(QDBusAbstractAdaptor):
+        """org.mpris.MediaPlayer2 — application identity/lifecycle."""
+
+        _mpris_iface_body("org.mpris.MediaPlayer2")
+
+        def __init__(self, window):
+            super().__init__(window)
+            self._window = window
+
+        @Slot()
+        def Raise(self):
+            window = self._window
+            window.showNormal()
+            window.raise_()
+            window.activateWindow()
+
+        @Slot()
+        def Quit(self):
+            self._window.close()
+
+        def _identity(self) -> str:
+            return "MPCASU"
+
+        def _desktop_entry(self) -> str:
+            return "casu-codec"
+
+        def _uri_schemes(self) -> list:
+            return ["file", "http", "https", "rtsp", "rtmp", "udp", "rtp",
+                    "spotify", "ytdl"]
+
+        def _mime_types(self) -> list:
+            return sorted(
+                f"{kind}/x-{ext.lstrip('.')}" if ext == ".casu" else f"{kind}/{ext.lstrip('.')}"
+                for ext, kind in (
+                    (".mp3", "audio"), (".flac", "audio"), (".wav", "audio"),
+                    (".ogg", "audio"), (".m4a", "audio"), (".opus", "audio"),
+                    (".aac", "audio"), (".aiff", "audio"), (".mp4", "video"),
+                    (".mkv", "video"), (".webm", "video"), (".mov", "video"),
+                    (".casu", "application"),
+                ))
+
+        Identity = Property(str, _identity, constant=True)
+        DesktopEntry = Property(str, _desktop_entry, constant=True)
+        CanQuit = Property(bool, lambda self: True, constant=True)
+        CanRaise = Property(bool, lambda self: True, constant=True)
+        HasTrackList = Property(bool, lambda self: False, constant=True)
+        SupportedUriSchemes = Property("QStringList", _uri_schemes, constant=True)
+        SupportedMimeTypes = Property("QStringList", _mime_types, constant=True)
+
+    @_mpris_iface_decorator(_MPRIS_PLAYER_INTERFACE)
+    class _MprisPlayer(QDBusAbstractAdaptor):
+        """org.mpris.MediaPlayer2.Player — transport, status and metadata."""
+
+        _mpris_iface_body(_MPRIS_PLAYER_INTERFACE)
+
+        # Declared as a Qt signal so QtDBus broadcasts it with the correct
+        # interface and an int64 ('x') payload.
+        Seeked = Signal("qlonglong")
+
+        def __init__(self, window):
+            super().__init__(window)
+            self._window = window
+
+        # --- property backends ---
+
+        def _playback_status(self) -> str:
+            window = self._window
+            backend = getattr(window, "backend", None)
+            if backend is None:
+                return "Stopped"
+            if getattr(window, "_paused", False):
+                return "Paused"
+            try:
+                state = backend.state()
+            except Exception:
+                return "Stopped"
+            if state in {PlaybackState.PLAYING, PlaybackState.LOADING,
+                         PlaybackState.READY}:
+                return "Playing"
+            if state == PlaybackState.PAUSED:
+                return "Paused"
+            return "Stopped"
+
+        def _loop_status(self) -> str:
+            return {"off": "None", "one": "Track",
+                    "all": "Playlist"}[getattr(self._window, "_repeat_mode", "off")]
+
+        def _set_loop_status(self, value) -> None:
+            mapping = {"None": "off", "Track": "one", "Playlist": "all"}
+            self._window._set_repeat_mode(mapping.get(str(value), "off"))
+
+        def _shuffle(self) -> bool:
+            return bool(getattr(self._window, "_shuffle", False))
+
+        def _set_shuffle(self, value) -> None:
+            self._window._toggle_shuffle(bool(value))
+
+        def _metadata(self) -> dict:
+            window = self._window
+            current = getattr(window, "current", None)
+            if current is None:
+                return {}
+            text = str(current)
+            url = text
+            try:
+                url = current.as_uri()
+            except (ValueError, AttributeError):
+                pass
+            meta = {
+                "mpris:trackid": QDBusObjectPath(
+                    "/org/mpcasu/track/"
+                    + hashlib.sha1(text.encode("utf-8", "replace")).hexdigest()[:16]),
+                "xesam:url": url,
+            }
+            try:
+                title = window._display_title(current)
+            except Exception:
+                title = getattr(current, "name", "")
+            if title:
+                meta["xesam:title"] = str(title)
+            duration = float(getattr(window, "duration", 0.0) or 0.0)
+            if duration > 0:
+                meta["mpris:length"] = int(duration * 1_000_000)
+            return meta
+
+        def _volume(self) -> float:
+            window = self._window
+            if getattr(window, "_muted", False):
+                return 0.0
+            return max(0.0, min(2.0, float(getattr(window, "_volume", 100)) / 100.0))
+
+        def _set_volume(self, value) -> None:
+            clamped = max(0.0, min(2.0, float(value)))
+            self._window._on_volume_slider(int(round(clamped * 100)))
+
+        def _position_us(self) -> int:
+            backend = getattr(self._window, "backend", None)
+            if backend is None:
+                return 0
+            try:
+                pos = float(backend.position())
+            except Exception:
+                pos = 0.0
+            return int(max(0.0, pos) * 1_000_000)
+
+        def _rate(self) -> float:
+            return float(getattr(self._window, "_rate", 1.0) or 1.0)
+
+        PlaybackStatus = Property(str, _playback_status)
+        LoopStatus = Property(str, _loop_status, _set_loop_status)
+        Shuffle = Property(bool, _shuffle, _set_shuffle)
+        Metadata = Property("QVariantMap", _metadata)
+        Volume = Property(float, _volume, _set_volume)
+        Position = Property("qlonglong", _position_us)
+        Rate = Property(float, _rate)
+        MinimumRate = Property(float, _rate, constant=True)
+        MaximumRate = Property(float, _rate, constant=True)
+        CanControl = Property(bool, lambda self: True, constant=True)
+        CanPlay = Property(bool, lambda self: True, constant=True)
+        CanPause = Property(bool, lambda self: True, constant=True)
+        CanSeek = Property(bool, lambda self: True, constant=True)
+        CanGoNext = Property(bool, lambda self: True, constant=True)
+        CanGoPrevious = Property(bool, lambda self: True, constant=True)
+
+        # --- transport methods ---
+
+        @Slot()
+        def Play(self):
+            window = self._window
+            if window.backend is None:
+                window.play_selected()
+            elif window._paused:
+                window.pause()
+
+        @Slot()
+        def Pause(self):
+            window = self._window
+            if window.backend is not None and not window._paused:
+                window.pause()
+
+        @Slot()
+        def PlayPause(self):
+            self._window.toggle_playback()
+
+        @Slot()
+        def Stop(self):
+            self._window.stop()
+
+        @Slot()
+        def Next(self):
+            self._window.play_next()
+
+        @Slot()
+        def Previous(self):
+            self._window.play_previous()
+
+        @Slot("qlonglong")
+        def Seek(self, offset_us):
+            window = self._window
+            if window.backend is None:
+                return
+            limit = float(getattr(window, "duration", 0.0) or 0.0)
+            target = float(self.Position) + float(offset_us) / 1_000_000
+            if limit > 0:
+                target = min(target, limit)
+            window._do_seek(max(0.0, target))
+
+        @Slot(QDBusObjectPath, "qlonglong")
+        def SetPosition(self, track_id, position_us):
+            if self._window.backend is None:
+                return
+            self._window._do_seek(max(0.0, float(position_us) / 1_000_000))
+
+        @Slot(str)
+        def OpenUri(self, uri):
+            window = self._window
+            text = str(uri)
+            if "://" in text or text.startswith(("spotify:", "ytdl:")):
+                window._play_network_source(text)
+            else:
+                window.play_selected(Path(text))
+
+    class _MprisNotifier:
+        """Diff-based org.freedesktop.DBus.Properties.PropertiesChanged emitter.
+
+        MainWindow._poll() calls refresh() every 200 ms; changed properties
+        are broadcast so desktop clients stay in sync without polling.
+        """
+
+        _TRACKED = ("PlaybackStatus", "LoopStatus", "Shuffle", "Metadata",
+                    "Volume")
+
+        def __init__(self, window, bus, player, service):
+            self._window = window
+            self._bus = bus
+            self._player = player
+            self._service = service
+            self._last: dict = {}
+
+        def _value(self, name: str):
+            value = getattr(self._player, name)
+            return value() if callable(value) else value
+
+        def _snapshot_value(self, value):
+            if isinstance(value, dict):
+                return {key: self._dbus_path_str(item)
+                        if isinstance(item, QDBusObjectPath) else item
+                        for key, item in value.items()}
+            return value
+
+        @staticmethod
+        def _dbus_path_str(item) -> str:
+            # str(QDBusObjectPath) yields the object repr (no __str__), so
+            # always go through path() for a stable, comparable value.
+            getter = getattr(item, "path", None)
+            return str(getter()) if callable(getter) else str(item)
+
+        def refresh(self) -> None:
+            changed = {}
+            for name in self._TRACKED:
+                value = self._value(name)
+                if self._last.get(name) != self._snapshot_value(value):
+                    self._last[name] = self._snapshot_value(value)
+                    changed[name] = value
+            if not changed:
+                return
+            message = QDBusMessage.createSignal(
+                _MPRIS_PATH, "org.freedesktop.DBus.Properties",
+                "PropertiesChanged")
+            message.setArguments([_MPRIS_PLAYER_INTERFACE, changed, []])
+            self._bus.send(message)
+
+        def seeked(self, seconds: float) -> None:
+            try:
+                self._player.Seeked.emit(int(round(float(seconds) * 1_000_000)))
+            except (RuntimeError, TypeError, ValueError):
+                pass
+
+        def close(self) -> None:
+            try:
+                self._bus.unregisterService(self._service)
+            except Exception:
+                pass
+
+
+def _register_mpris(window):
+    """Export the player on the session bus; returns a notifier or None."""
+    if not _HAVE_QTDBUS:
+        return None
+    try:
+        bus = QDBusConnection.sessionBus()
+        if not bus.isConnected():
+            return None
+        root = _MprisRoot(window)
+        player = _MprisPlayer(window)
+        service = _MPRIS_SERVICE
+        if not bus.registerService(service):
+            service = f"{_MPRIS_SERVICE}.instance{os.getpid()}"
+            if not bus.registerService(service):
+                return None
+        if not bus.registerObject(_MPRIS_PATH, window,
+                                  QDBusConnection.ExportAdaptors):
+            return None
+        return _MprisNotifier(window, bus, player, service)
+    except Exception:
+        return None
