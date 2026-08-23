@@ -29,6 +29,7 @@
 | **Playback (Tier 2.9, Teil 1)** | (2026-08-22, Commit `717186f`) SAFE_MEDIA_OPTIONS (:avcodec-hw=none pro Media), file://-URI-Reparatur, Resume-dur−5-Klemme, YouTube-Consent-Gate beim Abspielen; Tests ALL PASS. Teil 2 offen: async yt-dlp-Resolve, ERROR-Diagnose, Equalizer, Temp-Sinks, QtVideoSurfaceSink |
 | **§0b-Fazit** | Tier 1 KOMPLETT + Tier 2 Items 4–8 KOMPLETT + 9 Teil 1 — **6 neue Paritätstest-Exes, alle ALL PASS**; nur noch Playback-Reste + UI-Politur (Item 10) vor dem v5.0.0-Gate |
 | **UI (Tier 2.10, Teil 1–2)** | (`c923b8d`, `aaea380`) right_panel_width 310→370 (Referenzbreite), Esc-Fullscreen-Fix (showNormal), Ctrl+L→SourcesView, Wheel-Volume über Video, A-B-Referenzsemantik (B-vor-A=Fehltoast OHNE A-Reset), snapshot-<stamp>.png |
+| **UI (Tier 2.10, Teil 3)** | (`d286cc4`) FsOverlay-Referenzstyling (transluzent #07090bdd, r8) statt opak; Sidebar-Versionsfooter MPCASU 5.0.0 |
 | Offen | MSVC/QtWebEngine-Endbuild (nur auf echtem Windows); BLOCKER-004 (PATH/Registry auf echtem Windows); BLOCKER-005 (MF/DirectShow-Decoder geplant, nicht gebaut); **§0b-Rest nur noch Tier 2**: Items 4–10 (Recording/Settings/Library/Web-Backend/Visualizer/Playback/UI-Restpunkte) |
 
 ## Nächste Schritte (v5.0.0)
