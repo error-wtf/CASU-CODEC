@@ -21,7 +21,7 @@ bauen wollen. In jedem Unterordner liegen die **äquivalenten Hilfsdateien**
 
 | Unterordner | OS | Zielartefakt | Status |
 |-------------|----|--------------|--------|
-| `Windows/` | Windows x86_64 | `MPCASU-Setup-5.0.0.exe`, `MPCASU-Windows-x86_64.zip` | **v5.0.0 VERÖFFENTLICHT** (23.08.): §0b komplett, Gate 14/14 PASS, ctest 21/21 — https://github.com/error-wtf/CASU-CODEC/releases/tag/v5.0.0 |
+| `Windows/` | Windows x86_64 | `MPCASU-Setup-5.0.0.exe`, `MPCASU-Windows-x86_64.zip` | **v5.0.0 VERÖFFENTLICHT + AKTUALISIERT** (23.08.): §0b komplett + Chromium-Test gelöst (2 echte Web-Bugs gefixt), Linux 426/426 grün, Gate 14/14 PASS, Assets neu hochgeladen — https://github.com/error-wtf/CASU-CODEC/releases/tag/v5.0.0 |
 | `Linux/` | Linux (Debian/Ubuntu, x86_64) | `.deb`-Pakete (casu-codec, casu-converter, mpcasu, web-casu) + Pure-Web-ZIP | **v3.0.0 fertig**, v5.0 geplant |
 | `Mac-OS/` | macOS (arm64 + x86_64) | `.dmg` (geplant) | geplant, noch nicht gebaut |
 | `Android/` | Android (arm64-v8a, armeabi-v7a, x86_64) | `.apk` / `.aab` (geplant) | geplant, noch nicht gebaut |
