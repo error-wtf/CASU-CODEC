@@ -36,6 +36,8 @@ public:
     virtual void seek(double seconds) = 0;
     virtual double position() = 0;
     virtual double duration() = 0;
+    // Diagnostics kept after ERROR (reference keeps them visible).
+    virtual std::string last_error_detail() const { return {}; }
     virtual PlaybackState state() = 0;
 
     virtual int set_volume(int value) = 0;

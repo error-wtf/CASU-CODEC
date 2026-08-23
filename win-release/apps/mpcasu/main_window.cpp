@@ -63,6 +63,7 @@
 #include <QStandardPaths>
 #include <thread>
 #include <QPointer>
+#include <atomic>
 #include <QStackedLayout>
 #include <QStackedWidget>
 #include <QStatusBar>
@@ -2331,27 +2332,56 @@ void MainWindow::open_network_source(const QString& source, const QString& title
                 "yt-dlp consent required — enable it in Options first"));
             return;
         }
+        // Reference parity: yt-dlp resolution runs on a worker thread with a
+        // generation guard — the GUI stays responsive and a newer request
+        // invalidates the stale result instead of racing it.
         youtube_status_->setText(QStringLiteral("Resolving YouTube via yt-dlp…"));
-        try {
-            std::string resolved = casu::network::YtDlp().resolve(source.toStdString(), 45000);
-            QString err;
-            if (!yt_proxy_->start_remote(
-                    QString::fromStdString(resolved),
-                    [this, source] {
-                        return QString::fromStdString(
-                            casu::network::YtDlp().resolve(source.toStdString(), 45000));
-                    },
-                    &err)) {
-                status(QStringLiteral("Transport error: %1").arg(err));
-                return;
+        const int generation = ++resolve_generation_;
+        QPointer<MainWindow> guard(this);
+        std::thread([guard, generation, source, title] {
+            std::string resolved;
+            std::string error_text;
+            try {
+                resolved =
+                    casu::network::YtDlp().resolve(source.toStdString(), 45000);
+            } catch (const std::exception& e) {
+                error_text = e.what();
             }
-            effective = yt_proxy_->media_url();
-            youtube_status_->setText(QStringLiteral("Loopback transport on port %1").arg(yt_proxy_->port()));
-        } catch (const std::exception& e) {
-            youtube_status_->setText(QStringLiteral("YouTube resolve failed: %1").arg(QString::fromStdString(e.what())));
-            status(QStringLiteral("YouTube resolve failed: %1").arg(QString::fromStdString(e.what())));
-            return;
-        }
+            QMetaObject::invokeMethod(QCoreApplication::instance(),
+                                      [guard, generation, source, title,
+                                       resolved, error_text] {
+                if (!guard) return;
+                if (generation != guard->resolve_generation_)
+                    return;  // stale result — a newer request superseded it
+                if (!error_text.empty()) {
+                    guard->youtube_status_->setText(
+                        QStringLiteral("YouTube resolve failed: %1")
+                            .arg(QString::fromStdString(error_text)));
+                    guard->status(QStringLiteral(
+                        "YouTube resolve failed: %1")
+                        .arg(QString::fromStdString(error_text)));
+                    return;
+                }
+                QString err;
+                if (!guard->yt_proxy_->start_remote(
+                        QString::fromStdString(resolved),
+                        [source] {
+                            return QString::fromStdString(
+                                casu::network::YtDlp().resolve(
+                                    source.toStdString(), 45000));
+                        },
+                        &err)) {
+                    guard->status(QStringLiteral("Transport error: %1").arg(err));
+                    return;
+                }
+                guard->youtube_status_->setText(
+                    QStringLiteral("Loopback transport on port %1")
+                        .arg(guard->yt_proxy_->port()));
+                guard->open_backend_and_play(guard->yt_proxy_->media_url(),
+                                             title);
+            });
+        }).detach();
+        return;
     } else if (QFileInfo::exists(source) && force_proxy_) {
         // Loopback transport test: serve a local file over the proxy.
         QString err;
@@ -2856,10 +2886,24 @@ void MainWindow::poll() {
     if (duration_ > 0.0 && pos >= duration_ - 0.25 && !paused_) handle_end();
     const casu::playback::PlaybackState st = controller_->state();
     if (st == casu::playback::PlaybackState::ERROR) {
-        status(QStringLiteral("Playback error detected"));
-        surface_->set_video_active(false);
-        stop_playback();
+        if (!error_latched_) {
+            error_latched_ = true;
+            // Reference parity: KEEP the failed pipeline so the diagnostics
+            // stay inspectable instead of tearing it down silently.
+            QString detail;
+            if (backend_)
+                detail = QString::fromStdString(backend_->last_error_detail());
+            status(detail.isEmpty()
+                       ? QStringLiteral("Playback error detected")
+                       : QStringLiteral("Playback error: %1").arg(detail));
+            set_diagnostics(QStringLiteral("Legacy backend"),
+                            QStringLiteral("ERROR"), QStringLiteral("n/a"),
+                            detail.isEmpty() ? QStringLiteral("see status")
+                                             : detail);
+        }
+        return;  // do not run the rest of poll against a dead pipeline
     }
+    error_latched_ = false;
 }
 
 void MainWindow::update_play_button() {

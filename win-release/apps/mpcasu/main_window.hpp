@@ -229,6 +229,8 @@ private:
     mpcasu::SessionState session_;
     YoutubeProxy* yt_proxy_ = nullptr;
     WebPlayerTabs* web_player_tabs_ = nullptr;
+    std::atomic<int> resolve_generation_{0};
+    bool error_latched_ = false;
     RecordingController* recorder_ = nullptr;
     QTimer* record_timer_ = nullptr;
     int record_part_ = 1;
