@@ -111,7 +111,7 @@ atomar+force+verification_result, Web-Access-Log, Versionstrings, Seek ±10s.
    stop≤start-Filter fehlt, Sortierung fehlt, category fehlt (sub-title
    stattdessen), naiver Attribut-/Entity-Parser.
 
-### TIER 2 (App-Features) — Stand: Items 4–9 ✅ (`2e95e1d`,`2d74211`,`5daf7c8`,`7bf9194`,`9ea8cad`,`717186f`*); 9 Teil 2 `312cc43` (Rest: Equalizer+VideoSurfaceSink); Item 10 offen
+### TIER 2 (App-Features) — Stand: Items 4–9 ✅ (`2e95e1d`,`2d74211`,`5daf7c8`,`7bf9194`,`9ea8cad`,`717186f`*); 9 Teil 2 + 10 Teil 1–2 ✅ (`312cc43`, `c923b8d`, `aaea380`) — Rest: Equalizer+QtVideoSurfaceSink, kleinere Wortgleichheits-Politur
 4. **Recording**: -map_metadata/-map_chapters fehlen; KEIN Temp-Write+
    ffprobe-Verify+atomarer Publish (direkt ins Ziel); record_format-Setting
    wirkungslos (Quell-Suffix!); Splitting (record_split_minutes) komplett
@@ -404,4 +404,4 @@ Checkliste (abzuhaken):
 [x] EPG-offset+tvg ✅ `3142918` — Extended-M3U+XMLTV-Komplettport; UTC-Offsets, tvg-Matching, Sortierung, Limits, Entities; casu_epg_parity_test IDENTISCH zur Referenz
 [ ] REC verify/split/format [x] SET atomic/audio_device/session ✅ `2d74211` — Versionhülle+14 Referenzfelder inkl. audio_device; exakte Klemmen (rate 0.25–4.0, cache [0,65536], Split [0,1440]); 1MiB-Bound; atomar tmp+fsync+replace; settings.json BYTE-IDENTISCH zum Python-Writer; session.json getrennt im Linux-Format; casu_settings_parity_test ALL PASS
 [ ] LIB felder/extensions/casefold [x] WEB proxy-policy/trusted/media-token ✅ `7bf9194` — POST-Mutation-Guard (Sec-Fetch-Site/Origin→403), Proxy-Policy aktiviert (Radio-Proxy lebt; SSRF-Guard bleibt), kind video/audio via ffprobe-_media_shape, Upload >64MiB Disk-Spill statt 16GiB-RAM; web_backend+webapi Tests ALL PASS
-[ ] VIZ FFT [ ] PLAYBACK consent/hw/async [ ] UI-Texte+Breite370
+[ ] VIZ FFT [ ] PLAYBACK consent/hw/async [x] UI-Texte+Breite370 ✅ `c923b8d`+`aaea380` — right_panel_width 310→370 (Referenz design.py), Esc verlässt Vollbild wirklich (showNormal), Ctrl+L → SourcesView statt Modal, Wheel-Volume über Video, A-B-Semantik wortgleich inkl. B-vor-A-Fehltoast ohne A-Reset, snapshot-<stamp>.png-Präfix. OFFEN (klein): Queue-leer-Text/Startstatus-Wortgleichheit, FsOverlay-Styling, Sidebar-Fußzeile; Converter-Live-Fortschritt

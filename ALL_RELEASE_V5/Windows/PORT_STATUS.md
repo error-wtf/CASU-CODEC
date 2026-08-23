@@ -28,6 +28,7 @@
 | **Playback (Tier 2.9, Teil 2)** | (2026-08-22, Commit `312cc43`) yt-dlp-Resolve ASYNC mit Generations-Guard (GUI friert nicht mehr ein), ERROR-Diagnose bleibt sichtbar (Latch statt Teardown, last_error_detail in Status+Diagnostics), MP5/CASUNAT1-Temp-Sinks werden getrackt und aufgeräumt; Smoke/Playback/Core ALL PASS |
 | **Playback (Tier 2.9, Teil 1)** | (2026-08-22, Commit `717186f`) SAFE_MEDIA_OPTIONS (:avcodec-hw=none pro Media), file://-URI-Reparatur, Resume-dur−5-Klemme, YouTube-Consent-Gate beim Abspielen; Tests ALL PASS. Teil 2 offen: async yt-dlp-Resolve, ERROR-Diagnose, Equalizer, Temp-Sinks, QtVideoSurfaceSink |
 | **§0b-Fazit** | Tier 1 KOMPLETT + Tier 2 Items 4–8 KOMPLETT + 9 Teil 1 — **6 neue Paritätstest-Exes, alle ALL PASS**; nur noch Playback-Reste + UI-Politur (Item 10) vor dem v5.0.0-Gate |
+| **UI (Tier 2.10, Teil 1–2)** | (`c923b8d`, `aaea380`) right_panel_width 310→370 (Referenzbreite), Esc-Fullscreen-Fix (showNormal), Ctrl+L→SourcesView, Wheel-Volume über Video, A-B-Referenzsemantik (B-vor-A=Fehltoast OHNE A-Reset), snapshot-<stamp>.png |
 | Offen | MSVC/QtWebEngine-Endbuild (nur auf echtem Windows); BLOCKER-004 (PATH/Registry auf echtem Windows); BLOCKER-005 (MF/DirectShow-Decoder geplant, nicht gebaut); **§0b-Rest nur noch Tier 2**: Items 4–10 (Recording/Settings/Library/Web-Backend/Visualizer/Playback/UI-Restpunkte) |
 
 ## Nächste Schritte (v5.0.0)
