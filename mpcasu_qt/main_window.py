@@ -5907,10 +5907,6 @@ class MainWindow(QMainWindow):
                 self._video_surface.set_video_active(False)
 
 
-    def _backend_event(self, state: PlaybackState):
-        QTimer.singleShot(0, lambda s=state: self._apply_backend_event(s))
-
-
 # --- MPRIS D-Bus (org.mpris.MediaPlayer2.*) — desktop remote control -------
 #
 # Exposes the player on the session bus so GNOME Shell (top-right media
@@ -5982,7 +5978,7 @@ if _HAVE_QTDBUS:
             return "MPCASU"
 
         def _desktop_entry(self) -> str:
-            return "casu-codec"
+            return "mpcasu"  # packaging/mpcasu.desktop
 
         def _uri_schemes(self) -> list:
             return ["file", "http", "https", "rtsp", "rtmp", "udp", "rtp",
@@ -6046,8 +6042,10 @@ if _HAVE_QTDBUS:
                     "all": "Playlist"}[getattr(self._window, "_repeat_mode", "off")]
 
         def _set_loop_status(self, value) -> None:
-            mapping = {"None": "off", "Track": "one", "Playlist": "all"}
-            self._window._set_repeat_mode(mapping.get(str(value), "off"))
+            mode = {"None": "off", "Track": "one",
+                    "Playlist": "all"}.get(str(value))
+            if mode is not None:
+                self._window._set_repeat_mode(mode)
 
         def _shuffle(self) -> bool:
             return bool(getattr(self._window, "_shuffle", False))
@@ -6058,22 +6056,28 @@ if _HAVE_QTDBUS:
         def _metadata(self) -> dict:
             window = self._window
             current = getattr(window, "current", None)
-            if current is None:
+            # pathlib collapses "//" in URLs, so prefer the untouched
+            # original string the player was started with.
+            network = str(getattr(window, "_network_source", None) or "")
+            if current is None and not network:
                 return {}
-            text = str(current)
-            url = text
-            try:
-                url = current.as_uri()
-            except (ValueError, AttributeError):
-                pass
+            source_text = network or str(current)
+            if "://" in source_text:
+                url = source_text
+            else:
+                url = source_text
+                try:
+                    url = current.as_uri()
+                except (ValueError, AttributeError):
+                    pass
             meta = {
                 "mpris:trackid": QDBusObjectPath(
                     "/org/mpcasu/track/"
-                    + hashlib.sha1(text.encode("utf-8", "replace")).hexdigest()[:16]),
+                    + hashlib.sha1(source_text.encode("utf-8", "replace")).hexdigest()[:16]),
                 "xesam:url": url,
             }
             try:
-                title = window._display_title(current)
+                title = window._display_title(Path(source_text))
             except Exception:
                 title = getattr(current, "name", "")
             if title:
