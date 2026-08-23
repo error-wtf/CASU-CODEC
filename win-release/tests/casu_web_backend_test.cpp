@@ -82,7 +82,7 @@ int main(int argc, char** argv) {
         casu::network::HttpResponse r = client.get(base + "/api/version");
         check(r.status == 200, "GET /api/version -> 200");
         check(contains(r.text(), "\"version\""), "version payload has version field");
-        check(contains(r.text(), "3.0.0"), "version payload is 3.0.0");
+        check(contains(r.text(), "5.0.0"), "version payload is 5.0.0");
     }
 
     // --- static index + frontend ---
