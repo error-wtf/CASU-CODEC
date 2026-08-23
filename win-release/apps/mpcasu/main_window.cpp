@@ -2236,7 +2236,8 @@ void MainWindow::open_backend_and_play(const QString& source, const QString& tit
         }
         try { backend_->seek(resume_position_); } catch (const casu::playback::PlaybackError&) {}
         controller_->seek(resume_position_);
-        status(QStringLiteral("Resume at %1 s")
+        status(QStringLiteral("Resumed %1 at %2 s")
+                   .arg(QFileInfo(source).fileName())
                    .arg(resume_position_, 0, 'f', 1));
         resume_source_.clear();
         resume_position_ = -1.0;
@@ -2308,7 +2309,13 @@ void MainWindow::open_backend_and_play(const QString& source, const QString& tit
         controller_->play();
         apply_backend_settings();
         apply_media_preferences();  // Linux parity: recall tracks + A/V delays
-        status(QStringLiteral("Playing · %1").arg(current_title_));
+        // Reference start-status: "{name} · {state} · {vlc-version}".
+        const QString vlc_version = QString::fromStdString(
+            backend_ ? backend_->version_string() : std::string());
+        status(QStringLiteral("%1 · Playing · %2")
+                   .arg(QFileInfo(source).fileName(),
+                        vlc_version.isEmpty() ? QStringLiteral("libVLC")
+                                              : vlc_version));
     } catch (const casu::playback::PlaybackError& e) {
         surface_->set_video_active(false);
         backend_ = nullptr;
