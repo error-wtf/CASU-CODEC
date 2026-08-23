@@ -228,6 +228,9 @@ def test_chromium_web_app_handles_srt_urls_and_queue_indices(tmp_path):
                      "buffer": subtitle.read_bytes()},
                 ])
                 page.wait_for_timeout(1000)
+                page.wait_for_function(
+                    "() => document.querySelector('#subtitle-track').options.length > 1",
+                    timeout=10_000)
                 snapshot = page.evaluate("() => ({count:state.items.length,hidden:document.querySelector('#subtitle-track').hidden,options:document.querySelector('#subtitle-track').options.length,tracks:document.querySelectorAll('track[data-mpcasu]').length,urls:state.items.map(item=>(item.trackUrls||[]).length),subs:state.items.map(item=>(item.subtitleFiles||[]).map(file=>file.name)),toast:document.querySelector('#toast').textContent})")
                 assert snapshot["count"] == 1 and not snapshot["hidden"], (snapshot, page_errors)
                 page.select_option("#subtitle-track", "0")

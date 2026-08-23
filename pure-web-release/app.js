@@ -752,9 +752,9 @@ async function addPlaylist(file, ordinary, consumed) {
   const format = playlistXmlFormat(text, file.name);
   state.expanded.add(file.name);
   let missing = 0;
-  const addEntry = (value, title) => {
+  const addEntry = (value, title, attributes) => {
     if (value == null || !String(value).trim()) return;
-    if (!addPlaylistLocation(String(value), {}, String(title || "").trim(), ordinary, consumed, file.name)) missing++;
+    if (!addPlaylistLocation(String(value), attributes || {}, String(title || "").trim(), ordinary, consumed, file.name)) missing++;
   };
   if (format === "pls") {
     const values = text.split(/\r?\n/).map((line) => /^File\d+=(.*)$/i.exec(line.trim())?.[1]?.trim()).filter(Boolean);
@@ -793,7 +793,7 @@ async function addPlaylist(file, ordinary, consumed) {
       }
       if (line.startsWith("#")) continue;
       if (++count > MAX_PLAYLIST_ENTRIES) throw Error(`playlist exceeds ${MAX_PLAYLIST_ENTRIES} entries`);
-      addEntry(line, pendingName || line);
+      addEntry(line, pendingName || line, pending);
       pending = {}; pendingName = "";
     }
   }
