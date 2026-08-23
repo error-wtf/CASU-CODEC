@@ -111,6 +111,7 @@ public:
     std::string last_error_detail() const override {
         return last_error_detail_;
     }
+    std::string version_string() const override;
 };
 
 }  // namespace casu::playback

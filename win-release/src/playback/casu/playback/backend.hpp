@@ -38,6 +38,8 @@ public:
     virtual double duration() = 0;
     // Diagnostics kept after ERROR (reference keeps them visible).
     virtual std::string last_error_detail() const { return {}; }
+    // Reference capabilities().version: live libvlc_get_version().
+    virtual std::string version_string() const { return {}; }
     virtual PlaybackState state() = 0;
 
     virtual int set_volume(int value) = 0;

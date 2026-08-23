@@ -151,6 +151,12 @@ bool LibVLCBackend::is_location(const std::string& value) {
 }
 
 
+
+std::string LibVLCBackend::version_string() const {
+    if (!libvlc_get_version) return {};
+    const char* v = libvlc_get_version();
+    return v ? std::string(v) : std::string();
+}
 void LibVLCBackend::cleanup_temp_sinks() {
     for (const std::string& sink : temp_sinks_) {
         std::error_code ec;
