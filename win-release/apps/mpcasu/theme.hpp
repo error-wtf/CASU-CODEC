@@ -42,7 +42,7 @@ struct Palette {
 
 struct Metrics {
     int sidebar_width = 240;
-    int right_panel_width = 310;
+    int right_panel_width = 370;
     int topbar_height = 72;
     int transport_height = 66;
     int radius_shell = 18;

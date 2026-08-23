@@ -13,6 +13,7 @@ add_library(casu_webapi STATIC
 find_package(Qt6 REQUIRED COMPONENTS Core Network)
 
 target_link_libraries(casu_webapi PUBLIC Qt6::Network Qt6::Core)
-target_link_libraries(casu_webapi PRIVATE casu_core casu_network)
+target_link_libraries(casu_webapi PRIVATE casu_core casu_network casu_codec)
+target_include_directories(casu_webapi PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../codec)
 target_include_directories(casu_webapi PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(casu_webapi PUBLIC cxx_std_20)
