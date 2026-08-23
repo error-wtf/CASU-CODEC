@@ -10,6 +10,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QStandardPaths>
 #include <QTemporaryFile>
 #include <charconv>
 #include <filesystem>
@@ -375,9 +376,35 @@ void SettingsStore::save_session(const SessionState& s) const {
 }
 
 QString app_config_dir() {
-    const QString base = QCoreApplication::applicationDirPath();
-    QDir dir(base + "/config");
+    // Reference (~/.config/mpcasu) Windows parity WITHOUT admin rights:
+    // %APPDATA%\Lino-Codec\MPCASU via QStandardPaths. The previous
+    // exe-relative ./config folder broke under Program Files (read-only for
+    // normal users — the app then only ran elevated).
+    QString base = QStandardPaths::writableLocation(
+        QStandardPaths::AppLocalDataLocation);
+    if (base.isEmpty()) base = QDir::homePath() + "/.local/share/mpcasu";
+    QDir dir(base);
     if (!dir.exists()) dir.mkpath(".");
+
+    // One-time migration from the legacy exe-relative ./config.
+    const QString legacy =
+        QCoreApplication::applicationDirPath() + "/config";
+    const QString migrated_marker = dir.absoluteFilePath(".migrated-legacy");
+    if (!QFileInfo::exists(migrated_marker) && QDir(legacy).exists()) {
+        const QFileInfoList entries =
+            QDir(legacy).entryInfoList(QDir::Files);
+        bool copied_any = false;
+        for (const QFileInfo& fi : entries) {
+            const QString target = dir.absoluteFilePath(fi.fileName());
+            if (!QFileInfo::exists(target)) {
+                QFile::copy(fi.absoluteFilePath(), target);
+                copied_any = true;
+            }
+        }
+        QFile marker(migrated_marker);
+        marker.open(QIODevice::WriteOnly);
+        marker.write(copied_any ? "1" : "0");
+    }
     return dir.absolutePath();
 }
 

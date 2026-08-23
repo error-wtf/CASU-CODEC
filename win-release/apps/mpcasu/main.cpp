@@ -104,6 +104,11 @@ int main(int argc, char** argv) {
     }
 
     mpcasu::MainWindow window(media, proxy, vout, aout, play_test);
+    window.setMinimumSize(960, 600);  // responsiveness floor: readable fonts
+    QSize start_size = window.size();
+    if (start_size.width() < 1180) start_size.setWidth(1180);
+    if (start_size.height() < 720) start_size.setHeight(720);
+    window.resize(start_size);
     window.show();
     if (!page.isEmpty()) window.navigate_to(page);
     log_startup(QStringLiteral("started pid=%1 exe=%2").arg(QCoreApplication::applicationPid())

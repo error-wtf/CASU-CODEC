@@ -63,6 +63,7 @@
 #include <QStandardPaths>
 #include <thread>
 #include <QPointer>
+#include <filesystem>
 #include <atomic>
 #include <QStackedLayout>
 #include <QStackedWidget>
@@ -1780,7 +1781,11 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
 }
 
 void MainWindow::build_recording_page() {
-    auto* page = new QWidget(this);
+    auto* scroll_host = new QScrollArea(this);
+    scroll_host->setWidgetResizable(true);
+    scroll_host->setFrameShape(QFrame::NoFrame);
+    auto* page = new QWidget(scroll_host);
+    scroll_host->setWidget(page);
     auto* layout = new QVBoxLayout(page);
     layout->setContentsMargins(24, 24, 24, 24);
     layout->setSpacing(12);
@@ -1816,7 +1821,7 @@ void MainWindow::build_recording_page() {
     connect(toggle, &QPushButton::clicked, this, &MainWindow::on_recording_toggle);
     layout->addWidget(toggle, 0, Qt::AlignLeft);
     layout->addStretch();
-    pages_->addWidget(page);
+    pages_->addWidget(scroll_host);
 }
 
 void MainWindow::build_visualizer_page() {
@@ -1911,7 +1916,11 @@ void MainWindow::build_youtube_page() {
     youtube_status_->setObjectName("NowPlayingMeta");
     youtube_status_->setWordWrap(true);
     layout->addWidget(youtube_status_);
-    pages_->addWidget(page);
+    auto* yt_scroll = new QScrollArea(this);
+    yt_scroll->setWidgetResizable(true);
+    yt_scroll->setFrameShape(QFrame::NoFrame);
+    yt_scroll->setWidget(page);
+    pages_->addWidget(yt_scroll);
 }
 
 void MainWindow::build_web_players_page() {
@@ -3823,13 +3832,19 @@ void MainWindow::on_recording_toggle_restart_after_rotate() {
 void MainWindow::update_stage() {
     if (!stage_stack_) return;
     if (!stage_media_active_) { stage_stack_->setCurrentIndex(2); return; }
-    const bool viz = viz_btn_ && viz_btn_->isChecked();
+    // Reference parity: AUDIO-ONLY media always shows the visualizer stage;
+    // the viz button additionally overlays the visualizer for video.
+    const bool has_video_surface = surface_ && surface_->is_video_active();
+    const bool viz_pref = viz_btn_ && viz_btn_->isChecked();
+    const bool viz = viz_pref || !has_video_surface;
     stage_stack_->setCurrentIndex(viz ? 1 : 0);
 }
 
 void MainWindow::apply_viz_mode() {
     const bool on = app_settings_.player.visualizer != "off";
-    if (viz_btn_) viz_btn_->setChecked(on);
+    // While media is open the stage choice follows the media type (audio ->
+    // visualizer), so only sync the button when nothing is playing.
+    if (viz_btn_ && !stage_media_active_) viz_btn_->setChecked(on);
     update_stage();
     if (visualizer_) {
         static_cast<VisualizerWidget*>(visualizer_)->set_mode(app_settings_.player.visualizer);
@@ -3856,11 +3871,37 @@ void MainWindow::load_cover_art(const QString& source) {
     std::thread([this, key] {
         const QString tmp = QDir::tempPath() + QStringLiteral("/mpcasu_cover_") +
                             QString::number(QCoreApplication::applicationPid()) + QStringLiteral(".png");
-        const bool ok = casu::media::extract_cover(key.toStdString(), tmp.toStdString());
+        bool ok = casu::media::extract_cover(key.toStdString(), tmp.toStdString());
+        if (!ok) {
+            // Fallback: cached PPM thumbnail (reference thumbnail_for path)
+            // so the cover shows even when ffmpeg cannot extract artwork.
+            std::error_code ec;
+            const QString cache_dir =
+                QDir::homePath() + QStringLiteral("/.cache/mpcasu/thumbnails");
+            const std::string ppm =
+                casu::media::thumbnail_for(key.toStdString(),
+                                           cache_dir.toStdString());
+            ok = !ppm.empty();
+            QFile ppm_file(QString::fromStdString(ppm));
+            if (ok && ppm_file.open(QIODevice::ReadOnly)) {
+                const QByteArray ppm_bytes = ppm_file.readAll();
+                ppm_file.close();
+                QFile png(tmp);
+                if (png.open(QIODevice::WriteOnly)) {
+                    // Wrap the raw PPM bytes in a PNG-less QPixmap load via
+                    // QImageReader? QPixmap loads PPM natively — copy file.
+                    png.close();
+                    QFile::remove(tmp);
+                    QFile::copy(QString::fromStdString(ppm), tmp);
+                }
+            }
+        }
         QMetaObject::invokeMethod(this, [this, key, tmp, ok] {
             if (!ok || key != current_source_) return;
+            QPixmap pm;
+            if (!pm.load(tmp)) return;
             if (cover_pixmap_) { delete cover_pixmap_; cover_pixmap_ = nullptr; }
-            cover_pixmap_ = new QPixmap(tmp);
+            cover_pixmap_ = new QPixmap(pm);
             if (visualizer_) static_cast<VisualizerWidget*>(visualizer_)->set_cover(cover_pixmap_);
             QFile::remove(tmp);
         }, Qt::QueuedConnection);
