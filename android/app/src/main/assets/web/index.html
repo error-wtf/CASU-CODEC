@@ -129,5 +129,95 @@
   <script src="libs/hls.min.js?v=5.0.0-a2"></script>
   <script src="casu-native.js?v=5.0.0-a2"></script>
   <script src="app.js?v=5.0.0-a2"></script>
+<script>
+/* Android discover layer (LoopbackServer integration): YouTube search via
+ * /api/yt-search + provider web-player tiles. Injected UI only — the
+ * player's own globals (addItem, playIndex, toast) do the work. */
+(function () {
+  function build() {
+    if (document.getElementById("mpcasu-discover")) return;
+    const fab = document.createElement("button");
+    fab.id = "mpcasu-discover";
+    fab.textContent = "\u266B";
+    fab.style.cssText = "position:fixed;right:14px;bottom:76px;width:52px;height:52px;" +
+      "border-radius:50%;border:2px solid #ff1e2d;background:#1b0a0d;color:#ff1e2d;" +
+      "font-size:22px;z-index:60;cursor:pointer;box-shadow:0 10px 30px #000c";
+    document.body.appendChild(fab);
+
+    const panel = document.createElement("div");
+    panel.id = "mpcasu-discover-panel";
+    panel.style.cssText = "position:fixed;inset:0;background:#0b0d10f5;z-index:61;" +
+      "display:none;flex-direction:column;padding:16px;overflow:auto";
+    panel.innerHTML =
+      '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">' +
+      '<input id="disc-q" placeholder="YouTube search\u2026" style="flex:1;background:#080a0c;' +
+      'border:1px solid #333942;color:#fff;border-radius:8px;padding:12px;font:inherit">' +
+      '<button id="disc-go" style="background:#ff1e2d;color:#fff;border:0;border-radius:8px;' +
+      'padding:12px 16px;font:inherit;font-weight:700">Go</button>' +
+      '<button id="disc-close" style="background:#161a1f;color:#d7d9dc;border:1px solid #333942;' +
+      'border-radius:8px;padding:12px 14px;font:inherit">\u2715</button></div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">' +
+      ["https://open.spotify.com|Spotify", "https://tidal.com|Tidal",
+       "https://hearthis.at|HearThis", "https://www.netflix.com|Netflix",
+       "https://soundcloud.com|SoundCloud", "https://www.bandcamp.com|Bandcamp"
+      ].map(function (t) { const p = t.split("|");
+        return '<button class="disc-provider" data-url="' + p[0] + '" style="background:#161a1f;' +
+          'color:#d7d9dc;border:1px solid #333942;border-radius:8px;padding:10px 14px;font:inherit">' +
+          p[1] + "</button>"; }).join("") + "</div>" +
+      '<div id="disc-results" style="display:flex;flex-direction:column;gap:8px"></div>';
+    document.body.appendChild(panel);
+
+    fab.onclick = function () {
+      panel.style.display = panel.style.display === "flex" ? "none" : "flex";
+    };
+    document.getElementById("disc-close").onclick = function () {
+      panel.style.display = "none";
+    };
+    for (const b of panel.querySelectorAll(".disc-provider"))
+      b.onclick = function () { location.href = b.dataset.url; };
+
+    async function run() {
+      const q = document.getElementById("disc-q").value.trim();
+      const box = document.getElementById("disc-results");
+      if (!q) return;
+      box.innerHTML = '<p style="color:#8a93a0">Searching\u2026</p>';
+      try {
+        const r = await fetch("/api/yt-search?q=" + encodeURIComponent(q));
+        const data = await r.json();
+        if (data.error) throw new Error(data.error);
+        box.innerHTML = "";
+        (data.results || []).forEach(function (res) {
+          const card = document.createElement("div");
+          card.style.cssText = "background:#111418;border:1px solid #2a2f36;border-radius:8px;" +
+            "padding:10px 12px;cursor:pointer";
+          card.innerHTML = '<strong style="color:#f2f4f7;font-size:14px"></strong>' +
+            '<small style="display:block;color:#8a93a0;margin-top:3px"></small>';
+          card.querySelector("strong").textContent = res.title;
+          card.querySelector("small").textContent =
+            (res.uploader || "YouTube") + (res.duration ? " \u00b7 " + res.duration : "");
+          card.onclick = function () {
+            addItem({ title: res.title, url: res.url, kind: "youtube" });
+            if (typeof renderQueue === "function") renderQueue();
+            toast("Queued: " + res.title);
+            panel.style.display = "none";
+          };
+          box.appendChild(card);
+        });
+        if (!box.children.length)
+          box.innerHTML = '<p style="color:#8a93a0">No results</p>';
+      } catch (e) {
+        box.innerHTML = '<p style="color:#ff6b6b">Search failed: ' + e.message + "</p>";
+      }
+    }
+    document.getElementById("disc-go").onclick = run;
+    document.getElementById("disc-q").addEventListener("keydown", function (e) {
+      if (e.key === "Enter") run();
+    });
+  }
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", build);
+  else build();
+})();
+</script>
 </body>
 </html>

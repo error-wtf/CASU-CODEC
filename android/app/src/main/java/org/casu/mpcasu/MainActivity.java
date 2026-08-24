@@ -31,6 +31,7 @@ public class MainActivity extends Activity {
     private LoopbackServer server;
     private McasuMediaSession mediaSession;
     private ValueCallback<Uri[]> fileCallback;
+    private WebView webView;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override protected void onCreate(Bundle savedInstanceState) {
@@ -60,7 +61,7 @@ public class MainActivity extends Activity {
             throw new RuntimeException("loopback server failed", e);
         }
 
-        WebView webView = new WebView(this);
+        webView = new WebView(this);
         setContentView(webView);
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
@@ -69,6 +70,11 @@ public class MainActivity extends Activity {
         s.setAllowFileAccess(true);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         webView.setWebViewClient(new WebViewClient());
+        // Provider web players (Spotify/Tidal/…) need cookies + login
+        // sessions; BACK walks the WebView history back to MPCASU first.
+        android.webkit.CookieManager cookies = android.webkit.CookieManager.getInstance();
+        cookies.setAcceptCookie(true);
+        cookies.setAcceptThirdPartyCookies(webView, true);
         // Without a WebChromeClient the web UI's "Choose files" input is a
         // dead end on Android: onShowFileChooser is what opens the system
         // document picker (Linux desktops open it natively).
@@ -134,6 +140,14 @@ public class MainActivity extends Activity {
         if (checkSelfPermission(permission)
                 != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             list.add(permission);
+        }
+    }
+
+    @Override public void onBackPressed() {
+        if (webView != null && webView.canGoBack()) {
+            webView.goBack();  // provider browsing: BACK returns to MPCASU
+        } else {
+            super.onBackPressed();
         }
     }
 

@@ -100,6 +100,12 @@ final class LoopbackServer implements Runnable {
             respond(client, 200, "audio/x-mpegurl", m3u);
             return;
         }
+        if (path.startsWith("/api/yt-search?q=")) {
+            String query = path.substring("/api/yt-search?q=".length());
+            respond(client, 200, "application/json",
+                    YouTubeSearch.json(query).getBytes(StandardCharsets.UTF_8));
+            return;
+        }
         if ("/api/ping".equals(path)) {
             respond(client, 200, "application/json",
                     "{\"ok\":true}".getBytes(StandardCharsets.UTF_8));
