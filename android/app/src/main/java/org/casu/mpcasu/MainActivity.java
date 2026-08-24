@@ -2,9 +2,13 @@ package org.casu.mpcasu;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.Intent;
 import android.content.res.AssetManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -23,8 +27,10 @@ import java.io.InputStream;
  * {@link PlayerBridge} (JS forwarding out, polled state back).
  */
 public class MainActivity extends Activity {
+    private static final int FILE_REQUEST = 7;
     private LoopbackServer server;
     private McasuMediaSession mediaSession;
+    private ValueCallback<Uri[]> fileCallback;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override protected void onCreate(Bundle savedInstanceState) {
@@ -63,6 +69,23 @@ public class MainActivity extends Activity {
         s.setAllowFileAccess(true);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         webView.setWebViewClient(new WebViewClient());
+        // Without a WebChromeClient the web UI's "Choose files" input is a
+        // dead end on Android: onShowFileChooser is what opens the system
+        // document picker (Linux desktops open it natively).
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override public boolean onShowFileChooser(
+                    WebView view, ValueCallback<Uri[]> callback,
+                    FileChooserParams params) {
+                fileCallback = callback;
+                try {
+                    startActivityForResult(params.createIntent(), FILE_REQUEST);
+                } catch (android.content.ActivityNotFoundException e) {
+                    fileCallback = null;
+                    return false;
+                }
+                return true;
+            }
+        });
         webView.loadUrl("http://127.0.0.1:" + server.port() + "/web/index.html");
 
         // Warm up the native core so the .so + verification are ready.
@@ -112,6 +135,19 @@ public class MainActivity extends Activity {
                 != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             list.add(permission);
         }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == FILE_REQUEST) {
+            if (fileCallback != null) {
+                fileCallback.onReceiveValue(
+                        WebChromeClient.FileChooserParams.parseResult(resultCode, data));
+                fileCallback = null;
+            }
+            return;
+        }
+        super.onActivityResult(requestCode, resultCode, data);
     }
 
     @Override protected void onDestroy() {
