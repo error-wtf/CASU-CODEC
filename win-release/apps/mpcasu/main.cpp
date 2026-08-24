@@ -76,6 +76,7 @@ int main(int argc, char** argv) {
 
     // --- CLI flags (Wine test harness) ---
     bool smoke = false;
+    int shot_delay_ms = 1500;
     bool proxy = false;
     bool play_test = false;
     QString vout;
@@ -89,6 +90,7 @@ int main(int argc, char** argv) {
         else if (arg == "--proxy") proxy = true;
         else if (arg == "--play-test") play_test = true;
         else if (arg == "--screenshot" && i + 1 < argc) screenshot = QString::fromLocal8Bit(argv[++i]);
+        else if (arg == "--shot-delay" && i + 1 < argc) shot_delay_ms = QString::fromLocal8Bit(argv[++i]).toInt();
         else if (arg == "--page" && i + 1 < argc) page = QString::fromLocal8Bit(argv[++i]);
         else if (arg == "--vout" && i + 1 < argc) vout = QString::fromLocal8Bit(argv[++i]);
         else if (arg == "--aout" && i + 1 < argc) aout = QString::fromLocal8Bit(argv[++i]);
@@ -152,7 +154,9 @@ int main(int argc, char** argv) {
     if (!screenshot.isEmpty()) {
         // Visual regression helper: render the real window (stylesheet, layout)
         // to a PNG for offline inspection (used by the parity workflow).
-        QTimer::singleShot(1500, &window, [&app, &window, screenshot] {
+        // --shot-delay extends the settle window (e.g. playback start for
+        // visualizer/cover verification).
+        QTimer::singleShot(shot_delay_ms, &window, [&app, &window, screenshot] {
             const QPixmap pix = window.grab();
             const bool ok = pix.save(screenshot, "PNG");
             std::printf("MPCASU_SCREENSHOT=%d %s\n", ok ? 1 : 0,

@@ -21,10 +21,10 @@ bauen wollen. In jedem Unterordner liegen die **äquivalenten Hilfsdateien**
 
 | Unterordner | OS | Zielartefakt | Status |
 |-------------|----|--------------|--------|
-| `Windows/` | Windows x86_64 | `MPCASU-Setup-5.0.0.exe`, `MPCASU-Windows-x86_64.zip` | **v5.0.0 VERÖFFENTLICHT + AKTUALISIERT** (23.08.): §0b komplett + Chromium-Test gelöst (2 echte Web-Bugs gefixt), Linux 426/426 grün, Gate 14/14 PASS, Assets neu hochgeladen — https://github.com/error-wtf/CASU-CODEC/releases/tag/v5.0.0 |
-| `Linux/` | Linux (Debian/Ubuntu, x86_64) | `.deb`-Pakete (casu-codec, casu-converter, mpcasu, web-casu) + Pure-Web-ZIP | **v3.0.0 fertig**, v5.0 geplant |
+| `Windows/` | Windows x86_64 | `MPCASU-Setup-5.0.0.exe`, `MPCASU-Windows-x86_64.zip` | **v5.0.0 VERÖFFENTLICHT + AKTUALISIERT** (24.08.): Admin-Fix + Responsive (Sidebar-Scroll, Wrap-Cards) + VIZ-Defaults (Audio→Visualizer AN, Cover) endlich IMonline-Build; LIVE-Zeitanzeige; Gate 14/14 PASS — https://github.com/error-wtf/CASU-CODEC/releases/tag/v5.0.0 |
+| `Linux/` | Linux (Debian/Ubuntu, x86_64) | `.deb`-Pakete (casu-codec, casu-converter, mpcasu, web-casu) + Pure-Web-ZIP | **v5.0.0 online** (24.08.): MPRIS + Sidebar-Scroll + LIVE-Anzeige, 441 Checks grün |
 | `Mac-OS/` | macOS (arm64 + x86_64) | `.dmg` (geplant) | geplant, noch nicht gebaut |
-| `Android/` | Android (arm64-v8a, armeabi-v7a, x86_64) | `.apk` / `.aab` (geplant) | geplant, noch nicht gebaut |
+| `Android/` | Android (arm64-v8a, armeabi-v7a, x86_64) | `.apk` | **v5.0.0 ONLINE** (24.08.): Widget + MediaSession + JNI-Crash-Fix, on-device verifiziert |
 
 ## Grundstruktur der Hilfsdateien (je OS äquivalent)
 

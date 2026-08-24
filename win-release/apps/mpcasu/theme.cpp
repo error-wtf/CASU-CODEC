@@ -63,6 +63,9 @@ QMainWindow { background-color: %1; }
     background-color: %3;
     border-right: 1px solid %4;
 }
+#SidebarScroll, #SidebarScroll > QWidget > QWidget {
+    background: transparent;
+}
 #SidebarSection {
     color: #656b73;
     font-size: 10px;
@@ -93,6 +96,7 @@ QPushButton#NavItem {
     color: %6;
     text-align: left;
     padding: 11px 12px;
+    min-height: 18px;
     font-size: 13px;
     border-radius: %7px;
 }

@@ -207,6 +207,16 @@ class Sidebar(QFrame):
                 self._logo_label = logo
         layout.addSpacing(14)
 
+        # The nav body scrolls: 14+ rows need ~800 px and a QVBoxLayout
+        # would otherwise COMPRESS every row below its natural height in
+        # short (non-fullscreen) windows, clipping the label text halfway
+        # (same defect the Windows port had). Logo and version stay pinned.
+        nav_body = QWidget()
+        nav_body.setStyleSheet("background: transparent;")
+        nav_layout = QVBoxLayout(nav_body)
+        nav_layout.setContentsMargins(0, 0, 0, 0)
+        nav_layout.setSpacing(0)
+
         nav_items = [
             ("LIBRARY", ["NOW PLAYING", "LIBRARY", "WEB & STREAMS",
                          "PLAYLISTS", "IPTV / EPG"]),
@@ -240,7 +250,7 @@ class Sidebar(QFrame):
         for section_title, items in nav_items:
             section = QLabel(section_title)
             section.setObjectName("SidebarSection")
-            layout.addWidget(section)
+            nav_layout.addWidget(section)
             self._rail_hidden.append(section)
             for item in items:
                 btn = QPushButton(item)
@@ -252,9 +262,18 @@ class Sidebar(QFrame):
                 btn.clicked.connect(lambda checked=False, name=item: self.navRequested.emit(name))
                 self._nav_group.addButton(btn)
                 self._nav_buttons.append(btn)
-                layout.addWidget(btn)
+                nav_layout.addWidget(btn)
 
-        layout.addStretch()
+        nav_layout.addStretch()
+
+        nav_scroll = QScrollArea()
+        nav_scroll.setObjectName("SidebarScroll")
+        nav_scroll.setWidgetResizable(True)
+        nav_scroll.setFrameShape(QFrame.NoFrame)
+        nav_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        nav_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        nav_scroll.setWidget(nav_body)
+        layout.addWidget(nav_scroll)
 
         version = QLabel("MPCASU 5.0.0")
         version.setObjectName("NowPlayingMeta")

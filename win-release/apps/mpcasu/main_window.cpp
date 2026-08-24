@@ -273,9 +273,16 @@ void MainWindow::build_sidebar() {
     sidebar_ = new QFrame(this);
     sidebar_->setObjectName("Sidebar");
     sidebar_->setFixedWidth(metrics().sidebar_width);
-    auto* layout = new QVBoxLayout(sidebar_);
-    layout->setContentsMargins(12, 16, 12, 12);
-    layout->setSpacing(4);
+    auto* sidebar_layout = new QVBoxLayout(sidebar_);
+    sidebar_layout->setContentsMargins(12, 16, 12, 12);
+    sidebar_layout->setSpacing(4);
+
+    // The nav body lives in its own widget inside a scroll area: 13 nav
+    // rows + section headers need ~800 px. In a non-fullscreen window
+    // (620 px minimum) a plain layout would COMPRESS every row below its
+    // natural height and clip the label text halfway (user-reported).
+    // Scrolling keeps each row fully readable at any window height. The
+    // brand block stays pinned above it, the status footer below it.
 
     // Brand logo (exe-relative assets, mirrors the Linux sidebar header).
     auto* logo = new QLabel(sidebar_);
@@ -294,11 +301,16 @@ void MainWindow::build_sidebar() {
         logo->setText(QStringLiteral("MPCASU"));
     }
     logo->setCursor(Qt::PointingHandCursor);
-    layout->addWidget(logo);
+    sidebar_layout->addWidget(logo);
     auto* sub = new QLabel(QStringLiteral("MEDIA · CASU"), sidebar_);
     sub->setObjectName("BrandSub");
-    layout->addWidget(sub);
-    layout->addSpacing(12);
+    sidebar_layout->addWidget(sub);
+    sidebar_layout->addSpacing(12);
+
+    auto* body = new QWidget(sidebar_);
+    auto* layout = new QVBoxLayout(body);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(4);
 
     auto add_section = [&](const QString& label) {
         auto* section = new QLabel(label, sidebar_);
@@ -340,15 +352,25 @@ void MainWindow::build_sidebar() {
     add_nav(QStringLiteral("OPTIONS"), QStringLiteral("⚙"));
     add_nav(QStringLiteral("ABOUT"), QStringLiteral("ⓘ"));
     layout->addStretch();
+
+    auto* nav_scroll = new QScrollArea(sidebar_);
+    nav_scroll->setObjectName("SidebarScroll");
+    nav_scroll->setWidgetResizable(true);
+    nav_scroll->setFrameShape(QFrame::NoFrame);
+    nav_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    nav_scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    nav_scroll->setWidget(body);
+    sidebar_layout->addWidget(nav_scroll);
+
     auto* backend = new QLabel(QStringLiteral("libVLC backend"), sidebar_);
     backend->setObjectName("StatusText");
-    layout->addWidget(backend);
+    sidebar_layout->addWidget(backend);
     // Reference Sidebar footer: version label pinned to the bottom.
     auto* sidebar_version = new QLabel(QStringLiteral("MPCASU 5.0.0"), sidebar_);
     sidebar_version->setObjectName("NowPlayingMeta");
     sidebar_version->setContentsMargins(16, 8, 16, 8);
     sidebar_version->setAlignment(Qt::AlignLeft | Qt::AlignBottom);
-    layout->addWidget(sidebar_version);
+    sidebar_layout->addWidget(sidebar_version);
 }
 
 void MainWindow::build_about_page() {
@@ -410,6 +432,75 @@ void MainWindow::build_about_page() {
     wrap->addStretch();
     pages_->addWidget(page);
 }
+
+namespace {
+// Minimal flow layout (Qt example semantics): children keep their size
+// hint and wrap to the next row when the width runs out — used for the
+// diagnostics cards so nothing is ever clipped on narrow windows.
+class FlowLayout : public QLayout {
+public:
+    FlowLayout(QWidget* parent, int h_space, int v_space)
+        : QLayout(parent), h_space_(h_space), v_space_(v_space) {}
+    ~FlowLayout() override {
+        while (QLayoutItem* item = takeAt(0)) delete item;
+    }
+    void addItem(QLayoutItem* item) override { items_.append(item); }
+    Qt::Orientations expandingDirections() const override { return {}; }
+    bool hasHeightForWidth() const override { return true; }
+    int heightForWidth(int width) const override {
+        return do_layout(QRect(0, 0, width, 0), true);
+    }
+    int count() const override { return items_.size(); }
+    QLayoutItem* itemAt(int index) const override {
+        return items_.value(index);
+    }
+    QSize minimumSize() const override {
+        QSize size;
+        for (QLayoutItem* item : items_) size = size.expandedTo(item->minimumSize());
+        const QMargins margins = contentsMargins();
+        size += QSize(margins.left() + margins.right(),
+                      margins.top() + margins.bottom());
+        return size;
+    }
+    void setGeometry(const QRect& rect) override {
+        QLayout::setGeometry(rect);
+        do_layout(rect, false);
+    }
+    QSize sizeHint() const override { return minimumSize(); }
+    QLayoutItem* takeAt(int index) override {
+        return index >= 0 && index < items_.size() ? items_.takeAt(index)
+                                                   : nullptr;
+    }
+
+private:
+    int do_layout(const QRect& rect, bool test_only) const {
+        const QMargins margins = contentsMargins();
+        const QRect effective = rect.adjusted(margins.left(), margins.top(),
+                                             -margins.right(), -margins.bottom());
+        int x = effective.x(), y = effective.y(), row_height = 0;
+        for (QLayoutItem* item : items_) {
+            const int next_x = x + item->sizeHint().width() + h_space_;
+            if (next_x - effective.left() > effective.width() &&
+                row_height > 0) {
+                x = effective.x();
+                y = y + row_height + v_space_;
+                row_height = 0;
+            }
+            if (!test_only)
+                item->setGeometry(QRect(QPoint(x, y), item->sizeHint()));
+            x = next_x;
+            row_height = qMax(row_height, item->sizeHint().height());
+        }
+        return y + row_height - rect.y() + margins.bottom();
+    }
+    QList<QLayoutItem*> items_;
+    int h_space_;
+    int v_space_;
+};
+}  // namespace
+
+
+
 
 void MainWindow::build_player_page() {
     player_page_ = new QWidget(this);
@@ -535,11 +626,14 @@ void MainWindow::build_player_page() {
     col->addWidget(transport_frame_);
 
     // Diagnostics bar (Linux parity): four status cards above the stage.
+    // The cards WRAP to a second row on narrow windows: at the 980 px
+    // minimum the player column is ~360 px wide and four fixed cards
+    // clipped their label text halfway (user-reported "Schriften nicht
+    // ganz sichtbar" in non-fullscreen windows).
     diagnostics_bar_ = new QFrame(player_page_);
     diagnostics_bar_->setObjectName("Panel");
-    auto* diag_layout = new QHBoxLayout(diagnostics_bar_);
+    auto* diag_layout = new FlowLayout(diagnostics_bar_, 8, 6);
     diag_layout->setContentsMargins(12, 8, 12, 8);
-    diag_layout->setSpacing(8);
     const std::vector<std::pair<const char*, const char*>> kDiagCards = {
         {"SEGMENTED PLAYBACK", "unavailable"},
         {"LIVE GUIDE", "no EPG loaded"},
