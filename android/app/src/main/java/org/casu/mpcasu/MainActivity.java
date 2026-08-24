@@ -92,14 +92,25 @@ public class MainActivity extends Activity {
         });
     }
 
-    /** Android 13+ requires a runtime grant for notification visibility. */
+    /** Android 13+ requires runtime grants for notifications + media. */
     private void requestNotificationPermission() {
+        java.util.List<String> needed = new java.util.ArrayList<>();
         if (Build.VERSION.SDK_INT >= 33) {
-            String permission = "android.permission.POST_NOTIFICATIONS";
-            if (checkSelfPermission(permission)
-                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(new String[]{permission}, 1);
-            }
+            addIfDenied(needed, "android.permission.POST_NOTIFICATIONS");
+            addIfDenied(needed, "android.permission.READ_MEDIA_AUDIO");
+            addIfDenied(needed, "android.permission.READ_MEDIA_VIDEO");
+        } else if (Build.VERSION.SDK_INT >= 23) {
+            addIfDenied(needed, "android.permission.READ_EXTERNAL_STORAGE");
+        }
+        if (!needed.isEmpty()) {
+            requestPermissions(needed.toArray(new String[0]), 1);
+        }
+    }
+
+    private void addIfDenied(java.util.List<String> list, String permission) {
+        if (checkSelfPermission(permission)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            list.add(permission);
         }
     }
 
