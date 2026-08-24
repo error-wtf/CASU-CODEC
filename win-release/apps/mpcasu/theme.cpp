@@ -96,7 +96,7 @@ QPushButton#NavItem {
     color: %6;
     text-align: left;
     padding: 11px 12px;
-    min-height: 18px;
+    min-height: 20px;
     font-size: 13px;
     border-radius: %7px;
 }

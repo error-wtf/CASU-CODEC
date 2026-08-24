@@ -145,7 +145,7 @@ QPushButton#NavItem {{
     color: {p.text_muted};
     text-align: left;
     padding: 11px 12px;
-    min-height: 18px;
+    min-height: 20px;
     font-size: 13px;
     border-radius: {m.radius_small}px;
 }}

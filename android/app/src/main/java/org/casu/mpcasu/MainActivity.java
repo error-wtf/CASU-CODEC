@@ -3,6 +3,7 @@ package org.casu.mpcasu;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.res.AssetManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -78,13 +79,32 @@ public class MainActivity extends Activity {
         // (lock screen, headsets, assistant) plus state polling that also
         // refreshes the home-screen widget.
         mediaSession = new McasuMediaSession(this);
+        requestNotificationPermission();
         PlayerBridge.attach(webView, (title, playing) -> {
             if (mediaSession != null) mediaSession.pushState(title, playing);
             McasuWidgetProvider.pushState(getApplicationContext(), title, playing);
+            // VLC-style notification-panel controls: the foreground service
+            // appears with the first playback and mirrors title/glyph.
+            if (playing) {
+                PlaybackNotificationService.start(getApplicationContext());
+            }
+            PlaybackNotificationService.updateState(getApplicationContext(), title, playing);
         });
     }
 
+    /** Android 13+ requires a runtime grant for notification visibility. */
+    private void requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            String permission = "android.permission.POST_NOTIFICATIONS";
+            if (checkSelfPermission(permission)
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{permission}, 1);
+            }
+        }
+    }
+
     @Override protected void onDestroy() {
+        PlaybackNotificationService.stop(getApplicationContext());
         PlayerBridge.detach();
         if (mediaSession != null) {
             mediaSession.release();

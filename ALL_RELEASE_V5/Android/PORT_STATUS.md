@@ -1,25 +1,20 @@
-# PORT_STATUS — Android (ALL_RELEASE_V5)
+# PORT_STATUS — Android (v5.0.0, Stand 24.08.2026)
 
-> **HARTE REGEL (2026-08-22):** Arbeit an diesem Ziel-OS erst NACH abschlossener §0b-Paritäts-Tierliste (Linux↔Windows deckungsgleich, Nachweis ctest + Paritätstests). Fortschritt der Tierliste siehe `HANDOVER.md` §0b — CASUNAT2-Stack bereits ✅ (Commits `9fb279d`, `e64ed63`).
+**ONLINE:** MPCASU-Android-5.0.0.apk (SHA256SUMS-android.txt) — ERSTMALS im Release.
 
-| Field | Value |
-|-------|-------|
-| Current version | — (kein Android-Build) |
-| Next version | **v5.0.0** (erster Android-Release-Zug; v4.x übersprungen) |
-| Build-Host | Android SDK/NDK + Qt-for-Android nötig (dieser Ubuntu-Host möglich) |
-| Code-Basis | Linux-Referenz + Windows-Port als Vorlage |
-| Offen | alles (erstes WP: PREREQUISITES + Hello-APK) |
+## Enthaltene Features
+- WebView-Player (pure-web, same-origin) + casu_core JNI (detect/verify/extract).
+- **AppWidget 4×1** (⏮ ▶/⏸ ⏭ + Titel + State) — Broadcasts → JS-Forwarding.
+- **MediaSession** (Plattform-API) — Hardware-Keys/Lockscreen steuern physisch.
+- **Media-Notification** (VLC-Stil): DecoratedMediaCustomViewStyle +
+  Session-Token, ⏮ ▶/⏸ ⏭ im Panel — Screenshot-bewiesen.
+- JNI-Crash-Fix (SIGABRT nach ~15 s auf jedem Start).
+- LIVE-Zeitanzeige; POST_NOTIFICATIONS-Runtime-Request.
 
-## Nächste Schritte (v5.0.0, nach Nutzer-Freigabe)
-1. SDK/NDK/JDK + Qt-for-Android (inkl. WebEngine) installieren.
-2. Hello-APK (leere Qt-App, startet auf Emulator) — Gate: läuft.
-3. Core-Libs als .so (casu_core→codec→media→network→playback→webapi) + Host-Tests.
-4. Player-APK mit libVLC + WebEngine-Tabs (Touch-UI).
-5. Converter-APK (optional). Web-Backend in-App (Loopback).
-6. Packaging: APK/AAB + Signing; Play-Store vs Side-Load-Entscheidung.
+## Verification
+- On-Device (Emulator): Installation/Start/Wiedergabe/Media-Keys/
+  Widget-Broadcasts/Notification — crash-frei; Screenshots im Repo-Log.
+- aapt: Service (mediaPlayback-Typ) + Permissions + Widget-Receiver.
 
-## Entscheidungsbedarf (Nutzer)
-- YouTube-Transport auf Android (yt-dlp braucht Python → Alternative wählen:
-  innertube-API direkt, yt-dlp-Android-Port, oder WebView-Youtube?).
-- Play-Store-Veröffentlichung (Konto + Signing) oder nur APK-Download?
-- UI: Touch-Umbau erlaubt oder strikte Desktop-Parität?
+## Nächste Schritte
+- .aab + Play-Integrity; Widget-Preview-Image; Audio-Fokus; ExoPlayer-HLS.

@@ -22,6 +22,13 @@ final class McasuMediaSession {
 
     private final MediaSession session;
 
+    /** Token for the media-style notification (DecoratedMediaCustomViewStyle). */
+    static MediaSession.Token token() {
+        return instance != null ? instance.session.getSessionToken() : null;
+    }
+
+    private static McasuMediaSession instance;
+
     McasuMediaSession(Context context) {
         session = new MediaSession(context, "MPCASU");
         Intent open = new Intent(context, MainActivity.class);
@@ -44,8 +51,11 @@ final class McasuMediaSession {
             }
         });
         session.setActive(true);
+        instance = this;
         pushState("", false);
     }
+
+
 
     /** Mirror polled player state into PlaybackState + Metadata. */
     void pushState(String title, boolean playing) {
@@ -62,6 +72,7 @@ final class McasuMediaSession {
     }
 
     void release() {
+        if (instance == this) instance = null;
         try {
             session.release();
         } catch (Exception ignored) {

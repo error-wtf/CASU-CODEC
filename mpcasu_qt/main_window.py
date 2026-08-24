@@ -176,6 +176,109 @@ class Sidebar(QFrame):
 
     navRequested = Signal(str)
 
+    # Font-independent vector icons: Unicode glyphs render as tofu boxes on
+    # systems whose UI font lacks the codepoints (user-reported), so every
+    # nav icon is drawn with QPainter instead — identical on every OS.
+    ICON_DRAWERS = {
+        "NOW PLAYING": lambda p, r: p.drawPolygon(
+            QPolygonF([r.topLeft() + QPointF(1, 0), r.topLeft() + QPointF(1, r.height()),
+                       r.topLeft() + QPointF(r.width(), r.height() / 2)]), Qt.OddEvenFill),
+        "LIBRARY": lambda p, r: (p.drawRect(r), p.drawRect(
+            r.adjusted(r.width() * 0.3, r.height() * 0.3,
+                       -r.width() * 0.3, -r.height() * 0.3))),
+        "WEB & STREAMS": lambda p, r: (
+            p.drawEllipse(r),
+            p.drawLine(QPointF(r.left(), r.center().y()),
+                       QPointF(r.right(), r.center().y())),
+            p.drawEllipse(r.adjusted(r.width() * 0.28, 0,
+                                     -r.width() * 0.28, 0))),
+        "PLAYLISTS": lambda p, r: [
+            p.drawLine(QPointF(r.left(), r.top() + r.height() * f),
+                       QPointF(r.right(), r.top() + r.height() * f))
+            for f in (0.1, 0.5, 0.9)],
+        "IPTV / EPG": lambda p, r: (
+            p.drawRect(r.adjusted(0, 0, -r.width() / 2 - 1, -r.height() / 2 - 1)),
+            p.drawRect(r.adjusted(r.width() / 2 + 1, 0, 0, -r.height() / 2 - 1)),
+            p.drawRect(r.adjusted(0, r.height() / 2 + 1, -r.width() / 2 - 1, 0)),
+            p.drawRect(r.adjusted(r.width() / 2 + 1, r.height() / 2 + 1, 0, 0))),
+        "YOUTUBE": lambda p, r: (
+            p.drawRoundedRect(r, 3, 3),
+            p.drawPolygon(QPolygonF([
+                QPointF(r.center().x() - r.width() * 0.12, r.top() + r.height() * 0.28),
+                QPointF(r.center().x() - r.width() * 0.12, r.bottom() - r.height() * 0.28),
+                QPointF(r.right() - r.width() * 0.22, r.center().y())]), Qt.OddEvenFill)),
+        "SPOTIFY": lambda p, r: (
+            p.drawEllipse(r),
+            [p.drawArc(QRectF(r.left() + r.width() * f, r.top() + r.height() * (0.3 + 0.22 * i),
+                              r.width() * (1 - 2 * f), r.height() * 0.16), 20 * 16, 140 * 16)
+             for i, f in enumerate((0.22, 0.16, 0.10))]),
+        "CASU FILES": lambda p, r: (
+            p.drawPolygon(QPolygonF([r.center() + QPointF(0, -r.height() / 2),
+                                     r.center() + QPointF(r.width() / 2, 0),
+                                     r.center() + QPointF(0, r.height() / 2),
+                                     r.center() + QPointF(-r.width() / 2, 0)]), Qt.OddEvenFill),
+            p.drawPolygon(QPolygonF([r.center() + QPointF(0, -r.height() * 0.18),
+                                     r.center() + QPointF(r.width() * 0.18, 0),
+                                     r.center() + QPointF(0, r.height() * 0.18),
+                                     r.center() + QPointF(-r.width() * 0.18, 0)]), Qt.OddEvenFill)),
+        "HEARTHIS": lambda p, r: (
+            p.drawLine(QPointF(r.left() + 1, r.bottom() - 1),
+                       QPointF(r.right() - 1, r.top() + 1)),
+            p.drawPolyline(QPolygonF([
+                QPointF(r.right() - r.width() * 0.45, r.top() + 1),
+                QPointF(r.right() - 1, r.top() + 1),
+                QPointF(r.right() - 1, r.top() + r.height() * 0.45)]))),
+        "TIDAL": lambda p, r: [
+            p.drawPolyline(QPolygonF([
+                QPointF(r.left(), r.top() + r.height() * (0.2 + 0.3 * i)),
+                QPointF(r.center().x(), r.top() + r.height() * (0.05 + 0.3 * i)),
+                QPointF(r.right(), r.top() + r.height() * (0.2 + 0.3 * i)),
+                QPointF(r.right(), r.top() + r.height() * (0.5 + 0.3 * i))])
+            ) for i in range(2)],
+        "NETFLIX": lambda p, r: (
+            p.drawLine(QPointF(r.left() + 2, r.top()), QPointF(r.left() + 2, r.bottom())),
+            p.drawLine(QPointF(r.right() - 2, r.top()), QPointF(r.right() - 2, r.bottom())),
+            p.drawLine(QPointF(r.left() + 2, r.top()), QPointF(r.right() - 2, r.bottom()))),
+        "BROWSE": lambda p, r: (
+            p.drawEllipse(r),
+            p.drawPie(r, 40 * 16, 100 * 16),
+            p.drawPie(r, 220 * 16, 100 * 16)),
+        "OPTIONS": lambda p, r: (
+            p.drawEllipse(r.adjusted(r.width() * 0.22, r.height() * 0.22,
+                                     -r.width() * 0.22, -r.height() * 0.22)),
+            [p.drawLine(QPointF(r.center().x() + (r.width() / 2 - 1) * math.cos(a),
+                                r.center().y() + (r.height() / 2 - 1) * math.sin(a)),
+                        QPointF(r.center().x() + (r.width() / 2 - 1) * 0.55 * math.cos(a),
+                                r.center().y() + (r.height() / 2 - 1) * 0.55 * math.sin(a)))
+             for a in [i * math.pi / 4 for i in range(8)]]),
+        "ABOUT": lambda p, r: (
+            p.drawEllipse(r),
+            p.drawPoint(r.center() + QPointF(0, -r.height() * 0.22)),
+            p.drawLine(QPointF(r.center().x(), r.center().y()),
+                       QPointF(r.center().x(), r.bottom() - r.height() * 0.2))),
+    }
+
+    @staticmethod
+    def _nav_icon(name: str, color: QColor, active: QColor,
+                  size: int = 18) -> QIcon:
+        icon = QIcon()
+        for state, tint in ((QIcon.Off, color), (QIcon.On, active)):
+            pm = QPixmap(size, size)
+            pm.fill(Qt.transparent)
+            painter = QPainter(pm)
+            painter.setRenderHint(QPainter.Antialiasing)
+            pen = QPen(tint, 1.5)
+            pen.setCapStyle(Qt.RoundCap)
+            painter.setPen(pen)
+            rect = QRectF(2.5, 2.5, size - 5, size - 5)
+            drawer = Sidebar.ICON_DRAWERS.get(name)
+            if drawer is not None:
+                drawer(painter, rect)
+            painter.end()
+            icon.addPixmap(pm, QIcon.Normal, state)
+            icon.addPixmap(pm, QIcon.Selected, state)
+        return icon
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("Sidebar")
@@ -256,6 +359,9 @@ class Sidebar(QFrame):
                 btn = QPushButton(item)
                 btn.setObjectName("NavItem")
                 btn.setCheckable(True)
+                btn.setIcon(self._nav_icon(
+                    item, QColor(PALETTE.text_muted), QColor(PALETTE.accent)))
+                btn.setIconSize(QSize(18, 18))
                 btn.setProperty("nav_name", item)
                 btn.setToolTip(item)
                 btn.setCursor(Qt.PointingHandCursor)
@@ -291,8 +397,9 @@ class Sidebar(QFrame):
         for widget in self._rail_hidden:
             widget.setVisible(not on)
         for btn in self._nav_buttons:
-            name = str(btn.property("nav_name"))
-            btn.setText(self.NAV_ICONS.get(name, name[0]) if on else name)
+            # Icons are drawn pixmaps (font-independent); rail mode shows
+            # them without the label instead of falling back to glyphs.
+            btn.setText("" if on else str(btn.property("nav_name")))
 
     def select(self, name: str):
         for btn in self._nav_buttons:

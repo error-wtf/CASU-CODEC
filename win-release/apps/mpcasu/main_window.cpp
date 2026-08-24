@@ -19,6 +19,11 @@
 #include "visualizer.hpp"
 
 #include <QApplication>
+#include <cmath>
+#include <QIcon>
+#include <QPainter>
+#include <QPen>
+#include <QPolygonF>
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QColor>
@@ -269,6 +274,120 @@ void MainWindow::build_ui() {
     statusBar()->addPermanentWidget(status_right);
     statusBar()->setSizeGripEnabled(false);}
 
+
+// Font-independent sidebar nav icons: the Unicode glyphs (▶ ▣ ▤ ≡ ▦ …) are
+// missing from some systems' UI fonts and render as tofu boxes (user-
+// reported), so every icon is drawn with QPainter — identical on every OS
+// and matching the Linux reference (mpcasu_qt Sidebar.ICON_DRAWERS).
+QIcon nav_icon(const QString& name, const QColor& color, const QColor& active,
+               int size = 18) {
+    QIcon icon;
+    const std::pair<QIcon::State, QColor> variants[] = {
+        {QIcon::Off, color}, {QIcon::On, active}};
+    for (const auto& [state, tint] : variants) {
+        QPixmap pm(size, size);
+        pm.fill(Qt::transparent);
+        QPainter p(&pm);
+        p.setRenderHint(QPainter::Antialiasing);
+        QPen pen(tint, 1.5);
+        pen.setCapStyle(Qt::RoundCap);
+        p.setPen(pen);
+        const QRectF r(2.5, 2.5, size - 5.0, size - 5.0);
+        const QPointF c = r.center();
+        const qreal w = r.width(), h = r.height();
+        if (name == QLatin1String("NOW PLAYING")) {
+            QPolygonF tri;
+            tri << r.topLeft() << QPointF(r.left(), r.bottom())
+                << QPointF(r.right(), c.y());
+            p.drawPolygon(tri);
+        } else if (name == QLatin1String("LIBRARY")) {
+            p.drawRect(r);
+            p.drawRect(r.adjusted(w * 0.3, h * 0.3, -w * 0.3, -h * 0.3));
+        } else if (name == QLatin1String("WEB & STREAMS")) {
+            p.drawEllipse(r);
+            p.drawLine(QPointF(r.left(), c.y()), QPointF(r.right(), c.y()));
+            p.drawEllipse(r.adjusted(w * 0.28, 0, -w * 0.28, 0));
+        } else if (name == QLatin1String("PLAYLISTS")) {
+            for (const qreal f : {0.1, 0.5, 0.9})
+                p.drawLine(QPointF(r.left(), r.top() + h * f),
+                           QPointF(r.right(), r.top() + h * f));
+        } else if (name == QLatin1String("IPTV / EPG")) {
+            p.drawRect(r.adjusted(0, 0, -w / 2 - 1, -h / 2 - 1));
+            p.drawRect(r.adjusted(w / 2 + 1, 0, 0, -h / 2 - 1));
+            p.drawRect(r.adjusted(0, h / 2 + 1, -w / 2 - 1, 0));
+            p.drawRect(r.adjusted(w / 2 + 1, h / 2 + 1, 0, 0));
+        } else if (name == QLatin1String("YOUTUBE")) {
+            p.drawRoundedRect(r, 3, 3);
+            QPolygonF tri;
+            tri << QPointF(c.x() - w * 0.12, r.top() + h * 0.28)
+                << QPointF(c.x() - w * 0.12, r.bottom() - h * 0.28)
+                << QPointF(r.right() - w * 0.22, c.y());
+            p.drawPolygon(tri);
+        } else if (name == QLatin1String("SPOTIFY")) {
+            p.drawEllipse(r);
+            const qreal insets[] = {0.22, 0.16, 0.10};
+            for (int i = 0; i < 3; ++i)
+                p.drawArc(QRectF(r.left() + w * insets[i],
+                                 r.top() + h * (0.3 + 0.22 * i),
+                                 w * (1 - 2 * insets[i]), h * 0.16),
+                          20 * 16, 140 * 16);
+        } else if (name == QLatin1String("CASU FILES")) {
+            QPolygonF outer, inner;
+            outer << (c + QPointF(0, -h / 2)) << (c + QPointF(w / 2, 0))
+                  << (c + QPointF(0, h / 2)) << (c + QPointF(-w / 2, 0));
+            inner << (c + QPointF(0, -h * 0.18)) << (c + QPointF(w * 0.18, 0))
+                  << (c + QPointF(0, h * 0.18)) << (c + QPointF(-w * 0.18, 0));
+            p.drawPolygon(outer);
+            p.drawPolygon(inner);
+        } else if (name == QLatin1String("HEARTHIS")) {
+            p.drawLine(QPointF(r.left() + 1, r.bottom() - 1),
+                       QPointF(r.right() - 1, r.top() + 1));
+            QPolygonF head;
+            head << QPointF(r.right() - w * 0.45, r.top() + 1)
+                 << QPointF(r.right() - 1, r.top() + 1)
+                 << QPointF(r.right() - 1, r.top() + h * 0.45);
+            p.drawPolyline(head);
+        } else if (name == QLatin1String("TIDAL")) {
+            for (int i = 0; i < 2; ++i) {
+                QPolygonF wave;
+                wave << QPointF(r.left(), r.top() + h * (0.2 + 0.3 * i))
+                     << QPointF(c.x(), r.top() + h * (0.05 + 0.3 * i))
+                     << QPointF(r.right(), r.top() + h * (0.2 + 0.3 * i))
+                     << QPointF(r.right(), r.top() + h * (0.5 + 0.3 * i));
+                p.drawPolyline(wave);
+            }
+        } else if (name == QLatin1String("NETFLIX")) {
+            p.drawLine(QPointF(r.left() + 2, r.top()),
+                       QPointF(r.left() + 2, r.bottom()));
+            p.drawLine(QPointF(r.right() - 2, r.top()),
+                       QPointF(r.right() - 2, r.bottom()));
+            p.drawLine(QPointF(r.left() + 2, r.top()),
+                       QPointF(r.right() - 2, r.bottom()));
+        } else if (name == QLatin1String("BROWSE")) {
+            p.drawEllipse(r);
+            p.drawPie(r, 40 * 16, 100 * 16);
+            p.drawPie(r, 220 * 16, 100 * 16);
+        } else if (name == QLatin1String("OPTIONS")) {
+            p.drawEllipse(r.adjusted(w * 0.22, h * 0.22, -w * 0.22, -h * 0.22));
+            for (int i = 0; i < 8; ++i) {
+                const qreal a = i * M_PI / 4.0;
+                p.drawLine(c + QPointF((w / 2 - 1) * std::cos(a),
+                                       (h / 2 - 1) * std::sin(a)),
+                           c + QPointF((w / 2 - 1) * 0.55 * std::cos(a),
+                                       (h / 2 - 1) * 0.55 * std::sin(a)));
+            }
+        } else if (name == QLatin1String("ABOUT")) {
+            p.drawEllipse(r);
+            p.drawPoint(c + QPointF(0, -h * 0.22));
+            p.drawLine(c, QPointF(c.x(), r.bottom() - h * 0.2));
+        }
+        p.end();
+        icon.addPixmap(pm, QIcon::Normal, state);
+        icon.addPixmap(pm, QIcon::Selected, state);
+    }
+    return icon;
+}
+
 void MainWindow::build_sidebar() {
     sidebar_ = new QFrame(this);
     sidebar_->setObjectName("Sidebar");
@@ -318,11 +437,15 @@ void MainWindow::build_sidebar() {
         layout->addWidget(section);
     };
     auto add_nav = [&](const QString& name, const QString& icon) {
-        auto* btn = new QPushButton(icon + QStringLiteral("  ") + name, sidebar_);
+        Q_UNUSED(icon);  // glyphs replaced by drawn nav_icon() (font-safe)
+        auto* btn = new QPushButton(name, sidebar_);
         btn->setObjectName("NavItem");
         btn->setCheckable(true);
         btn->setToolTip(name);
         btn->setCursor(Qt::PointingHandCursor);
+        btn->setIcon(nav_icon(name, QColor(QStringLiteral("#8a93a0")),
+                              QColor(QStringLiteral("#ff1e2d"))));
+        btn->setIconSize(QSize(18, 18));
         layout->addWidget(btn);
         nav_buttons_.append(btn);
         nav_map_[name] = btn;
