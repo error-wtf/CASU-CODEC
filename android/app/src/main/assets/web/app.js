@@ -24,6 +24,7 @@ const MAX_XMLTV_PROGRAMMES = 200000;
 const MAX_EPG_TEXT = 1024;
 
 function formatTime(value) {
+  if (!Number.isFinite(Number(value))) return "LIVE";
   value = Math.max(0, Math.floor(Number(value) || 0));
   const h = Math.floor(value / 3600), m = Math.floor((value % 3600) / 60), s = value % 60;
   const pad = (n) => String(n).padStart(2, "0");
@@ -1450,7 +1451,7 @@ media.addEventListener("loadedmetadata", () => {
   $("meta").textContent = `${(state.items[state.index]?.kind || "MEDIA").toUpperCase()} · ${media.videoWidth ? `${media.videoWidth}×${media.videoHeight}` : "AUDIO"}`;
 });
 media.addEventListener("timeupdate", () => {
-  $("seek").value = media.currentTime;
+  $("seek").value = Number.isFinite(media.duration) ? media.currentTime : 0;
   $("clock").textContent = `${formatTime(media.currentTime)} / ${formatTime(media.duration)}`;
   if (state.abToken === state.playbackToken && state.abEnd !== null && media.currentTime >= state.abEnd)
     media.currentTime = state.abStart;

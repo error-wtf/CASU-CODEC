@@ -5892,7 +5892,14 @@ class MainWindow(QMainWindow):
                         self.backend.play()
                 except (BackendError, CasuError):
                     pass
-        self._time_total.setText(format_duration(self.duration if self.duration > 0 else None))
+        # Live streams (network source, no finite duration) are labelled
+        # LIVE instead of a meaningless 00:00 — same as the web players.
+        if self.duration > 0:
+            self._time_total.setText(format_duration(self.duration))
+        elif self._network_source:
+            self._time_total.setText("LIVE")
+        else:
+            self._time_total.setText(format_duration(None))
 
     def _poll(self):
         if self._mpris_notifier is not None:

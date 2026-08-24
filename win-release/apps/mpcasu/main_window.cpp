@@ -2916,11 +2916,25 @@ void MainWindow::poll() {
         int ms = qBound(0, static_cast<int>(pos * 1000.0), 0x7fffffff);
         seek_slider_->setValue(ms);
         time_current_->setText(format_duration(pos));
-        time_total_->setText(format_duration(duration_));
+        // Live streams (network source, no finite duration) are labelled
+        // LIVE instead of a meaningless 00:00 — same as the web players
+        // and the Linux Qt player.
+        time_total_->setText(duration_ > 0.0
+                                 ? format_duration(duration_)
+                                 : (current_source_.contains(
+                                        QStringLiteral("://"))
+                                        ? QStringLiteral("LIVE")
+                                        : format_duration(duration_)));
     }
     if (fs_overlay_ && fs_overlay_->isVisible() && fs_time_) {
         const double dur = controller_->duration() > 0.0 ? controller_->duration() : duration_;
-        fs_time_->setText(QStringLiteral("%1 / %2").arg(format_duration(pos), format_duration(dur)));
+        const QString total = duration_ > 0.0
+                                  ? format_duration(dur)
+                                  : (current_source_.contains(
+                                         QStringLiteral("://"))
+                                         ? QStringLiteral("LIVE")
+                                         : format_duration(dur));
+        fs_time_->setText(QStringLiteral("%1 / %2").arg(format_duration(pos), total));
     }
     if (duration_ > 0.0 && pos >= duration_ - 0.25 && !paused_) handle_end();
     const casu::playback::PlaybackState st = controller_->state();
