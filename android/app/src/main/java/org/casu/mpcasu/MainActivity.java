@@ -163,8 +163,8 @@ public class MainActivity extends Activity {
             }
         });
         playerUrl = "http://127.0.0.1:" + server.port() + "/web/index.html";
-        webView.loadUrl(playerUrl);
         webView.addJavascriptInterface(new JsBridge(), "MPCASUAndroid");
+        webView.loadUrl(playerUrl);
 
         handleViewIntent(getIntent());
 
@@ -269,21 +269,30 @@ public class MainActivity extends Activity {
     /** Embedded provider web players — the Linux "WEB PLAYERS" sidebar
      * section: SPOTIFY/HEARTHIS/TIDAL/NETFLIX/BROWSE open inside the app
      * with their own sessions; the player stays intact behind them. */
+    // HashMap (not Map.of): Map.of is API 30+ and crashed taps on
+    // Android < 11 devices through the JS bridge (NoSuchMethodError).
     private static final java.util.Map<String, String> PROVIDERS =
-            java.util.Map.of(
-                    "SPOTIFY", "https://open.spotify.com/",
-                    "HEARTHIS", "https://hearthis.at/",
-                    "TIDAL", "https://tidal.com/",
-                    "NETFLIX", "https://www.netflix.com/",
-                    "BROWSE", "https://www.google.com/");
+            new java.util.HashMap<>();
+    static {
+        PROVIDERS.put("SPOTIFY", "https://open.spotify.com/");
+        PROVIDERS.put("HEARTHIS", "https://hearthis.at/");
+        PROVIDERS.put("TIDAL", "https://tidal.com/");
+        PROVIDERS.put("NETFLIX", "https://www.netflix.com/");
+        PROVIDERS.put("BROWSE", "https://www.google.com/");
+    }
 
     private void openProvider(String name) {
-        String url = PROVIDERS.get(name);
-        if (url == null || webView == null) return;
-        providerMode = true;
-        providerTitle.setText(name);
-        providerBar.setVisibility(View.VISIBLE);
-        webView.loadUrl(url);
+        try {
+            String url = PROVIDERS.get(name);
+            if (url == null || webView == null) return;
+            providerMode = true;
+            providerTitle.setText(name);
+            providerBar.setVisibility(View.VISIBLE);
+            webView.loadUrl(url);
+        } catch (Exception e) {
+            android.widget.Toast.makeText(this, "Provider failed: " + e.getMessage(),
+                    android.widget.Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void closeProvider() {
