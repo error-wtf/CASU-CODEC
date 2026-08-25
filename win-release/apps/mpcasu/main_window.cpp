@@ -4011,7 +4011,7 @@ void MainWindow::on_recording_toggle() {
         const QString suffix = QStringLiteral(".") + fmt;
         if (record_split_minutes_ > 0)
             return dir + QStringLiteral("/") + record_stem_ +
-                   QStringLiteral("-part%1").arg(record_part_, 3, 10, u'0') +
+                   QStringLiteral("-part%1").arg(record_part_, 3, 10, QChar('0')) +
                    suffix;
         return dir + QStringLiteral("/") + record_stem_ + suffix;
     };
@@ -4057,7 +4057,7 @@ void MainWindow::on_recording_toggle_restart_after_rotate() {
                                 : QStringLiteral("mkv"));
     const QString destination =
         dir + QStringLiteral("/") + record_stem_ +
-        QStringLiteral("-part%1").arg(record_part_, 3, 10, u'0') + suffix;
+        QStringLiteral("-part%1").arg(record_part_, 3, 10, QChar('0')) + suffix;
     QString err;
     if (!recorder_->start(current_source_, destination, &err)) {
         status(QStringLiteral("Recording rotate failed: %1").arg(err));
