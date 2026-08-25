@@ -2407,13 +2407,18 @@ void MainWindow::toast(const QString& text) {
 // ------------------------------------------------------------------ playback core
 
 void MainWindow::stop_playback() {
-    if (yt_proxy_) yt_proxy_->stop();
+    // Invalidate an in-flight yt-dlp worker.  A late result must never start
+    // playback again after Stop or a source switch.
+    ++resolve_generation_;
     if (recorder_->is_recording()) recorder_->stop();
     if (backend_) {
         controller_->stop();
         controller_->close();
     }
     backend_.reset();
+    // libVLC is the proxy's HTTP consumer.  Tear the consumer down first so
+    // active requests cannot keep proxy shutdown hanging or race a dead port.
+    if (yt_proxy_) yt_proxy_->stop();
     controller_->poll();
     set_diagnostics(QStringLiteral("Legacy backend"), QStringLiteral("unavailable"),
                     QStringLiteral("unavailable"), QString());
@@ -2546,11 +2551,13 @@ void MainWindow::open_backend_and_play(const QString& source, const QString& tit
         surface_->set_video_active(false);
         backend_ = nullptr;
         controller_->close();
+        if (yt_proxy_) yt_proxy_->stop();
         status(QStringLiteral("Playback error: %1").arg(QString::fromStdString(e.what())));
     } catch (const casu::CasuError& e) {
         surface_->set_video_active(false);
         backend_ = nullptr;
         controller_->close();
+        if (yt_proxy_) yt_proxy_->stop();
         status(QStringLiteral("CASU error: %1").arg(QString::fromStdString(e.what())));
     }
     update_play_button();
