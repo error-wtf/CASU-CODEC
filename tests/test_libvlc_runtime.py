@@ -57,17 +57,48 @@ class _DecodedVideoCounter:
             backend.player, b"RV32", width, height, width * 4)
 
 
-def test_active_libvlc_clock_reconciles_late_buffering_event_to_playing():
-    """A late Buffering event must not leave UI/MPRIS stuck on LOADING."""
+def test_active_libvlc_state_does_not_fabricate_playing_from_polling():
+    """Reference v5.0.0 contract: polling must not flip the requested state.
+
+    A variant that forced _state=PLAYING whenever is_playing() was truthy
+    shipped in a build that regressed against the verified release (phantom
+    PLAYING during teardown windows). State transitions belong to the event
+    table; polling only maps terminal facts (Ended/Error).
+    """
     backend = object.__new__(LibVLCBackend)
     backend.player = object()
     backend.media = None
     backend._player_state_api = True
     backend._media_state_api = False
+    backend._play_requested_at = None
+    backend._user_stop_monotonic = None
     backend._state = PlaybackState.LOADING
-    backend.libvlc_media_player_get_state = lambda _player: 3
+    backend.libvlc_media_player_get_state = lambda _player: 3  # Buffering
     backend.libvlc_media_player_is_playing = lambda _player: 1
-    assert backend.state() is PlaybackState.PLAYING
+    backend.position = lambda: 0.0
+    backend.duration = lambda: 0.0
+    backend.audio_track_count = lambda: 0
+    backend.video_track_count = lambda: 0
+    assert backend.state() is PlaybackState.LOADING
+
+    # Terminal native facts still surface through polling:
+    backend._state = PlaybackState.PLAYING
+    backend.libvlc_media_player_get_state = lambda _player: 6  # Ended
+    assert backend.state() is PlaybackState.ENDED
+    backend._state = PlaybackState.PLAYING
+    backend.libvlc_media_player_get_state = lambda _player: 7  # Error
+    assert backend.state() is PlaybackState.ERROR
+
+    # An explicit user stop is sticky inside the teardown window even when
+    # the winding-down player reports Ended — it must never re-trigger
+    # end-of-media auto-advance.
+    backend.libvlc_media_player_get_state = lambda _player: 6
+    backend._media_state_api = True
+    backend.media = object()
+    backend.libvlc_media_get_state = lambda _media: 6
+    backend._user_stop_monotonic = time.monotonic()
+    backend._state = PlaybackState.STOPPED
+    assert backend.state() is PlaybackState.STOPPED
 
 
 @pytest.mark.media
@@ -850,4 +881,60 @@ def test_installed_libvlc_real_single_frame_step(tmp_path):
         assert hashlib.sha256(decoded.buffer.raw).digest() != before_digest
         assert backend.state() is PlaybackState.PAUSED
     finally:
+        backend.close()
+
+
+@pytest.mark.media
+@pytest.mark.skipif(not ctypes.util.find_library("vlc"), reason="libVLC unavailable")
+def test_stop_never_blocks_on_a_wedged_native_media_player_stop(tmp_path):
+    """Regression: libvlc_media_player_stop can block indefinitely on a
+    wedged input thread (observed with loopback HTTP sources). The backend
+    contract is that stop()/close_media() return promptly regardless — the
+    native teardown happens off-thread and releases are refcount-safe.
+    """
+    import threading
+
+    from pathlib import Path as _Path
+
+    clip = tmp_path / "wedged_stop.wav"
+    try:
+        import wave
+        with wave.open(str(clip), "wb") as handle:
+            handle.setnchannels(1)
+            handle.setsampwidth(2)
+            handle.setframerate(8000)
+            handle.writeframes(b"\x00\x00" * 8000)
+    except ImportError:  # pragma: no cover - wave is stdlib
+        pytest.skip("wave module unavailable")
+
+    backend = LibVLCBackend(_HeadlessSurface())
+    release_stop = threading.Event()
+    try:
+        backend.open_source(clip)
+        backend.play()
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            if backend.position() > 0.05:
+                break
+            time.sleep(0.02)
+
+        def blocking_stop(player):
+            release_stop.wait(10.0)
+
+        backend.libvlc_media_player_stop = blocking_stop
+        started = time.monotonic()
+        backend.stop()
+        elapsed = time.monotonic() - started
+        assert elapsed < 1.0, f"stop() blocked {elapsed:.2f}s on a wedged native stop"
+        assert backend.state() is PlaybackState.STOPPED
+
+        started = time.monotonic()
+        backend.close_media()
+        elapsed = time.monotonic() - started
+        assert elapsed < 1.0, f"close_media() blocked {elapsed:.2f}s"
+        assert backend.player is None and backend.media is None
+    finally:
+        # Un-wedge any retirement thread before closing for a clean exit.
+        release_stop.set()
+        backend._state = PlaybackState.STOPPED
         backend.close()

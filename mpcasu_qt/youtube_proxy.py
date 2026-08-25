@@ -203,6 +203,11 @@ class YouTubeMediaProxy:
 
         class Handler(BaseHTTPRequestHandler):
             protocol_version = "HTTP/1.1"
+            # Never block forever on a silent peer: without a socket timeout
+            # handle_one_request waits indefinitely for the next keep-alive
+            # request, and a libVLC teardown that still sees the open socket
+            # can block libvlc_media_player_stop — the whole GUI freezes.
+            timeout = 10
 
             def do_HEAD(self):
                 self._dispatch(head=True)
@@ -259,6 +264,16 @@ class YouTubeMediaProxy:
                         self.send_header("Accept-Ranges", "bytes")
                         forwarded.setdefault("Accept-Ranges", "bytes")
                     self.send_header("Cache-Control", "no-store")
+                    # One-shot connections only. A persistent connection would
+                    # keep this handler thread blocked in readline() after the
+                    # body until the player happens to send another request;
+                    # libVLC's synchronous stop can then wait on that socket
+                    # state and freeze playback teardown (observed as a full
+                    # GUI hang). Closing after each response keeps every
+                    # teardown path bounded; the loopback connect cost is
+                    # irrelevant next to CDN latency.
+                    self.send_header("Connection", "close")
+                    self.close_connection = True
                     self.end_headers()
                     print(f"[YT-PROXY-OUT] {status} "
                           f"CT={forwarded.get('Content-Type')!r} "
@@ -268,14 +283,22 @@ class YouTubeMediaProxy:
                           flush=True)
                     if head:
                         return
+                    sent = 0
                     while True:
-                        chunk = upstream.read(_CHUNK)
+                        try:
+                            chunk = upstream.read(_CHUNK)
+                        except Exception as exc:
+                            print(f"[YT-PROXY-BODY] upstream read error at {sent}: {exc!r}", flush=True)
+                            break
                         if not chunk:
                             break
                         try:
                             self.wfile.write(chunk)
-                        except (BrokenPipeError, ConnectionResetError):
+                            sent += len(chunk)
+                        except (BrokenPipeError, ConnectionResetError, OSError) as exc:
+                            print(f"[YT-PROXY-BODY] client closed at {sent}: {exc!r}", flush=True)
                             break
+                    print(f"[YT-PROXY-BODY] done sent={sent}", flush=True)
                 finally:
                     try:
                         upstream.close()

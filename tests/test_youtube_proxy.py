@@ -200,7 +200,9 @@ def test_hop_by_hop_headers_never_forwarded():
             assert headers.get("content-type") == "video/mp4"
             assert headers.get("accept-ranges") == "bytes"
             assert "content-range" in headers
-            assert "connection" not in headers
+            # The ONLY connection header allowed is the proxy's own one-shot
+            # teardown guard: upstream hop-by-hop values must never leak.
+            assert headers.get("connection") == "close"
             assert "keep-alive" not in headers
             assert "proxy-connection" not in headers
             assert "x-upstream-marker" not in headers

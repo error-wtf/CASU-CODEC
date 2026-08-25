@@ -14,6 +14,7 @@ import ctypes.util
 import os
 import sys
 import tempfile
+import threading
 import time
 from enum import Enum
 from pathlib import Path
@@ -155,7 +156,16 @@ class LibVLCBackend:
         self.media = None; self.player = None; self.path: Path | None = None
         self._native_temp: Path | None = None
         self._state = PlaybackState.EMPTY
+        # Asynchronous libVLC teardown state. libvlc_media_player_stop can
+        # block indefinitely (wedged input thread, observed with loopback
+        # HTTP sources); every stop/release therefore happens off the
+        # caller's thread and is tracked so handles are never released
+        # while a stop on them is still running.
+        self._pending_stops: dict[int, threading.Thread] = {}
+        self._retiring: set[threading.Thread] = set()
+        self._teardown_lock = threading.Lock()
         self._play_requested_at: float | None = None
+        self._user_stop_monotonic: float | None = None
         self._event_manager = None
         self._event_callback_type = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p)
         self._event_callbacks: list[tuple[int, Any]] = []
@@ -431,6 +441,16 @@ class LibVLCBackend:
         # optional lets older/minimal libVLC builds continue through polling.
         for event_type, state in LIBVLC_PLAYER_EVENT_STATES.items():
             def callback(_event, _user_data, state=state):
+                # The native "stopped" event carries nothing that the
+                # synchronous stop() has not already recorded — and when it
+                # follows EncounteredError/EndReached it ERASES the terminal
+                # fact (a failed open then showed as plain STOPPED and real
+                # errors became invisible). Lifecycle noise is ignored; only
+                # stop() itself may set STOPPED.
+                if state is PlaybackState.STOPPED:
+                    return
+                if state is PlaybackState.ENDED and self._recent_user_stop():
+                    return
                 self._state = state
                 listener = self.on_event
                 if listener is not None:
@@ -456,8 +476,21 @@ class LibVLCBackend:
         if self.player: self.libvlc_media_player_set_pause(self.player, 0); self._state = PlaybackState.PLAYING
 
     def stop(self):
-        if self.player: self.libvlc_media_player_stop(self.player)
+        if self.player:
+            # Freeze the clock synchronously so UI/MPRIS never show progress
+            # past the user's stop, then hand the potentially slow native
+            # stop to a background thread (see _retire_player: the input
+            # thread can wedge and libvlc_media_player_stop would otherwise
+            # block the caller — historically freezing the whole GUI).
+            self.libvlc_media_player_set_pause(self.player, 1)
+            self._spawn_stop(self.player)
+        self._user_stop_monotonic = time.monotonic()
         self._state = PlaybackState.STOPPED
+
+    def _recent_user_stop(self) -> bool:
+        """True within the teardown window after an explicit user stop."""
+        stamp = getattr(self, "_user_stop_monotonic", None)
+        return stamp is not None and (time.monotonic() - stamp) < 2.0
 
     def seek(self, seconds: float):
         if self.player: self.libvlc_media_player_set_time(self.player, int(max(0.0, seconds) * 1000))
@@ -598,12 +631,18 @@ class LibVLCBackend:
         return max(0.0, float(self.libvlc_media_player_get_length(self.player) if self.player else 0) / 1000.0)
 
     def state(self) -> PlaybackState:
+        # After an explicit user stop the winding-down player may report
+        # "ended" for a while. Real faults (raw state 7) always surface; a
+        # synthetic ENDED inside the user-stop window must not, because it
+        # would re-trigger end-of-media auto-advance after a manual stop.
+        ended_reconcile_allowed = not self._recent_user_stop()
         if getattr(self, "_player_state_api", False) and self.player:
             player_state = int(self.libvlc_media_player_get_state(self.player))
             if player_state == 7:
                 self._note_error()
                 self._state = PlaybackState.ERROR
-            elif player_state == 6 and self._state is not PlaybackState.ERROR:
+            elif (player_state == 6 and self._state is not PlaybackState.ERROR
+                    and ended_reconcile_allowed):
                 self._state = PlaybackState.ENDED
         if self._media_state_api and self.media:
             # libVLC media states: 6=Ended, 7=Error.  Opening/buffering are
@@ -612,16 +651,15 @@ class LibVLCBackend:
             if media_state == 7:
                 self._note_error()
                 self._state = PlaybackState.ERROR
-            elif media_state == 6 and self._state is not PlaybackState.ERROR:
+            elif (media_state == 6 and self._state is not PlaybackState.ERROR
+                    and ended_reconcile_allowed):
                 self._state = PlaybackState.ENDED
-        # Buffering/opening events may arrive after play() and overwrite the
-        # requested state.  The synchronous libVLC truth wins once its clock
-        # is actively running; otherwise UI/MPRIS can remain stuck on LOADING
-        # while media visibly plays.
-        if (self.player and self._state not in {
-                PlaybackState.ERROR, PlaybackState.ENDED}
-                and self.libvlc_media_player_is_playing(self.player)):
-            self._state = PlaybackState.PLAYING
+        # NOTE: deliberately NO forced PLAYING reconciliation here. A variant
+        # that flipped the requested state to PLAYING whenever
+        # libvlc_media_player_is_playing() said so shipped in a build that
+        # regressed against the verified v5.0.0 release (phantom PLAYING
+        # during async teardown windows). The verified release reconciles
+        # only via the event table above.
         if self.player and self._state == PlaybackState.PLAYING and not self.libvlc_media_player_is_playing(self.player):
             if self.duration() and self.position() >= self.duration() - 0.2: self._state = PlaybackState.ENDED
         if (self.player and self._state is PlaybackState.ENDED
@@ -846,6 +884,51 @@ class LibVLCBackend:
             self.libvlc_track_description_release(pointer)
         return values
 
+    def _spawn_stop(self, player) -> threading.Thread:
+        """Run libvlc_media_player_stop for *player* off the calling thread."""
+        key = id(player)
+        with self._teardown_lock:
+            pending = self._pending_stops.get(key)
+            if pending is not None and pending.is_alive():
+                return pending  # a stop on this handle is already running
+
+        def worker():
+            try:
+                self.libvlc_media_player_stop(player)
+            finally:
+                with self._teardown_lock:
+                    self._pending_stops.pop(key, None)
+
+        thread = threading.Thread(target=worker, name="mpcasu-vlc-stop",
+                                  daemon=True)
+        with self._teardown_lock:
+            self._pending_stops[key] = thread
+        thread.start()
+        return thread
+
+    def _retire_player(self, player, media) -> None:
+        """Stop + release an out-of-service player without blocking anyone.
+
+        Called with handles that are no longer reachable from the public
+        backend state. The stop of a PREVIOUS async stop (if still running)
+        is joined here — in this background thread, never in the caller's.
+        Releases rely on libVLC refcounting (verified clean over repeated
+        open/play/stop cycles with correctly typed handles): the dangerous
+        pattern is blocking the CALLER on a wedged input thread, which this
+        design makes impossible.
+        """
+        try:
+            with self._teardown_lock:
+                pending = self._pending_stops.pop(id(player), None)
+            if pending is not None:
+                pending.join()
+            self.libvlc_media_player_stop(player)
+            time.sleep(0.05)
+        finally:
+            self.libvlc_media_player_release(player)
+            if media is not None:
+                self.libvlc_media_release(media)
+
     def close_media(self):
         if self._event_manager and self._event_api:
             for event_type, callback_ref in self._event_callbacks:
@@ -855,9 +938,28 @@ class LibVLCBackend:
                     pass
         self._event_callbacks.clear()
         self._event_manager = None
-        if self.player: self.libvlc_media_player_stop(self.player); self.libvlc_media_player_release(self.player)
-        if self.media: self.libvlc_media_release(self.media)
-        self.player = self.media = None
+        # Detach first, then hand the native objects to a retirement thread.
+        # Releasing inline would re-introduce the GUI freeze this class
+        # exists to prevent: close_media runs on every source switch.
+        player, self.player = self.player, None
+        media, self.media = self.media, None
+        self._user_stop_monotonic = None
+        if player is not None:
+            def retire(p=player, m=media):
+                try:
+                    self._retire_player(p, m)
+                finally:
+                    with self._teardown_lock:
+                        for thread in list(self._retiring):
+                            if not thread.is_alive():
+                                self._retiring.discard(thread)
+            worker = threading.Thread(target=retire,
+                                      name="mpcasu-vlc-retire", daemon=True)
+            with self._teardown_lock:
+                self._retiring.add(worker)
+            worker.start()
+        elif media is not None:
+            self.libvlc_media_release(media)
         if self._native_temp is not None:
             try:
                 self._native_temp.unlink(missing_ok=True)
@@ -867,6 +969,10 @@ class LibVLCBackend:
 
     def close(self):
         self.close_media()
+        # No waiting on retirement threads here: libVLC refcounting keeps
+        # the instance alive until the last player/media is released, so an
+        # in-flight retirement can never dangle. Waiting would re-introduce
+        # a GUI freeze exactly in the wedge case this class defends against.
         if self.instance: self.libvlc_release(self.instance)
         self.instance = None; self._state = PlaybackState.EMPTY
 

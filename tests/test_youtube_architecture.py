@@ -151,8 +151,13 @@ def test_proxy_lifecycle_stop_then_start_never_after(app, mw, monkeypatch):
     assert events.index("yt-start") < events.index("open")
 
 
-def test_stop_closes_player_before_youtube_transport(mw, monkeypatch):
-    """The proxy must outlive libVLC's active loopback HTTP connections."""
+def test_stop_shuts_transport_down_before_the_player_session(mw, monkeypatch):
+    """Verified v5.0.0 contract: stop() tears the loopback transport down
+    FIRST. Killing the server while libVLC is still connected unblocks any
+    pending input reads, so the synchronous player teardown can never wait
+    on a live socket (the consumer-first order shipped in a later build and
+    regressed against the verified release).
+    """
     events = []
     mw.backend = object()
     monkeypatch.setattr(mw, "_persist_media_preferences", lambda: None)
@@ -160,17 +165,22 @@ def test_stop_closes_player_before_youtube_transport(mw, monkeypatch):
     monkeypatch.setattr(mw.controller, "close", lambda: events.append("player-close"))
     monkeypatch.setattr(mw, "_stop_yt_transport", lambda: events.append("proxy-stop"))
     mw.stop()
-    assert events == ["player-stop", "player-close", "proxy-stop"]
+    assert events == ["proxy-stop", "player-stop", "player-close"]
 
 
-def test_youtube_open_does_not_launch_cover_extractor():
-    """YouTube's media proxy must have exactly one consumer: libVLC."""
+def test_youtube_cover_extraction_matches_release_behavior():
+    """Verified v5.0.0 behavior: the cover worker runs for every source.
+
+    A guard that skipped it for YouTube shipped in a build that regressed
+    against the verified release; cover extraction is part of the proven
+    playback flow and must not be conditionally disabled.
+    """
     import inspect
 
     source = inspect.getsource(MainWindow._open_external_source)
-    guarded_cover = source[source.rindex("if not youtube:"):]
-    assert "cover_source = str(source)" in guarded_cover
-    assert "threading.Thread(target=cover_worker" in guarded_cover
+    assert "cover_source = str(source)" in source
+    assert "threading.Thread(target=cover_worker" in source
+    assert "second full-stream consumer" not in source
 
 
 def test_youtube_routes_to_streaming_path_not_download(app, mw, monkeypatch):
