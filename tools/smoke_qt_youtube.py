@@ -22,6 +22,13 @@ URL = os.environ.get(
     "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
 )
 
+# QtWebEngine refuses to start as root without --no-sandbox; the smoke
+# bypasses main() so the policy from mpcasu_qt.app must be mirrored here.
+if hasattr(os, "getuid") and os.getuid() == 0:
+    flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
+    if "--no-sandbox" not in flags:
+        os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (flags + " --no-sandbox").strip()
+
 QApplication.setAttribute(Qt.AA_DontCreateNativeWidgetSiblings, True)
 app = QApplication([])
 window = MainWindow()

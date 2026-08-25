@@ -48,6 +48,12 @@ def play_until(w, seconds=1.0, timeout=20.0) -> float:
 
 
 def main() -> int:
+    # QtWebEngine refuses to start as root without --no-sandbox (mirrors
+    # the policy applied in mpcasu_qt.app.main).
+    if hasattr(os, "getuid") and os.getuid() == 0:
+        _flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
+        if "--no-sandbox" not in _flags:
+            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (_flags + " --no-sandbox").strip()
     app = QApplication([])
     w = mw.MainWindow()
     w.show()

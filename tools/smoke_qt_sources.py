@@ -41,6 +41,12 @@ def check(name: str, ok: bool):
 
 
 def main() -> int:
+    # QtWebEngine refuses to start as root without --no-sandbox (mirrors
+    # the policy applied in mpcasu_qt.app.main).
+    if hasattr(os, "getuid") and os.getuid() == 0:
+        _flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
+        if "--no-sandbox" not in _flags:
+            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (_flags + " --no-sandbox").strip()
     app = QApplication([])
     window = mw.MainWindow()
     window.show()

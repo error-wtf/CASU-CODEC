@@ -16,6 +16,12 @@ from PySide6.QtCore import Qt, QTimer  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 from mpcasu_qt.main_window import MainWindow  # noqa: E402
 
+# QtWebEngine refuses to start as root without --no-sandbox (mirrors
+# the policy applied in mpcasu_qt.app.main).
+if hasattr(os, "getuid") and os.getuid() == 0:
+    _flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
+    if "--no-sandbox" not in _flags:
+        os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (_flags + " --no-sandbox").strip()
 app = QApplication([])
 window = MainWindow()
 window.show()
