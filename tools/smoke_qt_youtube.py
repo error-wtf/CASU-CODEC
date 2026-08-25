@@ -9,7 +9,8 @@ import time
 from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(root))
+if os.environ.get("MPCASU_SMOKE_INSTALLED") != "1":
+    sys.path.insert(0, str(root))
 os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="mpcasu-qt-youtube-")
 
 from PySide6.QtCore import Qt  # noqa: E402
@@ -48,9 +49,26 @@ while time.monotonic() < deadline:
     time.sleep(0.05)
 
 ok = position > 1.0 and duration > position
+snapshot = Path(os.environ["XDG_CONFIG_HOME"]) / "youtube-frame.png"
+snapshot_ok = False
+if ok and window.backend is not None:
+    try:
+        window.backend.take_snapshot(snapshot)
+        snap_deadline = time.monotonic() + 5.0
+        while time.monotonic() < snap_deadline and not snapshot.is_file():
+            app.processEvents()
+            time.sleep(0.05)
+        if snapshot.is_file():
+            from PySide6.QtGui import QImage
+            image = QImage(str(snapshot))
+            snapshot_ok = (not image.isNull() and image.width() > 0
+                           and image.height() > 0 and snapshot.stat().st_size > 1024)
+    except Exception as exc:
+        print(f"[FAIL] Qt YouTube snapshot: {exc}")
+ok = ok and snapshot_ok
 print(
     f"[{'OK' if ok else 'FAIL'}] Qt YouTube position={position:.2f}s "
-    f"duration={duration:.2f}s states={states}"
+    f"duration={duration:.2f}s states={states} snapshot={snapshot_ok}"
 )
 window.close()
 app.processEvents()
