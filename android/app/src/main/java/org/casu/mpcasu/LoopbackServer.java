@@ -238,7 +238,20 @@ final class LoopbackServer implements Runnable {
                 }
                 proxyBuffered(client, url, null);
             }
-            case "/api/resolve", "/api/search", "/api/spotify-metadata",
+            case "/api/search" -> {
+                String query = jsonField(body, "query");
+                if (query == null || query.isBlank()) {
+                    respond(client, 400, "application/json",
+                            "{\"results\":[],\"error\":\"query required\"}"
+                                    .getBytes(StandardCharsets.UTF_8));
+                    return;
+                }
+                String payload = YouTubeSearch.json(java.net.URLEncoder
+                        .encode(query, StandardCharsets.UTF_8));
+                respond(client, 200, "application/json",
+                        payload.getBytes(StandardCharsets.UTF_8));
+            }
+            case "/api/resolve", "/api/spotify-metadata",
                  "/api/youtube-title", "/api/transcode-file", "/api/transcode-url" ->
                 respond(client, 503, "application/json",
                         ("{\"error\":\"resolver/ffmpeg backend not available on Android - "

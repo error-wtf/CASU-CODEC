@@ -1,6 +1,7 @@
 package org.casu.mpcasu;
 
 import android.content.Context;
+import android.net.Uri;
 import android.os.Environment;
 
 import java.io.File;
@@ -190,6 +191,45 @@ final class LibraryIndex {
         return out;
     }
 
+    /** Copy a picked/opened content URI into the library inbox dir so the
+     * same-origin /media endpoint can serve it (Range, seek). */
+    static File inboxFile(Context context, Uri uri,
+                          android.content.ContentResolver resolver) {
+        try {
+            File mediaDir = new File(context.getExternalFilesDir(null), "media");
+            if (!mediaDir.exists()) mediaDir.mkdirs();
+            String name = "inbox-" + System.currentTimeMillis() + ".mp3";
+            android.database.Cursor cursor = resolver.query(uri, null, null, null, null);
+            if (cursor != null) {
+                try {
+                    int idx = cursor.getColumnIndex(
+                            android.provider.OpenableColumns.DISPLAY_NAME);
+                    if (cursor.moveToFirst() && idx >= 0) {
+                        String display = cursor.getString(idx);
+                        if (display != null && !display.isEmpty()) {
+                            name = display.replaceAll("[^A-Za-z0-9._ -]", "_");
+                        }
+                    }
+                } finally {
+                    cursor.close();
+                }
+            }
+            File target = new File(mediaDir, "inbox-" + System.currentTimeMillis()
+                    + "-" + name);
+            java.io.InputStream in = resolver.openInputStream(uri);
+            if (in == null) return null;
+            java.io.FileOutputStream out = new java.io.FileOutputStream(target);
+            byte[] buf = new byte[64 * 1024];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            out.close();
+            in.close();
+            return target;
+        } catch (IOException | SecurityException e) {
+            return null;
+        }
+    }
+
     static boolean isMedia(String name) {
         String ext = ext(name);
         return AUDIO.contains(ext) || VIDEO.contains(ext) || PLAYLISTS.contains(ext);
@@ -207,7 +247,7 @@ final class LibraryIndex {
         return dot < 0 ? "" : name.substring(dot + 1).toLowerCase(Locale.ROOT);
     }
 
-    private static String kindOf(File f) {
+    static String kindOf(File f) {
         String ext = ext(f.getName());
         return PLAYLISTS.contains(ext) ? "playlist"
                 : AUDIO.contains(ext) ? "audio" : "video";
