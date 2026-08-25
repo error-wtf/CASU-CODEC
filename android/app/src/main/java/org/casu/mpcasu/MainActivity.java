@@ -304,7 +304,10 @@ public class MainActivity extends Activity {
     public class JsBridge {
         @android.webkit.JavascriptInterface
         public void openProvider(String name) {
-            runOnUiThread(() -> openProvider(name));
+            // Qualified call: the unqualified name would resolve to
+            // JsBridge.openProvider (inner-class shadowing) and recurse
+            // until StackOverflowError — the crash on every tab tap.
+            runOnUiThread(() -> MainActivity.this.openProvider(name));
         }
     }
 
