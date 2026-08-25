@@ -184,6 +184,13 @@ if(CMAKE_CROSSCOMPILING)
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
       "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/tools/yt-dlp.exe"
       $<TARGET_FILE_DIR:casu_playback_youtube_live_test>
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${CASU_THIRD_PARTY}/vlc/libvlc.dll"
+      "${CASU_THIRD_PARTY}/vlc/libvlccore.dll"
+      $<TARGET_FILE_DIR:casu_playback_youtube_live_test>
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+      "${CASU_THIRD_PARTY}/vlc/plugins"
+      "$<TARGET_FILE_DIR:casu_playback_youtube_live_test>/plugins"
     COMMAND_EXPAND_LISTS)
 endif()
 

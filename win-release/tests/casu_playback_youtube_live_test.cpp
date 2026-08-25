@@ -7,6 +7,8 @@
 // "LIVE PASS" line + log.
 // Usage: casu_playback_youtube_live_test <yt-dlp.exe> <youtube_url> [timeout_ms]
 #include "casu/network/ytdlp.hpp"
+#include "casu/playback/libvlc_backend.hpp"
+#include "casu/playback/state.hpp"
 #include "youtube_proxy.hpp"
 
 #include <QCoreApplication>
@@ -19,7 +21,9 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <chrono>
 #include <string>
+#include <thread>
 
 using namespace mpcasu;
 using namespace casu::network;
@@ -112,7 +116,40 @@ int main(int argc, char** argv) {
     check(proxy_body == cdn_body,
           "proxy relays byte-exact CDN bytes (Range/206)");
 
-    // Retryable-refresh wiring is exercised: a refresh callback that throws is
+    // 3) The actual Windows playback backend must consume that same live
+    // proxy URL.  Resolver/HTTP success alone does not prove playback.
+    std::string exe_dir = argv[0];
+    const std::string::size_type slash = exe_dir.find_last_of("/\\");
+    if (slash != std::string::npos) exe_dir = exe_dir.substr(0, slash);
+    _putenv_s("VLC_PLUGIN_PATH", (exe_dir + "\\plugins").c_str());
+    try {
+        casu::playback::LibVLCBackend backend(
+            nullptr, {"--aout=dummy", "--vout=dummy"});
+        backend.open_source(loopback.toString().toStdString());
+        backend.play();
+        bool playing = false;
+        bool clock_moved = false;
+        for (int i = 0; i < 200; ++i) {
+            // YoutubeProxy is a QTcpServer owned by this thread.  Mirror the
+            // real GUI event loop while libVLC connects and streams.
+            app.processEvents(QEventLoop::AllEvents, 50);
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            const auto playback_state = backend.state();
+            const double playback_position = backend.position();
+            playing = playing || playback_state == casu::playback::PlaybackState::PLAYING;
+            clock_moved = clock_moved || playback_position > 0.05;
+            if (playing && clock_moved) break;
+            if (playback_state == casu::playback::PlaybackState::ERROR) break;
+        }
+        check(playing, "Windows libVLC reports PLAYING for live YouTube proxy");
+        check(clock_moved, "Windows libVLC YouTube clock advances");
+        backend.close();
+    } catch (const std::exception& exc) {
+        std::printf("FAIL Windows libVLC YouTube playback: %s\n", exc.what());
+        ++failures;
+    }
+
+    // 4) Retryable-refresh wiring is exercised: a refresh callback that throws is
     // treated as a transient failure and the server keeps serving.
     YoutubeProxy refresh_proxy;
     bool refresh_called = false;
