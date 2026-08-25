@@ -57,6 +57,19 @@ class _DecodedVideoCounter:
             backend.player, b"RV32", width, height, width * 4)
 
 
+def test_active_libvlc_clock_reconciles_late_buffering_event_to_playing():
+    """A late Buffering event must not leave UI/MPRIS stuck on LOADING."""
+    backend = object.__new__(LibVLCBackend)
+    backend.player = object()
+    backend.media = None
+    backend._player_state_api = True
+    backend._media_state_api = False
+    backend._state = PlaybackState.LOADING
+    backend.libvlc_media_player_get_state = lambda _player: 3
+    backend.libvlc_media_player_is_playing = lambda _player: 1
+    assert backend.state() is PlaybackState.PLAYING
+
+
 @pytest.mark.media
 @pytest.mark.skipif(not ctypes.util.find_library("vlc"), reason="libVLC unavailable")
 def test_installed_libvlc_runtime_initializes_and_reports_version():

@@ -151,6 +151,28 @@ def test_proxy_lifecycle_stop_then_start_never_after(app, mw, monkeypatch):
     assert events.index("yt-start") < events.index("open")
 
 
+def test_stop_closes_player_before_youtube_transport(mw, monkeypatch):
+    """The proxy must outlive libVLC's active loopback HTTP connections."""
+    events = []
+    mw.backend = object()
+    monkeypatch.setattr(mw, "_persist_media_preferences", lambda: None)
+    monkeypatch.setattr(mw.controller, "stop", lambda: events.append("player-stop"))
+    monkeypatch.setattr(mw.controller, "close", lambda: events.append("player-close"))
+    monkeypatch.setattr(mw, "_stop_yt_transport", lambda: events.append("proxy-stop"))
+    mw.stop()
+    assert events == ["player-stop", "player-close", "proxy-stop"]
+
+
+def test_youtube_open_does_not_launch_cover_extractor():
+    """YouTube's media proxy must have exactly one consumer: libVLC."""
+    import inspect
+
+    source = inspect.getsource(MainWindow._open_external_source)
+    guarded_cover = source[source.rindex("if not youtube:"):]
+    assert "cover_source = str(source)" in guarded_cover
+    assert "threading.Thread(target=cover_worker" in guarded_cover
+
+
 def test_youtube_routes_to_streaming_path_not_download(app, mw, monkeypatch):
     """Every YouTube entry point must stream via _play_youtube, never download."""
     assert not hasattr(MainWindow, "_download_media")

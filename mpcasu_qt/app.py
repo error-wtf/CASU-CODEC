@@ -177,10 +177,13 @@ def main() -> int:
         flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
         if "--no-sandbox" not in flags:
             os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (flags + " --no-sandbox").strip()
+    # Native-window policy must be selected before QApplication exists.
+    # libVLC embeds into a child HWND/XID; applying this afterwards can leave
+    # that drawable as an independent native top-level player window.
+    QApplication.setAttribute(Qt.AA_DontCreateNativeWidgetSiblings, True)
     app = QApplication(sys.argv)
     app.setApplicationName("MPCASU")
     app.setOrganizationName("Lino-Codec")
-    app.setAttribute(Qt.AA_DontCreateNativeWidgetSiblings, True)
 
     paths = [Path(arg).expanduser() for arg in sys.argv[1:]]
 

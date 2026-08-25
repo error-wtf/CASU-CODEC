@@ -614,6 +614,14 @@ class LibVLCBackend:
                 self._state = PlaybackState.ERROR
             elif media_state == 6 and self._state is not PlaybackState.ERROR:
                 self._state = PlaybackState.ENDED
+        # Buffering/opening events may arrive after play() and overwrite the
+        # requested state.  The synchronous libVLC truth wins once its clock
+        # is actively running; otherwise UI/MPRIS can remain stuck on LOADING
+        # while media visibly plays.
+        if (self.player and self._state not in {
+                PlaybackState.ERROR, PlaybackState.ENDED}
+                and self.libvlc_media_player_is_playing(self.player)):
+            self._state = PlaybackState.PLAYING
         if self.player and self._state == PlaybackState.PLAYING and not self.libvlc_media_player_is_playing(self.player):
             if self.duration() and self.position() >= self.duration() - 0.2: self._state = PlaybackState.ENDED
         if (self.player and self._state is PlaybackState.ENDED

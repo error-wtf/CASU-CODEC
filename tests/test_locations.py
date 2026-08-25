@@ -15,11 +15,17 @@ def test_direct_stream_location_is_not_rewritten():
 
 
 def test_youtube_location_resolves_one_combined_http_stream(monkeypatch):
+    commands = []
     monkeypatch.setattr("casu.locations.shutil.which", lambda _name: "/usr/bin/yt-dlp")
-    monkeypatch.setattr("casu.locations.subprocess.run", lambda *args, **kwargs:
-                        subprocess.CompletedProcess(args[0], 0,
-                                                    "https://media.example/video.mp4\n", ""))
+    def fake_run(*args, **kwargs):
+        commands.append(args[0])
+        return subprocess.CompletedProcess(
+            args[0], 0, "https://media.example/video.mp4\n", "")
+    monkeypatch.setattr("casu.locations.subprocess.run", fake_run)
     assert resolve_media_location("https://youtu.be/abc") == "https://media.example/video.mp4"
+    assert commands
+    extractor = commands[0].index("--extractor-args")
+    assert commands[0][extractor + 1] == "youtube:player_client=android"
 
 
 def test_youtube_location_fails_without_resolver(monkeypatch):
@@ -35,4 +41,3 @@ def test_youtube_location_rejects_split_or_invalid_results(monkeypatch):
                                                     "https://a/video\nhttps://a/audio\n", ""))
     with pytest.raises(LocationResolutionError, match="no playable combined"):
         resolve_media_location("https://youtube.com/watch?v=abc")
-

@@ -3111,8 +3111,6 @@ class MainWindow(QMainWindow):
                 self._play_btn.setText("| |")
 
     def stop(self, *, stop_youtube: bool = True):
-        if stop_youtube:
-            self._stop_yt_transport()
         self._stop_stream_viz()
         self._viz_timer.stop()
         self._viz_pcm = None
@@ -3133,6 +3131,12 @@ class MainWindow(QMainWindow):
             self.controller.stop()
             self.controller.close()
         self.backend = None
+        # libVLC owns one or more HTTP connections to the loopback YouTube
+        # transport.  Close the consumer before shutting down its server;
+        # reversing this order can block ThreadingHTTPServer.shutdown while a
+        # request handler is still streaming to libVLC.
+        if stop_youtube:
+            self._stop_yt_transport()
         self._seek_slider.clear_chapters()
         self._paused = False
         self._play_btn.setText("▶")
@@ -5000,16 +5004,21 @@ class MainWindow(QMainWindow):
                 # libVLC streams can misclassify the stage and flip Qt
                 # overlays over the native video surface.
                 self._probe_stage(source)
-            generation = self._viz_generation
-            cover_source = str(source)
+            if not youtube:
+                # The resolved YouTube URL is media, not artwork.  Running
+                # ffmpeg against the proxy here creates a second full-stream
+                # consumer alongside libVLC and can repeatedly download the
+                # video while preventing playback from advancing.
+                generation = self._viz_generation
+                cover_source = str(source)
 
-            def cover_worker():
-                cover = self._cover_for(cover_source)
-                if cover:
-                    self._viz_bridge.resultReady.emit(
-                        ("cover", generation, cover))
+                def cover_worker():
+                    cover = self._cover_for(cover_source)
+                    if cover:
+                        self._viz_bridge.resultReady.emit(
+                            ("cover", generation, cover))
 
-            threading.Thread(target=cover_worker, daemon=True).start()
+                threading.Thread(target=cover_worker, daemon=True).start()
         except (BackendError, OSError) as exc:
             self.controller.close()
             self.backend = None
@@ -5896,8 +5905,6 @@ class MainWindow(QMainWindow):
             pass
 
     def closeEvent(self, event):
-        if getattr(self, "_yt_stream", None) is not None:
-            self._yt_stream.stop()
         resume_position = self.backend.position() if self.backend else self._seek_slider._position
         self._persist_media_preferences()
         try:
@@ -5928,6 +5935,7 @@ class MainWindow(QMainWindow):
             self._mpris_notifier.close()
         self.controller.close()
         self.backend = None
+        self._stop_yt_transport()
         self.media_library.close()
         event.accept()
 
