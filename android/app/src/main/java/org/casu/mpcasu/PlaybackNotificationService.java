@@ -47,6 +47,7 @@ public class PlaybackNotificationService extends Service {
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         final String action = intent != null ? intent.getAction() : null;
         if (ACTION_STOP.equals(action)) {
+            PlayerBridge.stop();
             stopSelf();
             return START_NOT_STICKY;
         }
@@ -55,7 +56,7 @@ public class PlaybackNotificationService extends Service {
         } else if (ACTION_NEXT.equals(action)) {
             PlayerBridge.next();
         } else if (ACTION_PLAY.equals(action)) {
-            PlayerBridge.play();
+            PlayerBridge.toggle();
         }
         // Feedback (glyph/title) arrives via updateState() from the poll.
         return START_NOT_STICKY;

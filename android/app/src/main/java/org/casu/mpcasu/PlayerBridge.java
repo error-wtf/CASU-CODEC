@@ -3,6 +3,7 @@ package org.casu.mpcasu;
 import android.os.Handler;
 import android.os.Looper;
 import android.webkit.WebView;
+import org.json.JSONObject;
 
 /**
  * Bridge between the Android surface layer (home-screen widget,
@@ -16,19 +17,19 @@ public final class PlayerBridge {
 
     public interface StateListener {
         /** Called on the UI thread whenever polled player state changes. */
-        void onState(String title, boolean playing);
+        void onState(String title, boolean playing, double position, double duration);
     }
 
     private static final long POLL_MS = 1000;
-    // #play shows "▶" while idle/paused and "❚❚" while playing.
     private static final String POLL_JS =
-            "JSON.stringify({t:(document.querySelector('#title')||{textContent:''}).textContent||'',"
-          + "p:((document.querySelector('#play')||{textContent:'\\u25B6'}).textContent||'')"
-          + ".indexOf('\\u25B6')<0})";
+            "JSON.stringify(window.MPCASUControls ? MPCASUControls.state() : "
+          + "{title:'',playing:false,position:0,duration:0})";
 
     private static volatile WebView webView;
     private static volatile String title = "";
     private static volatile boolean playing = false;
+    private static volatile double position = 0;
+    private static volatile double duration = 0;
     private static StateListener listener;
     private static final Handler handler = new Handler(Looper.getMainLooper());
     private static final Runnable pollLoop = new Runnable() {
@@ -55,6 +56,8 @@ public final class PlayerBridge {
         handler.removeCallbacks(pollLoop);
         title = "";
         playing = false;
+        position = 0;
+        duration = 0;
     }
 
     /**
@@ -65,11 +68,11 @@ public final class PlayerBridge {
         WebView view = webView;
         if (view == null) return false;
         if (McasuWidgetProvider.ACTION_PREV.equals(widgetAction)) {
-            run("next(-1)");
+            previous();
         } else if (McasuWidgetProvider.ACTION_NEXT.equals(widgetAction)) {
-            run("next(1)");
+            next();
         } else if (McasuWidgetProvider.ACTION_PLAY.equals(widgetAction)) {
-            run("document.querySelector('#play').click()");
+            toggle();
         } else {
             return false;
         }
@@ -81,11 +84,20 @@ public final class PlayerBridge {
 
     public static String title() { return title; }
     public static boolean playing() { return playing; }
+    public static double position() { return position; }
+    public static double duration() { return duration; }
 
     /** Transport surface for MediaSession callbacks. */
-    public static void play() { run("document.querySelector('#play').click()"); }
-    public static void next() { run("next(1)"); }
-    public static void previous() { run("next(-1)"); }
+    public static void play() { run("MPCASUControls.play()"); }
+    public static void pause() { run("MPCASUControls.pause()"); }
+    public static void toggle() { if (playing) pause(); else play(); }
+    public static void stop() { run("MPCASUControls.stop()"); }
+    public static void seekTo(double seconds) {
+        if (Double.isFinite(seconds) && seconds >= 0)
+            run("MPCASUControls.seek(" + seconds + ")");
+    }
+    public static void next() { run("MPCASUControls.next()"); }
+    public static void previous() { run("MPCASUControls.previous()"); }
 
     private static void run(String js) {
         WebView view = webView;
@@ -103,15 +115,29 @@ public final class PlayerBridge {
                 body = body.substring(1, body.length() - 1)
                         .replace("\\\"", "\"").replace("\\\\", "\\");
             }
-            String newTitle = extractString(body, "t");
-            boolean newPlaying = body.contains("\"p\":true");
-            boolean changed = !newTitle.equals(title) || newPlaying != playing;
-            title = newTitle;
-            playing = newPlaying;
-            if (changed && listener != null) {
-                listener.onState(newTitle, newPlaying);
+            try {
+                JSONObject state = new JSONObject(body);
+                String newTitle = state.optString("title", "");
+                boolean newPlaying = state.optBoolean("playing", false);
+                double newPosition = finiteOrZero(state.optDouble("position", 0));
+                double newDuration = finiteOrZero(state.optDouble("duration", 0));
+                boolean changed = !newTitle.equals(title) || newPlaying != playing
+                        || Math.abs(newPosition - position) >= 0.5
+                        || Math.abs(newDuration - duration) >= 0.5;
+                title = newTitle;
+                playing = newPlaying;
+                position = newPosition;
+                duration = newDuration;
+                if (changed && listener != null)
+                    listener.onState(newTitle, newPlaying, newPosition, newDuration);
+            } catch (Exception ignored) {
+                // Page navigation/provider mode may temporarily have no player API.
             }
         });
+    }
+
+    private static double finiteOrZero(double value) {
+        return Double.isFinite(value) && value >= 0 ? value : 0;
     }
 
     private static String extractString(String json, String key) {

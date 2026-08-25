@@ -111,3 +111,53 @@ function vizAllowed(){const item=state.items[state.index];return vizActive&&!!it
 function drawViz(){vizAnim=requestAnimationFrame(drawViz);if(!vizAllowed()||!analyser){vizCanvas.hidden=true;vizCtx.clearRect(0,0,vizCanvas.width,vizCanvas.height);return}vizCanvas.hidden=false;const w=vizCanvas.width,h=vizCanvas.height,bufferLength=analyser.frequencyBinCount,dataArray=new Uint8Array(bufferLength);analyser.getByteFrequencyData(dataArray);vizCtx.clearRect(0,0,w,h);drawVizThumb(vizCtx,w,h);const barW=w/bufferLength,gap=1;vizCtx.fillStyle="transparent";vizCtx.clearRect(0,0,w,h);for(let i=0;i<bufferLength;i++){const barH=dataArray[i]/255*h*0.7,x=i*barW;vizCtx.fillStyle=i%2===0?"#ff1e2d":"#3a1015";vizCtx.fillRect(x+gap,h-barH,barW-gap*2,barH)}const timeData=new Uint8Array(analyser.fftSize);analyser.getByteTimeDomainData(timeData);vizCtx.beginPath();vizCtx.strokeStyle="#ff1e2d88";vizCtx.lineWidth=2;for(let i=0;i<analyser.fftSize;i++){const x=i/analyser.fftSize*w,y=timeData[i]/128*h*0.5+h*0.25;i===0?vizCtx.moveTo(x,y):vizCtx.lineTo(x,y)}vizCtx.stroke()}
 media.addEventListener("play",()=>{initAnalyser();if(!vizAnim)vizAnim=requestAnimationFrame(drawViz)});media.addEventListener("pause",()=>{if(vizAnim){cancelAnimationFrame(vizAnim);vizAnim=null}});media.addEventListener("loadedmetadata",()=>{if(vizCanvas.width!==vizCanvas.parentElement.clientWidth||vizCanvas.height!==vizCanvas.parentElement.clientHeight){vizCanvas.width=vizCanvas.parentElement.clientWidth;vizCanvas.height=vizCanvas.parentElement.clientHeight}vizCanvas.hidden=!vizAllowed();$("#drop-zone").classList.toggle("video-mode",media.videoWidth>0)});
 document.querySelectorAll("dialog button[value='cancel'],dialog button[aria-label='Close']").forEach(b=>{b.addEventListener("click",e=>{e.preventDefault();const d=b.closest("dialog");if(d)d.close()})});
+
+/* Stable Android surface API. MediaSession/notification/widget commands must
+ * be idempotent operations, not guessed clicks on the current button glyph. */
+window.MPCASUControls = Object.freeze({
+  play() {
+    if (state.native) {
+      if (!state.native.playing) state.native.play().catch(error=>toast(error.message));
+    } else if (!youtube.hidden) {
+      if (state.youtubeState !== 1) youtubeCommand("playVideo");
+    } else if (media.paused) {
+      media.play().catch(error=>toast(error.message));
+    }
+  },
+  pause() {
+    if (state.native) {
+      if (state.native.playing) state.native.pause();
+    } else if (!youtube.hidden) {
+      if (state.youtubeState === 1) youtubeCommand("pauseVideo");
+    } else if (!media.paused) {
+      media.pause();
+    }
+  },
+  stop() {
+    stopAll();
+    $("#play").textContent = "▶";
+    $("#seek").value = 0;
+    $("#clock").textContent = "00:00 / 00:00";
+  },
+  next() { next(1); },
+  previous() { next(-1); },
+  seek(seconds) {
+    const value = Number(seconds);
+    if (!Number.isFinite(value) || value < 0) return;
+    if (state.native) state.native.seek(value);
+    else if (!youtube.hidden) youtubeCommand("seekTo", [value, true]);
+    else if (media.readyState > 0) media.currentTime = value;
+  },
+  state() {
+    const item = state.items[state.index];
+    const position = state.native ? state.native.currentTime()
+      : (!youtube.hidden ? state.youtubeTime : (media.currentTime || 0));
+    const duration = state.native && state.native.duration ? state.native.duration()
+      : (!youtube.hidden ? state.youtubeDuration
+        : (Number.isFinite(media.duration) ? media.duration : 0));
+    const playing = state.native ? !!state.native.playing
+      : (!youtube.hidden ? state.youtubeState === 1 : !media.paused && !media.ended);
+    return {title:item ? itemLabel(item) : "", playing, position, duration,
+      index:state.index, kind:item?.kind || ""};
+  }
+});

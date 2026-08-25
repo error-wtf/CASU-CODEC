@@ -144,7 +144,58 @@
      navigate the WebView; BACK returns via goBack (MainActivity)
    - yt-dlp consent preset: search runs against the native /api/search */
 (function () {
+  const QUEUE_KEY = "mpcasu-android-queue-v1";
+  const MAX_QUEUE = 400;
   localStorage.setItem("casu-consent", "1");
+
+  function safeItem(item) {
+    if (!item || typeof item.url !== "string" || !item.url ||
+        item.url.startsWith("blob:")) return null;
+    const clean = {};
+    for (const key of ["title", "url", "kind", "uploader", "thumbnail",
+                       "subtitle", "epgId", "group", "logo", "playlist"])
+      if (typeof item[key] === "string" && item[key].length <= 8192)
+        clean[key] = item[key];
+    return clean.url ? clean : null;
+  }
+
+  function persistQueue() {
+    try {
+      const items = state.items.slice(0, MAX_QUEUE).map(safeItem).filter(Boolean);
+      const active = state.items[state.index];
+      const activeIndex = active ? state.items.indexOf(active) : -1;
+      const playerState = window.MPCASUControls ? MPCASUControls.state() : {};
+      localStorage.setItem(QUEUE_KEY, JSON.stringify({
+        version: 1, items, index: activeIndex,
+        position: Number.isFinite(playerState.position) ? playerState.position : 0,
+        shuffle: !!state.shuffle,
+        repeat: ["off", "all", "one"].includes(state.repeat) ? state.repeat : "off"
+      }));
+    } catch (e) { /* storage unavailable/full: playback must continue */ }
+  }
+
+  function restoreQueue() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(QUEUE_KEY) || "null");
+      if (!saved || saved.version !== 1 || !Array.isArray(saved.items)) return null;
+      const restored = saved.items.slice(0, MAX_QUEUE).map(safeItem).filter(Boolean);
+      state.items.push.apply(state.items, restored);
+      state.index = Number.isInteger(saved.index) && saved.index >= 0 &&
+                    saved.index < restored.length ? saved.index : -1;
+      state.selected = state.index;
+      state.shuffle = !!saved.shuffle;
+      state.repeat = ["off", "all", "one"].includes(saved.repeat)
+          ? saved.repeat : "off";
+      renderQueue();
+      return {index: state.index,
+              position: Number.isFinite(Number(saved.position))
+                  ? Math.max(0, Number(saved.position)) : 0};
+    } catch (e) {
+      localStorage.removeItem(QUEUE_KEY);
+      return null;
+    }
+  }
+
   async function preloadLibrary() {
     // IDEMPOTENT: only URLs not already in the (localStorage-restored)
     // queue are added. Without this the preload re-appended the whole
@@ -152,7 +203,7 @@
     // ground to a halt (renderQueue + localStorage churn).
     try {
       if (typeof addItem !== "function" || typeof state === "undefined") return;
-      if (state.items.length > 400) return;  // safety cap
+      if (state.items.length >= MAX_QUEUE) return;
       const existing = new Set(state.items.map(function (i) { return i.url; }));
       const r = await fetch("/api/library.m3u", { cache: "no-store" });
       if (!r.ok) return;
@@ -167,23 +218,48 @@
           continue;
         }
         if (l && !l.startsWith("#")) {
-          if (!existing.has(l)) {
-            addItem({ title: pending || l, url: l,
-                      kind: /^https?:/i.test(l) ? "stream" : "audio" });
+          if (!existing.has(l) && state.items.length < MAX_QUEUE) {
+            // Preload must not autoplay the first station and must not run
+            // persistence/render work once per entry.
+            state.items.push({ title: pending || l, url: l,
+                               kind: /^https?:/i.test(l) ? "stream" : "audio" });
             existing.add(l);
             added++;
           }
           pending = null;
         }
       }
-      if (added && typeof renderQueue === "function") renderQueue();
+      if (added && typeof renderQueue === "function") {
+        renderQueue();
+        persistQueue();
+      }
     } catch (e) { /* server without library */ }
   }
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function () {
-      preloadLibrary();
+      const restored = restoreQueue();
+      // Every queue mutation in the web adapter ends in renderQueue; wrap it
+      // once so moves/removes/renames are persisted without duplicating hooks.
+      const render = renderQueue;
+      renderQueue = function () { render(); persistQueue(); };
+      preloadLibrary().then(function () {
+        const options = JSON.parse(localStorage.getItem("casu-options") || "{}");
+        if (restored && restored.index >= 0 && options.resume !== false) {
+          playIndex(restored.index).then(function () {
+            if (restored.position > 0 && window.MPCASUControls)
+              MPCASUControls.seek(restored.position);
+          }).catch(function () {});
+        }
+      });
+      window.addEventListener("pagehide", persistQueue);
     });
-  } else { preloadLibrary(); }
+  } else {
+    restoreQueue();
+    const render = renderQueue;
+    renderQueue = function () { render(); persistQueue(); };
+    preloadLibrary();
+    window.addEventListener("pagehide", persistQueue);
+  }
 })();
 </script>
 <script>

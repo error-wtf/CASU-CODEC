@@ -18,7 +18,8 @@ final class McasuMediaSession {
     static final long ACTIONS =
             PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE
             | PlaybackState.ACTION_PLAY_PAUSE | PlaybackState.ACTION_SKIP_TO_NEXT
-            | PlaybackState.ACTION_SKIP_TO_PREVIOUS | PlaybackState.ACTION_STOP;
+            | PlaybackState.ACTION_SKIP_TO_PREVIOUS | PlaybackState.ACTION_STOP
+            | PlaybackState.ACTION_SEEK_TO;
 
     private final MediaSession session;
 
@@ -42,32 +43,37 @@ final class McasuMediaSession {
                 if (!PlayerBridge.playing()) PlayerBridge.play();
             }
             @Override public void onPause() {
-                if (PlayerBridge.playing()) PlayerBridge.play();
+                PlayerBridge.pause();
             }
             @Override public void onSkipToNext() { PlayerBridge.next(); }
             @Override public void onSkipToPrevious() { PlayerBridge.previous(); }
             @Override public void onStop() {
-                if (PlayerBridge.playing()) PlayerBridge.play();
+                PlayerBridge.stop();
+            }
+            @Override public void onSeekTo(long positionMs) {
+                PlayerBridge.seekTo(positionMs / 1000.0);
             }
         });
         session.setActive(true);
         instance = this;
-        pushState("", false);
+        pushState("", false, 0, 0);
     }
 
 
 
     /** Mirror polled player state into PlaybackState + Metadata. */
-    void pushState(String title, boolean playing) {
+    void pushState(String title, boolean playing, double position, double duration) {
         int state = playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED;
         session.setPlaybackState(new PlaybackState.Builder()
                 .setActions(ACTIONS)
-                .setState(state, 0, 1.0f)
+                .setState(state, Math.max(0L, Math.round(position * 1000)), 1.0f)
                 .build());
         session.setMetadata(new MediaMetadata.Builder()
                 .putString(MediaMetadata.METADATA_KEY_TITLE,
                         title == null || title.isEmpty()
                                 ? "MPCASU" : title)
+                .putLong(MediaMetadata.METADATA_KEY_DURATION,
+                        Math.max(0L, Math.round(duration * 1000)))
                 .build());
     }
 

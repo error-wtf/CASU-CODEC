@@ -183,8 +183,9 @@ public class MainActivity extends Activity {
         // refreshes the home-screen widget.
         mediaSession = new McasuMediaSession(this);
         requestNotificationPermission();
-        PlayerBridge.attach(webView, (title, playing) -> {
-            if (mediaSession != null) mediaSession.pushState(title, playing);
+        PlayerBridge.attach(webView, (title, playing, position, duration) -> {
+            if (mediaSession != null)
+                mediaSession.pushState(title, playing, position, duration);
             McasuWidgetProvider.pushState(getApplicationContext(), title, playing);
             // VLC-style notification-panel controls: the foreground service
             // appears with the first playback and mirrors title/glyph.
