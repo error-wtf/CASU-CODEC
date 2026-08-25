@@ -6,12 +6,14 @@ export SOURCE_DATE_EPOCH=0
 root=$(cd "$(dirname "$0")/.." && pwd)
 version=5.0.0
 out="$root/dist"
-rm -rf "$out"; mkdir -p "$out"
+mkdir -p "$out"
+stage_root=$(mktemp -d "${TMPDIR:-/tmp}/casu-debs.XXXXXX")
+trap 'rm -rf "$stage_root"' EXIT
 
 make_pkg() {
   local name="$1" description="$2" depends="$3"; shift 3
-  local stage="$out/stage-$name"
-  rm -rf "$stage"; mkdir -p "$stage/DEBIAN"
+  local stage="$stage_root/$name"
+  mkdir -p "$stage/DEBIAN"
   cat > "$stage/DEBIAN/control" <<EOF
 Package: $name
 Version: $version
