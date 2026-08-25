@@ -2,6 +2,10 @@ package org.casu.mpcasu;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.view.Gravity;
+import android.view.View;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.content.Intent;
 import android.content.res.AssetManager;
 import android.net.Uri;
@@ -35,6 +39,11 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> fileCallback;
     private WebView webView;
     private String pendingOpenPath;
+    private LinearLayout rootLayout;
+    private LinearLayout providerBar;
+    private TextView providerTitle;
+    private String playerUrl;
+    private boolean providerMode = false;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override protected void onCreate(Bundle savedInstanceState) {
@@ -65,7 +74,36 @@ public class MainActivity extends Activity {
         }
 
         webView = new WebView(this);
-        setContentView(webView);
+        rootLayout = new LinearLayout(this);
+        rootLayout.setOrientation(LinearLayout.VERTICAL);
+        providerBar = new LinearLayout(this);
+        providerBar.setOrientation(LinearLayout.HORIZONTAL);
+        providerBar.setBackgroundColor(0xFF0B0D10);
+        providerBar.setPadding(24, 20, 24, 20);
+        providerBar.setVisibility(View.GONE);
+        providerTitle = new TextView(this);
+        providerTitle.setTextColor(0xFFFF1E2D);
+        providerTitle.setTextSize(16);
+        providerTitle.setSingleLine(true);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
+        providerBar.addView(providerTitle, titleParams);
+        TextView close = new TextView(this);
+        close.setText("\u2715");
+        close.setTextColor(0xFFF2F4F7);
+        close.setTextSize(18);
+        close.setPadding(24, 0, 24, 0);
+        close.setOnClickListener(v -> closeProvider());
+        providerBar.addView(close, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.MATCH_PARENT));
+        rootLayout.addView(providerBar, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        rootLayout.addView(webView, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.MATCH_PARENT, 1));
+        setContentView(rootLayout);
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
@@ -124,7 +162,9 @@ public class MainActivity extends Activity {
                 }
             }
         });
-        webView.loadUrl("http://127.0.0.1:" + server.port() + "/web/index.html");
+        playerUrl = "http://127.0.0.1:" + server.port() + "/web/index.html";
+        webView.loadUrl(playerUrl);
+        webView.addJavascriptInterface(new JsBridge(), "MPCASUAndroid");
 
         handleViewIntent(getIntent());
 
@@ -226,12 +266,54 @@ public class MainActivity extends Activity {
         return s.replace("\\", "\\\\").replace("'", "\\'");
     }
 
-    @Override public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) {
-            webView.goBack();  // provider browsing: BACK returns to MPCASU
-        } else {
-            super.onBackPressed();
+    /** Embedded provider web players — the Linux "WEB PLAYERS" sidebar
+     * section: SPOTIFY/HEARTHIS/TIDAL/NETFLIX/BROWSE open inside the app
+     * with their own sessions; the player stays intact behind them. */
+    private static final java.util.Map<String, String> PROVIDERS =
+            java.util.Map.of(
+                    "SPOTIFY", "https://open.spotify.com/",
+                    "HEARTHIS", "https://hearthis.at/",
+                    "TIDAL", "https://tidal.com/",
+                    "NETFLIX", "https://www.netflix.com/",
+                    "BROWSE", "https://www.google.com/");
+
+    private void openProvider(String name) {
+        String url = PROVIDERS.get(name);
+        if (url == null || webView == null) return;
+        providerMode = true;
+        providerTitle.setText(name);
+        providerBar.setVisibility(View.VISIBLE);
+        webView.loadUrl(url);
+    }
+
+    private void closeProvider() {
+        providerMode = false;
+        providerBar.setVisibility(View.GONE);
+        if (playerUrl != null && webView != null) webView.loadUrl(playerUrl);
+    }
+
+    public class JsBridge {
+        @android.webkit.JavascriptInterface
+        public void openProvider(String name) {
+            runOnUiThread(() -> openProvider(name));
         }
+    }
+
+    @Override public void onBackPressed() {
+        if (webView == null) { super.onBackPressed(); return; }
+        if (providerMode && !webView.canGoBack()) {
+            closeProvider();  // provider root reached: back to the player
+            return;
+        }
+        if (webView.canGoBack()) {
+            webView.goBack();
+            return;
+        }
+        if (providerMode) {
+            closeProvider();
+            return;
+        }
+        super.onBackPressed();
     }
 
     @Override

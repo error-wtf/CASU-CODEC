@@ -23,6 +23,12 @@
       <button class="nav" id="open-search-youtube" data-view="youtube">▶ <span>YouTube</span></button>
       <p class="eyebrow">CASU</p>
       <button class="nav" id="open-casu" data-view="casu">◆ <span>CASU Files</span></button>
+      <div class="nav-section" style="padding:14px 12px 4px;color:#656b73;font-size:10px;font-weight:800;letter-spacing:.12em">WEB PLAYERS</div>
+      <button class="nav" onclick="MPCASUAndroid &amp;&amp; MPCASUAndroid.openProvider('SPOTIFY')"><span style="color:#ff1e2d">&#9834;</span> Spotify</button>
+      <button class="nav" onclick="MPCASUAndroid &amp;&amp; MPCASUAndroid.openProvider('HEARTHIS')"><span style="color:#ff1e2d">&#8599;</span> HearThis</button>
+      <button class="nav" onclick="MPCASUAndroid &amp;&amp; MPCASUAndroid.openProvider('TIDAL')"><span style="color:#ff1e2d">&#8776;</span> Tidal</button>
+      <button class="nav" onclick="MPCASUAndroid &amp;&amp; MPCASUAndroid.openProvider('NETFLIX')"><span style="color:#ff1e2d">&#9633;</span> Netflix</button>
+      <button class="nav" onclick="MPCASUAndroid &amp;&amp; MPCASUAndroid.openProvider('BROWSE')"><span style="color:#ff1e2d">&#9678;</span> Browse</button>
       <div class="sidebar-spacer"></div>
       <button class="nav" id="open-options">⚙ <span>Options</span></button>
       <button class="nav" id="clear-all">⌫ <span>Clear Library</span></button>
@@ -165,32 +171,11 @@
       if (added && typeof renderQueue === "function") renderQueue();
     } catch (e) { /* server without library */ }
   }
-  function buildProviders() {
-    if (document.getElementById("mpcasu-providers")) return;
-    const bar = document.createElement("div");
-    bar.id = "mpcasu-providers";
-    bar.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;padding:8px 12px;" +
-      "border-top:1px solid #20242a";
-    ["https://open.spotify.com|Spotify", "https://tidal.com|Tidal",
-     "https://hearthis.at|HearThis", "https://www.netflix.com|Netflix",
-     "https://soundcloud.com|SoundCloud", "https://www.bandcamp.com|Bandcamp"
-    ].forEach(function (t) {
-      const p = t.split("|");
-      const b = document.createElement("button");
-      b.textContent = p[1];
-      b.style.cssText = "background:#161a1f;color:#d7d9dc;border:1px solid #333942;" +
-        "border-radius:7px;padding:9px 14px;font:inherit;cursor:pointer";
-      b.onclick = function () { location.href = p[0]; };
-      bar.appendChild(b);
-    });
-    const queue = document.getElementById("queue");
-    if (queue && queue.parentNode) queue.parentNode.insertBefore(bar, queue);
-  }
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function () {
-      buildProviders(); preloadLibrary();
+      preloadLibrary();
     });
-  } else { buildProviders(); preloadLibrary(); }
+  } else { preloadLibrary(); }
 })();
 </script>
 </body>
