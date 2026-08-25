@@ -166,6 +166,7 @@ class LibVLCBackend:
         self._teardown_lock = threading.Lock()
         self._play_requested_at: float | None = None
         self._user_stop_monotonic: float | None = None
+        self._seen_playing = False
         self._event_manager = None
         self._event_callback_type = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p)
         self._event_callbacks: list[tuple[int, Any]] = []
@@ -377,6 +378,7 @@ class LibVLCBackend:
         if not self.supports(source):
             raise BackendError(f"unsupported media source: {display_media_source(source)}")
         self.close_media()
+        self._seen_playing = False
         self.path = Path(source).resolve() if isinstance(source, Path) else None
         self._state = PlaybackState.LOADING
         value = str(source)
@@ -451,6 +453,17 @@ class LibVLCBackend:
                     return
                 if state is PlaybackState.ENDED and self._recent_user_stop():
                     return
+                if state is PlaybackState.LOADING:
+                    if self._seen_playing:
+                        # libVLC re-emits Opening/Buffering while the output
+                        # pipeline recovers (observed as an endless buffering
+                        # storm when no audio device exists). Once playback
+                        # demonstrably started, those events must not
+                        # downgrade UI/MPRIS back to LOADING.
+                        return
+                    self._seen_playing = False
+                if state is PlaybackState.PLAYING:
+                    self._seen_playing = True
                 self._state = state
                 listener = self.on_event
                 if listener is not None:

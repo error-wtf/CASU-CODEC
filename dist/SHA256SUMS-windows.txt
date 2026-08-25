@@ -1,0 +1,2 @@
+ff604c847c4a70999ba6de5c5373dc672cfd99ad92ed8ae3ead61a635a3f9443  MPCASU-Windows-x86_64.zip
+40cc16366627dd1d247dcae623a565ce4584ecd93a4ab7fd1dec40cdcc3d38c9  MPCASU-Setup-5.0.0.exe

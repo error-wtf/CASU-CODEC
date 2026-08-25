@@ -1,0 +1,21 @@
+{
+  "version": "5.0.0",
+  "generated_utc": "2026-08-25T22:46:47Z",
+  "toolchain": "MinGW-w64 x86_64 + Qt6 6.8.3 + libVLC 3.0.21 + zstd 1.5.7 + OpenSSL 3.4.1",
+  "gates": {
+    "build": "PASS",
+    "unit_tests": "PASS",
+    "compatibility": "PASS",
+    "codec": "PASS",
+    "converter": "PASS",
+    "player": "PASS",
+    "youtube": "PASS",
+    "network": "PASS",
+    "web_backend": "PASS",
+    "pure_web": "PASS",
+    "packaging": "PASS",
+    "installer": "PASS",
+    "wine": "PASS",
+    "licenses": "PASS"
+  }
+}
