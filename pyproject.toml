@@ -64,6 +64,7 @@ py-modules = ["mpcasu_player", "mpcasu_backend", "mpcasu_native_backend", "mpcas
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+testpaths = ["tests"]
 markers = [
   "media: exercises real FFmpeg-decoded media fixtures and may take longer",
 ]

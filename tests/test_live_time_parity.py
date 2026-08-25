@@ -7,8 +7,10 @@ Akzeptanzkriterien:
   Werte "LIVE".
 - Die Seek-Leiste pegelt bei Live-Streams nicht auf "voll" (der Wert
   wird nur bei endlicher Dauer gesetzt).
-- Die Kopien sind synchron: web/app.js ≡ win-release web-backend,
-  pure-web-release ≡ Android-Assets ≡ win-release web/pure.
+- Die echten Kopien sind synchron: web/app.js ≡ win-release web-backend
+  und pure-web-release ≡ win-release web/pure. Android ist seit dem
+  WebView-/Bridge-Port ein eigener Plattformadapter und wird semantisch
+  statt fälschlich byte-identisch geprüft.
 """
 from __future__ import annotations
 
@@ -22,9 +24,11 @@ WEBCASU_COPIES = [
 ]
 PUREWEB_COPIES = [
     ROOT / "pure-web-release" / "app.js",
-    ROOT / "android" / "app" / "src" / "main" / "assets" / "web" / "app.js",
     ROOT / "win-release" / "web" / "pure" / "app.js",
 ]
+ANDROID_WEBVIEW = (
+    ROOT / "android" / "app" / "src" / "main" / "assets" / "web" / "app.js"
+)
 
 
 def test_format_time_guards_nonfinite_webcasu():
@@ -40,6 +44,11 @@ def test_format_time_guards_nonfinite_pureweb():
             path
 
 
+def test_format_time_guards_nonfinite_android_webview():
+    src = ANDROID_WEBVIEW.read_text(encoding="utf-8")
+    assert 'if(!Number.isFinite(seconds)) return "LIVE";' in src
+
+
 def test_seek_bar_ignores_infinite_duration():
     needle = 'Number.isFinite(media.duration)?media.currentTime:0'
     for path in WEBCASU_COPIES:
@@ -47,6 +56,7 @@ def test_seek_bar_ignores_infinite_duration():
     needle_pure = ("Number.isFinite(media.duration) ? media.currentTime : 0")
     for path in PUREWEB_COPIES:
         assert needle_pure in path.read_text(encoding="utf-8"), path
+    assert needle in ANDROID_WEBVIEW.read_text(encoding="utf-8")
 
 
 def test_app_js_copies_stay_in_sync():
