@@ -168,10 +168,9 @@ int main(int argc, char** argv) {
     }
 
     if (play_test) {
-        // Player-kernel verification: plays the first media argument and, after
-        // a settle window, reports the backend state/position. Passes when the
-        // backend opened the media and playback was requested without error
-        // (Wine software decode may still be buffering, reported as LOADING).
+        // Player-kernel verification: a request alone is not playback.  After
+        // the settle window the backend must report PLAYING and its clock must
+        // have advanced beyond zero.
         QTimer::singleShot(4000, &window, [&app, &window] {
             std::printf("MPCASU_PLAY_STATE=%s pos=%.1fs dur=%.1fs backend=%d\n",
                         window.playback_state_name(),
@@ -180,8 +179,8 @@ int main(int argc, char** argv) {
                         window.has_playback_backend() ? 1 : 0);
             std::fflush(stdout);
             const QString st = QString::fromLatin1(window.playback_state_name());
-            const bool ok = window.has_playback_backend() &&
-                            (st == "PLAYING" || st == "LOADING" || st == "PAUSED");
+            const bool ok = window.has_playback_backend() && st == "PLAYING" &&
+                            window.playback_position() > 0.05;
             log_startup(QStringLiteral("play-test state=%1 ok=%2").arg(st).arg(ok));
             window.close();  // teardown backend so libVLC threads join
             app.exit(ok ? 0 : 1);

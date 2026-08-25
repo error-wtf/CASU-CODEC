@@ -4,7 +4,7 @@
 //  1. --smoke run: the process starts (no missing DLL), the window becomes
 //     visible, and it exits cleanly with code 0.
 //  2. --play-test run (when a media file is given): the player kernel opens
-//     the media and reaches PLAYING/LOADING without error.
+//     the media, reaches PLAYING, and advances its media clock.
 #include <QCoreApplication>
 #include <QDir>
 #include <QProcess>
