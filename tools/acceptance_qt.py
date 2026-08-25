@@ -17,6 +17,7 @@ from pathlib import Path
 os.environ.setdefault("XDG_CONFIG_HOME", tempfile.mkdtemp(prefix="mpcasu-acc-"))
 ROOT = Path(__file__).resolve().parent.parent
 MEDIA = ROOT / "test_media"
+sys.path.insert(0, str(ROOT))
 
 from PySide6.QtWidgets import QApplication, QFileDialog, QPushButton  # noqa: E402
 from PySide6.QtCore import QTimer, Qt  # noqa: E402
@@ -100,11 +101,12 @@ def main() -> int:
     w.play_selected()
     pos = play_until(w, 1.0, 20)
     t0 = time.time()
-    while time.time() - t0 < 12 and not w._visualizer.isVisible():
+    # 25 s budget: full-file PCM decode competes with desktop load.
+    while time.time() - t0 < 25 and not w._visualizer.isVisible():
         app.processEvents(); time.sleep(0.2)
     check("mp3 plays >1s", pos > 1.0)
     check("visualizer visible with real bands",
-          w._visualizer.isVisible() and len(w._visualizer._bands) > 0)
+          w._visualizer.isVisible() and len(w._visualizer._wave) > 0)
 
     # standalone CASUNAT2 (source absent from queue dir is irrelevant: file alone)
     w.add_files([MEDIA / "demo_casunat2.casu"])

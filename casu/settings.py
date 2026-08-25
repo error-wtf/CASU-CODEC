@@ -22,7 +22,7 @@ class PlayerSettings:
     audio_device: str | None = None
     watched_folders: tuple[str, ...] = ()
     ytdlp_consent: bool = False
-    visualizer: str = "spectrum"
+    visualizer: str = "waveform"
     resume_playback: bool = True
     cache_limit_mib: int = 512
     recordings_dir: str = ""
@@ -44,8 +44,11 @@ class PlayerSettings:
         if device and ("\0" in device or len(device.encode("utf-8")) > MAX_SETTING_TEXT_BYTES):
             device = None
         visualizer = str(self.visualizer)
-        if visualizer not in {"spectrum", "waveform", "both", "off"}:
-            visualizer = "spectrum"
+        # Spectrum/FFT modes were retired by product decision — the player
+        # ships the oscilloscope waveform only. Old saved values migrate
+        # instead of silently falling back to a mode that no longer exists.
+        if visualizer not in {"waveform", "off"}:
+            visualizer = "waveform"
         try:
             cache_limit = int(self.cache_limit_mib)
         except (TypeError, ValueError):
@@ -98,7 +101,7 @@ class SettingsStore:
                 settings.get("rate", 1.0), settings.get("audio_device"),
                 tuple(watched),
                 settings.get("ytdlp_consent", False),
-                settings.get("visualizer", "spectrum"),
+                settings.get("visualizer", "waveform"),
                 settings.get("resume_playback", True),
                 settings.get("cache_limit_mib", 512),
                 settings.get("recordings_dir", ""),
