@@ -146,7 +146,14 @@
 (function () {
   localStorage.setItem("casu-consent", "1");
   async function preloadLibrary() {
+    // IDEMPOTENT: only URLs not already in the (localStorage-restored)
+    // queue are added. Without this the preload re-appended the whole
+    // library on EVERY start — the queue grew unboundedly and the UI
+    // ground to a halt (renderQueue + localStorage churn).
     try {
+      if (typeof addItem !== "function" || typeof state === "undefined") return;
+      if (state.items.length > 400) return;  // safety cap
+      const existing = new Set(state.items.map(function (i) { return i.url; }));
       const r = await fetch("/api/library.m3u", { cache: "no-store" });
       if (!r.ok) return;
       const text = await r.text();
@@ -160,9 +167,10 @@
           continue;
         }
         if (l && !l.startsWith("#")) {
-          if (typeof addItem === "function") {
+          if (!existing.has(l)) {
             addItem({ title: pending || l, url: l,
                       kind: /^https?:/i.test(l) ? "stream" : "audio" });
+            existing.add(l);
             added++;
           }
           pending = null;
