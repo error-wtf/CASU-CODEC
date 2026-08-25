@@ -2407,6 +2407,10 @@ void MainWindow::toast(const QString& text) {
 // ------------------------------------------------------------------ playback core
 
 void MainWindow::stop_playback() {
+    // Tear the loopback transport down FIRST (verified v5.0.0 order):
+    // killing the server unblocks any pending libVLC input reads so the
+    // synchronous player teardown cannot wait on a live socket.
+    if (yt_proxy_) yt_proxy_->stop();
     // Invalidate an in-flight yt-dlp worker.  A late result must never start
     // playback again after Stop or a source switch.
     ++resolve_generation_;
@@ -2416,9 +2420,6 @@ void MainWindow::stop_playback() {
         controller_->close();
     }
     backend_.reset();
-    // libVLC is the proxy's HTTP consumer.  Tear the consumer down first so
-    // active requests cannot keep proxy shutdown hanging or race a dead port.
-    if (yt_proxy_) yt_proxy_->stop();
     controller_->poll();
     set_diagnostics(QStringLiteral("Legacy backend"), QStringLiteral("unavailable"),
                     QStringLiteral("unavailable"), QString());

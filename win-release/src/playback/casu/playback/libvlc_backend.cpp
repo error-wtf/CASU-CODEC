@@ -396,14 +396,11 @@ PlaybackState LibVLCBackend::state() {
             state_ = PlaybackState::ENDED;
         }
     }
-    // Opening/Buffering events can arrive after play() and overwrite the
-    // state even though libVLC's clock is actively running.  The synchronous
-    // player truth wins so Qt controls and external media integration cannot
-    // remain stuck on LOADING during audible/visible playback.
-    if (state_ != PlaybackState::ERROR && state_ != PlaybackState::ENDED &&
-        libvlc_media_player_is_playing(player_)) {
-        state_ = PlaybackState::PLAYING;
-    }
+    // NOTE: no forced PLAYING reconciliation from is_playing() here. That
+    // variant shipped in a build that regressed against the verified
+    // v5.0.0 release (phantom PLAYING while a stop winds down); state
+    // transitions belong to the event mapping above, polling only maps
+    // terminal facts.
     if (state_ == PlaybackState::PLAYING && !libvlc_media_player_is_playing(player_)) {
         double dur = duration();
         if (dur > 0.0 && position() >= dur - 0.2)

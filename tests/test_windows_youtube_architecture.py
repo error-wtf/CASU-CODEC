@@ -13,10 +13,13 @@ def _function(name: str, next_name: str) -> str:
     return SOURCE[start:end]
 
 
-def test_windows_stop_invalidates_resolver_and_closes_consumer_before_proxy():
+def test_windows_stop_invalidates_resolver_and_stops_proxy_first():
+    """Verified v5.0.0 Windows contract: the loopback transport stops FIRST
+    (unblocks pending libVLC input reads), and an in-flight yt-dlp worker
+    is invalidated so a late resolve can never restart playback."""
     body = _function("stop_playback()", "open_backend_and_play")
     assert "++resolve_generation_;" in body
-    assert body.index("controller_->close();") < body.index("yt_proxy_->stop();")
+    assert body.index("yt_proxy_->stop();") < body.index("controller_->close();")
 
 
 def test_windows_backend_open_failure_stops_youtube_transport():
