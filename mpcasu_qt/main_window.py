@@ -171,6 +171,115 @@ class NowPlayingBar(QFrame):
         self.diagnostics_label.setText(text)
 
 
+def _nav_icon(name: str, color: QColor, active: QColor, size: int = 18) -> QIcon:
+    """Font-independent sidebar nav icons drawn with QPainter."""
+    icon = QIcon()
+    for state, tint in ((QIcon.Off, color), (QIcon.On, active)):
+        pm = QPixmap(size, size)
+        pm.fill(Qt.transparent)
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.Antialiasing)
+        pen = QPen(tint, 1.5)
+        pen.setCapStyle(Qt.RoundCap)
+        p.setPen(pen)
+        r = QRectF(2.5, 2.5, size - 5.0, size - 5.0)
+        c = r.center()
+        w, h = r.width(), r.height()
+        if name == "NOW PLAYING":
+            p.setBrush(tint)
+            p.drawPolygon(QPolygonF([QPointF(r.left(), r.top()),
+                                     QPointF(r.right(), c.y()),
+                                     QPointF(r.left(), r.bottom())]))
+        elif name == "LIBRARY":
+            p.drawRect(r.adjusted(0, 0, 0, 0))
+            p.drawRect(r.adjusted(w * 0.22, h * 0.22, -w * 0.22, -h * 0.22))
+        elif name == "WEB & STREAMS":
+            p.drawEllipse(c, w * 0.48, h * 0.48)
+            p.drawLine(QPointF(r.left(), c.y()), QPointF(r.right(), c.y()))
+            p.drawEllipse(QPointF(c.x(), c.y()), w * 0.48, h * 0.2)
+        elif name == "PLAYLISTS":
+            for frac in (0.3, 0.5, 0.7):
+                y = r.top() + h * frac
+                p.drawLine(QPointF(r.left(), y), QPointF(r.right(), y))
+        elif name == "IPTV / EPG":
+            gap = 2.5
+            cw2 = (w - gap * 3) / 2
+            ch2 = (h - gap * 3) / 2
+            for row in range(2):
+                for col in range(2):
+                    x = r.left() + gap + col * (cw2 + gap)
+                    y = r.top() + gap + row * (ch2 + gap)
+                    p.fillRect(int(x), int(y), int(cw2), int(ch2), tint)
+        elif name == "YOUTUBE":
+            p.drawRoundedRect(r.adjusted(1, 1, -1, -1), 4, 4)
+            p.setBrush(tint)
+            p.drawPolygon(QPolygonF([QPointF(c.x() - 3, c.y() - 5),
+                                     QPointF(c.x() + 6, c.y()),
+                                     QPointF(c.x() - 3, c.y() + 5)]))
+        elif name == "SPOTIFY":
+            for frac in (0.2, 0.38, 0.56):
+                r2 = r.adjusted(int(w * frac), int(h * frac),
+                                -int(w * frac), -int(h * frac))
+                p.drawArc(r2, -45 * 16, 90 * 16)
+        elif name == "CASU FILES":
+            half = min(w, h) * 0.35
+            p.setBrush(tint)
+            p.drawPolygon(QPolygonF([QPointF(c.x(), c.y() - half),
+                                     QPointF(c.x() + half, c.y()),
+                                     QPointF(c.x(), c.y() + half),
+                                     QPointF(c.x() - half, c.y())]))
+            half2 = half * 0.5
+            pm2 = QPixmap(size, size); pm2.fill(Qt.transparent)
+        elif name == "HEARTHIS":
+            p.drawLine(QPointF(r.left(), r.bottom()),
+                       QPointF(r.right(), r.top()))
+            p.drawLine(QPointF(r.right() - 5, r.top()),
+                       QPointF(r.right(), r.top()))
+            p.drawLine(QPointF(r.right(), r.top()),
+                       QPointF(r.right(), r.top() + 6))
+        elif name == "TIDAL":
+            for y_off in (-3, 3):
+                pts = []
+                for i in range(20):
+                    frac = i / 19.0
+                    x = r.left() + w * frac
+                    y = c.y() + y_off + math.sin(frac * math.pi * 2) * h * 0.22
+                    pts.append(QPointF(x, y))
+                p.drawPolyline(QPolygonF(pts))
+        elif name == "NETFLIX":
+            top_l = QPointF(r.left() + 2, r.top())
+            top_r = QPointF(r.right() - 2, r.top())
+            bot_l = QPointF(r.left() + 2, r.bottom())
+            bot_r = QPointF(r.right() - 2, r.bottom())
+            p.drawLine(top_l, bot_l)
+            p.drawLine(top_l, bot_r)
+            p.drawLine(top_r, bot_r)
+        elif name == "BROWSE":
+            p.drawEllipse(c, w * 0.46, h * 0.46)
+            p.drawLine(QPointF(c.x(), r.top()), QPointF(c.x(), r.bottom()))
+            p.drawLine(QPointF(r.left(), c.y()), QPointF(r.right(), c.y()))
+        elif name == "OPTIONS":
+            p.drawEllipse(c, w * 0.18, h * 0.18)
+            for i in range(8):
+                angle = i * math.pi / 4.0
+                x1 = c.x() + math.cos(angle) * w * 0.30
+                y1 = c.y() + math.sin(angle) * h * 0.30
+                x2 = c.x() + math.cos(angle) * w * 0.44
+                y2 = c.y() + math.sin(angle) * h * 0.44
+                p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+        elif name == "ABOUT":
+            p.drawEllipse(c, w * 0.44, h * 0.44)
+            p.setBrush(tint)
+            p.drawEllipse(QPointF(c.x(), c.y() - h * 0.14), 1.5, 1.5)
+            p.drawLine(QPointF(c.x(), c.y() - h * 0.02),
+                       QPointF(c.x(), c.y() + h * 0.22))
+        else:
+            p.drawText(r, Qt.AlignCenter, name[0])
+        p.end()
+        icon.addPixmap(pm, QIcon.Normal, state)
+    return icon
+
+
 class Sidebar(QFrame):
     """Left navigation sidebar."""
 
@@ -215,22 +324,8 @@ class Sidebar(QFrame):
             ("WEB PLAYERS", ["SPOTIFY", "HEARTHIS", "TIDAL", "NETFLIX", "BROWSE"]),
             ("SYSTEM", ["OPTIONS", "ABOUT"]),
         ]
-        self.NAV_ICONS = {
-            "NOW PLAYING": "♫",
-            "LIBRARY": "🎵",
-            "WEB & STREAMS": "🔗",
-            "PLAYLISTS": "📋",
-            "IPTV / EPG": "📺",
-            "YOUTUBE": "▶",
-            "SPOTIFY": "💚",
-            "CASU FILES": "📂",
-            "HEARTHIS": "🎸",
-            "TIDAL": "🌊",
-            "NETFLIX": "🎬",
-            "BROWSE": "🌐",
-            "OPTIONS": "⚙",
-            "ABOUT": "ℹ",
-        }
+        self.NAV_ICONS = {name: _nav_icon(name, QColor("#8a93a0"), QColor("#ff1e2d"))
+                          for items in nav_items for name in items[1]}
         self._nav_buttons: list[QPushButton] = []
         self._rail_hidden: list = []
         if self._logo_label is not None:
@@ -246,6 +341,8 @@ class Sidebar(QFrame):
                 btn = QPushButton(item)
                 btn.setObjectName("NavItem")
                 btn.setCheckable(True)
+                btn.setIcon(self.NAV_ICONS[item])
+                btn.setIconSize(QSize(18, 18))
                 btn.setProperty("nav_name", item)
                 btn.setToolTip(item)
                 btn.setCursor(Qt.PointingHandCursor)
@@ -272,8 +369,7 @@ class Sidebar(QFrame):
         for widget in self._rail_hidden:
             widget.setVisible(not on)
         for btn in self._nav_buttons:
-            name = str(btn.property("nav_name"))
-            btn.setText(self.NAV_ICONS.get(name, name[0]) if on else name)
+            btn.setText("" if on else str(btn.property("nav_name")))
 
     def select(self, name: str):
         for btn in self._nav_buttons:
