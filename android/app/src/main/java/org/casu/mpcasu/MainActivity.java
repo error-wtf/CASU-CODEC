@@ -135,13 +135,14 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     private android.os.Handler ui;
     private Settings settings;
     private boolean recording;
-    private Thread recordThread;
-    private File recordTarget;
     private Visualizer visualizer;
 
-    // recording format + folder
-    private String recordFormat = "ts";
-    private File recordFolder;
+    // recording: StreamRecorder (MediaExtractor/MediaMuxer), SAF folder URI
+    private StreamRecorder recorder;
+    private String recordFormat = "mp4";
+    private String recordFolderUri;   // SAF tree uri (or null → app dir)
+    private String recordFolderName = "MPCASU (Standard)";
+    private TextView recFolderLabel;  // folder label inside the open dialog
 
     // queue multi-select
     private final Set<Integer> multiSelected = new HashSet<>();
@@ -158,7 +159,7 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         public boolean resume = true;
         public boolean consent = false;
         public String subtitlePath = null;
-        public String recordFormat = "ts";
+        public String recordFormat = "mp4";
         public String recordFolder = null;
 
         public static Settings load(android.content.Context context) {
@@ -175,8 +176,11 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                 out.consent = o.optBoolean("consent", false);
                 out.subtitlePath = o.optString("subtitlePath", null);
                 if (out.subtitlePath != null && out.subtitlePath.isEmpty()) out.subtitlePath = null;
-                out.recordFormat = o.optString("recordFormat", "ts");
-                if (out.recordFormat.isEmpty()) out.recordFormat = "ts";
+                out.recordFormat = o.optString("recordFormat", "mp4");
+                if (out.recordFormat.isEmpty()) out.recordFormat = "mp4";
+                if (!StreamRecorder.formatSupported(out.recordFormat)) {
+                    out.recordFormat = "mp4";
+                }
                 out.recordFolder = o.optString("recordFolder", null);
                 if (out.recordFolder != null && out.recordFolder.isEmpty()) out.recordFolder = null;
             } catch (Exception ignored) {
@@ -210,8 +214,21 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         ui = new android.os.Handler(getMainLooper());
         settings = Settings.load(this);
         recordFormat = settings.recordFormat;
-        if (settings.recordFolder != null) {
-            recordFolder = new File(settings.recordFolder);
+        recordFolderUri = settings.recordFolder;
+        // restore the persisted SAF permission (may be gone after reboot)
+        if (recordFolderUri != null) {
+            try {
+                Uri tree = Uri.parse(recordFolderUri);
+                androidx.documentfile.provider.DocumentFile dir =
+                        androidx.documentfile.provider.DocumentFile.fromTreeUri(this, tree);
+                if (dir == null || !dir.canWrite()) {
+                    recordFolderUri = null;
+                } else {
+                    recordFolderName = dir.getName() == null ? "Ordner" : dir.getName();
+                }
+            } catch (Exception e) {
+                recordFolderUri = null;
+            }
         }
 
         // BUG 4+7 FIX: On cold start, delete stale queue.json so the queue
@@ -222,7 +239,6 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         library = new Library(this);
 
         ensureEngine();
-        CasuBridge.warmUp();
         requestPermissions();
 
         buildUi();
@@ -506,7 +522,7 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         transport.addView(next);
         page.addView(transport);
 
-        // secondary row
+        // secondary row (compact: shuffle/repeat/A-B/snapshot/rate)
         LinearLayout secondary = new LinearLayout(this);
         secondary.setOrientation(LinearLayout.HORIZONTAL);
         secondary.setGravity(Gravity.CENTER);
@@ -540,15 +556,24 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                 toast("Rate " + rateLabel(engine.rate()));
             }
         });
-        recordBtn = smallButton("●");
-        recordBtn.setOnClickListener(v -> toggleRecording());
         secondary.addView(shuffleBtn);
         secondary.addView(repeatBtn);
         secondary.addView(abBtn);
         secondary.addView(snapshotBtn);
         secondary.addView(rateBtn);
-        secondary.addView(recordBtn);
         page.addView(secondary);
+
+        // record row — own, prominent, always visible
+        LinearLayout recordRow = new LinearLayout(this);
+        recordRow.setOrientation(LinearLayout.HORIZONTAL);
+        recordRow.setGravity(Gravity.CENTER);
+        recordRow.setPadding(0, dp(4), 0, 0);
+        recordBtn = smallButton("● AUFNAHME");
+        recordBtn.setTextSize(12);
+        recordBtn.setTextColor(TEXT);
+        recordBtn.setOnClickListener(v -> toggleRecording());
+        recordRow.addView(recordBtn);
+        page.addView(recordRow);
 
         // volume row
         LinearLayout volumeRow = new LinearLayout(this);
@@ -1215,6 +1240,16 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         ytQuery.setBackground(boxBackground());
         ytQuery.setPadding(dp(12), dp(10), dp(12), dp(10));
         ytQuery.setSingleLine(true);
+        ytQuery.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
+        ytQuery.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+                    || (event != null && event.getKeyCode() == android.view.KeyEvent.KEYCODE_ENTER
+                    && event.getAction() == android.view.KeyEvent.ACTION_DOWN)) {
+                runYouTubeSearch(ytQuery.getText().toString());
+                return true;
+            }
+            return false;
+        });
         ytQuery.setId(View.generateViewId());
         searchRow.addView(ytQuery, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -1493,12 +1528,10 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         page.addView(managePlaylists);
 
         page.addView(sectionLabel("RECORDING"));
-        TextView recInfo = new TextView(this);
+        final TextView recInfo = new TextView(this);
         recInfo.setTextColor(MUTED);
         recInfo.setTextSize(12);
-        recInfo.setText("Format: " + recordFormat + "\nOrdner: "
-                + (recordFolder != null ? recordFolder.getAbsolutePath() : "(Standard)"));
-        recInfo.setTag("rec-info");
+        recInfo.setText(recordingInfoText());
         page.addView(recInfo);
         Button recSettings = new Button(this);
         recSettings.setText("Aufnahme-Einstellungen");
@@ -1506,13 +1539,33 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         recSettings.setBackgroundColor(Color.parseColor("#161a20"));
         recSettings.setOnClickListener(v -> {
             MediaItem item = engine != null ? engine.current() : null;
-            if (item != null && item.url.startsWith("http")) {
+            if (item != null && item.url != null && item.url.startsWith("http")) {
                 showRecordingSetupDialog(item);
+                // keep the settings view in sync after the dialog closes
+                recInfo.postDelayed(() -> recInfo.setText(recordingInfoText()), 800);
             } else {
-                toast("Erst einen Stream öffnen, dann Aufnahme konfigurieren");
+                toast("Erst einen Stream abspielen (YouTube, Radio, …)");
             }
         });
         page.addView(recSettings);
+
+        Button recOpen = new Button(this);
+        recOpen.setText("Aufnahmen-Ordner öffnen (Dateien)");
+        recOpen.setTextColor(TEXT);
+        recOpen.setBackgroundColor(Color.parseColor("#161a20"));
+        recOpen.setOnClickListener(v -> {
+            File dir = new File(getExternalFilesDir(Environment.DIRECTORY_MUSIC),
+                    "MPCASU");
+            if (!dir.exists()) dir.mkdirs();
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(Uri.fromFile(dir), "resource/folder");
+            try {
+                startActivity(intent);
+            } catch (Exception e) {
+                toast("Ordner: " + dir.getAbsolutePath());
+            }
+        });
+        page.addView(recOpen);
 
         page.addView(sectionLabel("ACTIONS"));
         Button loadSubtitle = new Button(this);
@@ -1759,30 +1812,30 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         }).start();
     }
 
+    private String recordingInfoText() {
+        return "Format: " + recordFormat.toUpperCase(Locale.ROOT)
+                + "\nOrdner: " + recordFolderName;
+    }
+
     private void toggleRecording() {
-        MediaItem item = engine != null ? engine.current() : null;
-        if (item == null) {
-            toast("Erst eine Quelle öffnen");
-            return;
-        }
-        if (!item.url.startsWith("http")) {
-            toast("Aufnahme für Streams (lokale Dateien speichern mit Export)");
-            return;
-        }
-        if (recording) {
-            recording = false;
-            recordBtn.setTextColor(TEXT);
+        if (recording && recorder != null) {
             toast("Aufnahme wird abgeschlossen…");
-            if (recordThread != null) recordThread.interrupt();
+            recorder.stop();
             return;
         }
-        // show format + folder picker
+        MediaItem item = engine != null ? engine.current() : null;
+        if (item == null || item.url == null || !item.url.startsWith("http")) {
+            toast("Erst einen Stream abspielen (YouTube, Radio, …)");
+            return;
+        }
         showRecordingSetupDialog(item);
     }
 
     private void showRecordingSetupDialog(MediaItem item) {
-        String[] formats = {"ts", "mp3", "aac", "ogg"};
-        String[] labels = {"MPEG-TS (Original)", "MP3 (Konvertiert)", "AAC (Konvertiert)", "OGG Vorbis (Konvertiert)"};
+        final String[] formats = {StreamRecorder.FMT_MP4, StreamRecorder.FMT_M4A,
+                StreamRecorder.FMT_OGG, StreamRecorder.FMT_COPY};
+        final String[] labels = {"MP4 — Video + Audio", "M4A/AAC — nur Audio",
+                "OGG — nur Audio", "Original — Stream-Kopie (Radio/TS)"};
         int checked = 0;
         for (int i = 0; i < formats.length; i++) {
             if (formats[i].equals(recordFormat)) { checked = i; break; }
@@ -1790,7 +1843,7 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
 
         LinearLayout dialog = new LinearLayout(this);
         dialog.setOrientation(LinearLayout.VERTICAL);
-        dialog.setPadding(dp(20), dp(16), dp(20), dp(8));
+        dialog.setPadding(dp(20), dp(10), dp(20), dp(4));
 
         TextView formatLabel = new TextView(this);
         formatLabel.setText("Aufnahme-Format:");
@@ -1801,53 +1854,78 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
 
         final int[] selectedFormat = {checked};
         for (int i = 0; i < formats.length; i++) {
+            if (!StreamRecorder.formatSupported(formats[i])) continue;
             android.widget.RadioButton rb = new android.widget.RadioButton(this);
             rb.setText(labels[i]);
             rb.setTextColor(TEXT);
             rb.setTextSize(12);
-            rb.setChecked(i == checked);
-            final int fi = i;
-            rb.setOnCheckedChangeListener((b, isChecked) -> { if (isChecked) selectedFormat[0] = fi; });
+            rb.setChecked(formats[i].equals(recordFormat));
+            final String fmt = formats[i];
+            rb.setOnCheckedChangeListener((b, isChecked) -> {
+                if (isChecked) selectedFormat[0] = java.util.Arrays.asList(formats).indexOf(fmt);
+            });
             dialog.addView(rb);
         }
 
-        // folder input
+        // ---- folder picker row (SAF) ----
+        TextView folderLabel = new TextView(this);
+        folderLabel.setText("Zielordner:");
+        folderLabel.setTextColor(TEXT);
+        folderLabel.setTextSize(13);
+        folderLabel.setTypeface(null, Typeface.BOLD);
+        folderLabel.setPadding(0, dp(14), 0, 0);
+        dialog.addView(folderLabel);
+
         LinearLayout folderRow = new LinearLayout(this);
         folderRow.setOrientation(LinearLayout.HORIZONTAL);
         folderRow.setGravity(Gravity.CENTER_VERTICAL);
-        folderRow.setPadding(0, dp(12), 0, 0);
-        TextView folderLabel = new TextView(this);
-        folderLabel.setText("Ziel: ");
-        folderLabel.setTextColor(MUTED);
-        folderLabel.setTextSize(12);
-        folderRow.addView(folderLabel);
-        EditText folderInput = new EditText(this);
-        folderInput.setTextColor(TEXT);
-        folderInput.setTextSize(12);
-        folderInput.setSingleLine(true);
-        folderInput.setBackground(boxBackground());
-        folderInput.setPadding(dp(8), dp(6), dp(8), dp(6));
-        String defaultPath = recordFolder != null ? recordFolder.getAbsolutePath()
-                : getExternalFilesDir(Environment.DIRECTORY_MUSIC) + "/MPCASU";
-        folderInput.setText(defaultPath);
-        folderInput.setTag("folder-input");
-        folderRow.addView(folderInput, new LinearLayout.LayoutParams(0,
+        TextView folderName = new TextView(this);
+        folderName.setText(recordFolderName);
+        folderName.setTextColor(MUTED);
+        folderName.setTextSize(12);
+        folderName.setSingleLine(true);
+        folderName.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+        recFolderLabel = folderName;
+        folderRow.addView(folderName, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        Button pickFolder = smallButton("Ordner wählen…");
+        pickFolder.setTextSize(11);
+        pickFolder.setOnClickListener(v -> {
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+            try {
+                startActivityForResult(intent, REQUEST_PICK_RECORD_FOLDER);
+            } catch (Exception e) {
+                toast("Kein Ordner-Dialog verfügbar");
+            }
+        });
+        folderRow.addView(pickFolder);
         dialog.addView(folderRow);
+
+        Button resetFolder = new Button(this);
+        resetFolder.setText("Zurücksetzen auf Standardordner");
+        resetFolder.setTextColor(MUTED);
+        resetFolder.setTextSize(11);
+        resetFolder.setBackgroundColor(Color.TRANSPARENT);
+        resetFolder.setPadding(0, 0, 0, 0);
+        resetFolder.setOnClickListener(v -> {
+            recordFolderUri = null;
+            recordFolderName = "MPCASU (Standard)";
+            settings.recordFolder = null;
+            settings.save(MainActivity.this);
+            if (recFolderLabel != null) recFolderLabel.setText(recordFolderName);
+        });
+        dialog.addView(resetFolder);
 
         new AlertDialog.Builder(this)
                 .setTitle("Aufnahme starten")
                 .setView(dialog)
-                .setPositiveButton("Aufnahme", (d, w) -> {
+                .setPositiveButton("● Aufnahme", (d, w) -> {
                     recordFormat = formats[selectedFormat[0]];
                     settings.recordFormat = recordFormat;
-                    // read folder from input
-                    EditText folderInp = dialog.findViewWithTag("folder-input");
-                    if (folderInp != null && folderInp.getText().length() > 0) {
-                        recordFolder = new File(folderInp.getText().toString().trim());
-                        settings.recordFolder = recordFolder.getAbsolutePath();
-                    }
-                    settings.save(this);
+                    settings.save(MainActivity.this);
                     startRecording(item);
                 })
                 .setNegativeButton("Abbrechen", null)
@@ -1855,36 +1933,71 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     }
 
     private void startRecording(MediaItem item) {
-        File dir = recordFolder;
-        if (dir == null || !dir.exists()) {
-            dir = new File(getExternalFilesDir(Environment.DIRECTORY_MUSIC), "MPCASU");
+        androidx.documentfile.provider.DocumentFile safDir = null;
+        File target = null;
+        if (recordFolderUri != null) {
+            try {
+                safDir = androidx.documentfile.provider.DocumentFile.fromTreeUri(
+                        this, Uri.parse(recordFolderUri));
+                if (safDir == null || !safDir.canWrite()) {
+                    toast("Zielordner nicht mehr verfügbar — nutze Standard");
+                    safDir = null;
+                }
+            } catch (Exception e) {
+                safDir = null;
+            }
         }
-        if (!dir.exists()) dir.mkdirs();
-        settings.recordFolder = dir.getAbsolutePath();
-        settings.save(this);
+        if (safDir == null) {
+            File dir = new File(getExternalFilesDir(Environment.DIRECTORY_MUSIC),
+                    "MPCASU");
+            if (!dir.exists()) dir.mkdirs();
+            String ext = StreamRecorder.extensionFor(recordFormat, item.url);
+            target = new File(dir, "rec-"
+                    + new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
+                    .format(new Date()) + "." + ext);
+        }
 
-        recordTarget = new File(dir, "rec-"
-                + new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date())
-                + "." + recordFormat);
+        final String format = recordFormat;
+        recorder = new StreamRecorder(this, item.url, target, safDir, format,
+                new StreamRecorder.Listener() {
+                    private String fileName = "rec";
+
+                    @Override public void onStarted(String info) {
+                        ui.post(() -> toast(info));
+                    }
+
+                    @Override public void onProgress(long seconds, long bytes) {
+                        ui.post(() -> {
+                            if (recordBtn != null) {
+                                recordBtn.setText("● " + seconds + "s · "
+                                        + (bytes / 1024) + " KB");
+                            }
+                        });
+                    }
+
+                    @Override public void onFinished(String name, long bytes,
+                                                     String error) {
+                        ui.post(() -> {
+                            recording = false;
+                            if (recordBtn != null) {
+                                recordBtn.setText("● AUFNAHME");
+                                recordBtn.setTextColor(TEXT);
+                            }
+                            if (error != null) {
+                                toast("Aufnahme fehlgeschlagen: " + error);
+                            } else {
+                                toast("Aufnahme gespeichert · " + name + " · "
+                                        + (bytes / 1024) + " KB");
+                            }
+                        });
+                    }
+                });
         recording = true;
         recordBtn.setTextColor(ACCENT);
-        toast("Aufnahme · " + recordTarget.getName());
-        recordThread = new Thread(() -> {
-            try (InputStream in = new java.net.URL(item.url).openStream();
-                 java.io.OutputStream out = new java.io.FileOutputStream(recordTarget)) {
-                byte[] chunk = new byte[64 * 1024];
-                int n;
-                while (recording && (n = in.read(chunk)) > 0) out.write(chunk, 0, n);
-            } catch (Exception e) {
-                ui.post(() -> toast("Aufnahme fehlgeschlagen: " + e.getMessage()));
-            }
-            recording = false;
-            ui.post(() -> {
-                recordBtn.setTextColor(TEXT);
-                toast("Aufnahme gespeichert · " + recordTarget.getName());
-            });
-        });
-        recordThread.start();
+        recordBtn.setText("● starte…");
+        toast("Aufnahme läuft · Format " + recordFormat.toUpperCase(Locale.ROOT)
+                + " · Ziel: " + recordFolderName);
+        recorder.start();
     }
 
     private void showMediaInfo() {
@@ -2065,6 +2178,7 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     private static final int REQUEST_OPEN_MEDIA = 21;
     private static final int REQUEST_OPEN_PLAYLIST = 22;
     private static final int REQUEST_OPEN_SUBTITLE = 23;
+    private static final int REQUEST_PICK_RECORD_FOLDER = 24;
 
     private void openFilePicker() {
         Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
@@ -2111,6 +2225,32 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        // SAF folder picker delivers a tree:// uri (no clip data path above).
+        if (requestCode == REQUEST_PICK_RECORD_FOLDER) {
+            if (resultCode != RESULT_OK || data == null || data.getData() == null) {
+                return;
+            }
+            Uri treeUri = data.getData();
+            try {
+                getContentResolver().takePersistableUriPermission(treeUri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                recordFolderUri = treeUri.toString();
+                settings.recordFolder = recordFolderUri;
+                settings.save(this);
+                androidx.documentfile.provider.DocumentFile dir =
+                        androidx.documentfile.provider.DocumentFile.fromTreeUri(
+                                this, treeUri);
+                recordFolderName = dir != null && dir.getName() != null
+                        ? dir.getName() : "Ordner";
+                toast("Aufnahme-Zielordner: " + recordFolderName);
+                // update the folder label of the still-open setup dialog
+                if (recFolderLabel != null) recFolderLabel.setText(recordFolderName);
+            } catch (Exception e) {
+                toast("Ordner konnte nicht übernommen werden");
+            }
+            return;
+        }
         if (resultCode != RESULT_OK || data == null) return;
         List<Uri> uris = new ArrayList<>();
         if (data.getData() != null) uris.add(data.getData());
