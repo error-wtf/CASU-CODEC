@@ -70,3 +70,4 @@ linux-release/
 win-release/tests/fixtures/natv2/cpp_convert.casu
 win-release/tests/fixtures/natv2/repaired.casu
 win-release/tests/fixtures/natv2/truncated.casu
+android-legacy-backup/
