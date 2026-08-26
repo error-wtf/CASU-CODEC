@@ -1265,7 +1265,7 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         aboutBox = new TextView(this);
         aboutBox.setTextColor(MUTED);
         aboutBox.setTextSize(12);
-        aboutBox.setText("MPCASU 6.0 — Native Android\nMedia Player für CASU & Legacy-Medien\n"
+        aboutBox.setText("MPCASU 5.0 — Native Android\nMedia Player für CASU & Legacy-Medien\n"
                 + "In-Process Playback · Kein externer Player\n\n"
                 + "Design inspiriert von VLC und Webamp — unabhängiger Original-Code.\n"
                 + "Anti-Capitalist License 1.4 · Lino Casu");

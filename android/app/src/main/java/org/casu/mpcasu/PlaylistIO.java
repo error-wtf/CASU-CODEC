@@ -310,7 +310,7 @@ public final class PlaylistIO {
             HttpURLConnection conn = (HttpURLConnection) new URL(location).openConnection();
             conn.setConnectTimeout(10000);
             conn.setReadTimeout(15000);
-            conn.setRequestProperty("User-Agent", "MPCASU/6.0");
+            conn.setRequestProperty("User-Agent", "MPCASU/5.0");
             int code = conn.getResponseCode();
             if (code < 200 || code >= 300) throw new Exception("HTTP " + code + " (http-error)");
             try (InputStream in = conn.getInputStream()) {

@@ -12,8 +12,8 @@ android {
         applicationId = "org.casu.mpcasu"
         minSdk = 24
         targetSdk = 34
-        versionCode = 6
-        versionName = "6.0.0"
+        versionCode = 5
+        versionName = "5.0.0"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }

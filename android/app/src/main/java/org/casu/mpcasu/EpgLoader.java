@@ -102,7 +102,7 @@ public final class EpgLoader {
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setConnectTimeout(10000);
         conn.setReadTimeout(20000);
-        conn.setRequestProperty("User-Agent", "MPCASU/6.0");
+        conn.setRequestProperty("User-Agent", "MPCASU/5.0");
         int code = conn.getResponseCode();
         if (code < 200 || code >= 300) throw new Exception("HTTP " + code);
         try (InputStream in = conn.getInputStream()) {
