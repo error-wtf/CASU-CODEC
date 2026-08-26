@@ -216,20 +216,20 @@ class Sidebar(QFrame):
             ("SYSTEM", ["OPTIONS", "ABOUT"]),
         ]
         self.NAV_ICONS = {
-            "NOW PLAYING": "▶",
-            "LIBRARY": "▣",
-            "WEB & STREAMS": "▤",
-            "PLAYLISTS": "≡",
-            "IPTV / EPG": "▦",
-            "YOUTUBE": "▷",
-            "SPOTIFY": "♪",
-            "CASU FILES": "◈",
-            "HEARTHIS": "↗",
-            "TIDAL": "≋",
-            "NETFLIX": "▣",
-            "BROWSE": "◎",
+            "NOW PLAYING": "♫",
+            "LIBRARY": "🎵",
+            "WEB & STREAMS": "🔗",
+            "PLAYLISTS": "📋",
+            "IPTV / EPG": "📺",
+            "YOUTUBE": "▶",
+            "SPOTIFY": "💚",
+            "CASU FILES": "📂",
+            "HEARTHIS": "🎸",
+            "TIDAL": "🌊",
+            "NETFLIX": "🎬",
+            "BROWSE": "🌐",
             "OPTIONS": "⚙",
-            "ABOUT": "ⓘ",
+            "ABOUT": "ℹ",
         }
         self._nav_buttons: list[QPushButton] = []
         self._rail_hidden: list = []
@@ -256,7 +256,7 @@ class Sidebar(QFrame):
 
         layout.addStretch()
 
-        version = QLabel("MPCASU 3.0.0")
+        version = QLabel("MPCASU 5.0.0")
         version.setObjectName("NowPlayingMeta")
         version.setContentsMargins(16, 8, 16, 8)
         version.setAlignment(Qt.AlignLeft | Qt.AlignBottom)
@@ -771,13 +771,6 @@ class PlaylistPane(QFrame):
         if item.parent() is None and self._is_playlist(item.data(0, Qt.UserRole) or ""):
             item.setExpanded(not item.isExpanded())
             return
-        if item.parent() is None:
-            row = self.tree.indexOfTopLevelItem(item)
-            if row >= 0:
-                self.playRequested.emit(row)
-            return
-        if item.data(0, Qt.UserRole):
-            self.childPlayRequested.emit(str(item.data(0, Qt.UserRole)))
 
     def _on_expanded(self, item):
         self._collapsed.discard(item.data(0, Qt.UserRole))
@@ -1268,6 +1261,7 @@ class LibraryPage(QFrame):
 
         self._tracks_list = QListWidget()
         self._tracks_list.setObjectName("QueueTree")
+        self._tracks_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self._tracks_list.itemDoubleClicked.connect(lambda _item: self._add_selected())
         self._tracks_list.setContextMenuPolicy(Qt.CustomContextMenu)
         self._tracks_list.customContextMenuRequested.connect(
@@ -1386,6 +1380,12 @@ class LibraryPage(QFrame):
             items = self._filtered(self._media_library.items(), query)
             for item in sorted(items, key=self._track_sort):
                 self._append_track(item)
+        elif mode == "favorites":
+            self._groups_list.setEnabled(False)
+            self._groups_list.clear()
+            self._show_favorites()
+            self._count_label.setText(f"{len(self._tracks)} tracks")
+            return
         else:
             self._groups_list.setEnabled(True)
             self._rebuild_groups(mode, query)
@@ -1398,6 +1398,9 @@ class LibraryPage(QFrame):
     def _rebuild_groups(self, mode, query):
         self._groups_list.blockSignals(True)
         self._groups_list.clear()
+        if mode == "favorites":
+            self._groups_list.blockSignals(False)
+            return
         key = self._key()
         values = [v for v in self._media_library.field_values(key)
                   if not query or query in v.casefold()]
@@ -1446,37 +1449,62 @@ class LibraryPage(QFrame):
         self._count_label.setText(f"{len(self._tracks)} tracks")
 
     def _add_selected(self, *_args):
-        item = self._tracks_list.currentItem()
-        if item is None:
-            return
-        row = self._tracks_list.row(item)
-        if 0 <= row < len(self._tracks):
-            self.addRequested.emit([self._tracks[row]])
+        selected = self._tracks_list.selectedItems()
+        if not selected:
+            item = self._tracks_list.currentItem()
+            if item is not None:
+                selected = [item]
+        paths = []
+        for item in selected:
+            row = self._tracks_list.row(item)
+            if 0 <= row < len(self._tracks):
+                paths.append(self._tracks[row])
+        if paths:
+            self.addRequested.emit(paths)
 
     def _library_track_context_menu(self, position):
         item = self._tracks_list.itemAt(position)
         if item is None:
             return
-        row = self._tracks_list.row(item)
-        if row < 0 or row >= len(self._tracks):
+        selected_items = self._tracks_list.selectedItems()
+        if not selected_items:
+            selected_items = [item]
+        paths = []
+        for sel in selected_items:
+            r = self._tracks_list.row(sel)
+            if 0 <= r < len(self._tracks):
+                paths.append(self._tracks[r])
+        if not paths:
             return
-        path = self._tracks[row]
-        meta_item = None
-        for mi in self._media_library.items():
-            if mi.path == path:
-                meta_item = mi
-                break
-        is_fav = bool(meta_item.favorite) if meta_item else False
         menu = QMenu(self)
-        fav_text = "Remove ★" if is_fav else "Add ★ Favorite"
-        menu.addAction(fav_text, lambda: self._toggle_favorite(path, row))
+        if len(paths) == 1:
+            meta_item = None
+            for mi in self._media_library.items():
+                if mi.path == paths[0]:
+                    meta_item = mi
+                    break
+            is_fav = bool(meta_item.favorite) if meta_item else False
+            fav_text = "Remove ★" if is_fav else "Add ★ Favorite"
+            menu.addAction(fav_text, lambda: self._toggle_favorite(paths[0], self._tracks_list.row(item)))
+        else:
+            any_fav = any(
+                bool((self._media_library.get(p) or {}).get("favorite", False))
+                for p in paths)
+            fav_text = "Remove ★" if any_fav else "Add ★ Favorite"
+            menu.addAction(f"{fav_text} ({len(paths)})", lambda: self._toggle_favorite_multi(paths, not any_fav))
         menu.addSeparator()
-        menu.addAction("Add to queue", lambda: self.addRequested.emit([path]))
+        add_text = "Add to queue" if len(paths) == 1 else f"Add to queue ({len(paths)})"
+        menu.addAction(add_text, lambda: self.addRequested.emit(paths))
         menu.exec(self._tracks_list.viewport().mapToGlobal(position))
 
     def _toggle_favorite(self, path, row):
         current = bool(self._media_library.get(path) or {}).get("favorite", False)
         self._media_library.set_favorite(path, not current)
+        self._refresh()
+
+    def _toggle_favorite_multi(self, paths, state):
+        for p in paths:
+            self._media_library.set_favorite(p, state)
         self._refresh()
 
     def _on_refresh(self):
@@ -1921,7 +1949,7 @@ class AboutPage(QFrame):
         sub.setAlignment(Qt.AlignCenter)
         layout.addWidget(sub)
         layout.addSpacing(12)
-        info = QLabel("Version 3.0.0\nMedia Player for CASU & Legacy Media\nIn-process playback · No external player")
+        info = QLabel("Version 5.0.0\nMedia Player for CASU & Legacy Media\nIn-process playback · No external player")
         info.setObjectName("NowPlayingMeta")
         info.setAlignment(Qt.AlignCenter)
         layout.addWidget(info)
@@ -2155,14 +2183,19 @@ class SourcesView(QFrame):
         self._searching = False
         self._results = list(found)
         self._list.clear()
+        self._list.setIconSize(QSize(120, 68))
         self._thumb_jobs = []
         for row, item in enumerate(self._results):
             duration = (f"{int(item.duration // 60)}:{int(item.duration % 60):02d}"
                         if item.duration else "live")
-            tag = "FIND ON YOUTUBE" if item.source == "handoff" else item.source.upper()
+            tag = "YT" if item.source != "handoff" else "FIND"
+            uploader = item.uploader or "unknown"
+            title = item.title
+            if len(title) > 70:
+                title = title[:67] + "…"
             entry = QListWidgetItem(
-                f"[{tag}] {item.title}  ·  {item.uploader or 'unknown'}  ·  {duration}")
-            entry.setSizeHint(QSize(0, 52))
+                f"  {title}\n  {uploader}  ·  {duration}  ▶")
+            entry.setSizeHint(QSize(0, 76))
             self._list.addItem(entry)
             self._thumb_jobs.append((row, item))
         if self._thumb_jobs:
@@ -2775,7 +2808,7 @@ class MainWindow(QMainWindow):
 
         status_bar = QStatusBar()
         status_bar.setObjectName("StatusBar")
-        self._status_left = QLabel("MPCASU 3.0.0")
+        self._status_left = QLabel("MPCASU 5.0.0")
         self._status_left.setObjectName("StatusText")
         self._status_left.setStyleSheet(f"color: {PALETTE.text_muted};")
         status_bar.addWidget(self._status_left)

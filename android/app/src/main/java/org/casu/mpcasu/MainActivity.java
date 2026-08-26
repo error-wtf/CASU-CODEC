@@ -148,6 +148,10 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     private final Set<Integer> multiSelected = new HashSet<>();
     private boolean multiSelectMode = false;
 
+    // library multi-select
+    private final Set<Integer> libMultiSelected = new HashSet<>();
+    private boolean libMultiSelectMode = false;
+
     // saved playlists management
     private LinearLayout savedPlaylistsContainer;
 
@@ -889,6 +893,19 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         }
     }
 
+    private void refreshLibMultiBar() {
+        LinearLayout bar = content.findViewWithTag("lib-multi-bar");
+        TextView count = bar != null ? bar.findViewWithTag("lib-multi-count") : null;
+        if (libMultiSelectMode && !libMultiSelected.isEmpty()) {
+            if (bar != null) bar.setVisibility(View.VISIBLE);
+            if (count != null) count.setText(libMultiSelected.size() + " gewählt");
+        } else {
+            if (bar != null) bar.setVisibility(View.GONE);
+            libMultiSelected.clear();
+            libMultiSelectMode = false;
+        }
+    }
+
     private final class QueueAdapter extends BaseAdapter {
         private final List<MediaItem> visible = new ArrayList<>();
         private final List<Integer> sourceIndexes = new ArrayList<>();
@@ -1053,11 +1070,98 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         page.addView(chips, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        // library multi-select action bar
+        LinearLayout libMultiBar = new LinearLayout(this);
+        libMultiBar.setOrientation(LinearLayout.HORIZONTAL);
+        libMultiBar.setGravity(Gravity.CENTER_VERTICAL);
+        libMultiBar.setBackgroundColor(Color.parseColor("#1a1014"));
+        libMultiBar.setPadding(dp(8), dp(6), dp(8), dp(6));
+        libMultiBar.setVisibility(View.GONE);
+        libMultiBar.setTag("lib-multi-bar");
+        TextView libMultiCount = new TextView(this);
+        libMultiCount.setTextColor(TEXT);
+        libMultiCount.setTextSize(12);
+        libMultiCount.setText("0 gewählt");
+        libMultiCount.setTag("lib-multi-count");
+        libMultiBar.addView(libMultiCount, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        Button libSelectAll = smallButton("Alle");
+        libSelectAll.setOnClickListener(v -> {
+            libMultiSelected.clear();
+            for (int i = 0; i < libraryTracks.size(); i++) libMultiSelected.add(i);
+            libraryAdapter.notifyDataSetChanged();
+            refreshLibMultiBar();
+        });
+        libMultiBar.addView(libSelectAll);
+        Button libDeselect = smallButton("Keine");
+        libDeselect.setOnClickListener(v -> {
+            libMultiSelected.clear();
+            libraryAdapter.notifyDataSetChanged();
+            refreshLibMultiBar();
+        });
+        libMultiBar.addView(libDeselect);
+        Button libAddQueue = smallButton("▶ Queue");
+        libAddQueue.setOnClickListener(v -> {
+            if (libMultiSelected.isEmpty()) return;
+            List<Integer> sorted = new ArrayList<>(libMultiSelected);
+            Collections.sort(sorted);
+            for (int idx : sorted) {
+                if (idx < libraryTracks.size()) {
+                    Library.Track track = libraryTracks.get(idx);
+                    MediaItem item = track.toItem();
+                    item.playlist = "LIBRARY";
+                    engine.openExternal(item, true, engine.items().size());
+                }
+            }
+            toast("▶ " + sorted.size() + " Tracks zur Queue hinzugefügt");
+            libMultiSelected.clear();
+            libMultiSelectMode = false;
+            libraryAdapter.notifyDataSetChanged();
+            refreshLibMultiBar();
+        });
+        libMultiBar.addView(libAddQueue);
+        Button libFavToggle = smallButton("★");
+        libFavToggle.setOnClickListener(v -> {
+            if (libMultiSelected.isEmpty()) return;
+            boolean anyFav = false;
+            for (int idx : libMultiSelected) {
+                if (idx < libraryTracks.size()) {
+                    if (library.isFavorite(libraryTracks.get(idx).uri)) { anyFav = true; break; }
+                }
+            }
+            for (int idx : libMultiSelected) {
+                if (idx < libraryTracks.size()) {
+                    boolean isFav = library.isFavorite(libraryTracks.get(idx).uri);
+                    if (anyFav && isFav) library.toggleFavorite(libraryTracks.get(idx).uri);
+                    else if (!anyFav && !isFav) library.toggleFavorite(libraryTracks.get(idx).uri);
+                }
+            }
+            toast(anyFav ? "★ Favoriten entfernt" : "★ Favoriten hinzugefügt");
+            refreshLibrary();
+        });
+        libMultiBar.addView(libFavToggle);
+        Button libExitMulti = smallButton("✕");
+        libExitMulti.setOnClickListener(v -> {
+            libMultiSelected.clear();
+            libMultiSelectMode = false;
+            libraryAdapter.notifyDataSetChanged();
+            refreshLibMultiBar();
+        });
+        libMultiBar.addView(libExitMulti);
+        page.addView(libMultiBar);
+
         libraryList = new ListView(this);
         libraryList.setBackgroundColor(SURFACE);
         libraryAdapter = new LibraryAdapter();
         libraryList.setAdapter(libraryAdapter);
         libraryList.setOnItemClickListener((parent, view, position, id) -> {
+            if (libMultiSelectMode) {
+                if (libMultiSelected.contains(position)) libMultiSelected.remove(position);
+                else libMultiSelected.add(position);
+                libraryAdapter.notifyDataSetChanged();
+                refreshLibMultiBar();
+                return;
+            }
             if (position < libraryTracks.size()) {
                 Library.Track track = libraryTracks.get(position);
                 MediaItem item = track.toItem();
@@ -1069,10 +1173,11 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         });
         libraryList.setOnItemLongClickListener((parent, view, position, id) -> {
             if (position < libraryTracks.size()) {
-                Library.Track track = libraryTracks.get(position);
-                library.toggleFavorite(track.uri);
-                toast(library.isFavorite(track.uri) ? "★ Favorit" : "Favorit entfernt");
-                refreshLibrary();
+                libMultiSelectMode = true;
+                libMultiSelected.clear();
+                libMultiSelected.add(position);
+                libraryAdapter.notifyDataSetChanged();
+                refreshLibMultiBar();
                 return true;
             }
             return false;
@@ -1106,25 +1211,51 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             LinearLayout row = convertView instanceof LinearLayout ? (LinearLayout) convertView : null;
             if (row == null) {
                 row = new LinearLayout(MainActivity.this);
-                row.setOrientation(LinearLayout.VERTICAL);
+                row.setOrientation(LinearLayout.HORIZONTAL);
                 row.setPadding(dp(12), dp(8), dp(12), dp(8));
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                TextView check = new TextView(MainActivity.this);
+                check.setTag("lcheck");
+                check.setTextColor(ACCENT);
+                check.setTextSize(14);
+                check.setPadding(0, 0, dp(8), 0);
+                check.setVisibility(android.view.View.GONE);
+                row.addView(check, new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT));
+                LinearLayout textCol = new LinearLayout(MainActivity.this);
+                textCol.setOrientation(LinearLayout.VERTICAL);
+                textCol.setLayoutParams(new LinearLayout.LayoutParams(0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
                 TextView title = new TextView(MainActivity.this);
                 title.setTag("ltitle");
                 title.setTextColor(TEXT);
                 title.setTextSize(13);
+                title.setMaxLines(2);
+                title.setEllipsize(android.text.TextUtils.TruncateAt.END);
                 TextView meta = new TextView(MainActivity.this);
                 meta.setTag("lmeta");
                 meta.setTextColor(MUTED);
                 meta.setTextSize(11);
-                row.addView(title);
-                row.addView(meta);
+                textCol.addView(title);
+                textCol.addView(meta);
+                row.addView(textCol);
             }
             Library.Track track = libraryTracks.get(position);
+            TextView check = row.findViewWithTag("lcheck");
             TextView title = row.findViewWithTag("ltitle");
             TextView meta = row.findViewWithTag("lmeta");
+            if (libMultiSelectMode) {
+                check.setVisibility(android.view.View.VISIBLE);
+                check.setText(libMultiSelected.contains(position) ? "◉" : "○");
+            } else {
+                check.setVisibility(android.view.View.GONE);
+            }
             title.setText((library.isFavorite(track.uri) ? "★ " : "") + track.title);
             String details = join(" · ", track.artist, track.album, track.genre);
             meta.setText(details.isEmpty() ? (track.video ? "VIDEO" : "AUDIO") : details);
+            row.setBackgroundColor(libMultiSelected.contains(position) && libMultiSelectMode
+                    ? Color.parseColor("#2a1018") : Color.TRANSPARENT);
             return row;
         }
     }

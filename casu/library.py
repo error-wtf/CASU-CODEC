@@ -237,15 +237,12 @@ class MediaLibrary:
                     continue
                 candidates.append(candidate)
 
-        # Only probe files that are new or lack metadata (keeps re-scans fast).
+        # Re-probe all files so embedded tags (ID3/Vorbis/MP4) always replace
+        # stale filename-derived metadata.  ffprobe is fast enough for this.
         to_probe: list[Path] = []
         metas: dict[Path, dict] = {}
         for candidate in candidates:
-            existing = self.get(candidate)
-            if existing is not None and existing.metadata:
-                metas[candidate] = dict(existing.metadata)
-            else:
-                to_probe.append(candidate)
+            to_probe.append(candidate)
 
         def probe(path: Path):
             try:

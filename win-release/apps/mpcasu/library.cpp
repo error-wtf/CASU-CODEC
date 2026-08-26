@@ -217,20 +217,35 @@ LibraryEntry* MediaLibrary::upsert(const QString& path,
     entry->size_bytes = info.size();
     entry->modified_ns = info.lastModified().toMSecsSinceEpoch() * kNsPerMs;
     entry->last_seen_ms = QDateTime::currentMSecsSinceEpoch();
-    if (duration_seconds.has_value() ||
-        !entry->has_duration) {
-        if (duration_seconds.has_value()) {
-            entry->has_duration = true;
-            entry->duration_seconds = *duration_seconds;
-        } else if (!entry->has_duration && entry->metadata.isEmpty()) {
-            try {
-                const auto tags = casu::media::metadata_for(
-                    entry->path.toStdString());
+    if (duration_seconds.has_value()) {
+        entry->has_duration = true;
+        entry->duration_seconds = *duration_seconds;
+    }
+    // Always probe for embedded tags (ID3/Vorbis/MP4) so that real tags
+    // from inside the file replace any stale filename-derived metadata.
+    if (!path.contains(QStringLiteral("://"))) {
+        try {
+            const auto tags = casu::media::metadata_for(
+                entry->path.toStdString());
+            if (!tags.empty()) {
+                entry->metadata.clear();
                 for (const auto& [k, v] : tags)
                     entry->metadata.insert(
                         QString::fromStdString(k),
                         QString::fromStdString(v));
-            } catch (const std::exception&) {
+            }
+        } catch (const std::exception&) {
+        }
+    }
+    // Also update duration from probe if not yet set.
+    if (!entry->has_duration) {
+        const auto dur_it = entry->metadata.find("duration");
+        if (dur_it != entry->metadata.end()) {
+            bool ok = false;
+            double d = dur_it->toDouble(&ok);
+            if (ok && d > 0.0) {
+                entry->has_duration = true;
+                entry->duration_seconds = d;
             }
         }
     }

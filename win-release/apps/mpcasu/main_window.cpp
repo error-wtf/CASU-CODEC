@@ -1375,23 +1375,14 @@ void MainWindow::build_playlist_pane() {
     connect(playlist_view_, &QTreeWidget::itemDoubleClicked, this,
             &MainWindow::playlist_double_clicked);
     connect(playlist_view_, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem* item, int) {
-        // Single click behaves like Linux: playlist rows toggle expand,
-        // loose rows play, children play (but never during multi-marking).
-        if (QApplication::keyboardModifiers() & (Qt::ControlModifier | Qt::ShiftModifier))
-            return;
+        // Single click: only toggle expand for playlist groups — play requires double-click.
         if (item->parent() == nullptr) {
             const int row = playlist_view_->indexOfTopLevelItem(item);
             if (row < 0) return;
             if (playlist_.is_playlist_row(row)) {
                 item->setExpanded(!item->isExpanded());
-                return;
             }
-            play_queue_index(row, false);
-            return;
         }
-        const int row = playlist_view_->indexOfTopLevelItem(item->parent());
-        if (row >= 0 && !item->data(0, Qt::UserRole).toString().isEmpty())
-            play_seq_entry(item->data(0, Qt::UserRole).toString(), row, false);
     });
     empty_hint_ = new QLabel(QStringLiteral("No media queued — add files, a URL or load a playlist."), pane);
     empty_hint_->setObjectName("StatusText");
@@ -1524,6 +1515,7 @@ void MainWindow::build_library_page() {
     split->addWidget(library_groups_);
     library_tracks_ = new QListWidget(split);
     library_tracks_->setObjectName("QueueTree");
+    library_tracks_->setSelectionMode(QAbstractItemView::ExtendedSelection);
     connect(library_tracks_, &QListWidget::itemDoubleClicked, this,
             [this](QListWidgetItem* item) { on_library_add_selected(item); });
     library_tracks_->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -1531,20 +1523,46 @@ void MainWindow::build_library_page() {
             [this](const QPoint& pos) {
                 QListWidgetItem* item = library_tracks_->itemAt(pos);
                 if (!item) return;
-                const QString path = item->data(Qt::UserRole).toString();
+                QList<QListWidgetItem*> sel = library_tracks_->selectedItems();
+                if (sel.isEmpty()) sel.append(item);
+                QStringList paths;
+                for (auto* s : sel) {
+                    const QString p = s->data(Qt::UserRole).toString();
+                    if (!p.isEmpty()) paths.append(p);
+                }
+                if (paths.isEmpty()) return;
                 QMenu menu(library_tracks_);
-                const bool fav = library_->index_of(path) >= 0 &&
-                                 library_->entries()[library_->index_of(path)].favorite;
-                QAction* fav_act = menu.addAction(fav ? QStringLiteral("★ Unmark favorite")
-                                                   : QStringLiteral("☆ Mark as favorite"));
-                QAction* add_act = menu.addAction(QStringLiteral("Add to queue"));
-                QAction* chosen = menu.exec(library_tracks_->viewport()->mapToGlobal(pos));
-                if (chosen == fav_act) {
-                    library_->set_favorite(path, !fav);
-                    refresh_library();
-                } else if (chosen == add_act) {
-                    add_files({path});
-                    status(QStringLiteral("Added to queue: %1").arg(QFileInfo(path).fileName()));
+                if (paths.size() == 1) {
+                    const bool fav = library_->index_of(paths[0]) >= 0 &&
+                                     library_->entries()[library_->index_of(paths[0])].favorite;
+                    QAction* fav_act = menu.addAction(fav ? QStringLiteral("★ Unmark favorite")
+                                                       : QStringLiteral("☆ Mark as favorite"));
+                    QAction* add_act = menu.addAction(QStringLiteral("Add to queue"));
+                    QAction* chosen = menu.exec(library_tracks_->viewport()->mapToGlobal(pos));
+                    if (chosen == fav_act) {
+                        library_->set_favorite(paths[0], !fav);
+                        refresh_library();
+                    } else if (chosen == add_act) {
+                        add_files(paths);
+                        status(QStringLiteral("Added to queue: %1").arg(QFileInfo(paths[0]).fileName()));
+                    }
+                } else {
+                    bool any_fav = false;
+                    for (const QString& p : paths)
+                        if (int idx = library_->index_of(p); idx >= 0)
+                            if (library_->entries()[idx].favorite) { any_fav = true; break; }
+                    QAction* fav_act = menu.addAction(any_fav
+                        ? QStringLiteral("★ Unmark favorite (%1)").arg(paths.size())
+                        : QStringLiteral("☆ Mark as favorite (%1)").arg(paths.size()));
+                    QAction* add_act = menu.addAction(QStringLiteral("Add to queue (%1)").arg(paths.size()));
+                    QAction* chosen = menu.exec(library_tracks_->viewport()->mapToGlobal(pos));
+                    if (chosen == fav_act) {
+                        for (const QString& p : paths) library_->set_favorite(p, !any_fav);
+                        refresh_library();
+                    } else if (chosen == add_act) {
+                        add_files(paths);
+                        status(QStringLiteral("Added %1 tracks to queue").arg(paths.size()));
+                    }
                 }
             });
     split->addWidget(library_tracks_);
@@ -1609,11 +1627,20 @@ void MainWindow::build_library_page() {
 }
 
 void MainWindow::on_library_add_selected(QListWidgetItem* item) {
-    if (!item) return;
-    const QString path = item->data(Qt::UserRole).toString();
-    if (path.isEmpty()) return;
-    add_files({path});
-    status(QStringLiteral("Added to queue: %1").arg(QFileInfo(path).fileName()));
+    QList<QListWidgetItem*> sel = library_tracks_->selectedItems();
+    if (sel.isEmpty() && item) sel.append(item);
+    if (sel.isEmpty()) return;
+    QStringList paths;
+    for (auto* s : sel) {
+        const QString p = s->data(Qt::UserRole).toString();
+        if (!p.isEmpty()) paths.append(p);
+    }
+    if (paths.isEmpty()) return;
+    add_files(paths);
+    if (paths.size() == 1)
+        status(QStringLiteral("Added to queue: %1").arg(QFileInfo(paths[0]).fileName()));
+    else
+        status(QStringLiteral("Added %1 tracks to queue").arg(paths.size()));
 }
 
 void MainWindow::scan_library_folders() {
@@ -2135,8 +2162,8 @@ void MainWindow::build_youtube_page() {
 
     yt_results_ = new QListWidget(page);
     yt_results_->setObjectName("QueueTree");
-    yt_results_->setIconSize(QSize(88, 50));
-    yt_results_->setSpacing(2);
+    yt_results_->setIconSize(QSize(120, 68));
+    yt_results_->setSpacing(4);
     connect(yt_results_, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* item) {
         if (!item) return;
         const QString url = item->data(Qt::UserRole).toString();
@@ -4370,11 +4397,14 @@ void MainWindow::on_youtube_play() {
                                                   .arg(static_cast<int>(r.duration) % 60, 2, 10,
                                                        QLatin1Char('0'))
                                             : QStringLiteral("live");
+                    QString displayTitle = title;
+                    if (displayTitle.length() > 70) displayTitle = displayTitle.left(67) + QStringLiteral("…");
                     auto* item = new QListWidgetItem(
-                        QStringLiteral("%1  ·  %2  ·  %3")
-                            .arg(title, uploader.isEmpty() ? QStringLiteral("unknown") : uploader, dur));
+                        QStringLiteral("  %1\n  %2  ·  %3  ▶")
+                            .arg(displayTitle, uploader.isEmpty() ? QStringLiteral("unknown") : uploader, dur));
                     item->setData(Qt::UserRole, QString::fromStdString(r.url));
                     item->setData(Qt::UserRole + 1, title);
+                    item->setSizeHint(QSize(0, 76));
                     yt_results_->addItem(item);
                 }
                 // Load thumbnails for YouTube results in background
