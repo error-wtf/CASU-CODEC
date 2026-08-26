@@ -26,7 +26,13 @@ vollständig enthalten.
 8. **YouTube-Thumbnails:** YouTube-Suchergebnisse zeigen Vorschaubilder
    (QNetworkAccessManager, Hintergrund-Thread).
 9. **★ Favoriten in Queue + Library:** Rechtsklick → "☆ Mark as favorite" /
-   "★ Remove favorite" — in Queue UND Library.
+    "★ Remove favorite" — in Queue UND Library.
+10. **Doppelklick für Wiedergabe:** Queue-Items werden per Doppelklick
+     abgespielt (Single-Click nur Expand/Selekt).
+11. **Library Multi-Select:** Strg/Shift-Klick für Mehrfachauswahl; Kontextmenü
+     "Add to queue (N)" und "★ Toggle (N)" für mehrere Items.
+12. **YouTube-Ergebnisse APK-artig:** Größere Thumbnails (120×68), zweizeiliges
+     Layout (Titel + Uploader · Dauer ▶).
 
 ## Linux (casu-codec / casu-converter / mpcasu / web-casu 5.0.0 DEBs)
 
@@ -35,15 +41,18 @@ vollständig enthalten.
    Container-Version `3.0.0` (`CASU_FORMAT_VERSION`) — ältere Player bleiben
    kompatibel.
 3. Pure Web bleibt als eingefrorenes `MPCASU-PURE-WEB-3.0.0.zip` erhalten.
-4. **Queue-Klick → Now Playing:** Qt- und Tk-Player springen bei Queue-Klick
-   automatisch auf Now Playing.
-5. **YouTube-Thumbnails:** Qt-Player zeigt YouTube-Thumbnails via urllib+QPixmap;
-   Tk-Player lädt Thumbnails via PIL im Hintergrund-Thread.
+4. **Doppelklick für Wiedergabe:** Queue-Items werden per Doppelklick
+   abgespielt (Single-Click nur Expand/Selekt).
+5. **YouTube-Ergebnisse APK-artig:** Größere Thumbnails (120×68), zweizeiliges
+   Layout (Titel + Uploader · Dauer ▶).
 6. **★ Favoriten in Queue + Library:** Rechtsklick-Kontextmenü in Queue (Play/★/Remove)
    und Library (★ Toggle + Add to queue) in allen Frontends (Qt + Tk).
 7. **Tk Player DB-Finder:** Rechtsklick → ★ Toggle / Add to queue.
+8. **Library Multi-Select:** Strg/Shift-Klick für Mehrfachauswahl; Kontextmenü
+   "Add to queue (N)" und "★ Toggle (N)" für mehrere Items.
+9. **Sidebar-Icons:** Optimierte Unicode-Symbole in der linken Navigation.
 
-## Android (MPCASU-Android-5.0.0.apk)
+## Android (CASU-5.0.0.apk)
 
 1. **StreamRecorder:** MediaExtractor/Muxer-basierte Aufnahme (MP4/M4A/OGG/Copy),
    automatischer MUXER→COPY-Fallback für Live-fMP4/DASH-Streams, SAF-Ordnerwahl.
@@ -51,6 +60,9 @@ vollständig enthalten.
 3. **YouTube-Thumbnails** in Suchergebnissen.
 4. **Multi-Select Queue** mit Favoriten-Toggle.
 5. **Provider-Tab** (OAuth/Downloads/Uploads) mit Tab-Layout.
+6. **Library Multi-Select:** Long-Press → Multi-Select-Modus mit ◉/○-Check,
+   Batch "▶ Queue" + "★" Toggle + Select All/Deselect.
+7. **Launcher-Icon vergrößert:** Foreground füllt ~57% der Canvas (vorher 17%).
 
 ## Geplant (Folge-Releases derselben v5-Reihe)
 
