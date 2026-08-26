@@ -1535,11 +1535,16 @@ void MainWindow::build_library_page() {
                 QMenu menu(library_tracks_);
                 const bool fav = library_->index_of(path) >= 0 &&
                                  library_->entries()[library_->index_of(path)].favorite;
-                QAction* act = menu.addAction(fav ? QStringLiteral("★ Unmark favorite")
-                                                  : QStringLiteral("☆ Mark as favorite"));
-                if (menu.exec(library_tracks_->viewport()->mapToGlobal(pos)) == act) {
+                QAction* fav_act = menu.addAction(fav ? QStringLiteral("★ Unmark favorite")
+                                                   : QStringLiteral("☆ Mark as favorite"));
+                QAction* add_act = menu.addAction(QStringLiteral("Add to queue"));
+                QAction* chosen = menu.exec(library_tracks_->viewport()->mapToGlobal(pos));
+                if (chosen == fav_act) {
                     library_->set_favorite(path, !fav);
                     refresh_library();
+                } else if (chosen == add_act) {
+                    add_files({path});
+                    status(QStringLiteral("Added to queue: %1").arg(QFileInfo(path).fileName()));
                 }
             });
     split->addWidget(library_tracks_);
@@ -3453,6 +3458,33 @@ void MainWindow::playlist_context_menu(const QPoint& pos) {
     }
 
     menu.addSeparator();
+    {
+        QStringList queue_paths;
+        for (auto* it : playlist_view_->selectedItems()) {
+            const QString p = it->data(0, Qt::UserRole).toString();
+            if (!p.isEmpty() && !p.startsWith(QStringLiteral("http")))
+                queue_paths.append(p);
+        }
+        if (!queue_paths.isEmpty()) {
+            bool any_fav = false;
+            for (const QString& p : queue_paths)
+                if (int idx = library_->index_of(p); idx >= 0)
+                    if (library_->entries()[idx].favorite) { any_fav = true; break; }
+            QString fav_label = queue_paths.size() == 1
+                ? (any_fav ? QStringLiteral("★ Remove favorite")
+                           : QStringLiteral("☆ Mark as favorite"))
+                : (any_fav ? QStringLiteral("★ Remove favorite (%1)")
+                           : QStringLiteral("☆ Mark as favorite (%1)"))
+                  .arg(queue_paths.size());
+            menu.addAction(fav_label, this, [this, queue_paths, any_fav] {
+                for (const QString& p : queue_paths)
+                    library_->set_favorite(p, !any_fav);
+                refresh_library();
+                status(QStringLiteral("★ Favorites updated"));
+            });
+            menu.addSeparator();
+        }
+    }
     menu.addAction(QStringLiteral("Move up"), this, [this, rows] { move_playlist_rows(rows, -1); });
     menu.addAction(QStringLiteral("Move down"), this, [this, rows] { move_playlist_rows(rows, 1); });
     QString remove_label = count == 1 ? QStringLiteral("Remove selected")

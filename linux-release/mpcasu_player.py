@@ -503,6 +503,7 @@ class MPCASUPlayer(tk.Tk):
         self._db_list.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=(2, 4))
         db_scroll.pack(side="right", fill="y", pady=(2, 4))
         self._db_list.bind("<Double-Button-1>", lambda _: self._add_db_selected())
+        self._db_list.bind("<Button-3>", self._db_context_menu)
         db_status = tk.Frame(db_frame, bg=PANEL)
         db_status.pack(fill="x", padx=6, pady=(0, 4))
         self._db_count_var = tk.StringVar(value="0 files · 0 shown")
@@ -525,6 +526,7 @@ class MPCASUPlayer(tk.Tk):
         pl_scroll.pack(side="right", fill="y", pady=(0, 4))
         self.queue.bind("<Double-Button-1>", self._play_queue_item)
         self.queue.bind("<Return>", self._play_queue_item)
+        self.queue.bind("<Button-3>", self._queue_context_menu)
         pl_actions = tk.Frame(pl_frame, bg=PANEL)
         pl_actions.pack(fill="x", padx=6, pady=(0, 6))
         ttk.Button(pl_actions, text="↑", width=3, style="MPC.TButton", command=lambda: self.move_queue(-1)).pack(side="left")
@@ -979,6 +981,35 @@ class MPCASUPlayer(tk.Tk):
             self.library.selection_clear(0, "end"); self.library.selection_set(index)
             self.canvas.focus_set(); self.play_selected()
 
+    def _queue_context_menu(self, event):
+        selected = self.queue.curselection()
+        if not selected:
+            return
+        view = getattr(self, "_queue_view", None)
+        idx = (view[selected[0]]
+               if view and selected[0] < len(view) else selected[0])
+        path = self.playlist[idx] if 0 <= idx < len(self.playlist) else None
+        menu = tk.Menu(self.root, tearoff=0, bg=PANEL, fg=TEXT,
+                       activebackground=RED_DARK, activeforeground=TEXT,
+                       relief="flat")
+        menu.add_command(label="Play", command=lambda: (
+            self.library.selection_clear(0, "end"),
+            self.library.selection_set(idx),
+            self.canvas.focus_set(),
+            self.play_selected()))
+        if path:
+            lib_item = self.media_library.get(path)
+            is_fav = bool(lib_item.favorite) if lib_item else False
+            fav_label = "★ Remove favorite" if is_fav else "☆ Mark as favorite"
+            menu.add_command(label=fav_label,
+                             command=lambda p=path, fav=is_fav: (
+                                 self.media_library.set_favorite(p, not fav),
+                                 self._render_playlist()))
+        menu.add_separator()
+        menu.add_command(label="Remove",
+                         command=lambda: self.remove_selected_queue(selected))
+        menu.tk_popup(event.x_root, event.y_root)
+
     def _render_playlist(self, selected: int | None = None) -> None:
         self.library.delete(0, "end")
         self.queue.delete(0, "end")
@@ -1002,7 +1033,11 @@ class MPCASUPlayer(tk.Tk):
                 # Remote URL row: show the resolved title, never the raw URL.
                 label = f"[{badge}] {self._display_titles.get(path, path)}"
             else:
-                label = f"[{badge}] {path.name}"
+                fav_marker = ""
+                lib_item = self.media_library.get(path)
+                if lib_item and lib_item.favorite:
+                    fav_marker = "★ "
+                label = f"{fav_marker}[{badge}] {path.name}"
             self.queue.insert("end", label)
             self._queue_view.append(index)
         if selected is not None and 0 <= selected < len(self.playlist_model):
@@ -1036,6 +1071,14 @@ class MPCASUPlayer(tk.Tk):
         self.now_playing.configure(text="NOW PLAYING · NO MEDIA SELECTED")
         self.status.set("Playlist cleared")
         self._sync_queue_empty()
+
+    def remove_selected_queue(self, indices) -> None:
+        if not indices:
+            return
+        for idx in sorted(indices, reverse=True):
+            if 0 <= idx < len(self.playlist):
+                self.playlist_model.remove([idx])
+        self._render_playlist()
 
     def toggle_shuffle(self) -> None:
         self._shuffle = not self._shuffle
@@ -1856,6 +1899,28 @@ class MPCASUPlayer(tk.Tk):
                    command=add_selected).pack(side="right")
         results.bind("<Double-Button-1>", add_selected)
         results.bind("<<ListboxSelect>>", load_preview)
+
+        def _lib_context_menu(event):
+            sel = results.curselection()
+            if not sel or sel[0] >= len(paths):
+                return
+            idx = sel[0]
+            item_path = paths[idx]
+            lib_item = self.media_library.get(item_path)
+            is_fav = bool(lib_item.favorite) if lib_item else False
+            menu = tk.Menu(dialog, tearoff=0, bg=PANEL, fg=TEXT,
+                           activebackground=RED_DARK, activeforeground=TEXT,
+                           relief="flat")
+            fav_label = "★ Remove favorite" if is_fav else "☆ Mark as favorite"
+            menu.add_command(label=fav_label, command=lambda: (
+                self.media_library.set_favorite(item_path, not is_fav),
+                refresh()))
+            menu.add_separator()
+            menu.add_command(label="Add to queue", command=lambda: (
+                self.add_files([item_path]), dialog.destroy()))
+            menu.tk_popup(event.x_root, event.y_root)
+
+        results.bind("<Button-3>", _lib_context_menu)
         query.trace_add("write", refresh)
         refresh(); entry.focus_set()
 
@@ -1944,6 +2009,7 @@ class MPCASUPlayer(tk.Tk):
         favorites_only = filt == "fav"
         items = self.media_library.search(query, favorites_only=favorites_only, limit=500)
         self._db_list.delete(0, "end")
+        self._db_visible_items = []
         shown = 0
         for item in items:
             ext = item.path.suffix.lower()
@@ -1953,10 +2019,11 @@ class MPCASUPlayer(tk.Tk):
                 continue
             if filt == "casu" and ext != ".casu" and ext != ".mp5":
                 continue
-            marker = "* " if item.favorite else ""
+            marker = "\u2605 " if item.favorite else ""
             dur = f" {item.duration_seconds:.0f}s" if item.duration_seconds else ""
             label = marker + item.path.name + dur
             self._db_list.insert("end", label)
+            self._db_visible_items.append(item)
             shown += 1
         total = len(self.media_library.items())
         self._db_count_var.set(f"{total} files \u00b7 {shown} shown")
@@ -1965,12 +2032,29 @@ class MPCASUPlayer(tk.Tk):
         sel = self._db_list.curselection()
         if not sel:
             return
-        query = self._db_search_var.get().strip()
-        filt = self._db_filter_var.get()
-        favorites_only = filt == "fav"
-        items = self.media_library.search(query, favorites_only=favorites_only, limit=500)
+        items = getattr(self, "_db_visible_items", [])
         if sel[0] < len(items):
             self.add_files([items[sel[0]].path])
+
+    def _db_context_menu(self, event):
+        sel = self._db_list.curselection()
+        if not sel:
+            return
+        items = getattr(self, "_db_visible_items", [])
+        if sel[0] >= len(items):
+            return
+        item = items[sel[0]]
+        menu = tk.Menu(self.root, tearoff=0, bg=PANEL, fg=TEXT,
+                       activebackground=RED_DARK, activeforeground=TEXT,
+                       relief="flat")
+        fav_label = "★ Remove favorite" if item.favorite else "☆ Mark as favorite"
+        menu.add_command(label=fav_label, command=lambda: (
+            self.media_library.set_favorite(item.path, not item.favorite),
+            self._refresh_db_finder()))
+        menu.add_separator()
+        menu.add_command(label="Add to queue",
+                         command=lambda: self.add_files([item.path]))
+        menu.tk_popup(event.x_root, event.y_root)
 
     def _restore_session(self):
         try:

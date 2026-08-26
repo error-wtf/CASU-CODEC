@@ -284,7 +284,7 @@ private:
     QLabel* fs_time_ = nullptr;
     QPushButton* fs_play_btn_ = nullptr;
     QTimer* fs_hide_timer_ = nullptr;
-    QLabel* status_label_ = nullptr;    // left: version (MPCASU 3.0.0)
+    QLabel* status_label_ = nullptr;    // left: version (MPCASU 5.0.0)
     QLabel* status_center_ = nullptr;   // center: transient status messages
     QLabel* toast_label_ = nullptr;
     QLabel* drop_overlay_ = nullptr;

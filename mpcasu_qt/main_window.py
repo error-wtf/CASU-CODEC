@@ -17,8 +17,8 @@ from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import (
-    QEasingCurve, QObject, Property, QPropertyAnimation, QRect, QRectF, QPointF,
-    Qt, QTimer, Signal, Slot, QSize, QLineF,
+    QEasingCurve, QObject, QPropertyAnimation, QRect, QRectF, QPointF, Qt, QTimer,
+    Signal, Slot, QSize, QLineF,
 )
 from PySide6.QtGui import (
     QAction, QColor, QFont, QIcon, QKeySequence, QPainter, QPen, QPixmap,
@@ -52,7 +52,7 @@ from casu.spotify import (SpotifyError, expand_spotify, fetch_spotify_metadata,
                           is_spotify_url, open_spotify_web, resolve_spotify_url,
                           search_spotify, spotify_kind, youtube_handoff_query)
 from casu.thumbnail import thumbnail_for
-from casu.waveform import decode_all_pcm, window_wave
+from casu.waveform import decode_all_pcm, live_fft, window_wave
 from casu.recording import MediaRecorder, RecordingError
 
 from casu.native import NativeCasuError, read_native
@@ -176,109 +176,6 @@ class Sidebar(QFrame):
 
     navRequested = Signal(str)
 
-    # Font-independent vector icons: Unicode glyphs render as tofu boxes on
-    # systems whose UI font lacks the codepoints (user-reported), so every
-    # nav icon is drawn with QPainter instead — identical on every OS.
-    ICON_DRAWERS = {
-        "NOW PLAYING": lambda p, r: p.drawPolygon(
-            QPolygonF([r.topLeft() + QPointF(1, 0), r.topLeft() + QPointF(1, r.height()),
-                       r.topLeft() + QPointF(r.width(), r.height() / 2)]), Qt.OddEvenFill),
-        "LIBRARY": lambda p, r: (p.drawRect(r), p.drawRect(
-            r.adjusted(r.width() * 0.3, r.height() * 0.3,
-                       -r.width() * 0.3, -r.height() * 0.3))),
-        "WEB & STREAMS": lambda p, r: (
-            p.drawEllipse(r),
-            p.drawLine(QPointF(r.left(), r.center().y()),
-                       QPointF(r.right(), r.center().y())),
-            p.drawEllipse(r.adjusted(r.width() * 0.28, 0,
-                                     -r.width() * 0.28, 0))),
-        "PLAYLISTS": lambda p, r: [
-            p.drawLine(QPointF(r.left(), r.top() + r.height() * f),
-                       QPointF(r.right(), r.top() + r.height() * f))
-            for f in (0.1, 0.5, 0.9)],
-        "IPTV / EPG": lambda p, r: (
-            p.drawRect(r.adjusted(0, 0, -r.width() / 2 - 1, -r.height() / 2 - 1)),
-            p.drawRect(r.adjusted(r.width() / 2 + 1, 0, 0, -r.height() / 2 - 1)),
-            p.drawRect(r.adjusted(0, r.height() / 2 + 1, -r.width() / 2 - 1, 0)),
-            p.drawRect(r.adjusted(r.width() / 2 + 1, r.height() / 2 + 1, 0, 0))),
-        "YOUTUBE": lambda p, r: (
-            p.drawRoundedRect(r, 3, 3),
-            p.drawPolygon(QPolygonF([
-                QPointF(r.center().x() - r.width() * 0.12, r.top() + r.height() * 0.28),
-                QPointF(r.center().x() - r.width() * 0.12, r.bottom() - r.height() * 0.28),
-                QPointF(r.right() - r.width() * 0.22, r.center().y())]), Qt.OddEvenFill)),
-        "SPOTIFY": lambda p, r: (
-            p.drawEllipse(r),
-            [p.drawArc(QRectF(r.left() + r.width() * f, r.top() + r.height() * (0.3 + 0.22 * i),
-                              r.width() * (1 - 2 * f), r.height() * 0.16), 20 * 16, 140 * 16)
-             for i, f in enumerate((0.22, 0.16, 0.10))]),
-        "CASU FILES": lambda p, r: (
-            p.drawPolygon(QPolygonF([r.center() + QPointF(0, -r.height() / 2),
-                                     r.center() + QPointF(r.width() / 2, 0),
-                                     r.center() + QPointF(0, r.height() / 2),
-                                     r.center() + QPointF(-r.width() / 2, 0)]), Qt.OddEvenFill),
-            p.drawPolygon(QPolygonF([r.center() + QPointF(0, -r.height() * 0.18),
-                                     r.center() + QPointF(r.width() * 0.18, 0),
-                                     r.center() + QPointF(0, r.height() * 0.18),
-                                     r.center() + QPointF(-r.width() * 0.18, 0)]), Qt.OddEvenFill)),
-        "HEARTHIS": lambda p, r: (
-            p.drawLine(QPointF(r.left() + 1, r.bottom() - 1),
-                       QPointF(r.right() - 1, r.top() + 1)),
-            p.drawPolyline(QPolygonF([
-                QPointF(r.right() - r.width() * 0.45, r.top() + 1),
-                QPointF(r.right() - 1, r.top() + 1),
-                QPointF(r.right() - 1, r.top() + r.height() * 0.45)]))),
-        "TIDAL": lambda p, r: [
-            p.drawPolyline(QPolygonF([
-                QPointF(r.left(), r.top() + r.height() * (0.2 + 0.3 * i)),
-                QPointF(r.center().x(), r.top() + r.height() * (0.05 + 0.3 * i)),
-                QPointF(r.right(), r.top() + r.height() * (0.2 + 0.3 * i)),
-                QPointF(r.right(), r.top() + r.height() * (0.5 + 0.3 * i))])
-            ) for i in range(2)],
-        "NETFLIX": lambda p, r: (
-            p.drawLine(QPointF(r.left() + 2, r.top()), QPointF(r.left() + 2, r.bottom())),
-            p.drawLine(QPointF(r.right() - 2, r.top()), QPointF(r.right() - 2, r.bottom())),
-            p.drawLine(QPointF(r.left() + 2, r.top()), QPointF(r.right() - 2, r.bottom()))),
-        "BROWSE": lambda p, r: (
-            p.drawEllipse(r),
-            p.drawPie(r, 40 * 16, 100 * 16),
-            p.drawPie(r, 220 * 16, 100 * 16)),
-        "OPTIONS": lambda p, r: (
-            p.drawEllipse(r.adjusted(r.width() * 0.22, r.height() * 0.22,
-                                     -r.width() * 0.22, -r.height() * 0.22)),
-            [p.drawLine(QPointF(r.center().x() + (r.width() / 2 - 1) * math.cos(a),
-                                r.center().y() + (r.height() / 2 - 1) * math.sin(a)),
-                        QPointF(r.center().x() + (r.width() / 2 - 1) * 0.55 * math.cos(a),
-                                r.center().y() + (r.height() / 2 - 1) * 0.55 * math.sin(a)))
-             for a in [i * math.pi / 4 for i in range(8)]]),
-        "ABOUT": lambda p, r: (
-            p.drawEllipse(r),
-            p.drawPoint(r.center() + QPointF(0, -r.height() * 0.22)),
-            p.drawLine(QPointF(r.center().x(), r.center().y()),
-                       QPointF(r.center().x(), r.bottom() - r.height() * 0.2))),
-    }
-
-    @staticmethod
-    def _nav_icon(name: str, color: QColor, active: QColor,
-                  size: int = 18) -> QIcon:
-        icon = QIcon()
-        for state, tint in ((QIcon.Off, color), (QIcon.On, active)):
-            pm = QPixmap(size, size)
-            pm.fill(Qt.transparent)
-            painter = QPainter(pm)
-            painter.setRenderHint(QPainter.Antialiasing)
-            pen = QPen(tint, 1.5)
-            pen.setCapStyle(Qt.RoundCap)
-            painter.setPen(pen)
-            rect = QRectF(2.5, 2.5, size - 5, size - 5)
-            drawer = Sidebar.ICON_DRAWERS.get(name)
-            if drawer is not None:
-                drawer(painter, rect)
-            painter.end()
-            icon.addPixmap(pm, QIcon.Normal, state)
-            icon.addPixmap(pm, QIcon.Selected, state)
-        return icon
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("Sidebar")
@@ -309,16 +206,6 @@ class Sidebar(QFrame):
                 layout.addWidget(header)
                 self._logo_label = logo
         layout.addSpacing(14)
-
-        # The nav body scrolls: 14+ rows need ~800 px and a QVBoxLayout
-        # would otherwise COMPRESS every row below its natural height in
-        # short (non-fullscreen) windows, clipping the label text halfway
-        # (same defect the Windows port had). Logo and version stay pinned.
-        nav_body = QWidget()
-        nav_body.setStyleSheet("background: transparent;")
-        nav_layout = QVBoxLayout(nav_body)
-        nav_layout.setContentsMargins(0, 0, 0, 0)
-        nav_layout.setSpacing(0)
 
         nav_items = [
             ("LIBRARY", ["NOW PLAYING", "LIBRARY", "WEB & STREAMS",
@@ -353,35 +240,23 @@ class Sidebar(QFrame):
         for section_title, items in nav_items:
             section = QLabel(section_title)
             section.setObjectName("SidebarSection")
-            nav_layout.addWidget(section)
+            layout.addWidget(section)
             self._rail_hidden.append(section)
             for item in items:
                 btn = QPushButton(item)
                 btn.setObjectName("NavItem")
                 btn.setCheckable(True)
-                btn.setIcon(self._nav_icon(
-                    item, QColor(PALETTE.text_muted), QColor(PALETTE.accent)))
-                btn.setIconSize(QSize(18, 18))
                 btn.setProperty("nav_name", item)
                 btn.setToolTip(item)
                 btn.setCursor(Qt.PointingHandCursor)
                 btn.clicked.connect(lambda checked=False, name=item: self.navRequested.emit(name))
                 self._nav_group.addButton(btn)
                 self._nav_buttons.append(btn)
-                nav_layout.addWidget(btn)
+                layout.addWidget(btn)
 
-        nav_layout.addStretch()
+        layout.addStretch()
 
-        nav_scroll = QScrollArea()
-        nav_scroll.setObjectName("SidebarScroll")
-        nav_scroll.setWidgetResizable(True)
-        nav_scroll.setFrameShape(QFrame.NoFrame)
-        nav_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        nav_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        nav_scroll.setWidget(nav_body)
-        layout.addWidget(nav_scroll)
-
-        version = QLabel("MPCASU 5.0.0")
+        version = QLabel("MPCASU 3.0.0")
         version.setObjectName("NowPlayingMeta")
         version.setContentsMargins(16, 8, 16, 8)
         version.setAlignment(Qt.AlignLeft | Qt.AlignBottom)
@@ -397,9 +272,8 @@ class Sidebar(QFrame):
         for widget in self._rail_hidden:
             widget.setVisible(not on)
         for btn in self._nav_buttons:
-            # Icons are drawn pixmaps (font-independent); rail mode shows
-            # them without the label instead of falling back to glyphs.
-            btn.setText("" if on else str(btn.property("nav_name")))
+            name = str(btn.property("nav_name"))
+            btn.setText(self.NAV_ICONS.get(name, name[0]) if on else name)
 
     def select(self, name: str):
         for btn in self._nav_buttons:
@@ -473,9 +347,7 @@ class PlaylistPane(QFrame):
 
     playRequested = Signal(int)
     removeRequested = Signal(list)
-    # moveRequested: (delta, selected top-level rows) — moving a multi-
-    # selection (Ctrl/Shift) moves all selected rows together.
-    moveRequested = Signal(int, list)
+    moveRequested = Signal(int, int)
     orderChanged = Signal(list)
     childPlayRequested = Signal(str)
     saveRequested = Signal()
@@ -483,13 +355,7 @@ class PlaylistPane(QFrame):
     addRequested = Signal()
     urlRequested = Signal()
     renameRequested = Signal(int)
-    # mergeRequested: emit the selected top-level rows (media/URLs) so the
-    # main window can offer to merge/append them into a playlist.
-    mergeRequested = Signal(list)
-    # childRemoveRequested/childMoveRequested: playlist children taken out of
-    # their playlist file ("remove from playlist" / "move to playlist").
-    childRemoveRequested = Signal(list)
-    childMoveRequested = Signal(list)
+    favoriteRequested = Signal(list)
 
     PLAYLIST_SUFFIXES = {".m3u", ".m3u8", ".pls", ".json", ".wpl", ".xspf",
                          ".jspf", ".asx", ".wmx", ".wvx", ".rmp", ".ram"}
@@ -566,20 +432,21 @@ class PlaylistPane(QFrame):
         up_btn = QPushButton("↑")
         up_btn.setObjectName("IconButton")
         up_btn.setFixedWidth(30)
-        up_btn.setToolTip("Move selection up")
-        up_btn.clicked.connect(lambda: self.moveRequested.emit(-1, self.selected_rows()))
+        up_btn.setToolTip("Move up")
+        up_btn.clicked.connect(lambda: self.moveRequested.emit(-1, self.selected_row()))
         cl.addWidget(up_btn)
         down_btn = QPushButton("↓")
         down_btn.setObjectName("IconButton")
         down_btn.setFixedWidth(30)
-        down_btn.setToolTip("Move selection down")
-        down_btn.clicked.connect(lambda: self.moveRequested.emit(1, self.selected_rows()))
+        down_btn.setToolTip("Move down")
+        down_btn.clicked.connect(lambda: self.moveRequested.emit(1, self.selected_row()))
         cl.addWidget(down_btn)
         remove_btn = QPushButton("×")
         remove_btn.setObjectName("IconButton")
         remove_btn.setFixedWidth(30)
-        remove_btn.setToolTip("Remove selected entries (Del)")
-        remove_btn.clicked.connect(lambda: self.removeRequested.emit(self.selected_rows()))
+        remove_btn.setToolTip("Remove selected entry (Del)")
+        remove_btn.clicked.connect(lambda: self.removeRequested.emit([self.selected_row()])
+                                   if self.selected_row() >= 0 else None)
         cl.addWidget(remove_btn)
         rename_btn = QPushButton("✎")
         rename_btn.setObjectName("IconButton")
@@ -654,34 +521,7 @@ class PlaylistPane(QFrame):
                 return row
         return -1
 
-    def selected_rows(self) -> list:
-        """Sorted top-level rows of the current (multi-)selection."""
-        return sorted({self.tree.indexOfTopLevelItem(item)
-                       for item in self.tree.selectedItems()
-                       if self.tree.indexOfTopLevelItem(item) >= 0})
-
-    def selected_child(self) -> str | None:
-        """Path/URL of the selected child of an expanded playlist group."""
-        for item in self.tree.selectedItems():
-            if item.parent() is not None and item.data(0, Qt.UserRole):
-                return str(item.data(0, Qt.UserRole))
-        return None
-
-    def select_rows(self, indexes: list):
-        """Re-apply a (multi-)selection after a re-render — persistent marking."""
-        want = {str(self._all_paths[i]) for i in indexes
-                if 0 <= i < len(self._all_paths)}
-        if not want:
-            return
-        self.tree.blockSignals(True)
-        self.tree.clearSelection()
-        for index in range(self.tree.topLevelItemCount()):
-            item = self.tree.topLevelItem(index)
-            if str(item.data(0, Qt.UserRole)) in want:
-                item.setSelected(True)
-        self.tree.blockSignals(False)
-
-    def populate(self, paths: list, selected=None):
+    def populate(self, paths: list, selected: int = -1):
         self._all_paths = list(paths)
         view = str(self._view_combo.currentData() or "all")
         visible = [(index, path) for index, path in enumerate(self._all_paths)
@@ -711,9 +551,7 @@ class PlaylistPane(QFrame):
             if item.isExpanded() and self._is_playlist(item.data(0, Qt.UserRole) or ""):
                 self._expand_playlist_item(item)
                 item.setExpanded(True)
-        if isinstance(selected, (list, set, tuple)):
-            self.select_rows(sorted(int(i) for i in selected))
-        elif isinstance(selected, int) and 0 <= selected < len(self._all_paths):
+        if 0 <= selected < len(self._all_paths):
             want = str(self._all_paths[selected])
             for index in range(self.tree.topLevelItemCount()):
                 if str(self.tree.topLevelItem(index).data(0, Qt.UserRole)) == want:
@@ -845,14 +683,8 @@ class PlaylistPane(QFrame):
 
     @staticmethod
     def _is_playlist(path) -> bool:
-        # Remote URLs (even with a playlist-like suffix, e.g. stream.m3u8)
-        # are stream entries, never playlist groups.
         try:
-            text = str(path)
-            if text.startswith(("http://", "https://", "rtsp://", "rtmp://",
-                                "udp://", "rtp://", "ftp://", "smb://")):
-                return False
-            return Path(text).suffix.lower() in PlaylistPane.PLAYLIST_SUFFIXES
+            return Path(str(path)).suffix.lower() in PlaylistPane.PLAYLIST_SUFFIXES
         except (TypeError, ValueError):
             return False
 
@@ -998,21 +830,6 @@ class PlaylistPane(QFrame):
                     return str(child.data(0, Qt.UserRole + 1) or "").strip()
         return ""
 
-    def refresh_group(self, playlist_path):
-        """Re-read the children of a playlist group from its (possibly
-        rewritten) file, keeping the current expanded/collapsed state."""
-        playlist_path = str(playlist_path)
-        for index in range(self.tree.topLevelItemCount()):
-            top = self.tree.topLevelItem(index)
-            if str(top.data(0, Qt.UserRole) or "") != playlist_path:
-                continue
-            expanded = top.isExpanded()
-            while top.childCount():
-                top.removeChild(top.child(0))
-            self._expand_playlist_item(top)
-            top.setExpanded(expanded)
-            return
-
     def _context_menu(self, position):
         item = self.tree.itemAt(position)
         menu = QMenu(self)
@@ -1033,12 +850,6 @@ class PlaylistPane(QFrame):
             count = len(top_rows)
             label = f"Play" if count <= 1 else f"Play ({count} items)"
             menu.addAction(label, lambda: self.playRequested.emit(top_rows[0]))
-            # Merge/append the selected media/URLs into a playlist (create a
-            # new one or extend an existing one). Works with single or
-            # multi-selection.
-            merge_label = "Save selection to playlist…" if count <= 1 else \
-                          f"Save {count} items to playlist…"
-            menu.addAction(merge_label, lambda: self.mergeRequested.emit(list(top_rows)))
             if count == 1:
                 single = self.tree.topLevelItem(row)
                 if single.childCount() or self._is_playlist(str(single.data(0, Qt.UserRole))):
@@ -1047,45 +858,30 @@ class PlaylistPane(QFrame):
                     else:
                         menu.addAction("Expand", single.setExpanded)
             menu.addSeparator()
-            menu.addAction("Move up", lambda: self.moveRequested.emit(-1, list(top_rows)))
-            menu.addAction("Move down", lambda: self.moveRequested.emit(1, list(top_rows)))
+            if count == 1:
+                menu.addAction("Move up", lambda: self.moveRequested.emit(-1, row))
+                menu.addAction("Move down", lambda: self.moveRequested.emit(1, row))
             remove_label = "Remove" if count <= 1 else f"Remove ({count} items)"
             menu.addAction(remove_label, lambda: self.removeRequested.emit(list(top_rows)))
+            menu.addSeparator()
+            fav_label = "Toggle ★ Favorite" if count <= 1 else f"Toggle ★ ({count} items)"
+            menu.addAction(fav_label, lambda: self.favoriteRequested.emit(list(top_rows)))
         else:
             parent = item.parent()
             if parent is not None and item.data(0, Qt.UserRole):
                 menu.addAction("Play", lambda: self.childPlayRequested.emit(
                     str(item.data(0, Qt.UserRole))))
-                # Playlist children (the media inside a playlist) can also be
-                # merged/added to any playlist, same as top-level rows.
-                child_rows = [item] if parent is None else [
-                    parent.child(c) for c in range(parent.childCount())
-                    if parent.child(c).isSelected()
-                    and parent.child(c).data(0, Qt.UserRole)]
-                if not child_rows or item not in child_rows:
-                    child_rows = [item]
-                data = [str(c.data(0, Qt.UserRole)) for c in child_rows]
-                label = "Save to playlist…" if len(data) == 1 else \
-                        f"Save {len(data)} items to playlist…"
-                menu.addAction(label, lambda: self.mergeRequested.emit(data))
-                move_label = "Move to playlist…" if len(data) == 1 else \
-                             f"Move {len(data)} items to playlist…"
-                menu.addAction(move_label, lambda: self.childMoveRequested.emit(data))
-                remove_label = "Remove from playlist" if len(data) == 1 else \
-                               f"Remove {len(data)} items from playlist"
-                menu.addAction(remove_label, lambda: self.childRemoveRequested.emit(data))
         menu.exec(self.tree.viewport().mapToGlobal(position))
 
 
 class VisualizerWidget(QWidget):
-    """Native Qt waveform visualizer (oscilloscope line on the web-style
-    cover layer).
+    """Native Qt visualizer, pixel-equivalent to web/app.js drawViz.
 
-    Product decision: FFT/spectrum bars are retired — only the 2048-point
-    oscilloscope line (#ff1e2d@0x88, y=v*0.5h+0.75h) is rendered, scrolling
-    with the playhead for local files and fed live by the stream analyser
-    for streams/radio.  One 60 Hz update path (no double repaints).  Never
-    over video.
+    128 raw FFT bars (alternating #ff1e2d/#3a1015, 0.7h, 1px gap) and a
+    256-point oscilloscope line (#ff1e2d@0x88, y=v*0.5h+0.75h) on the web
+    cover-layer background (radial gradient + centered art).  The analyser's
+    0.85 smoothing is applied to the bars.  One 60 Hz update path (no
+    double repaints) so it is as smooth as the web page.  Never over video.
     """
 
     def __init__(self, parent=None):
@@ -1096,20 +892,35 @@ class VisualizerWidget(QWidget):
         self._cover = None
         self._cover_scaled = None
         self._cover_scaled_size = (0, 0)
-        self._mode = "waveform"
+        self._mode = "spectrum"
         self._wave: tuple = ()
-        self._live_wave: tuple = ()
+        self._bands: tuple = ()
+        self._live = None
         self._overview: tuple = ()
+        self._smoothed_bands: tuple = ()
         self._bg_cache = None
         self._bg_cache_size = (0, 0)
 
+    def _smooth_bands(self, new):
+        """Web analyser smoothing (smoothingTimeConstant = 0.85)."""
+        new = tuple(new or ())
+        if not self._smoothed_bands:
+            self._smoothed_bands = new
+            return new
+        old = list(self._smoothed_bands)
+        out = []
+        for index in range(max(len(old), len(new))):
+            prev = old[index] if index < len(old) else 0.0
+            value = new[index] if index < len(new) else 0.0
+            out.append(0.85 * prev + 0.15 * value)
+        self._smoothed_bands = tuple(out)
+        return self._smoothed_bands
+
     def configure(self, mode, wave, bands, duration, overview=()):
-        # `bands` is kept in the signature for call-site compatibility but
-        # ignored: spectrum bars are retired, the waveform line is the only
-        # rendering.
         self._mode = mode
         self._duration = max(0.0, float(duration or 0.0))
         self._wave = tuple(wave or ())
+        self._bands = tuple(bands or ())
         self._overview = tuple(overview or ())
         if self._small:
             self.setVisible(False)
@@ -1156,17 +967,18 @@ class VisualizerWidget(QWidget):
         painter.drawPixmap(px, py, pix)
         painter.restore()
 
-    def set_live(self, wave, bands=None):
-        """Live stream waveform (spectrum `bands` argument is ignored)."""
-        self._live_wave = tuple(wave or ())
+    def set_live(self, bands, wave=()):
+        self._live = tuple(bands)
+        if wave:
+            self._wave = tuple(wave)
         if self._small:
             self.setVisible(False)
-        elif self._live_wave or self._cover:
+        elif self._live or self._cover:
             self.setVisible(True)
         self.update()
 
     def clear_live(self):
-        self._live_wave = ()
+        self._live = None
         self.update()
 
     def set_small(self, small: bool):
@@ -1174,6 +986,28 @@ class VisualizerWidget(QWidget):
         if small:
             self.setVisible(False)
         self.update()
+
+    def _paint_bottom_bars(self, painter, values, w, h):
+        """1024 dense bars like the web canvas, batched for speed."""
+        count = len(values)
+        if count < 2:
+            return
+        gap = 1.0
+        bar_w = w / count
+        even = []
+        odd = []
+        for index, value in enumerate(values):
+            bar_h = max(0.0, min(1.0, value) * h * 0.7)
+            x = index * bar_w
+            line = QLineF(x + gap, h - bar_h, x + gap, h)
+            (even if index % 2 == 0 else odd).append(line)
+        painter.setRenderHint(QPainter.Antialiasing, False)
+        if even:
+            painter.setPen(QPen(QColor(0xFF, 0x1E, 0x2D), max(1.0, bar_w - 2 * gap)))
+            painter.drawLines(even)
+        if odd:
+            painter.setPen(QPen(QColor(0x3A, 0x10, 0x15), max(1.0, bar_w - 2 * gap)))
+            painter.drawLines(odd)
 
     def _paint_wave_line(self, painter, wave, w, h):
         wave = list(wave or ())
@@ -1218,9 +1052,11 @@ class VisualizerWidget(QWidget):
         if self._cover is not None and not self._cover.isNull():
             self._paint_cover_art(painter, self._cover, w, h)
         if self._mode != "off":
-            wave = self._live_wave or self._wave
-            if wave:
-                self._paint_wave_line(painter, wave, w, h)
+            bands = self._live if self._live else self._bands
+            if bands:
+                self._paint_bottom_bars(painter, bands, w, h)
+            if self._wave:
+                self._paint_wave_line(painter, self._wave, w, h)
         painter.end()
 
     def _paint_cover_art(self, painter, cover, w, h):
@@ -1433,6 +1269,9 @@ class LibraryPage(QFrame):
         self._tracks_list = QListWidget()
         self._tracks_list.setObjectName("QueueTree")
         self._tracks_list.itemDoubleClicked.connect(lambda _item: self._add_selected())
+        self._tracks_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._tracks_list.customContextMenuRequested.connect(
+            self._library_track_context_menu)
         split.addWidget(self._tracks_list)
         split.setStretchFactor(0, 2)
         split.setStretchFactor(1, 5)
@@ -1614,6 +1453,32 @@ class LibraryPage(QFrame):
         if 0 <= row < len(self._tracks):
             self.addRequested.emit([self._tracks[row]])
 
+    def _library_track_context_menu(self, position):
+        item = self._tracks_list.itemAt(position)
+        if item is None:
+            return
+        row = self._tracks_list.row(item)
+        if row < 0 or row >= len(self._tracks):
+            return
+        path = self._tracks[row]
+        meta_item = None
+        for mi in self._media_library.items():
+            if mi.path == path:
+                meta_item = mi
+                break
+        is_fav = bool(meta_item.favorite) if meta_item else False
+        menu = QMenu(self)
+        fav_text = "Remove ★" if is_fav else "Add ★ Favorite"
+        menu.addAction(fav_text, lambda: self._toggle_favorite(path, row))
+        menu.addSeparator()
+        menu.addAction("Add to queue", lambda: self.addRequested.emit([path]))
+        menu.exec(self._tracks_list.viewport().mapToGlobal(position))
+
+    def _toggle_favorite(self, path, row):
+        current = bool(self._media_library.get(path) or {}).get("favorite", False)
+        self._media_library.set_favorite(path, not current)
+        self._refresh()
+
     def _on_refresh(self):
         self.refreshRequested.emit()
         self._refresh()
@@ -1720,7 +1585,8 @@ class OptionsPage(QFrame):
         viz_row = QHBoxLayout()
         self._viz_combo = QComboBox()
         self._viz_combo.setObjectName("IconButton")
-        for label, value in [("Waveform", "waveform"), ("Off", "off")]:
+        for label, value in [("Spectrum", "spectrum"), ("Waveform", "waveform"),
+                             ("Both", "both"), ("Off", "off")]:
             self._viz_combo.addItem(label, value)
         index = self._viz_combo.findData(settings.visualizer)
         self._viz_combo.setCurrentIndex(max(0, index))
@@ -2055,7 +1921,7 @@ class AboutPage(QFrame):
         sub.setAlignment(Qt.AlignCenter)
         layout.addWidget(sub)
         layout.addSpacing(12)
-        info = QLabel("Version 5.0.0\nMedia Player for CASU & Legacy Media\nIn-process playback · No external player")
+        info = QLabel("Version 3.0.0\nMedia Player for CASU & Legacy Media\nIn-process playback · No external player")
         info.setObjectName("NowPlayingMeta")
         info.setAlignment(Qt.AlignCenter)
         layout.addWidget(info)
@@ -2299,7 +2165,7 @@ class SourcesView(QFrame):
             entry.setSizeHint(QSize(0, 52))
             self._list.addItem(entry)
             self._thumb_jobs.append((row, item))
-        if self._thumb_jobs and self._mode != "youtube":
+        if self._thumb_jobs:
             self._load_thumbnails(list(self._thumb_jobs))
         self._status.setText(f"{len(self._results)} results — double-click or press Enter to play")
 
@@ -2385,10 +2251,6 @@ class MainWindow(QMainWindow):
         self._advancing = False
         self._end_handled = False
         self._started_at = 0.0
-        # Logical playback sequence over the queue: playlist groups stay in
-        # the model (they are never dissolved); playback walks this flattened
-        # list instead. Rebuilt lazily, invalidated on every queue mutation.
-        self._play_seq: list[str] | None = None
         self._start_offset = 0.0
         self._visual_phase = 0.0
         self._visual_state = "idle"
@@ -2423,7 +2285,7 @@ class MainWindow(QMainWindow):
         self._viz_rate = 0
         self._viz_generation = 0
         self._viz_overview = ()
-        self._viz_mode = "waveform"
+        self._viz_mode = "spectrum"
         self._viz_timer = QTimer(self)
         self._viz_timer.setInterval(16)  # ~60 Hz window update
         self._viz_timer.timeout.connect(self._tick_visualizer)
@@ -2463,7 +2325,6 @@ class MainWindow(QMainWindow):
         self._poll_timer = QTimer(self)
         self._poll_timer.timeout.connect(self._poll)
         self._poll_timer.start(200)
-        self._mpris_notifier = _register_mpris(self)
 
         if initial:
             self.add_files(initial)
@@ -2891,11 +2752,9 @@ class MainWindow(QMainWindow):
         self._playlist_pane.playRequested.connect(self._play_playlist_row)
         self._playlist_pane.removeRequested.connect(self._on_playlist_remove)
         self._playlist_pane.moveRequested.connect(self._on_playlist_move)
-        self._playlist_pane.mergeRequested.connect(self._on_playlist_merge)
+        self._playlist_pane.favoriteRequested.connect(self._on_queue_favorite)
         self._playlist_pane.orderChanged.connect(self._apply_queue_order)
         self._playlist_pane.childPlayRequested.connect(self._on_queue_child_play)
-        self._playlist_pane.childRemoveRequested.connect(self._on_child_remove_from_playlist)
-        self._playlist_pane.childMoveRequested.connect(self._on_child_move_to_playlist)
         self._playlist_pane.saveRequested.connect(self.save_playlist)
         self._playlist_pane.loadRequested.connect(self.load_playlist)
         self._random = random.SystemRandom()
@@ -2916,7 +2775,7 @@ class MainWindow(QMainWindow):
 
         status_bar = QStatusBar()
         status_bar.setObjectName("StatusBar")
-        self._status_left = QLabel("MPCASU 5.0.0")
+        self._status_left = QLabel("MPCASU 3.0.0")
         self._status_left.setObjectName("StatusText")
         self._status_left.setStyleSheet(f"color: {PALETTE.text_muted};")
         status_bar.addWidget(self._status_left)
@@ -3130,8 +2989,6 @@ class MainWindow(QMainWindow):
                 self.backend.play()
             self._seek_slider.set_position(pos)
             self._update_time_labels(pos)
-            if self._mpris_notifier is not None:
-                self._mpris_notifier.seeked(pos)
         except (BackendError, CasuError, OSError) as exc:
             self.status(f"Cannot seek — {exc}")
 
@@ -3184,12 +3041,6 @@ class MainWindow(QMainWindow):
         if path is not None:
             selected = Path(path)
         else:
-            # A selected child of an expanded playlist group plays through the
-            # same resolution path as every playlist action.
-            child = self._playlist_pane.selected_child()
-            if child is not None:
-                self._on_queue_child_play(child)
-                return
             selected = self.selected_path()
         if selected is None:
             self.status("Add a media file first.")
@@ -3199,16 +3050,11 @@ class MainWindow(QMainWindow):
             self._play_network_source(text)
             return
         path = selected
-        # A playlist file (a .m3u/.pls/… row in the queue) is not playable
-        # itself: the main Play button must start the FULL playlist, exactly
-        # like right-click -> Play does.
-        if path.is_file() and path.suffix.lower() in PlaylistPane.PLAYLIST_SUFFIXES:
-            self._play_playlist_full(path)
-            return
         if not Path(text).is_file():
             self.status("Add a media file first.")
             return
         self.stop()
+        self._show_player_page()
         self._stop_stream_viz()
         self._end_handled = False
         self.current = path
@@ -3343,24 +3189,19 @@ class MainWindow(QMainWindow):
             self._shuffle_btn.setChecked(checked)
         self.status(f"Shuffle {'on' if checked else 'off'}")
 
-    def _set_repeat_mode(self, mode: str) -> None:
-        if mode not in ("off", "all", "one") or mode == self._repeat_mode:
-            return
-        self._repeat_mode = mode
-        settings = self.settings_store.load()
-        self.settings_store.save(replace(settings, repeat_mode=mode))
-        self._playlist_pane.repeat_btn.setText(f"Repeat {mode}")
-        if hasattr(self, "_repeat_btn"):
-            self._repeat_btn.setText("↻" if mode == "off" else
-                                     ("↻1" if mode == "one" else "↻∞"))
-            self._repeat_btn.setProperty("on", "true" if mode != "off" else "false")
-            self._repeat_btn.style().unpolish(self._repeat_btn)
-            self._repeat_btn.style().polish(self._repeat_btn)
-        self.status(f"Repeat mode: {mode}")
-
     def _cycle_repeat(self) -> None:
         values = ("off", "all", "one")
-        self._set_repeat_mode(values[(values.index(self._repeat_mode) + 1) % len(values)])
+        self._repeat_mode = values[(values.index(self._repeat_mode) + 1) % len(values)]
+        settings = self.settings_store.load()
+        self.settings_store.save(replace(settings, repeat_mode=self._repeat_mode))
+        self._playlist_pane.repeat_btn.setText(f"Repeat {self._repeat_mode}")
+        if hasattr(self, "_repeat_btn"):
+            self._repeat_btn.setText("↻" if self._repeat_mode == "off" else
+                                     ("↻1" if self._repeat_mode == "one" else "↻∞"))
+            self._repeat_btn.setProperty("on", "true" if self._repeat_mode != "off" else "false")
+            self._repeat_btn.style().unpolish(self._repeat_btn)
+            self._repeat_btn.style().polish(self._repeat_btn)
+        self.status(f"Repeat mode: {self._repeat_mode}")
 
     def play_next(self, automatic: bool = False):
         count = len(self.playlist_model)
@@ -3392,37 +3233,38 @@ class MainWindow(QMainWindow):
             self.status("Playlist is empty")
             return
 
-        # The queue is the single source of truth: playlist groups stay in
-        # the model (they are never dissolved into their entries), so the
-        # playback order is a logical walk through the flattened queue —
-        # UI expand state never matters, and the playlists stay visible.
-        seq = self._ensure_play_seq()
-        count = len(seq)
-        if not count:
-            self.status("Playlist is empty")
+        # Playlist-aware advance: if the current item is a child of a playlist
+        # group, advance to the NEXT child inside that group before moving on
+        # to the following top-level row.
+        context = self._current_playlist_context()
+        if context is not None:
+            playlist, entries, child_index = context
+            if self._shuffle and len(entries) > 1:
+                choices = [i for i in range(len(entries)) if i != child_index]
+                target = self._random.choice(choices)
+                self._play_entry(playlist, entries[target])
+                return
+            if child_index + 1 < len(entries):
+                self._play_entry(playlist, entries[child_index + 1])
+                return
+            # Reached the end of this playlist's children: continue to the
+            # next top-level row after the playlist group.
+            row = self.playlist_model.index_of(playlist)
+            next_row = row + 1 if row is not None else -1
+            if next_row >= 0 and next_row < count:
+                self._playlist_pane.select_row(next_row)
+                self.play_selected()
+                return
+            if self._repeat_mode == "all":
+                self._playlist_pane.select_row(0)
+                self.play_selected()
+                return
+            self.status("End of playlist")
             return
 
-        current_text = str(self.current) if self.current else None
-        index = -1
-        if current_text is not None:
-            try:
-                index = seq.index(current_text)
-            except ValueError:
-                index = -1
-        if index < 0:
-            # Current entry is not part of the logical sequence (queue was
-            # edited or a stream is playing): continue from the selected
-            # row/child (or the beginning).
-            index = self._row_to_seq(self._selected_playlist_row())
-            if index is None:
-                child = self._playlist_pane.selected_child()
-                if child is not None:
-                    try:
-                        index = seq.index(str(child))
-                    except ValueError:
-                        index = -1
-            if index is None or index < 0:
-                index = 0
+        selected_index = self._selected_playlist_row()
+        current_index = self.playlist_model.index_of(self.current) if self.current else None
+        index = selected_index if selected_index >= 0 else (-1 if current_index is None else current_index)
         if self._shuffle and count > 1:
             choices = [value for value in range(count) if value != index]
             target = self._random.choice(choices)
@@ -3433,40 +3275,87 @@ class MainWindow(QMainWindow):
         if target >= count:
             self.status("End of playlist")
             return
-        self._play_playlist_entry(seq[target])
+        self._playlist_pane.select_row(target)
+        self.play_selected()
 
     def play_previous(self):
-        seq = self._ensure_play_seq()
-        count = len(seq)
+        count = len(self.playlist_model)
         if not count:
             self.status("Playlist is empty")
             return
 
-        current_text = str(self.current) if self.current else None
-        index = -1
-        if current_text is not None:
-            try:
-                index = seq.index(current_text)
-            except ValueError:
-                index = -1
-        if index < 0:
-            index = self._row_to_seq(self._selected_playlist_row())
-            if index is None:
-                child = self._playlist_pane.selected_child()
-                if child is not None:
-                    try:
-                        index = seq.index(str(child))
-                    except ValueError:
-                        index = -1
-            if index is None or index < 0:
-                index = 0
+        # Playlist-aware previous: if the current item is a playlist child,
+        # go to the PREVIOUS child inside that group first.
+        context = self._current_playlist_context()
+        if context is not None:
+            playlist, entries, child_index = context
+            if child_index - 1 >= 0:
+                self._play_entry(playlist, entries[child_index - 1])
+                return
+            row = self.playlist_model.index_of(playlist)
+            prev_row = row - 1 if row is not None else -1
+            if prev_row >= 0:
+                self._playlist_pane.select_row(prev_row)
+                self.play_selected()
+                return
+            if self._repeat_mode == "all":
+                self._playlist_pane.select_row(count - 1)
+                self.play_selected()
+                return
+            self.status("Beginning of playlist")
+            return
+
+        selected_index = self._selected_playlist_row()
+        current_index = self.playlist_model.index_of(self.current) if self.current else None
+        index = selected_index if selected_index >= 0 else (0 if current_index is None else current_index)
         target = index - 1
         if target < 0 and self._repeat_mode == "all":
             target = count - 1
         if target < 0:
             self.status("Beginning of playlist")
             return
-        self._play_playlist_entry(seq[target])
+        self._playlist_pane.select_row(target)
+        self.play_selected()
+
+    def _current_playlist_context(self):
+        """If the current item is a child of a playlist group, return
+        (playlist_path, entries, child_index); otherwise None."""
+        if self.current is None:
+            return None
+        current = str(self.current)
+        pane = self._playlist_pane
+        for index in range(pane.tree.topLevelItemCount()):
+            top = pane.tree.topLevelItem(index)
+            playlist_path = str(top.data(0, Qt.UserRole) or "")
+            if not playlist_path or playlist_path.startswith(("http://", "https://", "rtsp://")):
+                continue
+            if Path(playlist_path).suffix.lower() not in PlaylistPane.PLAYLIST_SUFFIXES:
+                continue
+            if not top.isExpanded():
+                continue
+            for c in range(top.childCount()):
+                child = top.child(c)
+                if str(child.data(0, Qt.UserRole) or "") == current:
+                    entries = self._playlist_entries(Path(playlist_path))
+                    for i, entry in enumerate(entries):
+                        if str(entry) == current:
+                            return (Path(playlist_path), entries, i)
+        return None
+
+    def _play_entry(self, playlist: Path, entry):
+        """Play one entry of a playlist group, keeping the group highlighted."""
+        self._playlist_pane.select_child(playlist, entry)
+        if isinstance(entry, str) and entry.startswith(("http://", "https://",
+                                                        "rtsp://", "rtmp://",
+                                                        "udp://", "rtp://",
+                                                        "ftp://", "smb://")):
+            self._resolve_and_open_external_source(entry)
+            return
+        path = Path(entry)
+        if not path.is_file():
+            self.toast(f"Local file not found: {path.name}")
+            return
+        self.play_selected(path)
 
     def _selected_playlist_row(self) -> int:
         return self._playlist_pane.selected_row()
@@ -3722,24 +3611,15 @@ class MainWindow(QMainWindow):
         # the queue must not be added a second time as a separate top-level
         # row. Resolve every (new) playlist's children first and treat those
         # paths as "already covered" so Choose files never double-loads.
-        # URLs (streams) are queued as top-level rows like files, so they can
-        # be combined with playlists and saved/merged into them. The input
-        # order is preserved: playlists, files and URLs keep their relative
-        # positions in the queue.
         playlists: list[Path] = []
         plain: list[Path] = []
-        urls: list[str] = []
         for value in paths:
             try:
-                text = str(value)
                 path = Path(value)
             except (TypeError, ValueError):
                 continue
             suffix = path.suffix.lower()
-            if text.startswith(("http://", "https://", "rtsp://", "rtmp://",
-                                "udp://", "rtp://", "ftp://", "smb://")):
-                urls.append(text)
-            elif path.is_file() and suffix in PlaylistPane.PLAYLIST_SUFFIXES:
+            if path.is_file() and suffix in PlaylistPane.PLAYLIST_SUFFIXES:
                 playlists.append(path.expanduser().resolve())
             elif path.is_file():
                 plain.append(path.expanduser().resolve())
@@ -3754,27 +3634,12 @@ class MainWindow(QMainWindow):
                 pass
 
         added: list[Path] = []
-        for value in paths:
-            try:
-                text = str(value)
-                path = Path(value)
-            except (TypeError, ValueError):
-                continue
-            if text.startswith(("http://", "https://", "rtsp://", "rtmp://",
-                                "udp://", "rtp://", "ftp://", "smb://")):
-                try:
-                    self.playlist_model.add((text,))
-                except PlaylistError as exc:
-                    self.status(str(exc))
-                continue
-            if not path.is_file():
-                continue
-            resolved = path.expanduser().resolve()
-            if resolved in added or str(resolved) in covered:
+        for path in playlists + plain:
+            if path in added or str(path) in covered:
                 continue
             try:
-                if self.playlist_model.add((resolved,), existing_only=True):
-                    added.append(resolved)
+                if self.playlist_model.add((path,), existing_only=True):
+                    added.append(path)
             except PlaylistError as exc:
                 self.status(str(exc))
                 break
@@ -3783,7 +3648,6 @@ class MainWindow(QMainWindow):
                 self.media_library.upsert(path)
             except OSError:
                 pass
-        self._invalidate_play_seq()
         self._render_playlist()
 
     def add_dialog(self):
@@ -4151,7 +4015,10 @@ class MainWindow(QMainWindow):
             return
 
         if payload[0] == "live":
-            self._visualizer.set_live(payload[1])
+            if len(payload) >= 3:
+                self._visualizer.set_live(payload[1], payload[2])
+            else:
+                self._visualizer.set_live(payload[1])
 
     def _tick_visualizer(self):
         if (
@@ -4162,7 +4029,7 @@ class MainWindow(QMainWindow):
         ):
             return
 
-        mode = self._viz_mode or "waveform"
+        mode = self._viz_mode or "spectrum"
 
         if mode == "off":
             return
@@ -4187,14 +4054,18 @@ class MainWindow(QMainWindow):
             window_s=2048.0 / max(1, self._viz_rate),
             points=2048,
         )
-        # Spectrum/FFT computation was retired by product decision — the
-        # per-tick rFFT (60 Hz × 2048 points) burned CPU for a rendering
-        # that no longer exists.
+        bands = live_fft(
+            self._viz_pcm,
+            self._viz_rate,
+            position,
+            fft_size=2048,
+            bins=1024,
+        )
 
         self._visualizer.configure(
             mode,
             wave,
-            (),
+            bands,
             self.duration or 0.0,
             self._viz_overview,
         )
@@ -4528,7 +4399,7 @@ class MainWindow(QMainWindow):
             self.toast("Visualizer is for audio only (subtitles show for video)")
             return
         settings = self.settings_store.load()
-        mode = "off" if settings.visualizer != "off" else "waveform"
+        mode = "off" if settings.visualizer != "off" else "spectrum"
         self.settings_store.save(replace(settings, visualizer=mode))
         self._viz_mode = mode
         self._viz_btn.setProperty("on", "true" if mode != "off" else "false")
@@ -4615,15 +4486,22 @@ class MainWindow(QMainWindow):
                     continue
                 last_emit = now
                 try:
-                    # Slide a 2048-sample window -> oscilloscope line only
-                    # (FFT bars are retired; no per-packet rFFT anymore).
+                    # Slide a 2048-sample window -> 1024 raw FFT bars.
                     buff = buff[-4096:]
                     samples = (np.frombuffer(buff, dtype="<i2")
                                .astype(np.float32) / 32768.0)
+                    windowed = samples * np.hanning(len(samples))
+                    spectrum = np.abs(np.fft.rfft(windowed))[1:1025]
+                    peak = float(spectrum.max()) if spectrum.size else 0.0
+                    if peak <= 1e-6:
+                        bands = tuple(0.0 for _ in spectrum)
+                    else:
+                        bands = tuple(float(max(0.0, min(1.0, value / peak)))
+                                      for value in spectrum)
                     width = max(1, len(samples) // 2048)
                     wave = tuple(float(samples[i])
                                  for i in range(0, len(samples), width))[:2048]
-                    bridge.resultReady.emit(("live", wave))
+                    bridge.resultReady.emit(("live", bands, wave))
                 except Exception:  # noqa: BLE001 - stream viz is optional
                     continue
         import threading
@@ -4685,13 +4563,6 @@ class MainWindow(QMainWindow):
                 self._queue_and_play(payload)
                 self._tag_queue_title(payload)
                 return
-            # Plain stream URLs are queued like files, so they combine with
-            # playlists in one mixed queue and can be saved/merged.
-            try:
-                self.playlist_model.add((payload,))
-                self._render_playlist()
-            except Exception:  # noqa: BLE001 - queue must never block playback
-                pass
             self._resolve_and_open_external_source(payload)
             return
         if getattr(payload, "source", None) == "spotify" and is_spotify_url(payload.url):
@@ -4876,11 +4747,6 @@ class MainWindow(QMainWindow):
         if provider:
             self._open_web_player(provider, url=str(source))
             return
-        # Keep the queue selection on the stream's row (if it is queued) so
-        # Next/Previous advance through the mixed queue in order.
-        index = self.playlist_model.index_of(source)
-        if index is not None:
-            self._playlist_pane.select_row(index)
         self._show_player_page()
         if preserve_proxy:
             # The loopback transport for THIS source is already running and
@@ -4946,23 +4812,16 @@ class MainWindow(QMainWindow):
                 # libVLC streams can misclassify the stage and flip Qt
                 # overlays over the native video surface.
                 self._probe_stage(source)
-            if not youtube:
-                # YouTube's resolved URL is media, not artwork. Running
-                # ffmpeg against the loopback proxy here creates a second
-                # full-stream consumer alongside libVLC; reproduced today as
-                # playback wedging at position 0 (ffmpeg pulled 170+ range
-                # requests while VLC starved). Cover art for YouTube items
-                # comes from yt-dlp thumbnails instead.
-                generation = self._viz_generation
-                cover_source = str(source)
+            generation = self._viz_generation
+            cover_source = str(source)
 
-                def cover_worker():
-                    cover = self._cover_for(cover_source)
-                    if cover:
-                        self._viz_bridge.resultReady.emit(
-                            ("cover", generation, cover))
+            def cover_worker():
+                cover = self._cover_for(cover_source)
+                if cover:
+                    self._viz_bridge.resultReady.emit(
+                        ("cover", generation, cover))
 
-                threading.Thread(target=cover_worker, daemon=True).start()
+            threading.Thread(target=cover_worker, daemon=True).start()
         except (BackendError, OSError) as exc:
             self.controller.close()
             self.backend = None
@@ -4973,92 +4832,32 @@ class MainWindow(QMainWindow):
         self._playlist_pane.populate(list(self.playlist_model.items), selected)
 
     def _play_playlist_row(self, row: int):
+        self._show_player_page()
         self._playlist_pane.select_row(row)
-        # If the selected row is a playlist group, "Play" starts the FULL
-        # playlist (all its tracks queued, then played in order) — not just the
-        # first track. This makes "Play" on a collapsed playlist work and lets
-        # the queue continue through every entry automatically.
+        # If the selected row is a playlist group, "Play" must start from the
+        # FIRST track of the playlist (its first child), not try to play the
+        # playlist file itself as media.
         try:
             item = self.playlist_model.item(row)
         except PlaylistError:
             self.play_selected()
             return
         if not isinstance(item, str) and item.suffix.lower() in PlaylistPane.PLAYLIST_SUFFIXES:
-            self._play_playlist_full(item)
+            entries = self._playlist_entries(item)
+            if not entries:
+                self.toast("Playlist is empty")
+                return
+            first = entries[0]
+            if isinstance(first, str):
+                self._play_playlist_entry(first)
+                return
+            # Start from the FIRST track of the playlist. The file may not be
+            # a top-level queue row (it is covered by the playlist group), so
+            # play it directly and highlight it inside the group.
+            self._playlist_pane.select_child(item, first)
+            self.play_selected(first)
             return
         self.play_selected()
-
-    def _play_playlist_full(self, playlist: Path):
-        """Play the whole playlist: its group row stays in the queue, the
-        playback sequence walks through all its entries (then continues with
-        whatever follows in the queue). The expanded/collapsed UI state never
-        matters — and the playlist never disappears from the display."""
-        entries = self._playlist_entries(playlist)
-        if not entries:
-            return
-        seq = self._ensure_play_seq()
-        row = self.playlist_model.index_of(playlist)
-        pos = self._row_to_seq(row) if row is not None else None
-        if pos is None or pos >= len(seq):
-            pos = 0
-        self._play_playlist_entry(seq[pos])
-
-    def _playback_sequence(self) -> list:
-        """Logical playback order over the queue: each playlist group
-        contributes its entries (in file order) at the group's position,
-        every other row is itself. The queue model is NEVER modified here —
-        playlists stay visible as groups."""
-        seq: list[str] = []
-        for idx in range(len(self.playlist_model)):
-            try:
-                item = self.playlist_model.item(idx)
-            except PlaylistError:
-                continue
-            if isinstance(item, str):
-                seq.append(str(item))
-                continue
-            if item.suffix.lower() in PlaylistPane.PLAYLIST_SUFFIXES:
-                try:
-                    loaded = load_playlist_file(item)
-                except (PlaylistError, OSError, ValueError):
-                    continue
-                seq.extend(str(entry) for entry in loaded.items)
-            else:
-                seq.append(str(item))
-        return seq
-
-    def _ensure_play_seq(self) -> list:
-        if self._play_seq is None:
-            self._play_seq = self._playback_sequence()
-        return self._play_seq
-
-    def _invalidate_play_seq(self):
-        self._play_seq = None
-
-    def _row_to_seq(self, row: int) -> int | None:
-        """First position in the logical playback sequence that the top-level
-        queue row ``row`` contributes (a playlist group's first entry), or
-        None when the row does not exist."""
-        if row is None or row < 0:
-            return None
-        pos = 0
-        for idx in range(len(self.playlist_model)):
-            if idx == row:
-                return pos
-            try:
-                item = self.playlist_model.item(idx)
-            except PlaylistError:
-                continue
-            if isinstance(item, str):
-                pos += 1
-            elif item.suffix.lower() in PlaylistPane.PLAYLIST_SUFFIXES:
-                try:
-                    pos += len(load_playlist_file(item).items)
-                except (PlaylistError, OSError, ValueError):
-                    pass
-            else:
-                pos += 1
-        return None
 
     def _playlist_entries(self, playlist: Path) -> list:
         try:
@@ -5068,38 +4867,7 @@ class MainWindow(QMainWindow):
             self.toast(f"Could not read playlist: {exc}")
             return []
 
-    def _containing_playlist(self, entry) -> Path | None:
-        """Return the playlist group (a .m3u/.pls/… row in the queue) whose
-        entries contain ``entry``, or None. Independent of the UI expand
-        state: the entries are read from the playlist files directly."""
-        want = str(entry)
-        for idx in range(len(self.playlist_model)):
-            try:
-                item = self.playlist_model.item(idx)
-            except PlaylistError:
-                continue
-            if isinstance(item, str):
-                continue
-            if item.suffix.lower() not in PlaylistPane.PLAYLIST_SUFFIXES:
-                continue
-            try:
-                loaded = load_playlist_file(item)
-            except (PlaylistError, OSError, ValueError):
-                continue
-            if any(str(e) == want for e in loaded.items):
-                return item
-        return None
-
     def _play_playlist_entry(self, entry):
-        # Highlight what is playing: the row itself, or the child inside its
-        # (still visible) playlist group. The queue model is never modified.
-        index = self.playlist_model.index_of(entry)
-        if index is not None:
-            self._playlist_pane.select_row(index)
-        else:
-            playlist = self._containing_playlist(entry)
-            if playlist is not None:
-                self._playlist_pane.select_child(playlist, entry)
         # Play one playlist entry (stream or local file) using the same path
         # as clicking a playlist child.
         if isinstance(entry, str) and entry.startswith(("http://", "https://",
@@ -5119,269 +4887,40 @@ class MainWindow(QMainWindow):
             if self.backend:
                 self.stop()
             self.playlist_model.clear()
-            self._invalidate_play_seq()
             self._render_playlist()
             self.current = None
             self._now_playing_bar.set_now_playing("")
             self._set_caption("")
             self.status("Playlist cleared")
             return
-        items = self.playlist_model.items
-        before = set(self._playlist_pane.selected_rows())
         try:
             self.playlist_model.remove(indices)
         except PlaylistError as exc:
             self.status(str(exc))
             return
-        self._invalidate_play_seq()
         self._render_playlist()
-        # Persistent marking: rows that were marked but not removed stay marked.
-        removed = {int(i) for i in indices if 0 <= i < len(items)}
-        keep = {str(items[i]) for i in (set(before) - removed)}
-        if keep:
-            new_indices = [i for i, path in enumerate(self.playlist_model.items)
-                           if str(path) in keep]
-            if new_indices:
-                self._playlist_pane.select_rows(new_indices)
 
-    def _on_playlist_move(self, delta: int, indices: list):
-        if not indices:
+    def _on_queue_favorite(self, indices):
+        for idx in indices:
+            try:
+                item = self.playlist_model.item(idx)
+                if item and Path(item).is_file():
+                    current = bool(self.media_library.get(str(item)) or
+                                   {}).get("favorite", False)
+                    self.media_library.set_favorite(str(item), not current)
+            except Exception:
+                pass
+        self.toast("★ Favorites updated")
+
+    def _on_playlist_move(self, delta: int, index: int):
+        if index < 0:
             return
-        items = self.playlist_model.items
-        saved = [items[i] for i in sorted({int(i) for i in indices})
-                 if 0 <= i < len(items)]
         try:
-            self.playlist_model.move_many(indices, delta)
+            target = self.playlist_model.move(index, delta)
         except PlaylistError as exc:
             self.status(str(exc))
             return
-        self._invalidate_play_seq()
-        self._render_playlist()
-        if saved:
-            # Persistent marking: re-select the same rows after the re-render,
-            # so repeated moves/removes work without re-marking.
-            want = {str(path) for path in saved}
-            new_indices = [i for i, path in enumerate(self.playlist_model.items)
-                           if str(path) in want]
-            if new_indices:
-                self._playlist_pane.select_rows(new_indices)
-
-    def _on_playlist_merge(self, rows: list):
-        """Merge/append selected queue rows (media files / URLs) into a playlist.
-
-        - Single or multi-selection is supported (mark several items, then
-          'Save N items to playlist…').
-        - Playlist children (the media inside a playlist) are accepted too:
-          the context menu sends their URLs instead of row indices.
-        - A whole playlist group (another .m3u/.pls/… in the queue) is
-          resolved into its entries, so entire playlists can be merged.
-        - Choose an existing playlist to extend (merge) or create a new one.
-        - The selected entries are appended to the playlist and saved.
-        """
-        from PySide6.QtWidgets import QInputDialog, QMessageBox
-        if not rows:
-            return
-        # Resolve the selected rows into media/URL entries. Rows are either
-        # queue indices (int) or direct entries (str, e.g. playlist children).
-        entries: list[str] = []
-        for row in rows:
-            if isinstance(row, int):
-                try:
-                    item = self.playlist_model.item(row)
-                except PlaylistError:
-                    continue
-                text = str(item)
-            else:
-                text = str(row)
-            # A playlist group itself is resolved into its entries, so merging
-            # whole playlists works: every track of the selected playlist is
-            # appended (deduplicated) to the target playlist. Remote URLs with
-            # a playlist-like suffix are stream entries, not groups.
-            if self._playlist_pane._is_playlist(text) and Path(text).is_file():
-                try:
-                    loaded = load_playlist_file(text)
-                except (PlaylistError, OSError, ValueError) as exc:
-                    self.toast(f"Could not read playlist {text}: {exc}")
-                    continue
-                for item in loaded.items:
-                    entries.append(str(item))
-                continue
-            entries.append(text)
-        if not entries:
-            self.toast("Nothing to merge: no playable media/URL selected.")
-            return
-
-        # Collect existing playlists already in the queue (their .m3u/.pls/...
-        # files), so the user can extend one of them.
-        playlists = self._queue_playlists()
-        target = self._choose_playlist_target(
-            playlists, title="Merge into playlist",
-            label="Choose a playlist to append the selected items to, or create a new one:")
-        if target is None:
-            return
-
-        # Merge: load existing, append new entries (deduplicated), save.
-        try:
-            model = load_playlist_file(target)
-        except (PlaylistError, OSError, ValueError):
-            model = PlaylistModel()
-        added = 0
-        for entry in entries:
-            before = len(model.items)
-            model.add((entry,))
-            if len(model.items) > before:
-                added += 1
-        try:
-            save_playlist_file(target, model)
-        except (PlaylistError, OSError) as exc:
-            self.toast(f"Could not save playlist: {exc}")
-            return
-        self.toast(f"Added {added} item(s) to {target.name}")
-        self.status(f"Playlist updated · {target.name}")
-        # The target playlist file changed: the logical playback sequence
-        # must reflect the new contents next time it is used.
-        self._invalidate_play_seq()
-        # Refresh the playlist group in the queue if it is already present;
-        # keep the selection (order/markings stay visible after the merge).
-        sel = rows[0] if isinstance(rows[0], int) else -1
-        self._render_playlist(sel)
-
-    def _queue_playlists(self) -> list:
-        """Playlist files (groups) currently present in the queue."""
-        playlists: list[Path] = []
-        for idx in range(len(self.playlist_model)):
-            try:
-                item = self.playlist_model.item(idx)
-            except PlaylistError:
-                continue
-            if not isinstance(item, str) and item.suffix.lower() in PlaylistPane.PLAYLIST_SUFFIXES:
-                playlists.append(item)
-        return playlists
-
-    def _choose_playlist_target(self, playlists: list, *, title: str,
-                                label: str) -> Path | None:
-        """Dialog to pick an existing queue playlist or create a new one."""
-        from PySide6.QtWidgets import QInputDialog
-        choices = ["<Create new playlist>"] + [str(p) for p in playlists]
-        if len(choices) == 1:
-            target_name, ok = QInputDialog.getText(
-                self, "New playlist", "Playlist name (e.g. mylist.m3u):")
-            if not ok or not target_name.strip():
-                return None
-            return self._resolve_playlist_target(target_name.strip())
-        choice, ok = QInputDialog.getItem(
-            self, title, label, choices, 0, False)
-        if not ok:
-            return None
-        if choice == "<Create new playlist>":
-            target_name, ok2 = QInputDialog.getText(
-                self, "New playlist", "Playlist name (e.g. mylist.m3u):")
-            if not ok2 or not target_name.strip():
-                return None
-            return self._resolve_playlist_target(target_name.strip())
-        return Path(choice)
-
-    def _on_child_remove_from_playlist(self, entries: list):
-        """'Remove from playlist': take the selected children OUT of their
-        playlist file. The playlist group stays visible in the queue."""
-        if not entries:
-            return
-        removed_total = 0
-        touched: set = set()
-        for entry in entries:
-            playlist = self._containing_playlist(entry)
-            if playlist is None:
-                continue
-            touched.add(str(playlist))
-            try:
-                model = load_playlist_file(playlist)
-            except (PlaylistError, OSError, ValueError):
-                continue
-            indices = [i for i in range(len(model.items))
-                       if str(model.items[i]) == str(entry)]
-            if not indices:
-                continue
-            try:
-                model.remove(indices)
-                save_playlist_file(playlist, model)
-            except (PlaylistError, OSError) as exc:
-                self.toast(f"Could not update {playlist.name}: {exc}")
-                continue
-            removed_total += len(indices)
-        for path in touched:
-            self._playlist_pane.refresh_group(Path(path))
-        self._invalidate_play_seq()
-        if removed_total:
-            self.toast(f"Removed {removed_total} item(s) from playlist")
-            self.status(f"Playlist updated · {removed_total} item(s) removed")
-
-    def _on_child_move_to_playlist(self, entries: list):
-        """'Move to playlist': take the selected children OUT of their source
-        playlist file and append them to a target playlist (choose or create).
-        Both playlists stay visible in the queue."""
-        if not entries:
-            return
-        target = self._choose_playlist_target(
-            self._queue_playlists(), title="Move to playlist",
-            label="Choose a playlist to move the selected items to, or create a new one:")
-        if target is None:
-            return
-        removed_total = 0
-        touched: set = set()
-        for entry in entries:
-            playlist = self._containing_playlist(entry)
-            if playlist is None or str(playlist) == str(target):
-                continue
-            touched.add(str(playlist))
-            try:
-                model = load_playlist_file(playlist)
-            except (PlaylistError, OSError, ValueError):
-                continue
-            indices = [i for i in range(len(model.items))
-                       if str(model.items[i]) == str(entry)]
-            if not indices:
-                continue
-            try:
-                model.remove(indices)
-                save_playlist_file(playlist, model)
-            except (PlaylistError, OSError) as exc:
-                self.toast(f"Could not update {playlist.name}: {exc}")
-                continue
-            removed_total += len(indices)
-        try:
-            model = load_playlist_file(target)
-        except (PlaylistError, OSError, ValueError):
-            model = PlaylistModel()
-        added = 0
-        for entry in entries:
-            before = len(model.items)
-            model.add((entry,))
-            if len(model.items) > before:
-                added += 1
-        try:
-            save_playlist_file(target, model)
-        except (PlaylistError, OSError) as exc:
-            self.toast(f"Could not save {target.name}: {exc}")
-            return
-        for path in touched:
-            self._playlist_pane.refresh_group(Path(path))
-        self._invalidate_play_seq()
-        self.toast(f"Moved {added} item(s) to {target.name}")
-        self.status(f"Playlist updated · {target.name}")
-
-    def _resolve_playlist_target(self, name: str) -> Path:
-        """Ensure the playlist name has a supported extension and resolve it
-        relative to a sensible location (home dir)."""
-        from pathlib import Path as _P
-        name = name.strip()
-        if not name:
-            raise ValueError("empty playlist name")
-        p = _P(name).expanduser()
-        if not p.suffix or p.suffix.lower() not in PlaylistPane.PLAYLIST_SUFFIXES:
-            p = p.with_suffix(".m3u")
-        if not p.is_absolute():
-            p = _P.home() / p
-        return p
+        self._render_playlist(target)
 
     def remove_selected(self):
         selected = self._selected_playlist_row()
@@ -5392,7 +4931,6 @@ class MainWindow(QMainWindow):
         except PlaylistError as exc:
             self.status(str(exc))
             return
-        self._invalidate_play_seq()
         self._render_playlist()
 
     def save_playlist(self):
@@ -5423,24 +4961,8 @@ class MainWindow(QMainWindow):
                     break
             else:
                 target = target.with_suffix(".m3u")
-        # Save the queue as one flat playlist: playlist groups inside the
-        # queue are resolved into their entries so the saved file contains
-        # real media/URLs, never references to other playlist files.
-        flat = PlaylistModel()
-        for idx in range(len(self.playlist_model)):
-            try:
-                item = self.playlist_model.item(idx)
-            except PlaylistError:
-                continue
-            if not isinstance(item, str) and item.suffix.lower() in PlaylistPane.PLAYLIST_SUFFIXES:
-                try:
-                    flat.add(load_playlist_file(item).items)
-                    continue
-                except (PlaylistError, OSError, ValueError):
-                    pass
-            flat.add((item,))
         try:
-            saved = save_playlist_file(target, flat)
+            saved = save_playlist_file(target, self.playlist_model)
         except (PlaylistError, OSError) as exc:
             self.toast(f"Could not save playlist: {exc}")
             return
@@ -5468,7 +4990,6 @@ class MainWindow(QMainWindow):
         except (PlaylistError, OSError, ValueError) as exc:
             self.toast(f"Could not load playlist: {exc}")
             return
-        self._invalidate_play_seq()
         self._render_playlist()
         self.status(f"Playlist loaded · {source.name} · {added} item(s) added")
         self.toast(f"Playlist loaded · {added} item(s) added")
@@ -5482,7 +5003,6 @@ class MainWindow(QMainWindow):
                 {"version": 1, "items": [str(value) for value in values]})
         except PlaylistError:
             return
-        self._invalidate_play_seq()
         if self.current is not None:
             index = self.playlist_model.index_of(self.current)
             if index is not None:
@@ -5490,11 +5010,22 @@ class MainWindow(QMainWindow):
         self.status("Queue reordered")
 
     def _on_queue_child_play(self, source: str):
-        # Playing a child of an expandable playlist group plays exactly that
-        # entry; the group stays in the queue (visible), playback continues
-        # through the logical sequence afterwards. The expanded/collapsed UI
-        # state never changes playback.
-        self._play_playlist_entry(source)
+        if source.startswith(("http://", "https://", "rtsp://", "rtmp://",
+                              "udp://", "rtp://", "ftp://", "smb://")):
+            self._resolve_and_open_external_source(source)
+            return
+        path = Path(source)
+        if not path.is_file():
+            self.toast(f"Local file not found: {path.name}")
+            return
+        # A playlist child is often covered by its group (not a top-level row),
+        # so play it directly instead of trying to select a top-level row.
+        index = self.playlist_model.index_of(path)
+        if index is None:
+            self.play_selected(path)
+            return
+        self._playlist_pane.select_row(index)
+        self.play_selected()
 
     def add_watched_folder(self):
         from PySide6.QtWidgets import QFileDialog
@@ -5877,8 +5408,6 @@ class MainWindow(QMainWindow):
             self._save_effective_settings()
         except OSError:
             pass
-        if self._mpris_notifier is not None:
-            self._mpris_notifier.close()
         self.controller.close()
         self.backend = None
         self.media_library.close()
@@ -5971,18 +5500,9 @@ class MainWindow(QMainWindow):
                         self.backend.play()
                 except (BackendError, CasuError):
                     pass
-        # Live streams (network source, no finite duration) are labelled
-        # LIVE instead of a meaningless 00:00 — same as the web players.
-        if self.duration > 0:
-            self._time_total.setText(format_duration(self.duration))
-        elif self._network_source:
-            self._time_total.setText("LIVE")
-        else:
-            self._time_total.setText(format_duration(None))
+        self._time_total.setText(format_duration(self.duration if self.duration > 0 else None))
 
     def _poll(self):
-        if self._mpris_notifier is not None:
-            self._mpris_notifier.refresh()
         if self.backend and not self._dragging and not self._paused:
             self._sync_position()
             state = self.backend.state()
@@ -5993,364 +5513,5 @@ class MainWindow(QMainWindow):
                 self._video_surface.set_video_active(False)
 
 
-# --- MPRIS D-Bus (org.mpris.MediaPlayer2.*) — desktop remote control -------
-#
-# Exposes the player on the session bus so GNOME Shell (top-right media
-# menu), playerctl and every other MPRIS client can Play/Pause/Next/Previous,
-# read status/metadata and control volume/loop/shuffle. Registration is best
-# effort: without a session bus (or QtDBus) the player simply runs without it.
-
-_MPRIS_SERVICE = "org.mpris.MediaPlayer2.casu"
-_MPRIS_PATH = "/org/mpris/MediaPlayer2"
-_MPRIS_PLAYER_INTERFACE = "org.mpris.MediaPlayer2.Player"
-
-try:
-    from PySide6.QtDBus import (
-        QDBusAbstractAdaptor, QDBusConnection, QDBusMessage, QDBusObjectPath,
-    )
-    _HAVE_QTDBUS = True
-except ImportError:  # headless or minimal PySide6 builds
-    QDBusAbstractAdaptor = None  # type: ignore[assignment]
-    _HAVE_QTDBUS = False
-
-try:
-    from PySide6.QtCore import ClassInfo as _QtClassInfo  # PySide6 >= 6.10
-except ImportError:
-    _QtClassInfo = None
-try:
-    from PySide6.QtCore import Q_CLASSINFO as _QtQClassInfo  # PySide6 < 6.10
-except ImportError:
-    _QtQClassInfo = None
-
-
-def _mpris_iface_decorator(name: str):
-    """Class decorator registering the 'D-Bus Interface' class info."""
-    if _QtClassInfo is not None:
-        return _QtClassInfo(**{"D-Bus Interface": name})
-    return lambda cls: cls
-
-
-def _mpris_iface_body(name: str):
-    """Legacy in-class-body spelling of the same 'D-Bus Interface' info."""
-    if _QtQClassInfo is not None:
-        return _QtQClassInfo("D-Bus Interface", name)
-    return None
-
-
-if _HAVE_QTDBUS:
-
-    @_mpris_iface_decorator("org.mpris.MediaPlayer2")
-    class _MprisRoot(QDBusAbstractAdaptor):
-        """org.mpris.MediaPlayer2 — application identity/lifecycle."""
-
-        _mpris_iface_body("org.mpris.MediaPlayer2")
-
-        def __init__(self, window):
-            super().__init__(window)
-            self._window = window
-
-        @Slot()
-        def Raise(self):
-            window = self._window
-            window.showNormal()
-            window.raise_()
-            window.activateWindow()
-
-        @Slot()
-        def Quit(self):
-            self._window.close()
-
-        def _identity(self) -> str:
-            return "MPCASU"
-
-        def _desktop_entry(self) -> str:
-            return "mpcasu"  # packaging/mpcasu.desktop
-
-        def _uri_schemes(self) -> list:
-            return ["file", "http", "https", "rtsp", "rtmp", "udp", "rtp",
-                    "spotify", "ytdl"]
-
-        def _mime_types(self) -> list:
-            return sorted(
-                f"{kind}/x-{ext.lstrip('.')}" if ext == ".casu" else f"{kind}/{ext.lstrip('.')}"
-                for ext, kind in (
-                    (".mp3", "audio"), (".flac", "audio"), (".wav", "audio"),
-                    (".ogg", "audio"), (".m4a", "audio"), (".opus", "audio"),
-                    (".aac", "audio"), (".aiff", "audio"), (".mp4", "video"),
-                    (".mkv", "video"), (".webm", "video"), (".mov", "video"),
-                    (".casu", "application"),
-                ))
-
-        Identity = Property(str, _identity, constant=True)
-        DesktopEntry = Property(str, _desktop_entry, constant=True)
-        CanQuit = Property(bool, lambda self: True, constant=True)
-        CanRaise = Property(bool, lambda self: True, constant=True)
-        HasTrackList = Property(bool, lambda self: False, constant=True)
-        SupportedUriSchemes = Property("QStringList", _uri_schemes, constant=True)
-        SupportedMimeTypes = Property("QStringList", _mime_types, constant=True)
-
-    @_mpris_iface_decorator(_MPRIS_PLAYER_INTERFACE)
-    class _MprisPlayer(QDBusAbstractAdaptor):
-        """org.mpris.MediaPlayer2.Player — transport, status and metadata."""
-
-        _mpris_iface_body(_MPRIS_PLAYER_INTERFACE)
-
-        # Declared as a Qt signal so QtDBus broadcasts it with the correct
-        # interface and an int64 ('x') payload.
-        Seeked = Signal("qlonglong")
-
-        def __init__(self, window):
-            super().__init__(window)
-            self._window = window
-
-        # --- property backends ---
-
-        def _playback_status(self) -> str:
-            window = self._window
-            backend = getattr(window, "backend", None)
-            if backend is None:
-                return "Stopped"
-            if getattr(window, "_paused", False):
-                return "Paused"
-            try:
-                state = backend.state()
-            except Exception:
-                return "Stopped"
-            if state in {PlaybackState.PLAYING, PlaybackState.LOADING,
-                         PlaybackState.READY}:
-                return "Playing"
-            if state == PlaybackState.PAUSED:
-                return "Paused"
-            return "Stopped"
-
-        def _loop_status(self) -> str:
-            return {"off": "None", "one": "Track",
-                    "all": "Playlist"}[getattr(self._window, "_repeat_mode", "off")]
-
-        def _set_loop_status(self, value) -> None:
-            mode = {"None": "off", "Track": "one",
-                    "Playlist": "all"}.get(str(value))
-            if mode is not None:
-                self._window._set_repeat_mode(mode)
-
-        def _shuffle(self) -> bool:
-            return bool(getattr(self._window, "_shuffle", False))
-
-        def _set_shuffle(self, value) -> None:
-            self._window._toggle_shuffle(bool(value))
-
-        def _metadata(self) -> dict:
-            window = self._window
-            current = getattr(window, "current", None)
-            # pathlib collapses "//" in URLs, so prefer the untouched
-            # original string the player was started with.
-            network = str(getattr(window, "_network_source", None) or "")
-            if current is None and not network:
-                return {}
-            source_text = network or str(current)
-            if "://" in source_text:
-                url = source_text
-            else:
-                url = source_text
-                try:
-                    url = current.as_uri()
-                except (ValueError, AttributeError):
-                    pass
-            meta = {
-                "mpris:trackid": QDBusObjectPath(
-                    "/org/mpcasu/track/"
-                    + hashlib.sha1(source_text.encode("utf-8", "replace")).hexdigest()[:16]),
-                "xesam:url": url,
-            }
-            try:
-                title = window._display_title(Path(source_text))
-            except Exception:
-                title = getattr(current, "name", "")
-            if title:
-                meta["xesam:title"] = str(title)
-            duration = float(getattr(window, "duration", 0.0) or 0.0)
-            if duration > 0:
-                meta["mpris:length"] = int(duration * 1_000_000)
-            return meta
-
-        def _volume(self) -> float:
-            window = self._window
-            if getattr(window, "_muted", False):
-                return 0.0
-            return max(0.0, min(2.0, float(getattr(window, "_volume", 100)) / 100.0))
-
-        def _set_volume(self, value) -> None:
-            clamped = max(0.0, min(2.0, float(value)))
-            self._window._on_volume_slider(int(round(clamped * 100)))
-
-        def _position_us(self) -> int:
-            backend = getattr(self._window, "backend", None)
-            if backend is None:
-                return 0
-            try:
-                pos = float(backend.position())
-            except Exception:
-                pos = 0.0
-            return int(max(0.0, pos) * 1_000_000)
-
-        def _rate(self) -> float:
-            return float(getattr(self._window, "_rate", 1.0) or 1.0)
-
-        PlaybackStatus = Property(str, _playback_status)
-        LoopStatus = Property(str, _loop_status, _set_loop_status)
-        Shuffle = Property(bool, _shuffle, _set_shuffle)
-        Metadata = Property("QVariantMap", _metadata)
-        Volume = Property(float, _volume, _set_volume)
-        Position = Property("qlonglong", _position_us)
-        Rate = Property(float, _rate)
-        MinimumRate = Property(float, _rate, constant=True)
-        MaximumRate = Property(float, _rate, constant=True)
-        CanControl = Property(bool, lambda self: True, constant=True)
-        CanPlay = Property(bool, lambda self: True, constant=True)
-        CanPause = Property(bool, lambda self: True, constant=True)
-        CanSeek = Property(bool, lambda self: True, constant=True)
-        CanGoNext = Property(bool, lambda self: True, constant=True)
-        CanGoPrevious = Property(bool, lambda self: True, constant=True)
-
-        # --- transport methods ---
-
-        @Slot()
-        def Play(self):
-            window = self._window
-            if window.backend is None:
-                window.play_selected()
-            elif window._paused:
-                window.pause()
-
-        @Slot()
-        def Pause(self):
-            window = self._window
-            if window.backend is not None and not window._paused:
-                window.pause()
-
-        @Slot()
-        def PlayPause(self):
-            self._window.toggle_playback()
-
-        @Slot()
-        def Stop(self):
-            self._window.stop()
-
-        @Slot()
-        def Next(self):
-            self._window.play_next()
-
-        @Slot()
-        def Previous(self):
-            self._window.play_previous()
-
-        @Slot("qlonglong")
-        def Seek(self, offset_us):
-            window = self._window
-            if window.backend is None:
-                return
-            limit = float(getattr(window, "duration", 0.0) or 0.0)
-            target = float(self.Position) + float(offset_us) / 1_000_000
-            if limit > 0:
-                target = min(target, limit)
-            window._do_seek(max(0.0, target))
-
-        @Slot(QDBusObjectPath, "qlonglong")
-        def SetPosition(self, track_id, position_us):
-            if self._window.backend is None:
-                return
-            self._window._do_seek(max(0.0, float(position_us) / 1_000_000))
-
-        @Slot(str)
-        def OpenUri(self, uri):
-            window = self._window
-            text = str(uri)
-            if "://" in text or text.startswith(("spotify:", "ytdl:")):
-                window._play_network_source(text)
-            else:
-                window.play_selected(Path(text))
-
-    class _MprisNotifier:
-        """Diff-based org.freedesktop.DBus.Properties.PropertiesChanged emitter.
-
-        MainWindow._poll() calls refresh() every 200 ms; changed properties
-        are broadcast so desktop clients stay in sync without polling.
-        """
-
-        _TRACKED = ("PlaybackStatus", "LoopStatus", "Shuffle", "Metadata",
-                    "Volume")
-
-        def __init__(self, window, bus, player, service):
-            self._window = window
-            self._bus = bus
-            self._player = player
-            self._service = service
-            self._last: dict = {}
-
-        def _value(self, name: str):
-            value = getattr(self._player, name)
-            return value() if callable(value) else value
-
-        def _snapshot_value(self, value):
-            if isinstance(value, dict):
-                return {key: self._dbus_path_str(item)
-                        if isinstance(item, QDBusObjectPath) else item
-                        for key, item in value.items()}
-            return value
-
-        @staticmethod
-        def _dbus_path_str(item) -> str:
-            # str(QDBusObjectPath) yields the object repr (no __str__), so
-            # always go through path() for a stable, comparable value.
-            getter = getattr(item, "path", None)
-            return str(getter()) if callable(getter) else str(item)
-
-        def refresh(self) -> None:
-            changed = {}
-            for name in self._TRACKED:
-                value = self._value(name)
-                if self._last.get(name) != self._snapshot_value(value):
-                    self._last[name] = self._snapshot_value(value)
-                    changed[name] = value
-            if not changed:
-                return
-            message = QDBusMessage.createSignal(
-                _MPRIS_PATH, "org.freedesktop.DBus.Properties",
-                "PropertiesChanged")
-            message.setArguments([_MPRIS_PLAYER_INTERFACE, changed, []])
-            self._bus.send(message)
-
-        def seeked(self, seconds: float) -> None:
-            try:
-                self._player.Seeked.emit(int(round(float(seconds) * 1_000_000)))
-            except (RuntimeError, TypeError, ValueError):
-                pass
-
-        def close(self) -> None:
-            try:
-                self._bus.unregisterService(self._service)
-            except Exception:
-                pass
-
-
-def _register_mpris(window):
-    """Export the player on the session bus; returns a notifier or None."""
-    if not _HAVE_QTDBUS:
-        return None
-    try:
-        bus = QDBusConnection.sessionBus()
-        if not bus.isConnected():
-            return None
-        root = _MprisRoot(window)
-        player = _MprisPlayer(window)
-        service = _MPRIS_SERVICE
-        if not bus.registerService(service):
-            service = f"{_MPRIS_SERVICE}.instance{os.getpid()}"
-            if not bus.registerService(service):
-                return None
-        if not bus.registerObject(_MPRIS_PATH, window,
-                                  QDBusConnection.ExportAdaptors):
-            return None
-        return _MprisNotifier(window, bus, player, service)
-    except Exception:
-        return None
+    def _backend_event(self, state: PlaybackState):
+        QTimer.singleShot(0, lambda s=state: self._apply_backend_event(s))

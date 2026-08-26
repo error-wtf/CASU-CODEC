@@ -15,7 +15,7 @@ namespace casu::cli {
 
 namespace {
 
-const char* kVersion = "CASU Codec for All Segmented Units 3.0.0";
+const char* kVersion = "CASU Codec for All Segmented Units 5.0.0";
 
 struct CommandEntry {
     const char* name;

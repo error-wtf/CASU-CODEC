@@ -355,6 +355,7 @@ class PlaylistPane(QFrame):
     addRequested = Signal()
     urlRequested = Signal()
     renameRequested = Signal(int)
+    favoriteRequested = Signal(list)
 
     PLAYLIST_SUFFIXES = {".m3u", ".m3u8", ".pls", ".json", ".wpl", ".xspf",
                          ".jspf", ".asx", ".wmx", ".wvx", ".rmp", ".ram"}
@@ -862,6 +863,9 @@ class PlaylistPane(QFrame):
                 menu.addAction("Move down", lambda: self.moveRequested.emit(1, row))
             remove_label = "Remove" if count <= 1 else f"Remove ({count} items)"
             menu.addAction(remove_label, lambda: self.removeRequested.emit(list(top_rows)))
+            menu.addSeparator()
+            fav_label = "Toggle ★ Favorite" if count <= 1 else f"Toggle ★ ({count} items)"
+            menu.addAction(fav_label, lambda: self.favoriteRequested.emit(list(top_rows)))
         else:
             parent = item.parent()
             if parent is not None and item.data(0, Qt.UserRole):
@@ -1265,6 +1269,9 @@ class LibraryPage(QFrame):
         self._tracks_list = QListWidget()
         self._tracks_list.setObjectName("QueueTree")
         self._tracks_list.itemDoubleClicked.connect(lambda _item: self._add_selected())
+        self._tracks_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._tracks_list.customContextMenuRequested.connect(
+            self._library_track_context_menu)
         split.addWidget(self._tracks_list)
         split.setStretchFactor(0, 2)
         split.setStretchFactor(1, 5)
@@ -1445,6 +1452,32 @@ class LibraryPage(QFrame):
         row = self._tracks_list.row(item)
         if 0 <= row < len(self._tracks):
             self.addRequested.emit([self._tracks[row]])
+
+    def _library_track_context_menu(self, position):
+        item = self._tracks_list.itemAt(position)
+        if item is None:
+            return
+        row = self._tracks_list.row(item)
+        if row < 0 or row >= len(self._tracks):
+            return
+        path = self._tracks[row]
+        meta_item = None
+        for mi in self._media_library.items():
+            if mi.path == path:
+                meta_item = mi
+                break
+        is_fav = bool(meta_item.favorite) if meta_item else False
+        menu = QMenu(self)
+        fav_text = "Remove ★" if is_fav else "Add ★ Favorite"
+        menu.addAction(fav_text, lambda: self._toggle_favorite(path, row))
+        menu.addSeparator()
+        menu.addAction("Add to queue", lambda: self.addRequested.emit([path]))
+        menu.exec(self._tracks_list.viewport().mapToGlobal(position))
+
+    def _toggle_favorite(self, path, row):
+        current = bool(self._media_library.get(path) or {}).get("favorite", False)
+        self._media_library.set_favorite(path, not current)
+        self._refresh()
 
     def _on_refresh(self):
         self.refreshRequested.emit()
@@ -2719,6 +2752,7 @@ class MainWindow(QMainWindow):
         self._playlist_pane.playRequested.connect(self._play_playlist_row)
         self._playlist_pane.removeRequested.connect(self._on_playlist_remove)
         self._playlist_pane.moveRequested.connect(self._on_playlist_move)
+        self._playlist_pane.favoriteRequested.connect(self._on_queue_favorite)
         self._playlist_pane.orderChanged.connect(self._apply_queue_order)
         self._playlist_pane.childPlayRequested.connect(self._on_queue_child_play)
         self._playlist_pane.saveRequested.connect(self.save_playlist)
@@ -4865,6 +4899,18 @@ class MainWindow(QMainWindow):
             self.status(str(exc))
             return
         self._render_playlist()
+
+    def _on_queue_favorite(self, indices):
+        for idx in indices:
+            try:
+                item = self.playlist_model.item(idx)
+                if item and Path(item).is_file():
+                    current = bool(self.media_library.get(str(item)) or
+                                   {}).get("favorite", False)
+                    self.media_library.set_favorite(str(item), not current)
+            except Exception:
+                pass
+        self.toast("★ Favorites updated")
 
     def _on_playlist_move(self, delta: int, index: int):
         if index < 0:
