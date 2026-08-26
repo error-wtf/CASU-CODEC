@@ -9,7 +9,9 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
@@ -66,7 +68,12 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     private static final String[] PROVIDER_URLS = {
             "https://open.spotify.com/", "https://hearthis.at/", "https://tidal.com/",
             "https://www.netflix.com/", "https://www.google.com/"};
-    private static final String[] PROVIDER_SYMBOLS = {"♪", "↗", "≋", "▣", "◎"};
+    private static final int[] PROVIDER_COLORS = {
+            Color.parseColor("#1DB954"),  // Spotify green
+            Color.parseColor("#FF6B35"),  // HearThis orange
+            Color.parseColor("#00FFFF"),  // Tidal cyan
+            Color.parseColor("#E50914"),  // Netflix red
+            Color.parseColor("#4285F4")}; // Browse blue
 
     private FrameLayout root;
     private FrameLayout content;
@@ -178,6 +185,12 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         super.onCreate(savedInstanceState);
         ui = new android.os.Handler(getMainLooper());
         settings = Settings.load(this);
+
+        // BUG 4+7 FIX: On cold start, delete stale queue.json so the queue
+        // starts EMPTY. Library content belongs in the LIBRARY tab, not
+        // preloaded into the queue from a previous session.
+        clearStaleQueue();
+
         library = new Library(this);
 
         ensureEngine();
@@ -188,6 +201,13 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         setContentView(root);
 
         handleIntent(getIntent());
+    }
+
+    private void clearStaleQueue() {
+        try {
+            java.io.File qf = new java.io.File(getFilesDir(), "queue.json");
+            if (qf.exists()) qf.delete();
+        } catch (Exception ignored) {}
     }
 
     private void ensureEngine() {
@@ -825,7 +845,19 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
             @Override public void afterTextChanged(Editable s) { refreshLibrary(); }
         });
-        page.addView(librarySearch, new LinearLayout.LayoutParams(
+        LinearLayout searchRow = new LinearLayout(this);
+        searchRow.setOrientation(LinearLayout.HORIZONTAL);
+        searchRow.setGravity(Gravity.CENTER_VERTICAL);
+        searchRow.addView(librarySearch, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        Button libRefresh = smallButton("⟳");
+        libRefresh.setOnClickListener(v -> {
+            if (library != null) library.rescan();
+            refreshLibrary();
+            toast("Bibliothek aktualisiert");
+        });
+        searchRow.addView(libRefresh);
+        page.addView(searchRow, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         LinearLayout chips = new LinearLayout(this);
@@ -880,14 +912,16 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
 
     private void refreshLibrary() {
         ui.post(() -> {
-            String query = librarySearch.getText().toString().trim();
-            List<Library.Track> tracks = library.query(
-                    query, "genres".equals(libraryMode), false);
+            if (library == null) return;
+            String query = librarySearch != null ? librarySearch.getText().toString().trim() : "";
+            boolean includeAudio = !"video-only".equals(libraryMode);
+            boolean includeVideo = !"artists".equals(libraryMode) && !"albums".equals(libraryMode);
+            List<Library.Track> tracks = library.query(query, includeAudio, includeVideo);
             if ("favorites".equals(libraryMode)) {
                 tracks = library.filterFavorites(tracks);
             }
             libraryTracks = tracks;
-            libraryAdapter.notifyDataSetChanged();
+            if (libraryAdapter != null) libraryAdapter.notifyDataSetChanged();
         });
     }
 
@@ -958,17 +992,25 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                 card.setGravity(Gravity.CENTER);
                 card.setBackground(boxBackground());
                 card.setPadding(dp(8), dp(14), dp(8), dp(14));
-                TextView symbol = new TextView(this);
-                symbol.setText(PROVIDER_SYMBOLS[j]);
-                symbol.setTextColor(ACCENT);
-                symbol.setTextSize(24);
-                symbol.setGravity(Gravity.CENTER);
+                ImageView icon = new ImageView(this);
+                Bitmap iconBmp = ProviderIcons.get(PROVIDER_NAMES[j]);
+                if (iconBmp != null) {
+                    icon.setImageBitmap(iconBmp);
+                    icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+                } else {
+                    // fallback: colored circle with initial
+                    icon.setImageBitmap(drawFallbackIcon(PROVIDER_NAMES[j],
+                            PROVIDER_COLORS[j]));
+                    icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+                }
+                icon.setLayoutParams(new LinearLayout.LayoutParams(dp(56), dp(56)));
                 TextView label = new TextView(this);
                 label.setText(PROVIDER_NAMES[j]);
-                label.setTextColor(TEXT);
+                label.setTextColor(PROVIDER_COLORS[j]);
                 label.setTextSize(10);
                 label.setGravity(Gravity.CENTER);
-                card.addView(symbol);
+                label.setTypeface(null, Typeface.BOLD);
+                card.addView(icon);
                 card.addView(label);
                 final String name = PROVIDER_NAMES[j];
                 final String url = PROVIDER_URLS[j];
@@ -1185,6 +1227,25 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         });
         page.addView(consentBox);
 
+        page.addView(sectionLabel("LIBRARY"));
+        Button refreshLib = new Button(this);
+        refreshLib.setText("Bibliothek aktualisieren");
+        refreshLib.setTextColor(TEXT);
+        refreshLib.setBackgroundColor(Color.parseColor("#161a20"));
+        refreshLib.setOnClickListener(v -> {
+            if (library != null) library.rescan();
+            refreshLibrary();
+            toast("Bibliothek aktualisiert");
+        });
+        page.addView(refreshLib);
+
+        Button scanDir = new Button(this);
+        scanDir.setText("Ordner scannen…");
+        scanDir.setTextColor(TEXT);
+        scanDir.setBackgroundColor(Color.parseColor("#161a20"));
+        scanDir.setOnClickListener(v -> openFilePicker());
+        page.addView(scanDir);
+
         page.addView(sectionLabel("ACTIONS"));
         Button loadSubtitle = new Button(this);
         loadSubtitle.setText("Untertitel laden (SRT/VTT)");
@@ -1278,6 +1339,15 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             videoActive = video;
             updateStageFor(engine.current());
             attachVisualizer();
+        });
+    }
+
+    @Override public void onVideoSizeChanged(int width, int height) {
+        ui.post(() -> {
+            if (width > 0 && height > 0) {
+                videoActive = true;
+                updateStageFor(engine.current());
+            }
         });
     }
 
@@ -1748,6 +1818,23 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
 
     private void toast(String text) {
         Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
+    }
+
+    private Bitmap drawFallbackIcon(String name, int color) {
+        int size = dp(56);
+        Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(bmp);
+        Paint bg = new Paint(Paint.ANTI_ALIAS_FLAG);
+        bg.setColor(Color.parseColor("#12151a"));
+        c.drawCircle(size/2f, size/2f, size/2f, bg);
+        Paint fg = new Paint(Paint.ANTI_ALIAS_FLAG);
+        fg.setColor(color);
+        fg.setTextSize(size * 0.45f);
+        fg.setTextAlign(Paint.Align.CENTER);
+        fg.setTypeface(Typeface.DEFAULT_BOLD);
+        String letter = name != null && !name.isEmpty() ? name.substring(0, 1) : "?";
+        c.drawText(letter, size/2f, size * 0.62f, fg);
+        return bmp;
     }
 
     private int dp(int value) {

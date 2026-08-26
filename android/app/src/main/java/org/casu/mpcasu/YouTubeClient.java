@@ -13,10 +13,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
-/** YouTube over the public Innertube API with the ANDROID client — the
- *  same client family the Linux reference forces through yt-dlp
- *  (player_client=android) because it returns a byte-range-capable
- *  progressive MP4. Search + player resolve, no API key, clear errors. */
+/** YouTube over the public Innertube API — the same backend the Linux
+ *  reference forces through yt-dlp (player_client=android). Search +
+ *  player resolve, no auth, clear errors.
+ *
+ *  Client: ANDROID_VR (the latest unblocked client family — the plain
+ *  ANDROID client was rotated out by YouTube in mid-2025). */
 public final class YouTubeClient {
 
     public static final class Video {
@@ -28,7 +30,7 @@ public final class YouTubeClient {
     }
 
     public static final class YouTubeException extends Exception {
-        public final String code; // taxonomy id for the UI
+        public final String code;
         public YouTubeException(String code, String message) {
             super(message);
             this.code = code;
@@ -36,26 +38,45 @@ public final class YouTubeClient {
     }
 
     private static final String UA =
-            "com.google.android.youtube/19.09.37 (Linux; U; Android 14) gzip";
-    private static final String CONTEXT =
-            "{\"context\":{\"client\":{\"clientName\":\"ANDROID\","
-            + "\"clientVersion\":\"19.09.37\",\"androidSdkVersion\":34,"
-            + "\"hl\":\"en\",\"gl\":\"US\"}}}";
+            "com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 14; Quest 3) gzip";
+
+    private static final String CLIENT_NAME = "ANDROID_VR";
+    private static final String CLIENT_VERSION = "1.60.19";
+
+    private static JSONObject contextBody() {
+        try {
+            JSONObject ctx = new JSONObject();
+            JSONObject client = new JSONObject();
+            client.put("clientName", CLIENT_NAME);
+            client.put("clientVersion", CLIENT_VERSION);
+            client.put("androidSdkVersion", 34);
+            client.put("hl", "de");
+            client.put("gl", "DE");
+            ctx.put("client", client);
+            JSONObject body = new JSONObject();
+            body.put("context", ctx);
+            body.put("apiKey", "AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w");
+            return body;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     // ------------------------------------------------------------------ search
 
     public static List<Video> search(String query, int limit) throws YouTubeException {
         try {
-            JSONObject body = new JSONObject();
-            JSONObject context = new JSONObject(CONTEXT).getJSONObject("context");
-            body.put("context", context);
+            JSONObject body = contextBody();
             body.put("query", query);
-            JSONObject response = post("https://www.youtube.com/youtubei/v1/search", body);
+            JSONObject response = post(
+                    "https://www.youtube.com/youtubei/v1/search",
+                    body);
             List<Video> out = new ArrayList<>();
-            walkSearchResults(response.optJSONObject("contents"), out);
+            // Response structure varies by client. Walk ALL nested structures.
+            walkAll(response, out, 0);
             if (out.isEmpty()) {
                 throw new YouTubeException("resolver-changed",
-                        "YouTube-Antwort enthielt keine Ergebnisse (resolver-changed)");
+                        "YouTube-Antwort enthielt keine Ergebnisse (veralteter Client oder leere Antwort)");
             }
             while (out.size() > limit) out.remove(out.size() - 1);
             return out;
@@ -67,40 +88,78 @@ public final class YouTubeClient {
         }
     }
 
-    private static void walkSearchResults(JSONObject contents, List<Video> out) {
-        if (contents == null) return;
-        JSONArray array = contents.optJSONArray("contents");
-        if (array == null) return;
-        for (int i = 0; i < array.length() && out.size() < 40; i++) {
-            JSONObject renderer = array.optJSONObject(i);
-            if (renderer == null) continue;
-            JSONObject videoRenderer = renderer.optJSONObject("videoRenderer");
-            if (videoRenderer == null) {
-                // nested sections (itemSectionRenderer)
-                JSONObject section = renderer.optJSONObject("itemSectionRenderer");
-                if (section != null) walkSearchResults(section, out);
-                continue;
+    /** Recursively walk ANY JSON structure looking for videoRenderer nodes. */
+    private static void walkAll(Object node, List<Video> out, int depth) {
+        if (out.size() >= 40 || depth > 12 || node == null) return;
+        if (node instanceof JSONObject) {
+            JSONObject obj = (JSONObject) node;
+            // Direct hit: videoRenderer
+            if (obj.has("videoRenderer")) {
+                Video v = parseVideoRenderer(obj.optJSONObject("videoRenderer"));
+                if (v != null) out.add(v);
+                return;
             }
-            Video video = new Video();
-            video.id = videoRenderer.optString("videoId", "");
-            JSONObject title = videoRenderer.optJSONObject("title");
-            video.title = title != null ? text(title.optJSONArray("runs")) : "";
-            if (video.title.isEmpty()) video.title = video.id;
-            JSONObject owner = videoRenderer.optJSONObject("ownerText");
-            if (owner != null) video.channel = text(owner.optJSONArray("runs"));
-            JSONObject length = videoRenderer.optJSONObject("lengthText");
-            video.durationSeconds = parseDuration(length != null ? length.optString("simpleText", "") : "");
-            JSONArray thumbnails = videoRenderer.optJSONObject("thumbnail") != null
-                    ? videoRenderer.optJSONObject("thumbnail").optJSONArray("thumbnails") : null;
-            if (thumbnails != null && thumbnails.length() > 0) {
-                JSONObject last = thumbnails.optJSONObject(thumbnails.length() - 1);
-                if (last != null) video.thumbnail = last.optString("url", "");
+            // Also check compactVideoRenderer (search results sometimes)
+            if (obj.has("compactVideoRenderer")) {
+                Video v = parseCompactVideoRenderer(obj.optJSONObject("compactVideoRenderer"));
+                if (v != null) out.add(v);
+                return;
             }
-            if (!video.id.isEmpty()) out.add(video);
+            // Walk every value in this object
+            java.util.Iterator<String> keys = obj.keys();
+            while (keys.hasNext()) {
+                walkAll(obj.opt(keys.next()), out, depth + 1);
+            }
+        } else if (node instanceof JSONArray) {
+            JSONArray arr = (JSONArray) node;
+            for (int i = 0; i < arr.length() && out.size() < 40; i++) {
+                walkAll(arr.opt(i), out, depth + 1);
+            }
         }
     }
 
-    private static String text(JSONArray runs) {
+    private static Video parseVideoRenderer(JSONObject r) {
+        if (r == null) return null;
+        Video v = new Video();
+        v.id = r.optString("videoId", "");
+        if (v.id.isEmpty()) return null;
+        JSONObject title = r.optJSONObject("title");
+        v.title = title != null ? textRuns(title.optJSONArray("runs"))
+                : r.optString("title", v.id);
+        if (v.title.isEmpty()) v.title = v.id;
+        JSONObject owner = r.optJSONObject("ownerText");
+        if (owner == null) owner = r.optJSONObject("longBylineText");
+        v.channel = owner != null ? textRuns(owner.optJSONArray("runs")) : null;
+        JSONObject length = r.optJSONObject("lengthText");
+        v.durationSeconds = parseDuration(length != null ? length.optString("simpleText", "") : "");
+        if (v.durationSeconds == 0) {
+            JSONObject d = r.optJSONObject("lengthText");
+            if (d != null) {
+                try { v.durationSeconds = Long.parseLong(d.optString("simpleText", "0")); } catch (Exception ignored) {}
+            }
+        }
+        JSONArray thumbs = r.optJSONObject("thumbnail") != null
+                ? r.optJSONObject("thumbnail").optJSONArray("thumbnails") : null;
+        if (thumbs != null && thumbs.length() > 0) {
+            v.thumbnail = thumbs.optJSONObject(thumbs.length() - 1).optString("url", "");
+        }
+        return v;
+    }
+
+    private static Video parseCompactVideoRenderer(JSONObject r) {
+        if (r == null) return null;
+        Video v = new Video();
+        v.id = r.optString("videoId", "");
+        if (v.id.isEmpty()) return null;
+        v.title = r.optString("title", v.id);
+        v.channel = r.optString("shortBylineText", null);
+        if (v.channel != null && v.channel.isEmpty()) v.channel = null;
+        JSONObject length = r.optJSONObject("lengthText");
+        v.durationSeconds = parseDuration(length != null ? length.optString("simpleText", "") : "");
+        return v;
+    }
+
+    private static String textRuns(JSONArray runs) {
         if (runs == null) return "";
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < runs.length(); i++) {
@@ -119,13 +178,24 @@ public final class YouTubeClient {
             throw new YouTubeException("invalid-url", "Keine YouTube-Video-ID erkannt (invalid-url)");
         }
         try {
+            // ANDROID client returns direct URLs for player (ANDROID_VR gets
+            // LOGIN_REQUIRED on the player endpoint despite working for search).
             JSONObject body = new JSONObject();
-            JSONObject context = new JSONObject(CONTEXT).getJSONObject("context");
-            body.put("context", context);
+            JSONObject client = new JSONObject();
+            client.put("clientName", "ANDROID");
+            client.put("clientVersion", "20.03.04");
+            client.put("androidSdkVersion", 34);
+            client.put("hl", "de");
+            client.put("gl", "DE");
+            JSONObject ctx = new JSONObject();
+            ctx.put("client", client);
+            body.put("context", ctx);
             body.put("videoId", id);
             body.put("contentCheckOk", true);
             body.put("racyCheckOk", true);
-            JSONObject response = post("https://www.youtube.com/youtubei/v1/player", body);
+            JSONObject response = post(
+                    "https://www.youtube.com/youtubei/v1/player",
+                    body, "com.google.android.youtube/20.03.04 (Linux; U; Android 14) gzip");
             String status = response.optJSONObject("playabilityStatus") != null
                     ? response.optJSONObject("playabilityStatus").optString("status", "") : "";
             if (!"OK".equals(status)) {
@@ -142,8 +212,8 @@ public final class YouTubeClient {
             if (streamingData == null) {
                 throw new YouTubeException("resolver-changed", "YouTube: keine streamingData (resolver-changed)");
             }
-            // Progressive formats (video+audio in one stream) — exactly what
-            // the Linux reference selects with player_client=android.
+            // Progressive formats (video+audio combined) — the ANDROID/ANDROID_VR
+            // client always returns direct URLs (no cipher/signature).
             JSONArray formats = streamingData.optJSONArray("formats");
             String best = null;
             long bestPixels = -1;
@@ -209,30 +279,37 @@ public final class YouTubeClient {
     // ------------------------------------------------------------------ http
 
     private static JSONObject post(String url, JSONObject body) throws Exception {
+        return post(url, body, UA);
+    }
+
+    private static JSONObject post(String url, JSONObject body, String userAgent) throws Exception {
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setRequestMethod("POST");
-        conn.setConnectTimeout(10000);
-        conn.setReadTimeout(20000);
+        conn.setConnectTimeout(15000);
+        conn.setReadTimeout(25000);
         conn.setDoOutput(true);
         conn.setRequestProperty("Content-Type", "application/json");
-        conn.setRequestProperty("User-Agent", UA);
+        conn.setRequestProperty("User-Agent", userAgent);
         byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
         try (java.io.OutputStream out = conn.getOutputStream()) {
             out.write(payload);
         }
         int code = conn.getResponseCode();
         if (code < 200 || code >= 300) {
-            throw new Exception("HTTP " + code + " (http-error)");
+            byte[] errBody = readStream(conn.getErrorStream());
+            throw new Exception("HTTP " + code + ": " + new String(errBody, StandardCharsets.UTF_8).substring(0, Math.min(200, errBody.length)));
         }
-        try (InputStream in = conn.getInputStream()) {
-            ByteArrayOutputStream buf = new ByteArrayOutputStream();
-            byte[] chunk = new byte[16 * 1024];
-            int n;
-            while ((n = in.read(chunk)) > 0) buf.write(chunk, 0, n);
-            return new JSONObject(new String(buf.toByteArray(), StandardCharsets.UTF_8));
-        } finally {
-            conn.disconnect();
-        }
+        byte[] respBody = readStream(conn.getInputStream());
+        return new JSONObject(new String(respBody, StandardCharsets.UTF_8));
+    }
+
+    private static byte[] readStream(InputStream in) throws Exception {
+        if (in == null) return new byte[0];
+        ByteArrayOutputStream buf = new ByteArrayOutputStream();
+        byte[] chunk = new byte[16 * 1024];
+        int n;
+        while ((n = in.read(chunk)) > 0) buf.write(chunk, 0, n);
+        return buf.toByteArray();
     }
 
     private static long parseDuration(String text) {

@@ -63,11 +63,17 @@ public final class Library {
         loadFavorites();
     }
 
-    public List<Track> query(String search, boolean videoOnly, boolean audioOnly) {
+    public List<Track> query(String search, boolean includeAudio, boolean includeVideo) {
         List<Track> out = new ArrayList<>();
-        out.addAll(queryStore(false, search, videoOnly));
-        if (!audioOnly) out.addAll(queryStore(true, search, false));
+        if (includeAudio) out.addAll(queryStore(false, search, false));
+        if (includeVideo) out.addAll(queryStore(true, search, false));
         return out;
+    }
+
+    public void rescan() {
+        // Force MediaStore re-read on next query (for refresh button).
+        // MediaStore is a ContentProvider — each query is fresh by default;
+        // this method exists as a semantic marker for UI refresh triggers.
     }
 
     private List<Track> queryStore(boolean video, String search, boolean skip) {

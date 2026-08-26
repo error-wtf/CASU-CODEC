@@ -145,6 +145,8 @@ public final class PlaybackService extends Service {
         }
 
         @Override public void onTracksReady(MediaPlayer player) { }
+
+        @Override public void onVideoSizeChanged(int width, int height) { }
     };
 
     private String currentTitle() {

@@ -37,6 +37,7 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
         void onError(String userMessage);
         void onQueueChanged();
         void onTracksReady(MediaPlayer player);   // for track menus/subtitles
+        void onVideoSizeChanged(int width, int height);  // for aspect-ratio
     }
 
     private static final String TAG = "MPCASU-Engine";
@@ -49,6 +50,7 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
     private final List<Listener> listeners = new ArrayList<>();
 
     private MediaPlayer player;
+    private android.view.Surface surface;   // kept across player recreation
     private final List<MediaItem> items = new ArrayList<>();
     private int index = -1;
     private boolean prepared;
@@ -115,6 +117,10 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
     private void fireError(String message) {
         lastError = message;
         for (Listener l : new ArrayList<>(listeners)) l.onError(message);
+    }
+
+    private void fireVideoSizeChanged(int width, int height) {
+        for (Listener l : new ArrayList<>(listeners)) l.onVideoSizeChanged(width, height);
     }
 
     // ------------------------------------------------------------------ state
@@ -495,11 +501,17 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
                 .setUsage(AudioAttributes.USAGE_MEDIA)
                 .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                 .build());
+        if (surface != null) {
+            try { mp.setSurface(surface); } catch (Exception ignored) {}
+        }
         return mp;
     }
 
-    /** Attach a video surface (TextureView's SurfaceHolder-equivalent). */
+    /** Attach a video surface. Kept referenced so EVERY future MediaPlayer
+     *  instance (after stop/open cycles) is bound again — otherwise video
+     *  plays blind (audio only) after the first teardown. */
     public void setSurface(android.view.Surface surface) {
+        this.surface = surface;
         if (player != null) {
             try { player.setSurface(surface); } catch (Exception ignored) {}
         }
@@ -521,6 +533,12 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
 
     @Override public void onPrepared(MediaPlayer mp) {
         prepared = true;
+        // BUG 5 FIX: Re-apply surface after prepare — if the TextureView
+        // wasn't laid out when createPlayer() ran, the surface was null then.
+        // This is the most common cause of "video plays but no picture".
+        if (surface != null) {
+            try { mp.setSurface(surface); } catch (Exception ignored) {}
+        }
         if (pendingRate > 0 && pendingRate != 1.0f) applyRate();
         long dur = duration();
         if (pendingSeekMs > 0 && pendingSeekMs < Math.max(dur - 500, pendingSeekMs + 500)) {
@@ -536,6 +554,11 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
             fireError(userError(e));
         }
         for (Listener l : new ArrayList<>(listeners)) l.onTracksReady(mp);
+        // Fire video size if the player already knows it (some codecs
+        // report size on prepare, others on first frame — onInfo handles
+        // the latter case).
+        int vw = videoWidth(), vh = videoHeight();
+        if (vw > 0 && vh > 0) fireVideoSizeChanged(vw, vh);
     }
 
     @Override public void onCompletion(MediaPlayer mp) {
@@ -565,6 +588,21 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
     }
 
     @Override public boolean onInfo(MediaPlayer mp, int what, int extra) {
+        // MEDIA_INFO_VIDEO_RENDERING_START = 3 — first frame rendered.
+        // This is the authoritative signal that video is actually playing.
+        if (what == 3) {
+            // Ensure the surface is still attached (some devices detach
+            // during prepare → start transition).
+            if (surface != null) {
+                try { mp.setSurface(surface); } catch (Exception ignored) {}
+            }
+            int vw = videoWidth(), vh = videoHeight();
+            if (vw > 0 && vh > 0) fireVideoSizeChanged(vw, vh);
+        }
+        // MEDIA_INFO_VIDEO_SIZE_CHANGED = ?
+        // Different devices use different codes; always check dimensions.
+        int vw = videoWidth(), vh = videoHeight();
+        if (vw > 0 && vh > 0) fireVideoSizeChanged(vw, vh);
         return false;
     }
 
@@ -651,15 +689,11 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
     }
 
     private void restore() {
-        QueueStore.Saved saved = store.load();
-        if (saved == null) return;
-        items.addAll(saved.items);
-        index = saved.index;
-        shuffle = saved.shuffle;
-        repeat = saved.repeat;
-        // Position/playing are restored by the service when the user taps
-        // play (resume) — we never autoplay on boot without the resume
-        // setting; PlayerService decides.
+        // Product decision (user): the QUEUE STARTS EMPTY on a fresh app
+        // start. queue.json still persists during a session (crash safety,
+        // position resume while the service lives) but the queue is never
+        // silently repopulated from old sessions — library content belongs
+        // in the LIBRARY tab, not preloaded into the queue.
     }
 
     public QueueStore.Saved savedState() {
