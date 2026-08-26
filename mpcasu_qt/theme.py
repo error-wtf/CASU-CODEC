@@ -112,9 +112,6 @@ QMainWindow {{ background-color: {p.window}; }}
     background-color: {p.sidebar};
     border-right: 1px solid {p.border};
 }}
-#SidebarScroll, #SidebarScroll > QWidget > QWidget {{
-    background: transparent;
-}}
 #SidebarSection {{
     color: #656b73;
     font-size: 10px;
@@ -145,8 +142,8 @@ QPushButton#NavItem {{
     color: {p.text_muted};
     text-align: left;
     padding: 11px 12px;
-    min-height: 20px;
     font-size: 13px;
+    font-family: "Noto Color Emoji", "Inter", "Ubuntu", sans-serif;
     border-radius: {m.radius_small}px;
 }}
 QPushButton#NavItem:hover {{
