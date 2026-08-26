@@ -27,6 +27,9 @@
 #include <QApplication>
 #include <cmath>
 #include <QIcon>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QPainter>
 #include <QPen>
 #include <QPolygonF>
@@ -2127,6 +2130,8 @@ void MainWindow::build_youtube_page() {
 
     yt_results_ = new QListWidget(page);
     yt_results_->setObjectName("QueueTree");
+    yt_results_->setIconSize(QSize(88, 50));
+    yt_results_->setSpacing(2);
     connect(yt_results_, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* item) {
         if (!item) return;
         const QString url = item->data(Qt::UserRole).toString();
@@ -2813,6 +2818,7 @@ void MainWindow::resume_after_seek() {
 
 void MainWindow::play_queue_index(int index, bool automatic) {
     if (index < 0 || index >= playlist_.size()) return;
+    navigate("NOW PLAYING");
     // A playlist GROUP row plays its first entry; the group itself stays in
     // the queue (visible, movable) — it is never dissolved into its entries.
     QString path;
@@ -3357,6 +3363,7 @@ void MainWindow::playlist_double_clicked() {
     }
     // A playlist child: play exactly that entry; the group stays visible and
     // playback continues through the logical sequence afterwards.
+    navigate("NOW PLAYING");
     int row = playlist_view_->indexOfTopLevelItem(item->parent());
     if (row >= 0 && !item->data(0, Qt::UserRole).toString().isEmpty())
         play_seq_entry(item->data(0, Qt::UserRole).toString(), row, false);
@@ -4337,6 +4344,42 @@ void MainWindow::on_youtube_play() {
                     item->setData(Qt::UserRole, QString::fromStdString(r.url));
                     item->setData(Qt::UserRole + 1, title);
                     yt_results_->addItem(item);
+                }
+                // Load thumbnails for YouTube results in background
+                struct ThumbJob { int row; std::string url; };
+                QVector<ThumbJob> thumbs;
+                for (int i = 0; i < found.size(); ++i) {
+                    if (!found[i].thumbnail.empty())
+                        thumbs.append({i, found[i].thumbnail});
+                }
+                if (!thumbs.isEmpty()) {
+                    auto* list = yt_results_;
+                    std::thread([list, thumbs] {
+                        for (const auto& job : thumbs) {
+                            try {
+                                QNetworkAccessManager mgr;
+                                QNetworkRequest req(QUrl(QString::fromStdString(job.url)));
+                                req.setRawHeader("User-Agent", "MPCASU/1.0");
+                                auto* reply = mgr.get(req);
+                                QEventLoop loop;
+                                QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+                                QTimer::singleShot(8000, &loop, &QEventLoop::quit);
+                                loop.exec();
+                                QByteArray data = reply->readAll();
+                                reply->deleteLater();
+                                if (data.isEmpty()) continue;
+                                QPixmap px;
+                                if (px.loadFromData(data)) {
+                                    QIcon icon(px.scaled(88, 50, Qt::KeepAspectRatioByExpanding,
+                                                        Qt::SmoothTransformation));
+                                    QMetaObject::invokeMethod(list, [list, row = job.row, icon] {
+                                        if (auto* it = list->item(row))
+                                            it->setIcon(icon);
+                                    }, Qt::QueuedConnection);
+                                }
+                            } catch (...) { continue; }
+                        }
+                    }).detach();
                 }
                 youtube_status_->setText(
                     found.empty() ? QStringLiteral("No results.")
