@@ -1,16 +1,15 @@
+// SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
+// SPDX-FileCopyrightText: 2026 Lino Casu
 package org.casu.mpcasu;
 
 import android.app.Application;
-import android.content.Context;
 
-/** Application holder: static context for the library scanner. */
-public class MpcasuApp extends Application {
-    private static Context appContext;
-
-    @Override public void onCreate() {
+/** Process bootstrap: warm up the native core so the .so + verification
+ *  are ready before the first CASU file is opened. */
+public final class MpcasuApp extends Application {
+    @Override
+    public void onCreate() {
         super.onCreate();
-        appContext = getApplicationContext();
+        CasuBridge.warmUp();
     }
-
-    static Context context() { return appContext; }
 }

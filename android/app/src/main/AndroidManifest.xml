@@ -9,6 +9,7 @@
                      android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <application
         android:name=".MpcasuApp"
         android:label="MPCASU"
@@ -37,8 +38,13 @@
             </intent-filter>
         </activity>
 
-        <!-- VLC-style notification-panel transport (media foreground svc) -->
-        <service android:name=".PlaybackNotificationService"
+        <activity android:name=".ProviderActivity"
+                  android:exported="false"
+                  android:configChanges="orientation|screenSize|keyboardHidden"/>
+
+        <!-- Foreground playback: engine + MediaSession + notification live here,
+             so the queue survives Activity death and app restarts. -->
+        <service android:name=".PlaybackService"
                  android:exported="false"
                  android:foregroundServiceType="mediaPlayback"/>
 

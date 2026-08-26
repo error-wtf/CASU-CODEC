@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
+// SPDX-FileCopyrightText: 2026 Lino Casu
 package org.casu.mpcasu;
 
 import android.app.PendingIntent;
@@ -8,14 +10,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.widget.RemoteViews;
 
-/**
- * MPCASU home-screen widget (4×1): current title + play/pause state and
- * ⏮ ▶/⏸ ⏭ transport buttons. Buttons arrive here as broadcasts; they are
- * forwarded into the live WebView (same JS surface as the desktop web
- * player: next(±1) / #play click). If no player is alive the tap simply
- * launches MainActivity. Playback state flows back through PlayerBridge's
- * poll loop → {@link #pushState}.
- */
+/** MPCASU home-screen widget (4×1): title + play/pause state + ⏮ ▶ ⏭.
+ *  Button taps arrive as broadcasts and drive the shared PlayerEngine in
+ *  PlaybackService; without a running service the tap opens the app. */
 public class McasuWidgetProvider extends AppWidgetProvider {
 
     public static final String ACTION_PREV = "org.casu.mpcasu.WIDGET_PREV";
@@ -24,7 +21,10 @@ public class McasuWidgetProvider extends AppWidgetProvider {
 
     @Override
     public void onUpdate(Context context, AppWidgetManager manager, int[] appWidgetIds) {
-        RemoteViews views = buildViews(context, PlayerBridge.title(), PlayerBridge.playing());
+        PlayerEngine engine = PlaybackService.engine();
+        boolean playing = engine != null && engine.isPlaying();
+        String title = engine != null && engine.current() != null ? engine.current().title : "";
+        RemoteViews views = buildViews(context, title, playing);
         for (int id : appWidgetIds) manager.updateAppWidget(id, views);
     }
 
@@ -32,12 +32,21 @@ public class McasuWidgetProvider extends AppWidgetProvider {
     public void onReceive(Context context, Intent intent) {
         String action = intent.getAction();
         if (ACTION_PREV.equals(action) || ACTION_PLAY.equals(action) || ACTION_NEXT.equals(action)) {
-            if (!PlayerBridge.dispatch(action)) {
-                // No live player: open the app so the user lands in control.
-                Intent open = new Intent(context, MainActivity.class)
+            PlayerEngine engine = PlaybackService.engine();
+            if (engine == null) {
+                // Cold start via widget: boot the service with the command.
+                String serviceAction = ACTION_PLAY.equals(action) ? PlaybackService.ACTION_TOGGLE
+                        : ACTION_PREV.equals(action) ? PlaybackService.ACTION_PREV
+                        : PlaybackService.ACTION_NEXT;
+                Intent start = new Intent(context, PlaybackService.class)
+                        .setAction(serviceAction)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                context.startActivity(open);
+                context.startForegroundService(start);
+                return;
             }
+            if (ACTION_PREV.equals(action)) engine.previous();
+            else if (ACTION_NEXT.equals(action)) engine.next();
+            else engine.playPause();
             return;
         }
         super.onReceive(context, intent);
@@ -55,26 +64,27 @@ public class McasuWidgetProvider extends AppWidgetProvider {
     }
 
     private static RemoteViews buildViews(Context context, String title, boolean playing) {
-        RemoteViews views = new RemoteViews(context.getPackageName(),
-                R.layout.widget_mpcasu);
+        RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.widget_mpcasu);
         boolean idle = title == null || title.isEmpty();
-        views.setTextViewText(R.id.widget_title,
-                idle ? context.getString(R.string.widget_idle_title) : title);
-        views.setTextViewText(R.id.widget_state, context.getString(
-                playing ? R.string.widget_state_playing : R.string.widget_state_paused));
-        views.setTextViewText(R.id.widget_play, playing ? "⏸" : "▶");
-        views.setOnClickPendingIntent(R.id.widget_prev,
-                pending(context, ACTION_PREV));
-        views.setOnClickPendingIntent(R.id.widget_play,
-                pending(context, ACTION_PLAY));
-        views.setOnClickPendingIntent(R.id.widget_next,
-                pending(context, ACTION_NEXT));
+        views.setTextViewText(R.id.widget_title, idle ? "MPCASU" : title);
+        views.setTextViewText(R.id.widget_state, idle ? "Bereit"
+                : (playing ? "Wiedergabe" : "Pausiert"));
+        views.setTextViewText(R.id.widget_play, playing ? "❚❚" : "▶");
+
+        Intent prev = new Intent(context, McasuWidgetProvider.class).setAction(ACTION_PREV);
+        Intent play = new Intent(context, McasuWidgetProvider.class).setAction(ACTION_PLAY);
+        Intent next = new Intent(context, McasuWidgetProvider.class).setAction(ACTION_NEXT);
+        views.setOnClickPendingIntent(R.id.widget_prev, pending(context, prev, 11));
+        views.setOnClickPendingIntent(R.id.widget_play, pending(context, play, 12));
+        views.setOnClickPendingIntent(R.id.widget_next, pending(context, next, 13));
+
+        Intent open = new Intent(context, MainActivity.class);
+        views.setOnClickPendingIntent(R.id.widget_root, pending(context, open, 14));
         return views;
     }
 
-    private static PendingIntent pending(Context context, String action) {
-        Intent intent = new Intent(context, McasuWidgetProvider.class).setAction(action);
-        int flags = PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE;
-        return PendingIntent.getBroadcast(context, action.hashCode(), intent, flags);
+    private static PendingIntent pending(Context context, Intent intent, int requestCode) {
+        return PendingIntent.getBroadcast(context, requestCode, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 }
