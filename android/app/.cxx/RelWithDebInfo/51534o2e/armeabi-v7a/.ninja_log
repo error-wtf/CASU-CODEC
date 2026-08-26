@@ -11,3 +11,5 @@
 2	11823	1787492464238058041	CMakeFiles/casucore.dir/home/error/Codec-Casu/win-release/src/core/casu/native_v2.cpp.o	8ca262ab1f04004
 8	14359	1787492466769108187	CMakeFiles/casucore.dir/home/error/Codec-Casu/win-release/src/core/casu/native_v2_payloads.cpp.o	1ec704598a613f73
 14359	14417	1787492466852109829	/home/error/Codec-Casu/android/app/build/intermediates/cxx/RelWithDebInfo/51534o2e/obj/armeabi-v7a/libcasucore.so	3372e18afad00168
+3	1576	1787662350090689626	CMakeFiles/casucore.dir/casu_jni.cpp.o	4e96fbcc8bca1786
+1576	1626	1787662350149689718	/home/error/Codec-Casu/android/app/build/intermediates/cxx/RelWithDebInfo/51534o2e/obj/armeabi-v7a/libcasucore.so	3372e18afad00168

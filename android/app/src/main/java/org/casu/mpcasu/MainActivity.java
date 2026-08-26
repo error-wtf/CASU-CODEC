@@ -39,6 +39,7 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> fileCallback;
     private WebView webView;
     private String pendingOpenPath;
+    private boolean pageReady = false;
     private LinearLayout rootLayout;
     private LinearLayout providerBar;
     private TextView providerTitle;
@@ -113,6 +114,7 @@ public class MainActivity extends Activity {
         webView.setWebViewClient(new WebViewClient() {
             @Override public void onPageFinished(WebView view, String url) {
                 // Flush an "Open with" hand-off once the player page is up.
+                pageReady = true;
                 if (pendingOpenPath != null) {
                     openInPlayer(pendingOpenPath);
                     pendingOpenPath = null;
@@ -237,7 +239,11 @@ public class MainActivity extends Activity {
                 return;
             }
             final String path = inbox.getAbsolutePath();
-            if (webView == null) {
+            if (webView == null || !pageReady) {
+                // Cold start: the intent can arrive before index.html has a
+                // JS context. evaluateJavascript on a loading page is lost
+                // silently (observed: MediaSession stayed PAUSED at 0 s),
+                // so park the hand-off until onPageFinished.
                 pendingOpenPath = path;
             } else {
                 openInPlayer(path);

@@ -1,6 +1,62 @@
 [
     {
+        "merged": "/root/.gradle/daemon/8.7/org.casu.mpcasu.app-release-4:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "/root/.gradle/daemon/8.7/org.casu.mpcasu.app-main-5:/mipmap-anydpi-v26/ic_launcher.xml"
+    },
+    {
+        "merged": "org.casu.mpcasu.app-release-4:/mipmap-xxhdpi_ic_launcher_foreground.png.flat",
+        "source": "org.casu.mpcasu.app-main-5:/mipmap-xxhdpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "org.casu.mpcasu.app-release-4:/mipmap-xhdpi_ic_launcher.png.flat",
+        "source": "org.casu.mpcasu.app-main-5:/mipmap-xhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "org.casu.mpcasu.app-release-4:/xml_widget_info.xml.flat",
+        "source": "org.casu.mpcasu.app-main-5:/xml/widget_info.xml"
+    },
+    {
+        "merged": "org.casu.mpcasu.app-release-4:/mipmap-hdpi_ic_launcher_foreground.png.flat",
+        "source": "org.casu.mpcasu.app-main-5:/mipmap-hdpi/ic_launcher_foreground.png"
+    },
+    {
         "merged": "org.casu.mpcasu.app-release-4:/mipmap-anydpi-v26_ic_launcher.xml.flat",
         "source": "org.casu.mpcasu.app-main-5:/mipmap-anydpi-v26/ic_launcher.xml"
+    },
+    {
+        "merged": "org.casu.mpcasu.app-release-4:/mipmap-xhdpi_ic_launcher_foreground.png.flat",
+        "source": "org.casu.mpcasu.app-main-5:/mipmap-xhdpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "org.casu.mpcasu.app-release-4:/mipmap-xxxhdpi_ic_launcher.png.flat",
+        "source": "org.casu.mpcasu.app-main-5:/mipmap-xxxhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "org.casu.mpcasu.app-release-4:/layout_widget_mpcasu.xml.flat",
+        "source": "org.casu.mpcasu.app-main-5:/layout/widget_mpcasu.xml"
+    },
+    {
+        "merged": "org.casu.mpcasu.app-release-4:/mipmap-hdpi_ic_launcher.png.flat",
+        "source": "org.casu.mpcasu.app-main-5:/mipmap-hdpi/ic_launcher.png"
+    },
+    {
+        "merged": "org.casu.mpcasu.app-release-4:/mipmap-mdpi_ic_launcher.png.flat",
+        "source": "org.casu.mpcasu.app-main-5:/mipmap-mdpi/ic_launcher.png"
+    },
+    {
+        "merged": "org.casu.mpcasu.app-release-4:/mipmap-xxxhdpi_ic_launcher_foreground.png.flat",
+        "source": "org.casu.mpcasu.app-main-5:/mipmap-xxxhdpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "org.casu.mpcasu.app-release-4:/mipmap-xxhdpi_ic_launcher.png.flat",
+        "source": "org.casu.mpcasu.app-main-5:/mipmap-xxhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "org.casu.mpcasu.app-release-4:/mipmap-mdpi_ic_launcher_foreground.png.flat",
+        "source": "org.casu.mpcasu.app-main-5:/mipmap-mdpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "org.casu.mpcasu.app-release-4:/layout_notification_mpcasu.xml.flat",
+        "source": "org.casu.mpcasu.app-main-5:/layout/notification_mpcasu.xml"
     }
 ]
