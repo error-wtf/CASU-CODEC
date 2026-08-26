@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#define NOGDI
+#include <windows.h>  // CREATE_NO_WINDOW: keep GUI child processes silent
+#endif
 #include "main_window.hpp"
 #include "epg.hpp"
 
@@ -2125,7 +2131,10 @@ void MainWindow::build_youtube_page() {
         if (!item) return;
         const QString url = item->data(Qt::UserRole).toString();
         if (url.isEmpty()) return;
-        open_network_source(url, url);
+        // Linux parity: search results enter the QUEUE with their title
+        // (never a raw-URL "Now Playing"), then play.
+        const QString title = item->data(Qt::UserRole + 1).toString();
+        queue_and_play(url, title);
     });
     layout->addWidget(yt_results_, 1);
 
@@ -2322,6 +2331,11 @@ void MainWindow::show_media_info() {
     const QString ffprobe = qEnvironmentVariable("CASU_FFPROBE");
     if (!ffprobe.isEmpty() && QFileInfo::exists(ffprobe) && QFileInfo::exists(path)) {
         QProcess probe;
+#ifdef Q_OS_WIN
+        // GUI app: never flash a console window for ffprobe.
+        probe.setCreateProcessArgumentsModifier(
+            [](QProcess::CreateProcessArguments* a) { a->flags |= CREATE_NO_WINDOW; });
+#endif
         probe.start(ffprobe, {"-v", "quiet", "-print_format", "json",
                               "-show_format", "-show_streams", path});
         if (probe.waitForFinished(15000)) {
@@ -2645,6 +2659,60 @@ void MainWindow::open_network_source(const QString& source, const QString& title
         effective = yt_proxy_->media_url();
     }
     open_backend_and_play(effective, title);
+}
+
+void MainWindow::queue_and_play(const QString& url, const QString& label) {
+    // Linux parity (_queue_and_play): the URL lands IN the queue, the row
+    // shows the passed label (or the fetched title), then playback starts.
+    if (!label.isEmpty()) display_titles_.insert(url, label);
+    int row = playlist_.index_of(url);
+    if (row < 0) {
+        playlist_.add(url, label);
+        row = playlist_.index_of(url);
+        refresh_playlist();
+    }
+    if (row < 0) {  // defensive: model refused the row
+        open_network_source(url, label);
+        return;
+    }
+    play_queue_index(row, false);
+    if (label.isEmpty()) tag_queue_title(url);  // fetch the real title
+}
+
+void MainWindow::tag_queue_title(const QString& url) {
+    // Linux parity (_tag_queue_title): background yt-dlp --print %(title)s,
+    // then rewrite the queue row + NOW PLAYING. A newer request invalidates
+    // a stale one (generation guard like the resolver).
+    if (!casu::network::is_youtube_url(url.toStdString())) return;
+    const int generation = ++title_generation_;
+    QPointer<MainWindow> guard(this);
+    std::thread([guard, generation, url] {
+        std::string title;
+        std::string uploader;
+        try {
+            const auto t = casu::network::YtDlp().title(url.toStdString(), 30000);
+            title = t.first;
+            uploader = t.second;
+        } catch (const std::exception&) {
+            return;  // keep the existing label
+        }
+        if (title.empty()) return;
+        std::string label = title;
+        if (!uploader.empty()) label += " — " + uploader;
+        const QString q_label = QString::fromStdString(label);
+        QMetaObject::invokeMethod(QCoreApplication::instance(),
+                                  [guard, generation, url, q_label] {
+            if (!guard) return;
+            if (generation != guard->title_generation_) return;
+            guard->display_titles_.insert(url, q_label);
+            guard->refresh_playlist();
+            // NOW PLAYING follows when the tagged row is the current source.
+            if (guard->current_source_ == url) {
+                guard->current_title_ = q_label;
+                guard->topbar_title_->setText(q_label);
+            }
+        });
+    }).detach();
 }
 
 void MainWindow::apply_backend_settings() {
@@ -3037,7 +3105,14 @@ void MainWindow::open_url_dialog() {
                                         QStringLiteral("Stream URL or YouTube link"),
                                         QLineEdit::Normal, QString(), &ok);
     if (!ok || url.trimmed().isEmpty()) return;
-    add_files({url.trimmed()});
+    const QString trimmed = url.trimmed();
+    if (casu::network::is_youtube_url(trimmed.toStdString())) {
+        // Linux parity: YouTube links enter the queue and get their real
+        // title resolved (never a raw URL as "Now Playing").
+        queue_and_play(trimmed, QString());
+        return;
+    }
+    add_files({trimmed});
     if (playlist_.current_index() >= 0)
         play_queue_index(playlist_.current_index(), false);
 }
@@ -3213,7 +3288,11 @@ void MainWindow::add_url() {
                                         QStringLiteral("Stream URL or YouTube link"),
                                         QLineEdit::Normal, QString(), &ok);
     if (!ok || url.trimmed().isEmpty()) return;
-    add_files({url.trimmed()});
+    const QString trimmed = url.trimmed();
+    add_files({trimmed});
+    // Linux parity: queued YouTube links get their real title async.
+    if (casu::network::is_youtube_url(trimmed.toStdString()))
+        tag_queue_title(trimmed);
 }
 
 void MainWindow::load_playlist_file() {
@@ -4201,6 +4280,8 @@ void MainWindow::on_youtube_play() {
                         auto* item = new QListWidgetItem(label, yt_results_);
                         item->setData(Qt::UserRole,
                                       QString::fromStdString(r.url));
+                        item->setData(Qt::UserRole + 1,
+                                      QString::fromStdString(r.title));
                         yt_results_->addItem(item);
                     }
                     youtube_status_->setText(
@@ -4217,6 +4298,12 @@ void MainWindow::on_youtube_play() {
         return;
     }
     if (is_url || QFileInfo::exists(input)) {
+        if (casu::network::is_youtube_url(input.toStdString())) {
+            // Linux parity: typed YouTube links enter the queue + resolve
+            // their title (no raw-URL "Now Playing").
+            queue_and_play(input, QString());
+            return;
+        }
         open_network_source(input, input);
         return;
     }
@@ -4248,6 +4335,7 @@ void MainWindow::on_youtube_play() {
                         QStringLiteral("%1  ·  %2  ·  %3")
                             .arg(title, uploader.isEmpty() ? QStringLiteral("unknown") : uploader, dur));
                     item->setData(Qt::UserRole, QString::fromStdString(r.url));
+                    item->setData(Qt::UserRole + 1, title);
                     yt_results_->addItem(item);
                 }
                 youtube_status_->setText(

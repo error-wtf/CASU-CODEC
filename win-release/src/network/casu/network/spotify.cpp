@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#define NOGDI
+#include <windows.h>  // CREATE_NO_WINDOW: keep GUI child processes silent
+#endif
 #include "casu/network/spotify.hpp"
 
 #include "casu/json.hpp"
@@ -105,6 +111,11 @@ casu::JsonValue spotdl_save(const std::string& input, int timeout_ms) {
                     QStringLiteral("--save-file"), to_qstring(save_file)});
     p.setStandardOutputFile(QProcess::nullDevice());
     p.setStandardErrorFile(QProcess::nullDevice());
+#ifdef Q_OS_WIN
+    // GUI app: never flash a console window for spotDL.
+    p.setCreateProcessArgumentsModifier(
+        [](QProcess::CreateProcessArguments* a) { a->flags |= CREATE_NO_WINDOW; });
+#endif
     p.start();
     if (!p.waitForStarted(15000)) {
         std::remove(save_file.c_str());

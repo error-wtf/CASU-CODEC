@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
 // Real-FFT visualizer (see header). FFT: iterative radix-2 Cooley–Tukey,
 // matching numpy rfft magnitudes for the 2048-sample Hann window.
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#define NOGDI
+#include <windows.h>  // CREATE_NO_WINDOW: keep GUI child processes silent
+#endif
 #include "visualizer.hpp"
 #include "viz_fft.hpp"
 
@@ -248,6 +254,11 @@ void VisualizerWidget::start_pipe(const QStringList& args, bool live) {
         stream_ring_.assign(44100 * kRingSeconds, 0.0f);
         ring_write_pos_ = 0;
     }
+#ifdef Q_OS_WIN
+    // GUI app: never flash a console window for ffmpeg.
+    pipe_->setCreateProcessArgumentsModifier(
+        [](QProcess::CreateProcessArguments* a) { a->flags |= CREATE_NO_WINDOW; });
+#endif
     pipe_->start();
 }
 

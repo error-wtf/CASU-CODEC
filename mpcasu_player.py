@@ -14,6 +14,7 @@ import math
 import os
 import queue
 import random
+import subprocess
 import threading
 import time
 import tkinter as tk
@@ -255,6 +256,9 @@ class MPCASUPlayer(tk.Tk):
         self._format_badge = "MPCASU"
         self._integrity_badge = "READY"
         self.playlist_model = PlaylistModel()
+        # URL rows → resolved display titles (YouTube etc.), Tk twin of the
+        # Qt PlaylistPane._display_titles dict.
+        self._display_titles: dict[str, str] = {}
         self._session_file = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "mpcasu" / "session.json"
         self.settings_store = SettingsStore(self._session_file.parent / "settings.json")
         effective_settings = self.settings_store.load()
@@ -993,7 +997,11 @@ class MPCASUPlayer(tk.Tk):
                      "rtmp-stream": "RTMP", "mms-stream": "MMS",
                      "udp-stream": "UDP", "network-stream": "STREAM"}.get(
                          etype, mtype.upper())
-            label = f"[{badge}] {path.name}"
+            if isinstance(path, str):
+                # Remote URL row: show the resolved title, never the raw URL.
+                label = f"[{badge}] {self._display_titles.get(path, path)}"
+            else:
+                label = f"[{badge}] {path.name}"
             self.queue.insert("end", label)
             self._queue_view.append(index)
         if selected is not None and 0 <= selected < len(self.playlist_model):
@@ -1309,7 +1317,9 @@ class MPCASUPlayer(tk.Tk):
                 return
             if text.startswith(("http://", "https://")):
                 dialog.destroy()
-                self._resolve_and_open_external_source(text)
+                # Qt parity: typed URLs enter the queue; YouTube links get
+                # their real title resolved in the background.
+                self._queue_and_play(text)
                 return
             run_search()
 
@@ -1319,8 +1329,9 @@ class MPCASUPlayer(tk.Tk):
                 return
             result = results[selection[0]]
             dialog.destroy()
-            self._resolve_and_open_external_source(result.url,
-                                                   display_label=result.title)
+            # Qt parity (_on_source_activated): the result lands IN the queue
+            # with its title, then plays — not a fire-and-forget stream.
+            self._queue_and_play(result.url, result.title)
 
         def run_search():
             query = value.get().strip()
@@ -1395,6 +1406,57 @@ class MPCASUPlayer(tk.Tk):
                 self._resolve_and_open_external_source(url)
         ttk.Button(dialog, text="Open", style="MPC.TButton", command=open_source).pack(anchor="e", padx=16, pady=14)
         entry.bind("<Return>", lambda _event: open_source())
+
+    def _queue_and_play(self, url: str, label: str = "") -> None:
+        """Qt parity (_queue_and_play): the URL lands IN the queue (with its
+        title), the queue re-renders, then playback starts through the
+        normal resolve path."""
+        if label:
+            self._display_titles[url] = label
+        try:
+            self.playlist_model.add((url,))
+        except PlaylistError:
+            pass
+        self._render_playlist()
+        self._resolve_and_open_external_source(
+            url, display_label=self._display_titles.get(url, label or url))
+        self._tag_queue_title(url)
+
+    def _tag_queue_title(self, url: str) -> None:
+        """Qt parity (_tag_queue_title): fetch the real YouTube title in the
+        background and rewrite the queue row + NOW PLAYING."""
+        if not is_youtube_url(url):
+            return
+        holder: dict = {}
+
+        def worker() -> None:
+            try:
+                proc = subprocess.run(
+                    ["yt-dlp", "--no-warnings", "--no-playlist",
+                     "--skip-download", "--print", "%(title)s", url],
+                    capture_output=True, text=True, timeout=25)
+                title = (proc.stdout.strip().splitlines() or [""])[0].strip() \
+                    if proc.returncode == 0 else ""
+            except Exception:  # noqa: BLE001 - title tagging is best-effort
+                title = ""
+            holder["title"] = title
+
+        threading.Thread(target=worker, daemon=True).start()
+
+        def poll() -> None:
+            if "title" not in holder:
+                self.after(150, poll)
+                return
+            title = holder["title"]
+            if not title:
+                return
+            self._display_titles[url] = title
+            self._render_playlist()
+            if self._network_source and url in self._network_source:
+                self.now_playing.configure(text=title.upper())
+                self._network_display = title
+
+        self.after(150, poll)
 
     def _resolve_and_open_external_source(self, source: str, *,
                                           display_label: str | None = None,
@@ -1612,12 +1674,17 @@ class MPCASUPlayer(tk.Tk):
         search.trace_add("write", refresh_channels)
         channels[:] = list(self._stream_catalog.channels); refresh_channels()
 
-    def add_files(self, paths: list[Path]):
+    def add_files(self, paths: list):
         # A media file already covered by a playlist in the selection must not
         # be added a second time as a top-level row (Choose files double-load).
         playlists: list[Path] = []
         plain: list[Path] = []
+        remote: list[str] = []
         for value in paths:
+            if isinstance(value, str):
+                # Remote URL rows (queue/session restore) stay strings.
+                remote.append(value)
+                continue
             path = value.expanduser().resolve()
             if path.is_file() and path.suffix.lower() in PLAYLIST_SUFFIXES:
                 playlists.append(path)
@@ -1639,6 +1706,11 @@ class MPCASUPlayer(tk.Tk):
                     added.append(path)
             except PlaylistError as exc:
                 self.status.set(str(exc)); break
+        for url in remote:
+            try:
+                self.playlist_model.add((url,))
+            except PlaylistError:
+                pass
         try:
             self.media_library.upsert_many(added)
         except (OSError, ValueError):
@@ -2392,7 +2464,9 @@ class MPCASUPlayer(tk.Tk):
             messagebox.showinfo("MPCASU", "Add a media file first.")
             return
         if isinstance(item, str):
-            self._resolve_and_open_external_source(item, display_label=item)
+            # URL row: show the resolved title (never the raw URL).
+            self._resolve_and_open_external_source(
+                item, display_label=self._display_titles.get(item, item))
             return
         path = item
         if not path:

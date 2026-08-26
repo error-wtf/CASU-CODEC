@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
 // Full port of casu/recording.py MediaRecorder semantics (see header).
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#define NOGDI
+#include <windows.h>  // CREATE_NO_WINDOW: keep GUI child processes silent
+#endif
 #include "recording.hpp"
 
 #include "casu/codec/ffprobe.hpp"
@@ -110,6 +116,11 @@ bool RecordingController::start(const QString& source,
         QStringLiteral("-y"), temporary_});
     connect(proc_, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             this, &RecordingController::handle_finished);
+#ifdef Q_OS_WIN
+    // GUI app: never flash a console window for ffmpeg.
+    proc_->setCreateProcessArgumentsModifier(
+        [](QProcess::CreateProcessArguments* a) { a->flags |= CREATE_NO_WINDOW; });
+#endif
     proc_->start();
     if (!proc_->waitForStarted(10000)) {
         cleanup_temp();

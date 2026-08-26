@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#define NOGDI
+#include <windows.h>  // CREATE_NO_WINDOW: keep GUI child processes silent
+#endif
 #include "casu/network/ytdlp.hpp"
 
 #include "casu/json.hpp"
@@ -54,6 +60,11 @@ ProcResult run_process(const std::string& program, const std::vector<std::string
     QStringList qargs;
     for (const auto& a : args) qargs << to_qstring(a);
     p.setArguments(qargs);
+#ifdef Q_OS_WIN
+    // GUI app: never flash a console window for yt-dlp.exe.
+    p.setCreateProcessArgumentsModifier(
+        [](QProcess::CreateProcessArguments* a) { a->flags |= CREATE_NO_WINDOW; });
+#endif
     p.start();
     if (!p.waitForStarted(timeout_ms)) {
         return r;

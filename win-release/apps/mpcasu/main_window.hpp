@@ -128,6 +128,10 @@ private:
 
     void open_backend_and_play(const QString& source, const QString& title);
     void open_network_source(const QString& source, const QString& title);
+    // Linux parity (_queue_and_play/_tag_queue_title): YouTube results go
+    // INTO the queue with their title; the real title is fetched async.
+    void queue_and_play(const QString& url, const QString& label);
+    void tag_queue_title(const QString& url);
     void open_web_player(const QString& provider, const QString& query = {},
                          const QString& url = {});
     void play_queue_index(int index, bool automatic);
@@ -230,6 +234,7 @@ private:
     YoutubeProxy* yt_proxy_ = nullptr;
     WebPlayerTabs* web_player_tabs_ = nullptr;
     std::atomic<int> resolve_generation_{0};
+    std::atomic<int> title_generation_{0};
     bool error_latched_ = false;
     RecordingController* recorder_ = nullptr;
     QTimer* record_timer_ = nullptr;

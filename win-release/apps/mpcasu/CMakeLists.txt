@@ -70,7 +70,9 @@ endif()
 
 target_include_directories(casu_mpcasu PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(casu_mpcasu PRIVATE cxx_std_20)
-set_target_properties(casu_mpcasu PROPERTIES RUNTIME_OUTPUT_NAME "MPCASU")
+# GUI subsystem: no console window next to the player. (stdout still works
+# when redirected, so the Wine smoke harness keeps its markers.)
+set_target_properties(casu_mpcasu PROPERTIES RUNTIME_OUTPUT_NAME "MPCASU" WIN32_EXECUTABLE TRUE)
 casu_stage_app("MPCASU.exe" casu_mpcasu)
 
 # Application icon resource (embedded into the exe; loaded via IDI_ICON1).

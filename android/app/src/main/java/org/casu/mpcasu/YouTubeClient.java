@@ -151,11 +151,33 @@ public final class YouTubeClient {
         Video v = new Video();
         v.id = r.optString("videoId", "");
         if (v.id.isEmpty()) return null;
-        v.title = r.optString("title", v.id);
-        v.channel = r.optString("shortBylineText", null);
-        if (v.channel != null && v.channel.isEmpty()) v.channel = null;
+        // title can be JSONObject {simpleText:...} or {runs:[...]} or a plain string
+        Object titleRaw = r.opt("title");
+        if (titleRaw instanceof JSONObject) {
+            JSONObject titleObj = (JSONObject) titleRaw;
+            v.title = textRuns(titleObj.optJSONArray("runs"));
+            if (v.title.isEmpty()) v.title = titleObj.optString("simpleText", v.id);
+        } else if (titleRaw instanceof String) {
+            v.title = (String) titleRaw;
+        } else {
+            v.title = r.optString("title", v.id);
+        }
+        if (v.title.isEmpty()) v.title = v.id;
+        // channel: shortBylineText can be {simpleText:...} or {runs:[...]}
+        Object channelRaw = r.opt("shortBylineText");
+        if (channelRaw instanceof JSONObject) {
+            v.channel = textRuns(((JSONObject) channelRaw).optJSONArray("runs"));
+            if (v.channel.isEmpty()) v.channel = ((JSONObject) channelRaw).optString("simpleText", null);
+        } else if (channelRaw instanceof String) {
+            v.channel = (String) channelRaw;
+        }
         JSONObject length = r.optJSONObject("lengthText");
         v.durationSeconds = parseDuration(length != null ? length.optString("simpleText", "") : "");
+        JSONArray thumbs = r.optJSONObject("thumbnail") != null
+                ? r.optJSONObject("thumbnail").optJSONArray("thumbnails") : null;
+        if (thumbs != null && thumbs.length() > 0) {
+            v.thumbnail = thumbs.optJSONObject(thumbs.length() - 1).optString("url", "");
+        }
         return v;
     }
 

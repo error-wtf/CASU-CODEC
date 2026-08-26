@@ -42,12 +42,17 @@ import android.widget.Toast;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /** MPCASU Android — native rewrite of the full Linux Qt player.
  *  Symbol-driven UI, 5 bottom tabs, everything touch-first. */
@@ -134,6 +139,17 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     private File recordTarget;
     private Visualizer visualizer;
 
+    // recording format + folder
+    private String recordFormat = "ts";
+    private File recordFolder;
+
+    // queue multi-select
+    private final Set<Integer> multiSelected = new HashSet<>();
+    private boolean multiSelectMode = false;
+
+    // saved playlists management
+    private LinearLayout savedPlaylistsContainer;
+
     // persisted settings (JSON)
     public static final class Settings {
         public int volume = 100;
@@ -142,6 +158,8 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         public boolean resume = true;
         public boolean consent = false;
         public String subtitlePath = null;
+        public String recordFormat = "ts";
+        public String recordFolder = null;
 
         public static Settings load(android.content.Context context) {
             Settings out = new Settings();
@@ -157,6 +175,10 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                 out.consent = o.optBoolean("consent", false);
                 out.subtitlePath = o.optString("subtitlePath", null);
                 if (out.subtitlePath != null && out.subtitlePath.isEmpty()) out.subtitlePath = null;
+                out.recordFormat = o.optString("recordFormat", "ts");
+                if (out.recordFormat.isEmpty()) out.recordFormat = "ts";
+                out.recordFolder = o.optString("recordFolder", null);
+                if (out.recordFolder != null && out.recordFolder.isEmpty()) out.recordFolder = null;
             } catch (Exception ignored) {
             }
             return out;
@@ -171,6 +193,8 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                 o.put("resume", resume);
                 o.put("consent", consent);
                 o.put("subtitlePath", subtitlePath == null ? "" : subtitlePath);
+                o.put("recordFormat", recordFormat);
+                o.put("recordFolder", recordFolder == null ? "" : recordFolder);
                 try (java.io.FileOutputStream out = new java.io.FileOutputStream(
                         new java.io.File(context.getFilesDir(), "settings.json"))) {
                     out.write(o.toString().getBytes());
@@ -185,6 +209,10 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         super.onCreate(savedInstanceState);
         ui = new android.os.Handler(getMainLooper());
         settings = Settings.load(this);
+        recordFormat = settings.recordFormat;
+        if (settings.recordFolder != null) {
+            recordFolder = new File(settings.recordFolder);
+        }
 
         // BUG 4+7 FIX: On cold start, delete stale queue.json so the queue
         // starts EMPTY. Library content belongs in the LIBRARY tab, not
@@ -639,6 +667,62 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         page.addView(header);
 
+        // multi-select action bar (hidden unless multi-select active)
+        LinearLayout multiBar = new LinearLayout(this);
+        multiBar.setOrientation(LinearLayout.HORIZONTAL);
+        multiBar.setGravity(Gravity.CENTER_VERTICAL);
+        multiBar.setBackgroundColor(Color.parseColor("#1a1014"));
+        multiBar.setPadding(dp(8), dp(6), dp(8), dp(6));
+        multiBar.setVisibility(View.GONE);
+        multiBar.setTag("multi-bar");
+        TextView multiCount = new TextView(this);
+        multiCount.setTextColor(TEXT);
+        multiCount.setTextSize(12);
+        multiCount.setText("0 gewählt");
+        multiCount.setTag("multi-count");
+        multiBar.addView(multiCount, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        Button selectAllBtn = smallButton("Alle");
+        selectAllBtn.setOnClickListener(v -> {
+            multiSelected.clear();
+            List<MediaItem> items = engine.items();
+            for (int i = 0; i < items.size(); i++) multiSelected.add(i);
+            refreshQueueUi();
+        });
+        multiBar.addView(selectAllBtn);
+        Button deselectBtn = smallButton("Keine");
+        deselectBtn.setOnClickListener(v -> {
+            multiSelected.clear();
+            refreshQueueUi();
+        });
+        multiBar.addView(deselectBtn);
+        Button deleteBtn = smallButton("✕ Löschen");
+        deleteBtn.setTextColor(ACCENT);
+        deleteBtn.setOnClickListener(v -> {
+            if (multiSelected.isEmpty()) return;
+            new AlertDialog.Builder(this)
+                    .setTitle(multiSelected.size() + " Einträge löschen?")
+                    .setPositiveButton("Löschen", (d, w) -> {
+                        List<Integer> sorted = new ArrayList<>(multiSelected);
+                        Collections.sort(sorted, Collections.reverseOrder());
+                        for (int idx : sorted) engine.removeAt(idx);
+                        multiSelected.clear();
+                        multiSelectMode = false;
+                        refreshQueueUi();
+                    })
+                    .setNegativeButton("Abbrechen", null)
+                    .show();
+        });
+        multiBar.addView(deleteBtn);
+        Button exitMultiBtn = smallButton("✕");
+        exitMultiBtn.setOnClickListener(v -> {
+            multiSelected.clear();
+            multiSelectMode = false;
+            refreshQueueUi();
+        });
+        multiBar.addView(exitMultiBtn);
+        page.addView(multiBar);
+
         queueSearch = new EditText(this);
         queueSearch.setHint("Queue durchsuchen…");
         queueSearch.setTextColor(TEXT);
@@ -664,7 +748,28 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         queueList.setAdapter(queueAdapter);
         queueList.setOnItemClickListener((parent, view, position, id) -> {
             List<Integer> visible = visibleQueueIndexes();
-            if (position < visible.size()) engine.playIndex(visible.get(position));
+            if (position < visible.size()) {
+                if (multiSelectMode) {
+                    int srcIdx = visible.get(position);
+                    if (multiSelected.contains(srcIdx)) multiSelected.remove(srcIdx);
+                    else multiSelected.add(srcIdx);
+                    refreshQueueUi();
+                } else {
+                    engine.playIndex(visible.get(position));
+                }
+            }
+        });
+        queueList.setOnItemLongClickListener((parent, view, position, id) -> {
+            if (!multiSelectMode) {
+                multiSelectMode = true;
+            }
+            List<Integer> visible = visibleQueueIndexes();
+            if (position < visible.size()) {
+                int srcIdx = visible.get(position);
+                multiSelected.add(srcIdx);
+            }
+            refreshQueueUi();
+            return true;
         });
         page.addView(queueList, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
@@ -678,9 +783,12 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         down.setOnClickListener(v -> moveSelected(1));
         Button rename = smallButton("✎");
         rename.setOnClickListener(v -> renameSelected());
+        Button mergeBtn = smallButton("⊕");
+        mergeBtn.setOnClickListener(v -> showMergeQueueDialog());
         footer.addView(up);
         footer.addView(down);
         footer.addView(rename);
+        footer.addView(mergeBtn);
         page.addView(footer);
         return page;
     }
@@ -744,6 +852,16 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         queueSummary.setText(engine.items().size() + " Einträge"
                 + (engine.shuffle() ? " · ⤨" : "")
                 + ("one".equals(engine.repeat()) ? " · ↻1" : "all".equals(engine.repeat()) ? " · ↻∞" : ""));
+        // multi-select bar
+        LinearLayout multiBar = content.findViewWithTag("multi-bar");
+        TextView multiCount = multiBar != null ? multiBar.findViewWithTag("multi-count") : null;
+        if (multiSelectMode && !multiSelected.isEmpty()) {
+            if (multiBar != null) multiBar.setVisibility(View.VISIBLE);
+            if (multiCount != null) multiCount.setText(multiSelected.size() + " gewählt");
+        } else if (!multiSelectMode) {
+            if (multiBar != null) multiBar.setVisibility(View.GONE);
+            multiSelected.clear();
+        }
     }
 
     private final class QueueAdapter extends BaseAdapter {
@@ -769,11 +887,21 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             int sourceIndex = sourceIndexes.get(position);
             TextView title = row.findViewWithTag("qtitle");
             TextView badge = row.findViewWithTag("qbadge");
+            TextView check = row.findViewWithTag("qcheck");
             title.setText(item.title + (item.artist != null && !item.artist.isEmpty()
                     ? "\n" + item.artist : ""));
             badge.setText(item.badge);
             boolean active = sourceIndex == engine.index();
-            row.setBackgroundColor(active ? Color.parseColor("#2a1114") : SURFACE);
+            boolean selected = multiSelected.contains(sourceIndex);
+            if (multiSelectMode) {
+                check.setVisibility(View.VISIBLE);
+                check.setText(selected ? "◉" : "○");
+                check.setTextColor(selected ? ACCENT : MUTED);
+            } else {
+                check.setVisibility(View.GONE);
+            }
+            row.setBackgroundColor(selected ? Color.parseColor("#2a1018")
+                    : active ? Color.parseColor("#2a1114") : SURFACE);
             title.setTextColor(active ? ACCENT : TEXT);
             return row;
         }
@@ -783,6 +911,13 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(12), dp(10), dp(12), dp(10));
+            TextView check = new TextView(MainActivity.this);
+            check.setTag("qcheck");
+            check.setTextColor(MUTED);
+            check.setTextSize(16);
+            check.setVisibility(View.GONE);
+            check.setPadding(0, 0, dp(6), 0);
+            row.addView(check, new LinearLayout.LayoutParams(dp(24), dp(24)));
             TextView badge = new TextView(MainActivity.this);
             badge.setTag("qbadge");
             badge.setTextColor(ACCENT);
@@ -812,13 +947,25 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             row.addView(remove, new LinearLayout.LayoutParams(dp(40), dp(40)));
             row.setOnClickListener(v -> {
                 int position = queueList.getPositionForView(v);
-                selected = position;
-                refreshQueueUi();
+                if (multiSelectMode) {
+                    if (position >= 0 && position < sourceIndexes.size()) {
+                        int srcIdx = sourceIndexes.get(position);
+                        if (multiSelected.contains(srcIdx)) multiSelected.remove(srcIdx);
+                        else multiSelected.add(srcIdx);
+                        refreshQueueUi();
+                    }
+                } else {
+                    selected = position;
+                    refreshQueueUi();
+                }
             });
             row.setOnLongClickListener(v -> {
                 int position = queueList.getPositionForView(v);
-                selected = position;
-                engine.playIndex(sourceIndexes.get(position));
+                if (!multiSelectMode) multiSelectMode = true;
+                if (position >= 0 && position < sourceIndexes.size()) {
+                    multiSelected.add(sourceIndexes.get(position));
+                }
+                refreshQueueUi();
                 return true;
             });
             return row;
@@ -998,7 +1145,6 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                     icon.setImageBitmap(iconBmp);
                     icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
                 } else {
-                    // fallback: colored circle with initial
                     icon.setImageBitmap(drawFallbackIcon(PROVIDER_NAMES[j],
                             PROVIDER_COLORS[j]));
                     icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
@@ -1033,6 +1179,32 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         ytParams.topMargin = dp(14);
         page.addView(ytHeading, ytParams);
 
+        // inline consent banner (shown when consent not yet given)
+        LinearLayout consentBanner = new LinearLayout(this);
+        consentBanner.setOrientation(LinearLayout.VERTICAL);
+        consentBanner.setBackground(boxBackground());
+        consentBanner.setPadding(dp(12), dp(10), dp(12), dp(10));
+        consentBanner.setTag("yt-consent-banner");
+        consentBanner.setVisibility(settings.consent ? View.GONE : View.VISIBLE);
+        TextView consentInfo = new TextView(this);
+        consentInfo.setText("YouTube-Suche nutzt die öffentliche Innertube-API.\n"
+                + "Nur für private Nutzung. Bestätigen:");
+        consentInfo.setTextColor(MUTED);
+        consentInfo.setTextSize(11);
+        consentBanner.addView(consentInfo);
+        android.widget.CheckBox consentInline = new android.widget.CheckBox(this);
+        consentInline.setText("YouTube aktivieren (nur privat)");
+        consentInline.setTextColor(TEXT);
+        consentInline.setTextSize(12);
+        consentInline.setChecked(settings.consent);
+        consentInline.setOnCheckedChangeListener((b, checked) -> {
+            settings.consent = checked;
+            settings.save(this);
+            consentBanner.setVisibility(checked ? View.GONE : View.VISIBLE);
+        });
+        consentBanner.addView(consentInline);
+        page.addView(consentBanner);
+
         LinearLayout searchRow = new LinearLayout(this);
         searchRow.setOrientation(LinearLayout.HORIZONTAL);
         EditText ytQuery = new EditText(this);
@@ -1063,7 +1235,9 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     private void runYouTubeSearch(String query) {
         if (query == null || query.trim().isEmpty()) return;
         if (!settings.consent) {
-            toast("Erst die yt-dlp-/YouTube-Hinweise in SETUP bestätigen");
+            toast("YouTube zuerst aktivieren (Inline-Checkbox oben)");
+            LinearLayout consentBanner = content.findViewWithTag("yt-consent-banner");
+            if (consentBanner != null) consentBanner.setVisibility(View.VISIBLE);
             return;
         }
         LinearLayout results = content.findViewWithTag("yt-results");
@@ -1079,7 +1253,6 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             try {
                 String id = YouTubeClient.extractVideoId(term);
                 if (id != null && (term.contains("youtu") || term.length() == 11)) {
-                    // direct URL: resolve + queue + play
                     String mediaUrl = YouTubeClient.resolveMediaUrl(term);
                     MediaItem item = new MediaItem(mediaUrl, "YouTube " + id,
                             "youtube", "YT");
@@ -1105,7 +1278,13 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                     results.addView(failed);
                     return;
                 }
-                if (finalFound == null || finalFound.isEmpty()) return;
+                if (finalFound == null || finalFound.isEmpty()) {
+                    TextView empty = new TextView(MainActivity.this);
+                    empty.setTextColor(MUTED);
+                    empty.setText("Keine Ergebnisse");
+                    results.addView(empty);
+                    return;
+                }
                 for (YouTubeClient.Video video : finalFound) {
                     results.addView(youTubeResultRow(video));
                 }
@@ -1115,39 +1294,99 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
 
     private View youTubeResultRow(YouTubeClient.Video video) {
         LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.VERTICAL);
-        row.setPadding(dp(12), dp(10), dp(12), dp(10));
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(10), dp(8), dp(10), dp(8));
         row.setBackground(boxBackground());
+
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rowParams.topMargin = dp(4);
+        rowParams.bottomMargin = dp(4);
+        row.setLayoutParams(rowParams);
+
+        // thumbnail
+        ImageView thumb = new ImageView(this);
+        thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        thumb.setBackgroundColor(Color.parseColor("#1a1d22"));
+        LinearLayout.LayoutParams thumbParams = new LinearLayout.LayoutParams(dp(80), dp(56));
+        thumbParams.setMarginEnd(dp(10));
+        thumb.setLayoutParams(thumbParams);
+        row.addView(thumb);
+
+        // load thumbnail in background
+        if (video.thumbnail != null && !video.thumbnail.isEmpty()) {
+            final String thumbUrl = video.thumbnail;
+            new Thread(() -> {
+                try {
+                    java.net.HttpURLConnection conn = (java.net.HttpURLConnection)
+                            new URL(thumbUrl).openConnection();
+                    conn.setConnectTimeout(5000);
+                    conn.setReadTimeout(5000);
+                    conn.setRequestProperty("User-Agent",
+                            "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36");
+                    InputStream is = conn.getInputStream();
+                    Bitmap bmp = android.graphics.BitmapFactory.decodeStream(is);
+                    is.close();
+                    if (bmp != null) {
+                        ui.post(() -> thumb.setImageBitmap(bmp));
+                    }
+                } catch (Exception ignored) {}
+            }).start();
+        }
+
+        // text column
+        LinearLayout textCol = new LinearLayout(this);
+        textCol.setOrientation(LinearLayout.VERTICAL);
+        textCol.setLayoutParams(new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
         TextView title = new TextView(this);
         title.setTextColor(TEXT);
         title.setTextSize(13);
+        title.setMaxLines(2);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
         title.setText(video.title);
+        textCol.addView(title);
+
         TextView meta = new TextView(this);
         meta.setTextColor(MUTED);
         meta.setTextSize(11);
-        meta.setText((video.channel == null ? "YouTube" : video.channel)
-                + (video.durationSeconds > 0 ? " · " + video.durationSeconds / 60 + ":"
-                + String.format(Locale.US, "%02d", video.durationSeconds % 60) : ""));
-        row.addView(title);
-        row.addView(meta);
-        row.setOnClickListener(v -> new Thread(() -> {
-            try {
-                String mediaUrl = YouTubeClient.resolveMediaUrl(video.id);
-                MediaItem item = new MediaItem(mediaUrl,
-                        video.title, video.durationSeconds > 0 ? "video" : "stream", "YT");
-                ui.post(() -> {
-                    engine.openExternal(item, true, 0);
-                    toast("▶ " + video.title);
-                    showTab(TAB_PLAY);
-                });
-            } catch (Exception e) {
-                ui.post(() -> toast("YouTube: " + e.getMessage()));
-            }
-        }).start());
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.topMargin = dp(6);
-        row.setLayoutParams(params);
+        String channel = video.channel == null ? "YouTube" : video.channel;
+        String duration = video.durationSeconds > 0
+                ? String.format(Locale.US, "%d:%02d",
+                        video.durationSeconds / 60, video.durationSeconds % 60)
+                : "";
+        meta.setText(channel + (duration.isEmpty() ? "" : " · " + duration));
+        textCol.addView(meta);
+
+        row.addView(textCol);
+
+        // play indicator
+        TextView playArrow = new TextView(this);
+        playArrow.setText("▶");
+        playArrow.setTextColor(ACCENT);
+        playArrow.setTextSize(14);
+        playArrow.setPadding(dp(8), 0, 0, 0);
+        row.addView(playArrow);
+
+        row.setOnClickListener(v -> {
+            toast("Lade… " + video.title);
+            new Thread(() -> {
+                try {
+                    String mediaUrl = YouTubeClient.resolveMediaUrl(video.id);
+                    MediaItem item = new MediaItem(mediaUrl,
+                            video.title, video.durationSeconds > 0 ? "video" : "stream", "YT");
+                    ui.post(() -> {
+                        engine.openExternal(item, true, 0);
+                        toast("▶ " + video.title);
+                        showTab(TAB_PLAY);
+                    });
+                } catch (Exception e) {
+                    ui.post(() -> toast("YouTube: " + e.getMessage()));
+                }
+            }).start();
+        });
         return row;
     }
 
@@ -1245,6 +1484,35 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         scanDir.setBackgroundColor(Color.parseColor("#161a20"));
         scanDir.setOnClickListener(v -> openFilePicker());
         page.addView(scanDir);
+
+        Button managePlaylists = new Button(this);
+        managePlaylists.setText("Playlists verwalten");
+        managePlaylists.setTextColor(TEXT);
+        managePlaylists.setBackgroundColor(Color.parseColor("#161a20"));
+        managePlaylists.setOnClickListener(v -> showManagePlaylistsDialog());
+        page.addView(managePlaylists);
+
+        page.addView(sectionLabel("RECORDING"));
+        TextView recInfo = new TextView(this);
+        recInfo.setTextColor(MUTED);
+        recInfo.setTextSize(12);
+        recInfo.setText("Format: " + recordFormat + "\nOrdner: "
+                + (recordFolder != null ? recordFolder.getAbsolutePath() : "(Standard)"));
+        recInfo.setTag("rec-info");
+        page.addView(recInfo);
+        Button recSettings = new Button(this);
+        recSettings.setText("Aufnahme-Einstellungen");
+        recSettings.setTextColor(TEXT);
+        recSettings.setBackgroundColor(Color.parseColor("#161a20"));
+        recSettings.setOnClickListener(v -> {
+            MediaItem item = engine != null ? engine.current() : null;
+            if (item != null && item.url.startsWith("http")) {
+                showRecordingSetupDialog(item);
+            } else {
+                toast("Erst einen Stream öffnen, dann Aufnahme konfigurieren");
+            }
+        });
+        page.addView(recSettings);
 
         page.addView(sectionLabel("ACTIONS"));
         Button loadSubtitle = new Button(this);
@@ -1508,16 +1776,101 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             if (recordThread != null) recordThread.interrupt();
             return;
         }
-        File dir = new File(getExternalFilesDir(Environment.DIRECTORY_MUSIC), "MPCASU");
+        // show format + folder picker
+        showRecordingSetupDialog(item);
+    }
+
+    private void showRecordingSetupDialog(MediaItem item) {
+        String[] formats = {"ts", "mp3", "aac", "ogg"};
+        String[] labels = {"MPEG-TS (Original)", "MP3 (Konvertiert)", "AAC (Konvertiert)", "OGG Vorbis (Konvertiert)"};
+        int checked = 0;
+        for (int i = 0; i < formats.length; i++) {
+            if (formats[i].equals(recordFormat)) { checked = i; break; }
+        }
+
+        LinearLayout dialog = new LinearLayout(this);
+        dialog.setOrientation(LinearLayout.VERTICAL);
+        dialog.setPadding(dp(20), dp(16), dp(20), dp(8));
+
+        TextView formatLabel = new TextView(this);
+        formatLabel.setText("Aufnahme-Format:");
+        formatLabel.setTextColor(TEXT);
+        formatLabel.setTextSize(13);
+        formatLabel.setTypeface(null, Typeface.BOLD);
+        dialog.addView(formatLabel);
+
+        final int[] selectedFormat = {checked};
+        for (int i = 0; i < formats.length; i++) {
+            android.widget.RadioButton rb = new android.widget.RadioButton(this);
+            rb.setText(labels[i]);
+            rb.setTextColor(TEXT);
+            rb.setTextSize(12);
+            rb.setChecked(i == checked);
+            final int fi = i;
+            rb.setOnCheckedChangeListener((b, isChecked) -> { if (isChecked) selectedFormat[0] = fi; });
+            dialog.addView(rb);
+        }
+
+        // folder input
+        LinearLayout folderRow = new LinearLayout(this);
+        folderRow.setOrientation(LinearLayout.HORIZONTAL);
+        folderRow.setGravity(Gravity.CENTER_VERTICAL);
+        folderRow.setPadding(0, dp(12), 0, 0);
+        TextView folderLabel = new TextView(this);
+        folderLabel.setText("Ziel: ");
+        folderLabel.setTextColor(MUTED);
+        folderLabel.setTextSize(12);
+        folderRow.addView(folderLabel);
+        EditText folderInput = new EditText(this);
+        folderInput.setTextColor(TEXT);
+        folderInput.setTextSize(12);
+        folderInput.setSingleLine(true);
+        folderInput.setBackground(boxBackground());
+        folderInput.setPadding(dp(8), dp(6), dp(8), dp(6));
+        String defaultPath = recordFolder != null ? recordFolder.getAbsolutePath()
+                : getExternalFilesDir(Environment.DIRECTORY_MUSIC) + "/MPCASU";
+        folderInput.setText(defaultPath);
+        folderInput.setTag("folder-input");
+        folderRow.addView(folderInput, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        dialog.addView(folderRow);
+
+        new AlertDialog.Builder(this)
+                .setTitle("Aufnahme starten")
+                .setView(dialog)
+                .setPositiveButton("Aufnahme", (d, w) -> {
+                    recordFormat = formats[selectedFormat[0]];
+                    settings.recordFormat = recordFormat;
+                    // read folder from input
+                    EditText folderInp = dialog.findViewWithTag("folder-input");
+                    if (folderInp != null && folderInp.getText().length() > 0) {
+                        recordFolder = new File(folderInp.getText().toString().trim());
+                        settings.recordFolder = recordFolder.getAbsolutePath();
+                    }
+                    settings.save(this);
+                    startRecording(item);
+                })
+                .setNegativeButton("Abbrechen", null)
+                .show();
+    }
+
+    private void startRecording(MediaItem item) {
+        File dir = recordFolder;
+        if (dir == null || !dir.exists()) {
+            dir = new File(getExternalFilesDir(Environment.DIRECTORY_MUSIC), "MPCASU");
+        }
         if (!dir.exists()) dir.mkdirs();
-        recordTarget = new File(dir, "record-"
+        settings.recordFolder = dir.getAbsolutePath();
+        settings.save(this);
+
+        recordTarget = new File(dir, "rec-"
                 + new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date())
-                + ".ts");
+                + "." + recordFormat);
         recording = true;
         recordBtn.setTextColor(ACCENT);
         toast("Aufnahme · " + recordTarget.getName());
         recordThread = new Thread(() -> {
-            try (java.io.InputStream in = new java.net.URL(item.url).openStream();
+            try (InputStream in = new java.net.URL(item.url).openStream();
                  java.io.OutputStream out = new java.io.FileOutputStream(recordTarget)) {
                 byte[] chunk = new byte[64 * 1024];
                 int n;
@@ -1627,6 +1980,81 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                     } catch (Exception e) {
                         toast("Speichern fehlgeschlagen: " + e.getMessage());
                     }
+                })
+                .setNegativeButton("Abbrechen", null)
+                .show();
+    }
+
+    private void showMergeQueueDialog() {
+        File dir = new File(getExternalFilesDir(Environment.DIRECTORY_MUSIC), "MPCASU");
+        if (!dir.exists()) dir.mkdirs();
+        File[] files = dir.listFiles((d, name) ->
+                name.endsWith(".m3u") || name.endsWith(".m3u8") || name.endsWith(".pls")
+                || name.endsWith(".xspf") || name.endsWith(".jspf") || name.endsWith(".json")
+                || name.endsWith(".asx") || name.endsWith(".wpl"));
+        if (files == null || files.length == 0) {
+            toast("Keine gespeicherten Playlists gefunden");
+            return;
+        }
+        String[] names = new String[files.length + 1];
+        for (int i = 0; i < files.length; i++) names[i] = files[i].getName();
+        names[files.length] = "URL hinzufügen…";
+        new AlertDialog.Builder(this)
+                .setTitle("Queue mergen / erweitern")
+                .setItems(names, (dialog, which) -> {
+                    if (which < files.length) {
+                        loadPlaylist(new Uri.Builder().path(files[which].getAbsolutePath()).build());
+                        toast("Merging… " + files[which].getName());
+                    } else {
+                        showAddUrlDialog();
+                    }
+                })
+                .setNegativeButton("Abbrechen", null)
+                .show();
+    }
+
+    private void showManagePlaylistsDialog() {
+        File dir = new File(getExternalFilesDir(Environment.DIRECTORY_MUSIC), "MPCASU");
+        if (!dir.exists()) dir.mkdirs();
+        File[] files = dir.listFiles((d, name) ->
+                name.endsWith(".m3u") || name.endsWith(".m3u8") || name.endsWith(".pls")
+                || name.endsWith(".xspf") || name.endsWith(".jspf") || name.endsWith(".json")
+                || name.endsWith(".asx") || name.endsWith(".wpl"));
+        if (files == null || files.length == 0) {
+            toast("Keine gespeicherten Playlists");
+            return;
+        }
+        String[] names = new String[files.length];
+        for (int i = 0; i < files.length; i++) names[i] = files[i].getName();
+        new AlertDialog.Builder(this)
+                .setTitle("Playlists verwalten")
+                .setItems(names, (dialog, which) -> {
+                    final File file = files[which];
+                    new AlertDialog.Builder(this)
+                            .setTitle(file.getName())
+                            .setItems(new String[]{"Abspielen", "In Queue mergen", "Löschen"},
+                                    (d2, which2) -> {
+                                        if (which2 == 0) {
+                                            loadPlaylist(Uri.fromFile(file));
+                                        } else if (which2 == 1) {
+                                            loadPlaylist(Uri.fromFile(file));
+                                            toast("Gemerged: " + file.getName());
+                                        } else {
+                                            new AlertDialog.Builder(this)
+                                                    .setTitle(file.getName() + " löschen?")
+                                                    .setPositiveButton("Löschen", (d3, w3) -> {
+                                                        if (file.delete()) {
+                                                            toast("Gelöscht: " + file.getName());
+                                                        } else {
+                                                            toast("Fehler beim Löschen");
+                                                        }
+                                                    })
+                                                    .setNegativeButton("Abbrechen", null)
+                                                    .show();
+                                        }
+                                    })
+                            .setNegativeButton("Abbrechen", null)
+                            .show();
                 })
                 .setNegativeButton("Abbrechen", null)
                 .show();

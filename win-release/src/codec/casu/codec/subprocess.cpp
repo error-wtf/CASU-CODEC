@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#define NOGDI
+#include <windows.h>  // CREATE_NO_WINDOW: keep GUI child processes silent
+#endif
 #include "casu/codec/subprocess.hpp"
 
 #ifdef CASU_HAS_QT
@@ -42,6 +48,11 @@ ProcessResult Subprocess::run(const std::vector<std::string>& args,
     qargs.reserve(int(args.size()));
     for (const auto& arg : args) qargs << QString::fromUtf8(arg.c_str());
     proc.setArguments(qargs);
+#ifdef Q_OS_WIN
+    // GUI app: never flash a console window for ffmpeg/ffprobe.
+    proc.setCreateProcessArgumentsModifier(
+        [](QProcess::CreateProcessArguments* a) { a->flags |= CREATE_NO_WINDOW; });
+#endif
     proc.start();
     if (!proc.waitForStarted(10000)) {
         out.stderr_data = "could not start process: " + program_;
