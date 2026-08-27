@@ -1584,8 +1584,8 @@ class LibraryPage(QFrame):
             menu.addAction(fav_text, lambda: self._toggle_favorite(paths[0], self._tracks_list.row(item)))
         else:
             any_fav = any(
-                bool((self._media_library.get(p) or {}).get("favorite", False))
-                for p in paths)
+                bool(self._media_library.get(p).favorite)
+                for p in paths if self._media_library.get(p))
             fav_text = "Remove ★" if any_fav else "Add ★ Favorite"
             menu.addAction(f"{fav_text} ({len(paths)})", lambda: self._toggle_favorite_multi(paths, not any_fav))
         menu.addSeparator()
@@ -1594,7 +1594,8 @@ class LibraryPage(QFrame):
         menu.exec(self._tracks_list.viewport().mapToGlobal(position))
 
     def _toggle_favorite(self, path, row):
-        current = bool(self._media_library.get(path) or {}).get("favorite", False)
+        item = self._media_library.get(path)
+        current = bool(item.favorite) if item else False
         self._media_library.set_favorite(path, not current)
         self._refresh()
 
@@ -5034,8 +5035,8 @@ class MainWindow(QMainWindow):
             try:
                 item = self.playlist_model.item(idx)
                 if item and Path(item).is_file():
-                    current = bool(self.media_library.get(str(item)) or
-                                   {}).get("favorite", False)
+                    lib_item = self.media_library.get(str(item))
+                    current = bool(lib_item.favorite) if lib_item else False
                     self.media_library.set_favorite(str(item), not current)
             except Exception:
                 pass
