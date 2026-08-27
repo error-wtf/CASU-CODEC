@@ -1051,8 +1051,8 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
 
         LinearLayout chips = new LinearLayout(this);
         chips.setOrientation(LinearLayout.HORIZONTAL);
-        String[] modes = {"all", "artists", "albums", "genres", "favorites"};
-        String[] labels = {"ALLE", "ARTISTS", "ALBUMS", "GENRES", "★"};
+        String[] modes = {"all", "artists", "albums", "genres", "favorites", "playlists"};
+        String[] labels = {"ALLE", "ARTISTS", "ALBUMS", "GENRES", "★", "≡"};
         for (int i = 0; i < modes.length; i++) {
             Button chip = new Button(this);
             chip.setText(labels[i]);
@@ -1164,6 +1164,10 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             }
             if (position < libraryTracks.size()) {
                 Library.Track track = libraryTracks.get(position);
+                if ("playlists".equals(libraryMode) && playlistFiles.containsKey(track.title.replaceFirst("^≡ ", ""))) {
+                    openPlaylistFile(playlistFiles.get(track.title.replaceFirst("^≡ ", "")));
+                    return;
+                }
                 MediaItem item = track.toItem();
                 item.playlist = "LIBRARY";
                 engine.openExternal(item, true, 0);
@@ -1190,6 +1194,10 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     private void refreshLibrary() {
         ui.post(() -> {
             if (library == null) return;
+            if ("playlists".equals(libraryMode)) {
+                scanPlaylists();
+                return;
+            }
             String query = librarySearch != null ? librarySearch.getText().toString().trim() : "";
             boolean includeAudio = !"video-only".equals(libraryMode);
             boolean includeVideo = !"artists".equals(libraryMode) && !"albums".equals(libraryMode);
@@ -1200,6 +1208,106 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             libraryTracks = tracks;
             if (libraryAdapter != null) libraryAdapter.notifyDataSetChanged();
         });
+    }
+
+    private final java.util.Map<String, String> playlistFiles = new java.util.LinkedHashMap<>();
+
+    private void scanPlaylists() {
+        playlistFiles.clear();
+        String[] exts = {".m3u", ".m3u8", ".pls", ".xspf"};
+        java.util.Set<String> found = new java.util.LinkedHashSet<>();
+        java.io.File extDir = android.os.Environment.getExternalStorageDirectory();
+        scanPlaylistsInDir(extDir, exts, found);
+        java.io.File dlDir = getExternalFilesDir(null);
+        if (dlDir != null) scanPlaylistsInDir(dlDir, exts, found);
+        java.io.File dlDir2 = android.os.Environment.getExternalStoragePublicDirectory(
+                android.os.Environment.DIRECTORY_DOWNLOADS);
+        if (dlDir2 != null) scanPlaylistsInDir(dlDir2, exts, found);
+        for (String path : found) {
+            java.io.File f = new java.io.File(path);
+            playlistFiles.put(f.getName().replaceFirst("\\.[^.]+$", ""), path);
+        }
+        libraryTracks.clear();
+        int idx = 0;
+        for (java.util.Map.Entry<String, String> e : playlistFiles.entrySet()) {
+            String parentName = new java.io.File(e.getValue()).getParentFile() != null
+                    ? new java.io.File(e.getValue()).getParentFile().getName() : "";
+            libraryTracks.add(new Library.Track(idx++, e.getValue(), "≡ " + e.getKey(),
+                    parentName, "Playlist", "", 0, false));
+        }
+        if (libraryAdapter != null) libraryAdapter.notifyDataSetChanged();
+    }
+
+    private void scanPlaylistsInDir(java.io.File dir, String[] exts, java.util.Set<String> found) {
+        if (dir == null || !dir.isDirectory()) return;
+        try {
+            java.io.File[] files = dir.listFiles();
+            if (files == null) return;
+            for (java.io.File f : files) {
+                if (f.isDirectory() && !f.getName().startsWith(".")) {
+                    scanPlaylistsInDir(f, exts, found);
+                } else if (f.isFile()) {
+                    String name = f.getName().toLowerCase(java.util.Locale.ROOT);
+                    for (String ext : exts) {
+                        if (name.endsWith(ext)) {
+                            found.add(f.getAbsolutePath());
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private void openPlaylistFile(String path) {
+        try {
+            java.io.File f = new java.io.File(path);
+            if (!f.exists()) { toast("File not found: " + path); return; }
+            String ext = f.getName().toLowerCase(java.util.Locale.ROOT);
+            String content;
+            try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(f))) {
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) { sb.append(line).append("\n"); }
+                content = sb.toString();
+            }
+            java.util.List<String> entries = new java.util.ArrayList<>();
+            if (ext.endsWith(".m3u") || ext.endsWith(".m3u8")) {
+                for (String line : content.split("\n")) {
+                    line = line.trim();
+                    if (!line.isEmpty() && !line.startsWith("#")) entries.add(line);
+                }
+            } else if (ext.endsWith(".pls")) {
+                for (String line : content.split("\n")) {
+                    String lo = line.trim().toLowerCase(java.util.Locale.ROOT);
+                    if (lo.startsWith("file")) {
+                        int eq = lo.indexOf('=');
+                        if (eq >= 0) entries.add(line.trim().substring(eq + 1).trim());
+                    }
+                }
+            } else if (ext.endsWith(".xspf")) {
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                    "<location>(.*?)</location>", java.util.regex.Pattern.CASE_INSENSITIVE)
+                    .matcher(content);
+                while (m.find()) entries.add(m.group(1).trim());
+            }
+            if (entries.isEmpty()) { toast("No tracks in playlist"); return; }
+            for (String entry : entries) {
+                java.io.File ef = new java.io.File(entry);
+                if (!ef.isAbsolute()) ef = new java.io.File(f.getParentFile(), entry);
+                if (ef.exists()) {
+                    MediaItem item = new MediaItem();
+                    item.url = ef.getAbsolutePath();
+                    item.title = ef.getName();
+                    item.playlist = "PLAYLIST";
+                    engine.add(item);
+                }
+            }
+            toast("≡ " + entries.size() + " tracks added to queue");
+            showTab(TAB_PLAY);
+        } catch (Exception e) {
+            toast("Error: " + e.getMessage());
+        }
     }
 
     private final class LibraryAdapter extends BaseAdapter {

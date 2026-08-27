@@ -1312,7 +1312,7 @@ class LibraryPage(QFrame):
     backRequested = Signal()
 
     MODES = {"all": "All Tracks", "artists": "Artists", "albums": "Albums",
-             "genres": "Genres", "favorites": "Favorites"}
+             "genres": "Genres", "favorites": "Favorites", "playlists": "Playlists"}
 
     def __init__(self, media_library, thumbnail_dir, settings_store=None, parent=None):
         super().__init__(parent)
@@ -1321,6 +1321,8 @@ class LibraryPage(QFrame):
         self._thumbnail_dir = thumbnail_dir
         self._settings_store = settings_store
         self._tracks: list[Path] = []
+        self._splitter = None
+        self._playlist_files: dict[str, Path] = {}
         self._build()
 
     def _build(self):
@@ -1350,6 +1352,7 @@ class LibraryPage(QFrame):
         layout.addLayout(top)
 
         split = QSplitter(Qt.Horizontal)
+        self._splitter = split
         self._groups_list = QListWidget()
         self._groups_list.setObjectName("QueueTree")
         self._groups_list.currentItemChanged.connect(self._on_group_selected)
@@ -1469,17 +1472,21 @@ class LibraryPage(QFrame):
         mode = self._mode()
         self._tracks.clear()
         self._tracks_list.clear()
+        use_groups = mode in ("artists", "albums", "genres", "playlists")
+        self._groups_list.setVisible(use_groups)
 
         if mode == "all":
-            self._groups_list.setEnabled(False)
             self._groups_list.clear()
             items = self._filtered(self._media_library.items(), query)
             for item in sorted(items, key=self._track_sort):
                 self._append_track(item)
         elif mode == "favorites":
-            self._groups_list.setEnabled(False)
             self._groups_list.clear()
             self._show_favorites()
+            self._count_label.setText(f"{len(self._tracks)} tracks")
+            return
+        elif mode == "playlists":
+            self._scan_playlist_files()
             self._count_label.setText(f"{len(self._tracks)} tracks")
             return
         else:
@@ -1521,6 +1528,9 @@ class LibraryPage(QFrame):
         if mode == "favorites":
             self._show_favorites()
             return
+        if mode == "playlists":
+            self._on_playlist_group_selected(current)
+            return
         value = current.text()
         key = self._key()
         query = self._query()
@@ -1543,6 +1553,101 @@ class LibraryPage(QFrame):
         for item in sorted(self._filtered(favorites, query), key=self._track_sort):
             self._append_track(item)
         self._count_label.setText(f"{len(self._tracks)} tracks")
+
+    def _scan_playlist_files(self):
+        self._groups_list.blockSignals(True)
+        self._groups_list.clear()
+        self._playlist_files.clear()
+        playlist_exts = {".m3u", ".m3u8", ".pls", ".xspf", ".cue"}
+        folders = []
+        if self._settings_store is not None:
+            try:
+                from .settings import Settings
+                settings = self._settings_store.load()
+                folders = list(settings.watched_folders)
+            except Exception:
+                pass
+        if not folders:
+            folders = [str(Path.home())]
+        for folder in folders:
+            fpath = Path(folder)
+            if not fpath.is_dir():
+                continue
+            try:
+                for p in sorted(fpath.rglob("*")):
+                    if p.suffix.lower() in playlist_exts and p.is_file():
+                        name = p.stem
+                        self._playlist_files[name] = p
+                        self._groups_list.addItem(name)
+            except PermissionError:
+                continue
+        self._groups_list.blockSignals(False)
+        self._groups_list.setEnabled(True)
+        if self._groups_list.count() > 0:
+            self._groups_list.setCurrentRow(0)
+            self._on_playlist_group_selected(self._groups_list.item(0))
+        else:
+            self._count_label.setText("No playlist files found")
+
+    def _on_playlist_group_selected(self, current):
+        if current is None:
+            return
+        name = current.text()
+        pl_path = self._playlist_files.get(name)
+        if pl_path is None or not pl_path.is_file():
+            return
+        self._tracks.clear()
+        self._tracks_list.clear()
+        entries = self._parse_playlist_file(pl_path)
+        lib_items = self._media_library.items()
+        lib_by_path = {str(it.path): it for it in lib_items}
+        for entry_path in entries:
+            resolved = str(Path(entry_path).expanduser().resolve())
+            lib_item = lib_items[0] if lib_items else None
+            for it in lib_items:
+                if str(it.path) == resolved:
+                    lib_item = it
+                    break
+            if lib_item is None:
+                from .casu import LibraryItem as LI
+                lib_item = LI(Path(resolved), 0, 0, False, 0.0, None, {})
+            self._tracks.append(Path(resolved))
+            self._append_track(lib_item)
+        self._count_label.setText(f"{len(self._tracks)} tracks")
+
+    @staticmethod
+    def _parse_playlist_file(path: Path) -> list[str]:
+        ext = path.suffix.lower()
+        entries: list[str] = []
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            return entries
+        if ext in (".m3u", ".m3u8"):
+            for line in text.splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    entries.append(line)
+        elif ext == ".pls":
+            for line in text.splitlines():
+                line = line.strip()
+                if line.lower().startswith("file"):
+                    eq = line.find("=")
+                    if eq >= 0:
+                        entries.append(line[eq + 1:].strip().strip('"'))
+        elif ext == ".xspf":
+            import re
+            for m in re.finditer(r"<location>(.*?)</location>", text, re.IGNORECASE):
+                entries.append(m.group(1).strip())
+        elif ext == ".cue":
+            for line in text.splitlines():
+                line = line.strip()
+                if line.upper().startswith("FILE "):
+                    parts = line.split(None, 1)
+                    if len(parts) >= 2:
+                        fname = parts[1].rsplit(None, 1)[0].strip('"')
+                        entries.append(fname)
+        return entries
 
     def _add_selected(self, *_args):
         selected = self._tracks_list.selectedItems()

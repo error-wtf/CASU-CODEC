@@ -24,6 +24,9 @@
 #include "video_surface.hpp"
 #include "visualizer.hpp"
 
+#include <QDirIterator>
+#include <QRegularExpression>
+
 #include <QApplication>
 #include <cmath>
 #include <QIcon>
@@ -1495,6 +1498,7 @@ void MainWindow::build_library_page() {
     library_mode_->addItem(QStringLiteral("Albums"), QStringLiteral("albums"));
     library_mode_->addItem(QStringLiteral("Genres"), QStringLiteral("genres"));
     library_mode_->addItem(QStringLiteral("Favorites"), QStringLiteral("favorites"));
+    library_mode_->addItem(QStringLiteral("Playlists"), QStringLiteral("playlists"));
     connect(library_mode_, &QComboBox::currentIndexChanged, this,
             [this](int) { refresh_library(); });
     top->addWidget(library_mode_);
@@ -1506,11 +1510,15 @@ void MainWindow::build_library_page() {
     layout->addLayout(top);
 
     auto* split = new QSplitter(Qt::Horizontal, page);
+    library_splitter_ = split;
     library_groups_ = new QListWidget(split);
     library_groups_->setObjectName("QueueTree");
     connect(library_groups_, &QListWidget::currentItemChanged, this,
             [this](QListWidgetItem* current, QListWidgetItem*) {
-                if (current) refresh_library();
+                if (!current) return;
+                const QString mode = library_mode_->currentData().toString();
+                if (mode == "playlists") on_playlist_group_selected(current);
+                else refresh_library();
             });
     split->addWidget(library_groups_);
     library_tracks_ = new QListWidget(split);
@@ -3929,6 +3937,9 @@ void MainWindow::refresh_library() {
     library_tracks_->clear();
     const QString query = library_search_->text().trimmed().toLower();
     const QString mode = library_mode_->currentData().toString();
+    const bool use_groups = (mode == "artists" || mode == "albums" ||
+                             mode == "genres" || mode == "playlists");
+    library_groups_->setVisible(use_groups);
     auto meta_of = [this](const QString& path, const QString& key) -> QString {
         const QString cache_key = path + QLatin1Char('|') + key;
         auto it = lib_meta_.constFind(cache_key);
@@ -3981,6 +3992,10 @@ void MainWindow::refresh_library() {
         library_count_->setText(QStringLiteral("%1 tracks").arg(shown));
         return;
     }
+    if (mode == "playlists") {
+        scan_playlist_files();
+        return;
+    }
     // Group modes: artists / albums / genres.
     const QString field = mode == "artists" ? QStringLiteral("artist")
                           : mode == "albums" ? QStringLiteral("album")
@@ -4019,6 +4034,109 @@ void MainWindow::refresh_library() {
     }
     library_count_->setText(groups.isEmpty() ? QStringLiteral("No groups found")
                                              : QStringLiteral("%1 tracks").arg(shown));
+}
+
+void MainWindow::scan_playlist_files() {
+    library_groups_->blockSignals(true);
+    library_groups_->clear();
+    playlist_files_.clear();
+    const QStringList exts = {".m3u", ".m3u8", ".pls", ".xspf", ".cue"};
+    QStringList folders = app_settings_.player.watched_folders;
+    if (folders.isEmpty()) folders << QDir::homePath();
+    for (const QString& folder : folders) {
+        QDir dir(folder);
+        if (!dir.exists()) continue;
+        QDirIterator it(dir.absolutePath(), QStringList(), QDir::Files,
+                        QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            const QString fp = it.next();
+            const QString ext = QFileInfo(fp).suffix().toLower();
+            if (exts.contains(QLatin1Char('.') + ext)) {
+                const QString name = QFileInfo(fp).baseName();
+                playlist_files_[name] = fp;
+                library_groups_->addItem(name);
+            }
+        }
+    }
+    library_groups_->blockSignals(false);
+    library_groups_->setEnabled(true);
+    if (library_groups_->count() > 0) {
+        library_groups_->setCurrentRow(0);
+        on_playlist_group_selected(library_groups_->item(0));
+    } else {
+        library_count_->setText(QStringLiteral("No playlist files found"));
+    }
+}
+
+static QStringList parse_playlist_file(const QString& path) {
+    QStringList entries;
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return entries;
+    const QString text = QString::fromUtf8(f.readAll());
+    const QString ext = QFileInfo(path).suffix().toLower();
+    const QStringList lines = text.split(QLatin1Char('\n'));
+    if (ext == "m3u" || ext == "m3u8") {
+        for (const QString& line : lines) {
+            const QString trimmed = line.trimmed();
+            if (!trimmed.isEmpty() && !trimmed.startsWith('#'))
+                entries.append(trimmed);
+        }
+    } else if (ext == "pls") {
+        for (const QString& line : lines) {
+            const QString trimmed = line.trimmed();
+            if (trimmed.toLower().startsWith("file")) {
+                const int eq = trimmed.indexOf('=');
+                if (eq >= 0) {
+                    QString val = trimmed.mid(eq + 1).trimmed();
+                    if (val.startsWith('"') && val.endsWith('"'))
+                        val = val.mid(1, val.length() - 2);
+                    entries.append(val);
+                }
+            }
+        }
+    } else if (ext == "xspf") {
+        QRegularExpression re("<location>(.*?)</location>",
+                              QRegularExpression::CaseInsensitiveOption);
+        QRegularExpressionMatchIterator it = re.globalMatch(text);
+        while (it.hasNext()) {
+            entries.append(it.next().captured(1).trimmed());
+        }
+    } else if (ext == "cue") {
+        for (const QString& line : lines) {
+            const QString trimmed = line.trimmed();
+            if (trimmed.toUpper().startsWith("FILE ")) {
+                const QStringList parts = trimmed.split(QLatin1Char(' '));
+                if (parts.size() >= 2) {
+                    QString fname = parts.mid(1).join(QLatin1Char(' '));
+                    // Remove trailing type: "FILE "name" AUDIO"
+                    const int lastQuote = fname.lastIndexOf('"');
+                    if (lastQuote > 0) fname = fname.left(lastQuote);
+                    if (fname.startsWith('"')) fname = fname.mid(1);
+                    entries.append(fname);
+                }
+            }
+        }
+    }
+    return entries;
+}
+
+void MainWindow::on_playlist_group_selected(QListWidgetItem* current) {
+    if (!current) return;
+    const QString name = current->text();
+    const QString plPath = playlist_files_.value(name);
+    if (plPath.isEmpty() || !QFileInfo::exists(plPath)) return;
+    library_tracks_->clear();
+    const QStringList entries = parse_playlist_file(plPath);
+    int shown = 0;
+    for (const QString& entry : entries) {
+        const QString resolved = QFileInfo(entry).absoluteFilePath();
+        const QString text = QFileInfo(resolved).fileName();
+        auto* item = new QListWidgetItem(text);
+        item->setData(Qt::UserRole, resolved);
+        library_tracks_->addItem(item);
+        ++shown;
+    }
+    library_count_->setText(QStringLiteral("%1 tracks").arg(shown));
 }
 
 void MainWindow::on_settings_save() {

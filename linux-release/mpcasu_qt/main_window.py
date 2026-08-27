@@ -171,6 +171,115 @@ class NowPlayingBar(QFrame):
         self.diagnostics_label.setText(text)
 
 
+def _nav_icon(name: str, color: QColor, active: QColor, size: int = 18) -> QIcon:
+    """Font-independent sidebar nav icons drawn with QPainter."""
+    icon = QIcon()
+    for state, tint in ((QIcon.Off, color), (QIcon.On, active)):
+        pm = QPixmap(size, size)
+        pm.fill(Qt.transparent)
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.Antialiasing)
+        pen = QPen(tint, 1.5)
+        pen.setCapStyle(Qt.RoundCap)
+        p.setPen(pen)
+        r = QRectF(2.5, 2.5, size - 5.0, size - 5.0)
+        c = r.center()
+        w, h = r.width(), r.height()
+        if name == "NOW PLAYING":
+            p.setBrush(tint)
+            p.drawPolygon(QPolygonF([QPointF(r.left(), r.top()),
+                                     QPointF(r.right(), c.y()),
+                                     QPointF(r.left(), r.bottom())]))
+        elif name == "LIBRARY":
+            p.drawRect(r.adjusted(0, 0, 0, 0))
+            p.drawRect(r.adjusted(w * 0.22, h * 0.22, -w * 0.22, -h * 0.22))
+        elif name == "WEB & STREAMS":
+            p.drawEllipse(c, w * 0.48, h * 0.48)
+            p.drawLine(QPointF(r.left(), c.y()), QPointF(r.right(), c.y()))
+            p.drawEllipse(QPointF(c.x(), c.y()), w * 0.48, h * 0.2)
+        elif name == "PLAYLISTS":
+            for frac in (0.3, 0.5, 0.7):
+                y = r.top() + h * frac
+                p.drawLine(QPointF(r.left(), y), QPointF(r.right(), y))
+        elif name == "IPTV / EPG":
+            gap = 2.5
+            cw2 = (w - gap * 3) / 2
+            ch2 = (h - gap * 3) / 2
+            for row in range(2):
+                for col in range(2):
+                    x = r.left() + gap + col * (cw2 + gap)
+                    y = r.top() + gap + row * (ch2 + gap)
+                    p.fillRect(int(x), int(y), int(cw2), int(ch2), tint)
+        elif name == "YOUTUBE":
+            p.drawRoundedRect(r.adjusted(1, 1, -1, -1), 4, 4)
+            p.setBrush(tint)
+            p.drawPolygon(QPolygonF([QPointF(c.x() - 3, c.y() - 5),
+                                     QPointF(c.x() + 6, c.y()),
+                                     QPointF(c.x() - 3, c.y() + 5)]))
+        elif name == "SPOTIFY":
+            for frac in (0.2, 0.38, 0.56):
+                r2 = r.adjusted(int(w * frac), int(h * frac),
+                                -int(w * frac), -int(h * frac))
+                p.drawArc(r2, -45 * 16, 90 * 16)
+        elif name == "CASU FILES":
+            half = min(w, h) * 0.35
+            p.setBrush(tint)
+            p.drawPolygon(QPolygonF([QPointF(c.x(), c.y() - half),
+                                     QPointF(c.x() + half, c.y()),
+                                     QPointF(c.x(), c.y() + half),
+                                     QPointF(c.x() - half, c.y())]))
+            half2 = half * 0.5
+            pm2 = QPixmap(size, size); pm2.fill(Qt.transparent)
+        elif name == "HEARTHIS":
+            p.drawLine(QPointF(r.left(), r.bottom()),
+                       QPointF(r.right(), r.top()))
+            p.drawLine(QPointF(r.right() - 5, r.top()),
+                       QPointF(r.right(), r.top()))
+            p.drawLine(QPointF(r.right(), r.top()),
+                       QPointF(r.right(), r.top() + 6))
+        elif name == "TIDAL":
+            for y_off in (-3, 3):
+                pts = []
+                for i in range(20):
+                    frac = i / 19.0
+                    x = r.left() + w * frac
+                    y = c.y() + y_off + math.sin(frac * math.pi * 2) * h * 0.22
+                    pts.append(QPointF(x, y))
+                p.drawPolyline(QPolygonF(pts))
+        elif name == "NETFLIX":
+            top_l = QPointF(r.left() + 2, r.top())
+            top_r = QPointF(r.right() - 2, r.top())
+            bot_l = QPointF(r.left() + 2, r.bottom())
+            bot_r = QPointF(r.right() - 2, r.bottom())
+            p.drawLine(top_l, bot_l)
+            p.drawLine(top_l, bot_r)
+            p.drawLine(top_r, bot_r)
+        elif name == "BROWSE":
+            p.drawEllipse(c, w * 0.46, h * 0.46)
+            p.drawLine(QPointF(c.x(), r.top()), QPointF(c.x(), r.bottom()))
+            p.drawLine(QPointF(r.left(), c.y()), QPointF(r.right(), c.y()))
+        elif name == "OPTIONS":
+            p.drawEllipse(c, w * 0.18, h * 0.18)
+            for i in range(8):
+                angle = i * math.pi / 4.0
+                x1 = c.x() + math.cos(angle) * w * 0.30
+                y1 = c.y() + math.sin(angle) * h * 0.30
+                x2 = c.x() + math.cos(angle) * w * 0.44
+                y2 = c.y() + math.sin(angle) * h * 0.44
+                p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+        elif name == "ABOUT":
+            p.drawEllipse(c, w * 0.44, h * 0.44)
+            p.setBrush(tint)
+            p.drawEllipse(QPointF(c.x(), c.y() - h * 0.14), 1.5, 1.5)
+            p.drawLine(QPointF(c.x(), c.y() - h * 0.02),
+                       QPointF(c.x(), c.y() + h * 0.22))
+        else:
+            p.drawText(r, Qt.AlignCenter, name[0])
+        p.end()
+        icon.addPixmap(pm, QIcon.Normal, state)
+    return icon
+
+
 class Sidebar(QFrame):
     """Left navigation sidebar."""
 
@@ -215,22 +324,8 @@ class Sidebar(QFrame):
             ("WEB PLAYERS", ["SPOTIFY", "HEARTHIS", "TIDAL", "NETFLIX", "BROWSE"]),
             ("SYSTEM", ["OPTIONS", "ABOUT"]),
         ]
-        self.NAV_ICONS = {
-            "NOW PLAYING": "♫",
-            "LIBRARY": "🎵",
-            "WEB & STREAMS": "🔗",
-            "PLAYLISTS": "📋",
-            "IPTV / EPG": "📺",
-            "YOUTUBE": "▶",
-            "SPOTIFY": "💚",
-            "CASU FILES": "📂",
-            "HEARTHIS": "🎸",
-            "TIDAL": "🌊",
-            "NETFLIX": "🎬",
-            "BROWSE": "🌐",
-            "OPTIONS": "⚙",
-            "ABOUT": "ℹ",
-        }
+        self.NAV_ICONS = {name: _nav_icon(name, QColor("#8a93a0"), QColor("#ff1e2d"))
+                          for items in nav_items for name in items[1]}
         self._nav_buttons: list[QPushButton] = []
         self._rail_hidden: list = []
         if self._logo_label is not None:
@@ -246,6 +341,8 @@ class Sidebar(QFrame):
                 btn = QPushButton(item)
                 btn.setObjectName("NavItem")
                 btn.setCheckable(True)
+                btn.setIcon(self.NAV_ICONS[item])
+                btn.setIconSize(QSize(18, 18))
                 btn.setProperty("nav_name", item)
                 btn.setToolTip(item)
                 btn.setCursor(Qt.PointingHandCursor)
@@ -272,8 +369,7 @@ class Sidebar(QFrame):
         for widget in self._rail_hidden:
             widget.setVisible(not on)
         for btn in self._nav_buttons:
-            name = str(btn.property("nav_name"))
-            btn.setText(self.NAV_ICONS.get(name, name[0]) if on else name)
+            btn.setText("" if on else str(btn.property("nav_name")))
 
     def select(self, name: str):
         for btn in self._nav_buttons:
@@ -1216,7 +1312,7 @@ class LibraryPage(QFrame):
     backRequested = Signal()
 
     MODES = {"all": "All Tracks", "artists": "Artists", "albums": "Albums",
-             "genres": "Genres", "favorites": "Favorites"}
+             "genres": "Genres", "favorites": "Favorites", "playlists": "Playlists"}
 
     def __init__(self, media_library, thumbnail_dir, settings_store=None, parent=None):
         super().__init__(parent)
@@ -1225,6 +1321,8 @@ class LibraryPage(QFrame):
         self._thumbnail_dir = thumbnail_dir
         self._settings_store = settings_store
         self._tracks: list[Path] = []
+        self._splitter = None
+        self._playlist_files: dict[str, Path] = {}
         self._build()
 
     def _build(self):
@@ -1254,6 +1352,7 @@ class LibraryPage(QFrame):
         layout.addLayout(top)
 
         split = QSplitter(Qt.Horizontal)
+        self._splitter = split
         self._groups_list = QListWidget()
         self._groups_list.setObjectName("QueueTree")
         self._groups_list.currentItemChanged.connect(self._on_group_selected)
@@ -1373,17 +1472,21 @@ class LibraryPage(QFrame):
         mode = self._mode()
         self._tracks.clear()
         self._tracks_list.clear()
+        use_groups = mode in ("artists", "albums", "genres", "playlists")
+        self._groups_list.setVisible(use_groups)
 
         if mode == "all":
-            self._groups_list.setEnabled(False)
             self._groups_list.clear()
             items = self._filtered(self._media_library.items(), query)
             for item in sorted(items, key=self._track_sort):
                 self._append_track(item)
         elif mode == "favorites":
-            self._groups_list.setEnabled(False)
             self._groups_list.clear()
             self._show_favorites()
+            self._count_label.setText(f"{len(self._tracks)} tracks")
+            return
+        elif mode == "playlists":
+            self._scan_playlist_files()
             self._count_label.setText(f"{len(self._tracks)} tracks")
             return
         else:
@@ -1425,6 +1528,9 @@ class LibraryPage(QFrame):
         if mode == "favorites":
             self._show_favorites()
             return
+        if mode == "playlists":
+            self._on_playlist_group_selected(current)
+            return
         value = current.text()
         key = self._key()
         query = self._query()
@@ -1447,6 +1553,101 @@ class LibraryPage(QFrame):
         for item in sorted(self._filtered(favorites, query), key=self._track_sort):
             self._append_track(item)
         self._count_label.setText(f"{len(self._tracks)} tracks")
+
+    def _scan_playlist_files(self):
+        self._groups_list.blockSignals(True)
+        self._groups_list.clear()
+        self._playlist_files.clear()
+        playlist_exts = {".m3u", ".m3u8", ".pls", ".xspf", ".cue"}
+        folders = []
+        if self._settings_store is not None:
+            try:
+                from .settings import Settings
+                settings = self._settings_store.load()
+                folders = list(settings.watched_folders)
+            except Exception:
+                pass
+        if not folders:
+            folders = [str(Path.home())]
+        for folder in folders:
+            fpath = Path(folder)
+            if not fpath.is_dir():
+                continue
+            try:
+                for p in sorted(fpath.rglob("*")):
+                    if p.suffix.lower() in playlist_exts and p.is_file():
+                        name = p.stem
+                        self._playlist_files[name] = p
+                        self._groups_list.addItem(name)
+            except PermissionError:
+                continue
+        self._groups_list.blockSignals(False)
+        self._groups_list.setEnabled(True)
+        if self._groups_list.count() > 0:
+            self._groups_list.setCurrentRow(0)
+            self._on_playlist_group_selected(self._groups_list.item(0))
+        else:
+            self._count_label.setText("No playlist files found")
+
+    def _on_playlist_group_selected(self, current):
+        if current is None:
+            return
+        name = current.text()
+        pl_path = self._playlist_files.get(name)
+        if pl_path is None or not pl_path.is_file():
+            return
+        self._tracks.clear()
+        self._tracks_list.clear()
+        entries = self._parse_playlist_file(pl_path)
+        lib_items = self._media_library.items()
+        lib_by_path = {str(it.path): it for it in lib_items}
+        for entry_path in entries:
+            resolved = str(Path(entry_path).expanduser().resolve())
+            lib_item = lib_items[0] if lib_items else None
+            for it in lib_items:
+                if str(it.path) == resolved:
+                    lib_item = it
+                    break
+            if lib_item is None:
+                from .casu import LibraryItem as LI
+                lib_item = LI(Path(resolved), 0, 0, False, 0.0, None, {})
+            self._tracks.append(Path(resolved))
+            self._append_track(lib_item)
+        self._count_label.setText(f"{len(self._tracks)} tracks")
+
+    @staticmethod
+    def _parse_playlist_file(path: Path) -> list[str]:
+        ext = path.suffix.lower()
+        entries: list[str] = []
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            return entries
+        if ext in (".m3u", ".m3u8"):
+            for line in text.splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    entries.append(line)
+        elif ext == ".pls":
+            for line in text.splitlines():
+                line = line.strip()
+                if line.lower().startswith("file"):
+                    eq = line.find("=")
+                    if eq >= 0:
+                        entries.append(line[eq + 1:].strip().strip('"'))
+        elif ext == ".xspf":
+            import re
+            for m in re.finditer(r"<location>(.*?)</location>", text, re.IGNORECASE):
+                entries.append(m.group(1).strip())
+        elif ext == ".cue":
+            for line in text.splitlines():
+                line = line.strip()
+                if line.upper().startswith("FILE "):
+                    parts = line.split(None, 1)
+                    if len(parts) >= 2:
+                        fname = parts[1].rsplit(None, 1)[0].strip('"')
+                        entries.append(fname)
+        return entries
 
     def _add_selected(self, *_args):
         selected = self._tracks_list.selectedItems()
@@ -1488,8 +1689,8 @@ class LibraryPage(QFrame):
             menu.addAction(fav_text, lambda: self._toggle_favorite(paths[0], self._tracks_list.row(item)))
         else:
             any_fav = any(
-                bool((self._media_library.get(p) or {}).get("favorite", False))
-                for p in paths)
+                bool(self._media_library.get(p).favorite)
+                for p in paths if self._media_library.get(p))
             fav_text = "Remove ★" if any_fav else "Add ★ Favorite"
             menu.addAction(f"{fav_text} ({len(paths)})", lambda: self._toggle_favorite_multi(paths, not any_fav))
         menu.addSeparator()
@@ -1498,7 +1699,8 @@ class LibraryPage(QFrame):
         menu.exec(self._tracks_list.viewport().mapToGlobal(position))
 
     def _toggle_favorite(self, path, row):
-        current = bool(self._media_library.get(path) or {}).get("favorite", False)
+        item = self._media_library.get(path)
+        current = bool(item.favorite) if item else False
         self._media_library.set_favorite(path, not current)
         self._refresh()
 
@@ -4938,8 +5140,8 @@ class MainWindow(QMainWindow):
             try:
                 item = self.playlist_model.item(idx)
                 if item and Path(item).is_file():
-                    current = bool(self.media_library.get(str(item)) or
-                                   {}).get("favorite", False)
+                    lib_item = self.media_library.get(str(item))
+                    current = bool(lib_item.favorite) if lib_item else False
                     self.media_library.set_favorite(str(item), not current)
             except Exception:
                 pass

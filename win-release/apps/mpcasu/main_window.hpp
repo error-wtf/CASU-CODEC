@@ -25,6 +25,7 @@
 #include <QMap>
 #include <QObject>
 #include <QSet>
+#include <QSplitter>
 #include <QTimer>
 
 #include <memory>
@@ -181,6 +182,8 @@ private:
     void on_library_add_current();
     void on_library_add_selected(QListWidgetItem* item);
     void scan_library_folders();
+    void scan_playlist_files();
+    void on_playlist_group_selected(QListWidgetItem* current);
     void on_settings_save();
     void on_epg_load();
     void load_epg_source(const QString& source);
@@ -322,11 +325,13 @@ private:
     // library page
     QLineEdit* library_search_ = nullptr;
     QComboBox* library_mode_ = nullptr;
+    QSplitter* library_splitter_ = nullptr;
     QListWidget* library_groups_ = nullptr;
     QListWidget* library_tracks_ = nullptr;
     QListWidget* library_folders_ = nullptr;
     QLabel* library_count_ = nullptr;
     QHash<QString, QString> lib_meta_;  // cached tag fields: "path|field" → value
+    QMap<QString, QString> playlist_files_;  // playlist name → file path
 
     // settings page
     QSlider* settings_volume_ = nullptr;
