@@ -68,6 +68,7 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
     private AudioFocusRequest focusRequest;
     private Visualizer visualizer;
     private boolean hasFocus;
+    private long openSeq = 0;
 
     private final Runnable abTicker = new Runnable() {
         @Override public void run() {
@@ -462,6 +463,20 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
     }
 
     private void openSource(String source) {
+        final long seq = ++openSeq;
+        if (source.startsWith("http://") || source.startsWith("https://")) {
+            // Radio / playlist streams: resolve async so Android's MediaPlayer
+            // gets a direct playable URL (handles .pls/.m3u chains + UA header).
+            StreamResolver.resolve(source, result -> main.post(() -> {
+                if (seq != openSeq) return; // superseded by a newer open
+                openResolved(result.url, result.headers);
+            }));
+            return;
+        }
+        openResolved(source, null);
+    }
+
+    private void openResolved(String source, java.util.Map<String, String> headers) {
         if (player != null) {
             try { player.reset(); } catch (Exception ignored) {}
         } else {
@@ -473,6 +488,8 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
                 player.setDataSource(context, android.net.Uri.parse(source));
             } else if (source.startsWith("/")) {
                 player.setDataSource(source);
+            } else if (headers != null && !headers.isEmpty()) {
+                player.setDataSource(context, android.net.Uri.parse(source), headers);
             } else {
                 player.setDataSource(source);
             }
