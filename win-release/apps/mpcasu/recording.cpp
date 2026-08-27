@@ -102,18 +102,41 @@ bool RecordingController::start(const QString& source,
     destination_ = QDir::cleanPath(destination);
     temporary_ = temporary_for(destination_);
 
+    // Audio-only containers drop the video track (so recording a video to
+    // MP3 works); video containers copy ALL streams (video + audio) so the
+    // video picture is never switched off. Reference casu/recording.py.
+    const QString suffix = dest_info.suffix().toLower();
+    const bool audio_only = suffix == "mp3" || suffix == "ogg" ||
+                            suffix == "flac" || suffix == "wav";
+    QStringList args{QStringLiteral("-nostdin"),
+                     QStringLiteral("-hide_banner"),
+                     QStringLiteral("-loglevel"), QStringLiteral("error"),
+                     QStringLiteral("-i"), source_};
+    if (audio_only) {
+        args << QStringLiteral("-map") << QStringLiteral("0:a:0?")
+             << QStringLiteral("-vn");
+        if (suffix == "mp3")
+            args << QStringLiteral("-acodec") << QStringLiteral("libmp3lame")
+                 << QStringLiteral("-q:a") << QStringLiteral("2");
+        else if (suffix == "ogg")
+            args << QStringLiteral("-acodec") << QStringLiteral("libvorbis")
+                 << QStringLiteral("-q:a") << QStringLiteral("5");
+        else if (suffix == "flac")
+            args << QStringLiteral("-acodec") << QStringLiteral("flac");
+        else if (suffix == "wav")
+            args << QStringLiteral("-acodec") << QStringLiteral("pcm_s16le");
+    } else {
+        args << QStringLiteral("-map") << QStringLiteral("0")
+             << QStringLiteral("-map_metadata") << QStringLiteral("0")
+             << QStringLiteral("-map_chapters") << QStringLiteral("0")
+             << QStringLiteral("-c") << QStringLiteral("copy");
+    }
+    args << QStringLiteral("-y") << temporary_;
+
     state_ = State::Starting;
     proc_ = new QProcess(this);
     proc_->setProgram(QString::fromStdString(exe));
-    proc_->setArguments(QStringList{
-        QStringLiteral("-nostdin"), QStringLiteral("-hide_banner"),
-        QStringLiteral("-loglevel"), QStringLiteral("error"),
-        QStringLiteral("-i"), source_,
-        QStringLiteral("-map"), QStringLiteral("0"),
-        QStringLiteral("-map_metadata"), QStringLiteral("0"),
-        QStringLiteral("-map_chapters"), QStringLiteral("0"),
-        QStringLiteral("-c"), QStringLiteral("copy"),
-        QStringLiteral("-y"), temporary_});
+    proc_->setArguments(args);
     connect(proc_, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             this, &RecordingController::handle_finished);
 #ifdef Q_OS_WIN

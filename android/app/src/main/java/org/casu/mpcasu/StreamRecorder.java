@@ -42,6 +42,7 @@ public final class StreamRecorder {
     public static final String FMT_MP4 = "mp4";   // video + audio
     public static final String FMT_M4A = "m4a";   // audio only (MP4 container)
     public static final String FMT_OGG = "ogg";   // audio only
+    public static final String FMT_MP3 = "mp3";   // audio only (byte copy)
     public static final String FMT_COPY = "copy"; // raw stream copy
 
     /** Output extensions per format. */
@@ -50,6 +51,7 @@ public final class StreamRecorder {
             case FMT_MP4: return "mp4";
             case FMT_M4A: return "m4a";
             case FMT_OGG: return "ogg";
+            case FMT_MP3: return "mp3";
             default: {
                 // COPY keeps the source container: guess from URL/content.
                 String u = sourceUrl == null ? "" : sourceUrl.toLowerCase();
@@ -69,6 +71,7 @@ public final class StreamRecorder {
         switch (format) {
             case FMT_MP4:
             case FMT_M4A:
+            case FMT_MP3:
             case FMT_COPY:
                 return true;
             case FMT_OGG:
@@ -118,8 +121,14 @@ public final class StreamRecorder {
         String finalName = destination != null ? destination.getName()
                 : "recording";
         try {
-            if (FMT_COPY.equals(format)) {
-                finalName = runCopy();
+            if (FMT_MP3.equals(format) || FMT_COPY.equals(format)) {
+                if (destination != null && destination.exists()
+                        && !sourceUrl.startsWith("http")) {
+                    finalName = runLocalCopy();
+                } else {
+                    finalName = runCopy(FMT_MP3.equals(format) ? "mp3"
+                            : extensionFor(FMT_COPY, sourceUrl));
+                }
             } else {
                 finalName = runMuxer();
             }
@@ -138,6 +147,24 @@ public final class StreamRecorder {
 
     private String runCopy() throws Exception {
         return runCopy(extensionFor(FMT_COPY, sourceUrl));
+    }
+
+    private String runLocalCopy() throws Exception {
+        try (DestinationTarget target = openDestination(extensionFor(format, sourceUrl))) {
+            long start = System.currentTimeMillis();
+            try (InputStream in = new FileInputStream(destination)) {
+                byte[] chunk = new byte[64 * 1024];
+                int n;
+                while (!stopped && (n = in.read(chunk)) > 0) {
+                    target.out.write(chunk, 0, n);
+                    totalBytes += n;
+                }
+            }
+            if (totalBytes == 0) {
+                throw new IllegalStateException("Keine Daten empfangen");
+            }
+        }
+        return currentName;
     }
 
     private String runCopy(String ext) throws Exception {

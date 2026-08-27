@@ -2063,18 +2063,26 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             return;
         }
         MediaItem item = engine != null ? engine.current() : null;
-        if (item == null || item.url == null || !item.url.startsWith("http")) {
-            toast("Erst einen Stream abspielen (YouTube, Radio, …)");
+        if (item == null || item.url == null) {
+            toast("Erst etwas abspielen (YouTube, Radio, Datei, …)");
+            return;
+        }
+        boolean localFile = item.isLocalFile();
+        boolean stream = item.url.startsWith("http");
+        if (!localFile && !stream) {
+            toast("Diese Quelle kann nicht aufgenommen werden");
             return;
         }
         showRecordingSetupDialog(item);
     }
 
     private void showRecordingSetupDialog(MediaItem item) {
-        final String[] formats = {StreamRecorder.FMT_MP4, StreamRecorder.FMT_M4A,
-                StreamRecorder.FMT_OGG, StreamRecorder.FMT_COPY};
-        final String[] labels = {"MP4 — Video + Audio", "M4A/AAC — nur Audio",
-                "OGG — nur Audio", "Original — Stream-Kopie (Radio/TS)"};
+        final boolean srcIsVideo = item.isVideo();
+        final String[] formats = {StreamRecorder.FMT_MP4, StreamRecorder.FMT_MP3,
+                StreamRecorder.FMT_M4A, StreamRecorder.FMT_OGG, StreamRecorder.FMT_COPY};
+        final String[] labels = {"MP4 — Video + Audio", "MP3 — nur Audio",
+                "M4A/AAC — nur Audio", "OGG — nur Audio",
+                "Original — Stream-Kopie (Radio/TS)"};
         int checked = 0;
         for (int i = 0; i < formats.length; i++) {
             if (formats[i].equals(recordFormat)) { checked = i; break; }

@@ -50,9 +50,7 @@ class MediaRecorder:
         executable = shutil.which("ffmpeg")
         if not executable:
             raise RecordingError("FFmpeg is required for recording")
-        command = [executable, "-nostdin", "-hide_banner", "-loglevel", "error",
-                   "-i", self.source, "-map", "0", "-map_metadata", "0",
-                   "-map_chapters", "0", "-c", "copy", "-y", str(self.temporary)]
+        command = self._build_command(executable)
         try:
             self.process = subprocess.Popen(command, stdin=subprocess.DEVNULL,
                                             stdout=subprocess.DEVNULL,
@@ -61,6 +59,36 @@ class MediaRecorder:
             self._cleanup()
             raise RecordingError(f"could not start recording: {exc}") from exc
         self.started_at = time.monotonic()
+
+    def _build_command(self, executable: str) -> list[str]:
+        """Build the ffmpeg command depending on target format.
+
+        Video containers (mp4/mkv/webm/ts/mov/m2ts) stream-copy ALL streams so
+        video AND audio are recorded and the video picture is never switched
+        off. Audio-only containers (mp3/ogg/flac/wav) drop the video track and
+        keep/transcode just the audio — recording a video to MP3 works.
+        """
+        suffix = self.destination.suffix.lower()
+        audio_only = suffix in {".mp3", ".ogg", ".flac", ".wav"}
+        command = [executable, "-nostdin", "-hide_banner", "-loglevel", "error",
+                   "-i", self.source]
+        if audio_only:
+            # Keep audio only; transcode to the target codec inside the container.
+            command += ["-map", "0:a:0?"]
+            if suffix == ".mp3":
+                command += ["-acodec", "libmp3lame", "-q:a", "2"]
+            elif suffix == ".ogg":
+                command += ["-acodec", "libvorbis", "-q:a", "5"]
+            elif suffix == ".flac":
+                command += ["-acodec", "flac"]
+            elif suffix == ".wav":
+                command += ["-acodec", "pcm_s16le"]
+            command += ["-vn"]
+        else:
+            command += ["-map", "0", "-map_metadata", "0", "-map_chapters", "0",
+                        "-c", "copy"]
+        command += ["-y", str(self.temporary)]
+        return command
 
     def finish(self, *, timeout: float = 10.0) -> Path:
         if self.process is None:
