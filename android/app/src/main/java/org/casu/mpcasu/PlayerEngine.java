@@ -20,6 +20,7 @@ import org.videolan.libvlc.interfaces.IVLCVout;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.Locale;
 
 /**
  * Single playback engine with a dual backend:
@@ -92,6 +93,7 @@ public final class PlayerEngine implements
     private Visualizer visualizer;
     private boolean hasFocus;
     private long openSeq = 0;
+    private int consecutiveFailures;
 
     private final Runnable abTicker = new Runnable() {
         @Override public void run() {
@@ -504,9 +506,28 @@ public final class PlayerEngine implements
     }
 
     private boolean isNetworkSource(String source) {
-        return source != null
-                && (source.startsWith("http://") || source.startsWith("https://")
-                || source.startsWith("rtsp://") || source.startsWith("mms://"));
+        if (source == null) return false;
+        String value = source.trim();
+        if (value.startsWith("//")) return true;
+        String scheme = android.net.Uri.parse(value).getScheme();
+        if (scheme == null) return false;
+        switch (scheme.toLowerCase(Locale.ROOT)) {
+            case "http":
+            case "https":
+            case "rtsp":
+            case "rtmp":
+            case "rtmps":
+            case "mms":
+            case "icy":
+            case "icyx":
+            case "icecast":
+            case "ftp":
+            case "udp":
+            case "rtp":
+                return true;
+            default:
+                return false;
+        }
     }
 
     /** Resolve the playable URL (CASU containers → cache file) and open. */
@@ -535,8 +556,10 @@ public final class PlayerEngine implements
     }
 
     private void openSource(String source) {
+        String cleaned = source == null ? "" : source.trim();
+        final String normalized = cleaned.startsWith("//") ? "https:" + cleaned : cleaned;
         final long seq = ++openSeq;
-        boolean network = isNetworkSource(source);
+        boolean network = isNetworkSource(normalized);
         usingVlc = network;
         if (network) {
             // libVLC resolves playlists/chains and decodes every stream type
@@ -544,10 +567,10 @@ public final class PlayerEngine implements
             // resolution step is needed.
             main.post(() -> {
                 if (seq != openSeq) return;
-                openVlc(source);
+                openVlc(normalized);
             });
         } else {
-            openResolved(source);
+            openResolved(normalized);
         }
     }
 
@@ -571,6 +594,10 @@ public final class PlayerEngine implements
             ensureVoutAttached();
             Media media = new Media(libvlc, android.net.Uri.parse(source));
             media.setHWDecoderEnabled(false, false);
+            media.addOption(":network-caching=1800");
+            media.addOption(":live-caching=1800");
+            media.addOption(":http-reconnect");
+            media.addOption(":http-user-agent=MPCASU/5.0.1 (Android; libVLC)");
             vlc.setMedia(media);
             requestFocus();
             vlc.play();
@@ -608,6 +635,7 @@ public final class PlayerEngine implements
         switch (event.type) {
             case org.videolan.libvlc.MediaPlayer.Event.Playing:
                 Log.i(TAG, "vlc event: PLAYING");
+                consecutiveFailures = 0;
                 prepared = true;
                 if (pendingRate > 0 && pendingRate != 1.0f) applyRate();
                 if (pendingSeekMs > 0) {
@@ -638,7 +666,7 @@ public final class PlayerEngine implements
             case org.videolan.libvlc.MediaPlayer.Event.EncounteredError:
                 Log.w(TAG, "vlc error event");
                 setPlaying(false, false);
-                fireError("Wiedergabefehler der Quelle (stream-error)");
+                handlePlaybackFailure("Stream nicht erreichbar (stream-error)");
                 break;
             case org.videolan.libvlc.MediaPlayer.Event.Vout:
                 main.post(() -> {
@@ -763,6 +791,7 @@ public final class PlayerEngine implements
     // ------------------------------------------------------------------ MediaPlayer events
 
     @Override public void onPrepared(MediaPlayer mp) {
+        consecutiveFailures = 0;
         prepared = true;
         if (surface != null) {
             try { mp.setSurface(surface); } catch (Exception ignored) {}
@@ -806,10 +835,21 @@ public final class PlayerEngine implements
         } else if (what == MediaPlayer.MEDIA_ERROR_SERVER_DIED) {
             message = "Medien-Dienst wurde beendet (playback-failed)";
         } else {
-            message = "Wiedergabefehler der Quelle (http-error/unsupported)";
+            message = "Lokale Mediendatei konnte nicht geöffnet werden (local-media-error)";
         }
-        fireError(message);
+        handlePlaybackFailure(message);
         return true;
+    }
+
+    /** A playlist should not die on its first stale or regional stream URL. */
+    private void handlePlaybackFailure(String message) {
+        fireError(message);
+        consecutiveFailures++;
+        if (items.size() <= 1 || consecutiveFailures >= items.size()) return;
+        final int failedIndex = index;
+        main.postDelayed(() -> {
+            if (!playing && index == failedIndex) nextInternal(true);
+        }, 350);
     }
 
     @Override public boolean onInfo(MediaPlayer mp, int what, int extra) {
