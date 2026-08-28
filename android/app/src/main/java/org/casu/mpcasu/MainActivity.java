@@ -19,6 +19,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.OpenableColumns;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
@@ -2026,8 +2027,11 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             toast("Erst etwas abspielen (YouTube, Radio, Datei, …)");
             return;
         }
+        String recordingSource = PlaylistIO.normalizePlayableLocation(item.url);
         boolean localFile = item.isLocalFile();
-        boolean stream = item.url.startsWith("http");
+        boolean stream = "stream".equals(item.kind)
+                || recordingSource.startsWith("http://")
+                || recordingSource.startsWith("https://");
         if (!localFile && !stream) {
             toast("Diese Quelle kann nicht aufgenommen werden");
             return;
@@ -2151,7 +2155,8 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                 .format(new Date()) + "." + ext);
 
         final String format = recordFormat;
-        recorder = new StreamRecorder(this, item.url, target, format,
+        recorder = new StreamRecorder(this,
+                PlaylistIO.normalizePlayableLocation(item.url), target, format,
                 new StreamRecorder.Listener() {
                     private String fileName = "rec";
 
@@ -2480,13 +2485,30 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         }
     }
 
-    private static String guessKind(Uri uri) {
-        String value = uri.toString().toLowerCase(Locale.ROOT);
+    private String guessKind(Uri uri) {
+        StringBuilder identity = new StringBuilder(uri.toString());
+        try {
+            String mime = getContentResolver().getType(uri);
+            if (mime != null) identity.append(' ').append(mime);
+        } catch (Exception ignored) {}
+        if ("content".equalsIgnoreCase(uri.getScheme())) {
+            try (android.database.Cursor cursor = getContentResolver().query(uri,
+                    new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+                if (cursor != null && cursor.moveToFirst()) {
+                    int column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                    if (column >= 0) identity.append(' ').append(cursor.getString(column));
+                }
+            } catch (Exception ignored) {}
+        }
+        String value = identity.toString().toLowerCase(Locale.ROOT);
         if (value.endsWith(".casu")) return "casu";
         if (value.endsWith(".mp5")) return "mp5";
-        if (value.endsWith(".m3u") || value.endsWith(".m3u8") || value.endsWith(".pls")
-                || value.endsWith(".xspf") || value.endsWith(".jspf") || value.endsWith(".asx")
-                || value.endsWith(".wpl") || value.endsWith(".json")) return "playlist";
+        if (value.contains(".m3u") || value.contains(".pls")
+                || value.contains(".xspf") || value.contains(".jspf")
+                || value.contains(".asx") || value.contains(".wpl")
+                || value.contains("application/vnd.apple.mpegurl")
+                || value.contains("application/x-mpegurl")
+                || value.contains("audio/x-mpegurl")) return "playlist";
         if (value.contains("video") || value.endsWith(".mp4") || value.endsWith(".mkv")
                 || value.endsWith(".webm") || value.endsWith(".mov") || value.endsWith(".m4v")) {
             return "video";

@@ -27,6 +27,23 @@ public class PlaylistIOTest {
     }
 
     @Test
+    public void m3u_cleans_bom_zero_width_and_quoted_network_urls() throws Exception {
+        String m3u = "\uFEFF#EXTM3U\n"
+                + "#EXTINF:-1,BOM Radio\n"
+                + "\u200B\"HTTPS://radio.example/live\"\u2060\n";
+        PlaylistIO.Playlist playlist = PlaylistIO.load("content://picker/radio.m3u",
+                loc -> m3u);
+
+        assertEquals(1, playlist.items.size());
+        assertEquals("HTTPS://radio.example/live", playlist.items.get(0).url);
+        assertEquals("BOM Radio", playlist.items.get(0).title);
+        assertEquals("https://radio.example/live",
+                PlaylistIO.normalizePlayableLocation(playlist.items.get(0).url));
+        assertEquals("https://radio.example/live",
+                PlaylistIO.normalizePlayableLocation("//radio.example/live"));
+    }
+
+    @Test
     public void pls_ordered_by_number() throws Exception {
         String pls = "[playlist]\n"
                 + "File2=https://b.example/2\n"

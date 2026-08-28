@@ -92,7 +92,9 @@ public final class StreamRecorder {
     public StreamRecorder(android.content.Context context, String sourceUrl,
                           File destination, String format, Listener listener) {
         this.context = context.getApplicationContext();
-        this.sourceUrl = sourceUrl;
+        // Use exactly the same canonical source as playback. Recording still
+        // starts only when the user presses the existing record button.
+        this.sourceUrl = PlaylistIO.normalizePlayableLocation(sourceUrl);
         this.destination = destination;
         this.format = format;
         this.listener = listener;
@@ -112,9 +114,6 @@ public final class StreamRecorder {
             System.err.println("StreamRecorder calling activeTranscoder.cancel()");
             android.util.Log.i("StreamRecorder", "calling activeTranscoder.cancel()");
             activeTranscoder.cancel();
-        } else {
-            System.err.println("StreamRecorder activeTranscoder is NULL!");
-            android.util.Log.w("StreamRecorder", "activeTranscoder is NULL!");
         }
     }
 
@@ -204,7 +203,7 @@ public final class StreamRecorder {
         totalBytes = 0;
         startedAtMs = System.currentTimeMillis();
 
-        if (sourceUrl.startsWith("http")) {
+        if (sourceUrl.startsWith("http://") || sourceUrl.startsWith("https://")) {
             java.net.HttpURLConnection conn = (java.net.HttpURLConnection)
                     new java.net.URL(sourceUrl).openConnection();
             conn.setConnectTimeout(15000);
@@ -213,6 +212,7 @@ public final class StreamRecorder {
             conn.setInstanceFollowRedirects(true);
             int code = conn.getResponseCode();
             if (code < 200 || code >= 300) throw new IllegalStateException("HTTP " + code);
+            target = targetForContentType(target, conn.getContentType());
             try (java.io.InputStream in = conn.getInputStream();
                  java.io.OutputStream out = new java.io.FileOutputStream(target)) {
                 byte[] chunk = new byte[64 * 1024];
@@ -243,6 +243,20 @@ public final class StreamRecorder {
             throw new IllegalStateException("Keine Daten empfangen");
         }
         return target.getName();
+    }
+
+    private static File targetForContentType(File target, String contentType) {
+        if (target == null || !target.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".ts")) {
+            return target;
+        }
+        String type = contentType == null ? "" : contentType.toLowerCase(java.util.Locale.ROOT);
+        String extension = null;
+        if (type.contains("audio/mpeg") || type.contains("audio/mp3")) extension = "mp3";
+        else if (type.contains("audio/aac") || type.contains("audio/aacp")) extension = "aac";
+        else if (type.contains("audio/ogg") || type.contains("application/ogg")) extension = "ogg";
+        if (extension == null) return target;
+        String name = target.getName();
+        return new File(target.getParentFile(), name.substring(0, name.length() - 2) + extension);
     }
 
     // -------------------------------------------------------------- notify

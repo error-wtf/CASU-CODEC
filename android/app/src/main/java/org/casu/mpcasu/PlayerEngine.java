@@ -552,14 +552,20 @@ public final class PlayerEngine implements
             }
             source = resolved;
         }
-        openSource(source);
+        // The parser already knows that playlist entries are streams.  Keep
+        // that semantic information: malformed/legacy URL spelling must never
+        // silently demote a radio stream to Android's local MediaPlayer.
+        openSource(source, "stream".equals(kind));
     }
 
     private void openSource(String source) {
-        String cleaned = source == null ? "" : source.trim();
-        final String normalized = cleaned.startsWith("//") ? "https:" + cleaned : cleaned;
+        openSource(source, false);
+    }
+
+    private void openSource(String source, boolean forceNetwork) {
+        final String normalized = PlaylistIO.normalizePlayableLocation(source);
         final long seq = ++openSeq;
-        boolean network = isNetworkSource(normalized);
+        boolean network = forceNetwork || isNetworkSource(normalized);
         usingVlc = network;
         if (network) {
             // libVLC resolves playlists/chains and decodes every stream type
@@ -597,7 +603,7 @@ public final class PlayerEngine implements
             media.addOption(":network-caching=1800");
             media.addOption(":live-caching=1800");
             media.addOption(":http-reconnect");
-            media.addOption(":http-user-agent=MPCASU/5.0.1 (Android; libVLC)");
+            media.addOption(":http-user-agent=MPCASU/5.0.0 (Android; libVLC)");
             vlc.setMedia(media);
             requestFocus();
             vlc.play();

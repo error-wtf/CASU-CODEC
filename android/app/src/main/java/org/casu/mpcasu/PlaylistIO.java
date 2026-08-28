@@ -103,7 +103,7 @@ public final class PlaylistIO {
         Playlist out = new Playlist();
         String pending = null;
         for (String raw : text.split("\\r?\\n")) {
-            String line = raw.trim();
+            String line = cleanEntry(raw);
             if (line.isEmpty()) continue;
             if (line.startsWith("#EXTINF:")) {
                 int comma = line.indexOf(',');
@@ -389,7 +389,8 @@ public final class PlaylistIO {
     }
 
     private static String resolve(String entry, String base) {
-        if (entry == null || entry.isEmpty()) return entry;
+        entry = cleanEntry(entry);
+        if (entry.isEmpty()) return entry;
         String low = entry.toLowerCase();
         if (low.startsWith("http://") || low.startsWith("https://") || low.startsWith("rtsp://")
                 || low.startsWith("content://") || low.startsWith("file://") || entry.startsWith("/")) {
@@ -397,6 +398,44 @@ public final class PlaylistIO {
         }
         if (base != null) return base + entry;
         return entry;
+    }
+
+    /** Normalize text copied out of real-world M3U files.
+     *
+     * UTF BOMs, zero-width characters and quoted URLs are accepted by many
+     * desktop players.  Android Uri treats such a prefix as part of the path,
+     * which previously sent an actual HTTP stream to the local MediaPlayer.
+     */
+    static String cleanEntry(String value) {
+        if (value == null) return "";
+        String cleaned = value.replace("\uFEFF", "")
+                .replace("\u200B", "")
+                .replace("\u200C", "")
+                .replace("\u200D", "")
+                .replace("\u2060", "")
+                .trim();
+        if (cleaned.length() >= 2) {
+            char first = cleaned.charAt(0);
+            char last = cleaned.charAt(cleaned.length() - 1);
+            if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+                cleaned = cleaned.substring(1, cleaned.length() - 1).trim();
+            }
+        }
+        return cleaned;
+    }
+
+    /** Canonical source passed to playback and the optional recorder. */
+    static String normalizePlayableLocation(String value) {
+        String cleaned = cleanEntry(value);
+        if (cleaned.startsWith("//")) return "https:" + cleaned;
+        int colon = cleaned.indexOf(':');
+        if (colon > 0) {
+            String scheme = cleaned.substring(0, colon);
+            if (scheme.matches("[A-Za-z][A-Za-z0-9+.-]*")) {
+                return scheme.toLowerCase(java.util.Locale.ROOT) + cleaned.substring(colon);
+            }
+        }
+        return cleaned;
     }
 
     private static String fallbackName(String location) {
