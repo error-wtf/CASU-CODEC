@@ -273,7 +273,7 @@ void MainWindow::build_ui() {
 
     // Linux parity: status bar shows version | tagline | telemetry placeholder;
     // transient status messages go to the center label.
-    status_label_ = new QLabel(QStringLiteral("MPCASU 5.0.0"), this);
+    status_label_ = new QLabel(QStringLiteral("MPCASU 6.0.0"), this);
     status_label_->setObjectName("StatusText");
     statusBar()->addWidget(status_label_);
     status_center_ = new QLabel(
@@ -501,7 +501,7 @@ void MainWindow::build_sidebar() {
     backend->setObjectName("StatusText");
     sidebar_layout->addWidget(backend);
     // Reference Sidebar footer: version label pinned to the bottom.
-    auto* sidebar_version = new QLabel(QStringLiteral("MPCASU 5.0.0"), sidebar_);
+    auto* sidebar_version = new QLabel(QStringLiteral("MPCASU 6.0.0"), sidebar_);
     sidebar_version->setObjectName("NowPlayingMeta");
     sidebar_version->setContentsMargins(16, 8, 16, 8);
     sidebar_version->setAlignment(Qt::AlignLeft | Qt::AlignBottom);
@@ -535,7 +535,7 @@ void MainWindow::build_about_page() {
     name->setObjectName("BrandName");
     name->setAlignment(Qt::AlignCenter);
     col->addWidget(name);
-    auto* version = new QLabel(QStringLiteral("Version 5.0.0 · Windows port (MinGW-w64 x64 + Qt 6)"), panel);
+    auto* version = new QLabel(QStringLiteral("Version 6.0.0 · Windows port (MinGW-w64 x64 + Qt 6)"), panel);
     version->setObjectName("BrandSub");
     version->setAlignment(Qt::AlignCenter);
     col->addWidget(version);
@@ -4422,25 +4422,60 @@ void MainWindow::on_youtube_play() {
                         lower.startsWith(QStringLiteral("rtp://")) ||
                         lower.startsWith(QStringLiteral("ftp://")) ||
                         lower.startsWith(QStringLiteral("smb://"));
-    // YouTube playlist URLs expand into queue entries (Linux parity).
-    if (casu::network::is_youtube_url(input.toStdString()) &&
-        input.contains(QStringLiteral("list="))) {
-        youtube_status_->setText(QStringLiteral("Expanding YouTube playlist…"));
-        std::thread([this, input] {
+    // A free-form YouTube field: several videos and/or complete playlists
+    // (comma/line separated) expand straight into the queue as individual
+    // entries (Linux parity), so shuffle/repeat act per-video.
+    const QStringList tokens = input.split(QRegularExpression(QStringLiteral("[\r\n,;]+")),
+                                           Qt::SkipEmptyParts);
+    QStringList multiTokens;
+    for (const QString& t : tokens) {
+        const QString s = t.trimmed();
+        if (!s.isEmpty()) multiTokens.append(s);
+    }
+    bool single_youtube_nolist = true;
+    if (multiTokens.size() == 1) {
+        const QString only = multiTokens.first();
+        if (!casu::network::is_youtube_url(only.toStdString()) ||
+            only.contains(QStringLiteral("list="))) {
+            single_youtube_nolist = false;
+        }
+    } else if (!multiTokens.isEmpty()) {
+        single_youtube_nolist = false;
+    }
+    if (!single_youtube_nolist && !multiTokens.isEmpty()) {
+        youtube_status_->setText(QStringLiteral("Expanding YouTube into the queue…"));
+        const QStringList frame = multiTokens;
+        std::thread([this, frame] {
             try {
-                const auto found = casu::network::YtDlp().expand_playlist(
-                    input.toStdString(), 100, 60000);
-                QMetaObject::invokeMethod(this, [this, input, found] {
-                    QStringList urls;
-                    for (const auto& r : found) urls.append(QString::fromStdString(r.url));
+                QStringList urls;
+                for (const QString& token : frame) {
+                    if (!casu::network::is_youtube_url(token.toStdString())) {
+                        // Non-YouTube tokens are ignored for the YouTube field.
+                        continue;
+                    }
+                    if (token.contains(QStringLiteral("list="))) {
+                        const auto found = casu::network::YtDlp().expand_playlist(
+                            token.toStdString(), 100, 60000);
+                        for (const auto& r : found)
+                            urls.append(QString::fromStdString(r.url));
+                    } else {
+                        urls.append(token);
+                    }
+                }
+                QMetaObject::invokeMethod(this, [this, urls] {
+                    if (urls.isEmpty()) {
+                        youtube_status_->setText(
+                            QStringLiteral("No YouTube videos recognised."));
+                        return;
+                    }
                     add_files(urls);
                     youtube_status_->setText(
-                        QStringLiteral("Playlist expanded: %1 entries").arg(found.size()));
-                    status(QStringLiteral("Added %1 playlist entries").arg(found.size()));
+                        QStringLiteral("Queued %1 videos").arg(urls.size()));
+                    status(QStringLiteral("Added %1 videos to the queue").arg(urls.size()));
                 }, Qt::QueuedConnection);
             } catch (const std::exception& e) {
                 QMetaObject::invokeMethod(this, [this, e] {
-                    youtube_status_->setText(QStringLiteral("Playlist expand failed: %1")
+                    youtube_status_->setText(QStringLiteral("YouTube expand failed: %1")
                                                  .arg(QString::fromStdString(e.what())));
                 }, Qt::QueuedConnection);
             }

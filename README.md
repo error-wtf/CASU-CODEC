@@ -6,7 +6,7 @@ media player suite: a Qt desktop player, a local web player, a batch converter
 and a CLI. Everything installs system-wide via Debian packages and does not
 interfere with VLC, GStreamer or FFmpeg.
 
-> **Version:** `5.0.0` — see [RELEASE_GATE_STATUS.json](RELEASE_GATE_STATUS.json).
+> **Version:** `6.0.0` — see [RELEASE_GATE_STATUS.json](RELEASE_GATE_STATUS.json).
 > Gates 1–3 (source-resolution STRICT, CASUNAT2 native payload, integrity /
 > recovery / fuzzing) are **PASS**. Gates 4–6 (native player path, media
 > management / converter, product UI / release regression) are honestly
@@ -53,10 +53,10 @@ source file is **not** required for native playback.
 ./packaging/build_debs.sh          # builds into dist/ (or use shipped DEBs)
 cd dist
 sha256sum -c SHA256SUMS
-sudo dpkg -i casu-codec_5.0.0_all.deb \
-             casu-converter_5.0.0_all.deb \
-             mpcasu_5.0.0_all.deb \
-             web-casu_5.0.0_all.deb
+sudo dpkg -i casu-codec_6.0.0_all.deb \
+             casu-converter_6.0.0_all.deb \
+             mpcasu_6.0.0_all.deb \
+             web-casu_6.0.0_all.deb
 sudo apt-get -f install            # only if dependencies are missing
 ```
 
@@ -79,9 +79,9 @@ The same four programs are available as native Windows x86_64 builds
 | Artifact | Content | Use |
 |---|---|---|
 | `MPCASU-Windows-x86_64.zip` | `MPCASU.exe`, `CASU-Converter.exe`, `CASU-Web-Backend.exe`, `casu.exe`, Qt6 runtime, libVLC + plugins, ffmpeg/ffprobe/yt-dlp, `web/pure/` | Portable (unzip + run `MPCASU.exe`) |
-| `MPCASU-Setup-5.0.0.exe` | Same package as a self-contained NSIS installer | One-click install + Start Menu / Desktop shortcuts + uninstaller |
+| `MPCASU-Setup-6.0.0.exe` | Same package as a self-contained NSIS installer | One-click install + Start Menu / Desktop shortcuts + uninstaller |
 
-**Install (Windows):** run `MPCASU-Setup-5.0.0.exe` (installs to
+**Install (Windows):** run `MPCASU-Setup-6.0.0.exe` (installs to
 `%ProgramFiles%\MPCASU`) or extract the ZIP and launch `MPCASU.exe`.
 
 **Feature parity with the Linux release:** the same container formats

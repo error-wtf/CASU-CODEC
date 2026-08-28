@@ -241,7 +241,7 @@ HttpResponse WebBackendHandler::handle_media(const HttpRequestHead& req,
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("CASU-Web-Backend");
-    QCoreApplication::setApplicationVersion("5.0.0");
+    QCoreApplication::setApplicationVersion("6.0.0");
 
     int port = kDefaultPort;
     for (int i = 1; i < argc; ++i) {

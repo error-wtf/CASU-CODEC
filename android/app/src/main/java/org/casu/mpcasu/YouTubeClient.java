@@ -87,6 +87,52 @@ public final class YouTubeClient {
         }
     }
 
+    /** Fetch the videos of a complete YouTube playlist (``list=`` id) via the
+     *  Innertube browse endpoint. Returns a flat list of individual videos so
+     *  a playlist expands into separate queue entries. */
+    public static List<Video> fetchPlaylist(String playlistId) throws YouTubeException {
+        if (playlistId == null || playlistId.isEmpty()) {
+            throw new YouTubeException("invalid-playlist", "Keine Playlist-ID erkannt");
+        }
+        try {
+            JSONObject body = contextBody();
+            body.put("browseId", "VL" + playlistId);
+            JSONObject response = post(
+                    "https://www.youtube.com/youtubei/v1/browse",
+                    body);
+            List<Video> out = new ArrayList<>();
+            walkAll(response, out, 0);
+            if (out.isEmpty()) {
+                throw new YouTubeException("resolver-changed",
+                        "Playlist enthielt keine Videos (veralteter Client oder leere Playlist)");
+            }
+            return out;
+        } catch (YouTubeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new YouTubeException("network-offline",
+                    "Playlist laden fehlgeschlagen: " + rootMessage(e));
+        }
+    }
+
+    /** Extract the ``list=`` playlist id from a URL, or null when absent. */
+    public static String extractPlaylistId(String input) {
+        if (input == null) return null;
+        try {
+            java.net.URI uri = java.net.URI.create(input.trim());
+            String query = uri.getQuery();
+            if (query == null) return null;
+            for (String pair : query.split("&")) {
+                if (pair.startsWith("list=")) {
+                    String id = pair.substring(5);
+                    return id.isEmpty() ? null : id;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
     /** Recursively walk ANY JSON structure looking for videoRenderer nodes. */
     private static void walkAll(Object node, List<Video> out, int depth) {
         if (out.size() >= 40 || depth > 12 || node == null) return;
@@ -101,6 +147,12 @@ public final class YouTubeClient {
             // Also check compactVideoRenderer (search results sometimes)
             if (obj.has("compactVideoRenderer")) {
                 Video v = parseCompactVideoRenderer(obj.optJSONObject("compactVideoRenderer"));
+                if (v != null) out.add(v);
+                return;
+            }
+            // Playlist detail responses use playlistVideoRenderer
+            if (obj.has("playlistVideoRenderer")) {
+                Video v = parsePlaylistVideoRenderer(obj.optJSONObject("playlistVideoRenderer"));
                 if (v != null) out.add(v);
                 return;
             }
@@ -172,6 +224,40 @@ public final class YouTubeClient {
         }
         JSONObject length = r.optJSONObject("lengthText");
         v.durationSeconds = parseDuration(length != null ? length.optString("simpleText", "") : "");
+        JSONArray thumbs = r.optJSONObject("thumbnail") != null
+                ? r.optJSONObject("thumbnail").optJSONArray("thumbnails") : null;
+        if (thumbs != null && thumbs.length() > 0) {
+            v.thumbnail = thumbs.optJSONObject(thumbs.length() - 1).optString("url", "");
+        }
+        return v;
+    }
+
+    private static Video parsePlaylistVideoRenderer(JSONObject r) {
+        if (r == null) return null;
+        Video v = new Video();
+        v.id = r.optString("videoId", "");
+        if (v.id.isEmpty()) return null;
+        Object titleRaw = r.opt("title");
+        if (titleRaw instanceof JSONObject) {
+            JSONObject titleObj = (JSONObject) titleRaw;
+            v.title = textRuns(titleObj.optJSONArray("runs"));
+            if (v.title.isEmpty()) v.title = titleObj.optString("simpleText", v.id);
+        } else if (titleRaw instanceof String) {
+            v.title = (String) titleRaw;
+        } else {
+            v.title = r.optString("title", v.id);
+        }
+        if (v.title.isEmpty()) v.title = v.id;
+        Object ownerRaw = r.opt("shortBylineText");
+        if (ownerRaw instanceof JSONObject) {
+            v.channel = textRuns(((JSONObject) ownerRaw).optJSONArray("runs"));
+            if (v.channel.isEmpty()) v.channel = ((JSONObject) ownerRaw).optString("simpleText", null);
+        } else if (ownerRaw instanceof String) {
+            v.channel = (String) ownerRaw;
+        }
+        JSONObject length = r.optJSONObject("lengthText");
+        v.durationSeconds = parseDuration(length != null
+                ? length.optString("simpleText", "") : "");
         JSONArray thumbs = r.optJSONObject("thumbnail") != null
                 ? r.optJSONObject("thumbnail").optJSONArray("thumbnails") : null;
         if (thumbs != null && thumbs.length() > 0) {

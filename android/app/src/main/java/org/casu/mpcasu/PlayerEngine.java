@@ -603,7 +603,7 @@ public final class PlayerEngine implements
             media.addOption(":network-caching=1800");
             media.addOption(":live-caching=1800");
             media.addOption(":http-reconnect");
-            media.addOption(":http-user-agent=MPCASU/5.0.0 (Android; libVLC)");
+            media.addOption(":http-user-agent=MPCASU/6.0.0 (Android; libVLC)");
             vlc.setMedia(media);
             requestFocus();
             vlc.play();

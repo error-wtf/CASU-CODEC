@@ -1,4 +1,4 @@
-fetch("/api/version").then(r=>r.json()).then(p=>{const v="5.0.0";if(p.version&&p.version!==v&&sessionStorage.getItem("casu-reloaded")!==p.version){sessionStorage.setItem("casu-reloaded",p.version);location.reload()}}).catch(()=>{});"use strict";
+fetch("/api/version").then(r=>r.json()).then(p=>{const v="6.0.0";if(p.version&&p.version!==v&&sessionStorage.getItem("casu-reloaded")!==p.version){sessionStorage.setItem("casu-reloaded",p.version);location.reload()}}).catch(()=>{});"use strict";
 const $ = selector => document.querySelector(selector);
 const media = $("#media"), youtube = $("#youtube"), nativeCanvas = $("#native-canvas"), queueNode = $("#queue");
 const state = {items: [], index: -1, shuffle: false, repeat: "off", objectUrls: new Set(), selected: -1, native: null, fallbacking: false, playbackToken: 0, youtubeState: -1, youtubeTime: 0, youtubeDuration: 0, epgNames: new Map(), programmes: [], abStart: null, abEnd: null, abToken: -1, rateIndex: 2, view: "now", expanded: new Set(), multi: new Set()};

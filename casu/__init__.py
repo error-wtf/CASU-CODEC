@@ -2,4 +2,4 @@
 # SPDX-FileCopyrightText: 2026 Lino Casu
 """CASU — Codec for All Segmented Units: a conservative media codec/container."""
 
-__version__ = "5.0.0"
+__version__ = "6.0.0"

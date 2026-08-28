@@ -13,6 +13,7 @@ disk.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from dataclasses import asdict, dataclass
@@ -158,3 +159,76 @@ def search_youtube_playlist(url: str, *, limit: int = 100,
         raise SearchError(
             detail[-1][:300] if detail else "playlist returned no videos")
     return _to_results(entries, "youtube", limit)
+
+
+def _has_list_param(url: str) -> bool:
+    """True if a YouTube URL carries a playlist (``list=``) parameter."""
+    from .locations import is_youtube_url
+    if not is_youtube_url(url):
+        return False
+    return "list=" in url
+
+
+def youtube_playlist_id(url: str) -> str:
+    """Return the YouTube playlist id (``list=`` value) or an empty string."""
+    try:
+        from urllib.parse import urlparse, parse_qs
+        parsed = urlparse(url.strip())
+        values = parse_qs(parsed.query).get("list")
+        return values[0].strip() if values else ""
+    except ValueError:
+        return ""
+
+
+def split_youtube_input(text: str) -> list[str]:
+    """Split a free-form YouTube field into individual URL tokens.
+
+    Accepts commas, semicolons and line breaks as separators so a user can
+    paste several YouTube videos and/or playlist links at once.  Each token is
+    trimmed; empty tokens are dropped.
+    """
+    raw = (text or "").strip()
+    if not raw:
+        return []
+    tokens = []
+    for piece in re.split(r"[\n,;]+", raw):
+        piece = piece.strip()
+        if not piece:
+            continue
+        tokens.append(piece)
+    return tokens
+
+
+def expand_youtube_input(text: str, *, limit: int = 100,
+                         timeout: float = 60.0) -> list[SearchResult]:
+    """Expand a free-form YouTube field into a flat list of individual videos.
+
+    The field may contain several single video URLs and/or complete playlist
+    URLs, separated by commas, semicolons or line breaks.  Single video URLs
+    are kept as-is (one queue entry each); playlist URLs are expanded into
+    their individual videos via ``yt-dlp --flat-playlist``.  The result is a
+    flat, ordered list that the caller can drop straight into the queue so
+    shuffle/repeat act per-video.
+    """
+    results: list[SearchResult] = []
+    seen_urls: set[str] = set()
+    for token in split_youtube_input(text):
+        if youtube_playlist_id(token):
+            found = search_youtube_playlist(token, limit=limit, timeout=timeout)
+        else:
+            found = [
+                SearchResult(title=str(token)[:300], url=token,
+                             duration=None, uploader="", source="youtube",
+                             thumbnail="")
+            ]
+        for result in found:
+            url = result.url.strip()
+            if not url or url in seen_urls:
+                continue
+            seen_urls.add(url)
+            results.append(result)
+        if len(results) >= limit:
+            break
+    if not results:
+        raise SearchError("no YouTube videos or playlists were recognised")
+    return results

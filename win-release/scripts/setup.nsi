@@ -18,7 +18,7 @@
 ;     per-user copy instead of failing.
 ;
 ; Compile (Linux):  makensis scripts/setup.nsi
-; Output:           dist/MPCASU-Setup-5.0.0.exe
+; Output:           dist/MPCASU-Setup-6.0.0.exe
 
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
@@ -27,7 +27,7 @@
 
 ; ------------------------------------------------------------------ metadata
 !define APP_NAME "MPCASU"
-!define APP_VERSION "5.0.0"
+!define APP_VERSION "6.0.0"
 !define APP_PUBLISHER "Lino Casu / CASU-CODEC"
 !define APP_EXE "MPCASU.exe"
 !define OUTPUT_FILE "..\dist\MPCASU-Setup-${APP_VERSION}.exe"

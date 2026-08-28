@@ -2243,19 +2243,7 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                     String url = input.getText().toString().trim();
                     if (url.isEmpty()) return;
                     if (url.contains("youtu")) {
-                        new Thread(() -> {
-                            try {
-                                String mediaUrl = YouTubeClient.resolveMediaUrl(url);
-                                String id = YouTubeClient.extractVideoId(url);
-                                ui.post(() -> {
-                                    engine.openExternal(new MediaItem(mediaUrl,
-                                            "YouTube " + id, "youtube", "YT"), true, 0);
-                                    toast("▶ YouTube");
-                                });
-                            } catch (Exception e) {
-                                ui.post(() -> toast("YouTube: " + e.getMessage()));
-                            }
-                        }).start();
+                        expandYouTubeAdd(url);
                         return;
                     }
                     MediaItem item = new MediaItem(url, null, "stream", null);
@@ -2263,6 +2251,68 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                 })
                 .setNegativeButton("Abbrechen", null)
                 .show();
+    }
+
+    /** Expand a free-form YouTube field (several videos and/or full playlists,
+     *  separated by commas/semicolons/line breaks) into individual queue items
+     *  and start playing the first one. Linux/Windows parity. */
+    private void expandYouTubeAdd(String url) {
+        new Thread(() -> {
+            final List<MediaItem> toAdd = new ArrayList<>();
+            final boolean[] failed = {false};
+            final String[] errorMsg = {null};
+            final List<String> tokens = new ArrayList<>();
+            for (String t : url.split("[\n,;]+")) {
+                String s = t.trim();
+                if (!s.isEmpty()) tokens.add(s);
+            }
+            try {
+                for (String token : tokens) {
+                    String playlistId = YouTubeClient.extractPlaylistId(token);
+                    if (playlistId != null) {
+                        List<YouTubeClient.Video> videos = YouTubeClient.fetchPlaylist(playlistId);
+                        int n = 0;
+                        for (YouTubeClient.Video v : videos) {
+                            if (n >= 100) break;
+                            try {
+                                String mediaUrl = YouTubeClient.resolveMediaUrl(v.id);
+                                toAdd.add(new MediaItem(mediaUrl,
+                                        v.title != null && !v.title.isEmpty() ? v.title : "YouTube " + v.id,
+                                        "youtube", "YT"));
+                            } catch (Exception ignored) {
+                            }
+                            n++;
+                        }
+                    } else {
+                        String id = YouTubeClient.extractVideoId(token);
+                        if (id == null) continue;
+                        String mediaUrl = YouTubeClient.resolveMediaUrl(id);
+                        toAdd.add(new MediaItem(mediaUrl, "YouTube " + id, "youtube", "YT"));
+                    }
+                }
+            } catch (Exception e) {
+                failed[0] = true;
+                errorMsg[0] = e.getMessage();
+            }
+            final List<MediaItem> added = toAdd;
+            final boolean failedFinal = failed[0];
+            final String errorFinal = errorMsg[0];
+            ui.post(() -> {
+                if (failedFinal) {
+                    toast("YouTube: " + errorFinal);
+                    return;
+                }
+                if (added.isEmpty()) {
+                    toast("Keine YouTube-Videos erkannt");
+                    return;
+                }
+                MediaItem first = added.get(0);
+                engine.addAll(added);
+                engine.openExternal(first, false, 0);
+                toast(added.size() + " Video(s) zur Queue hinzugefügt · ▶");
+                showTab(TAB_PLAY);
+            });
+        }).start();
     }
 
     private void showSavePlaylistDialog() {

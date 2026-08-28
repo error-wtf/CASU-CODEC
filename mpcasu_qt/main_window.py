@@ -353,7 +353,7 @@ class Sidebar(QFrame):
 
         layout.addStretch()
 
-        version = QLabel("MPCASU 5.0.0")
+        version = QLabel("MPCASU 6.0.0")
         version.setObjectName("NowPlayingMeta")
         version.setContentsMargins(16, 8, 16, 8)
         version.setAlignment(Qt.AlignLeft | Qt.AlignBottom)
@@ -2226,7 +2226,7 @@ class AboutPage(QFrame):
         sub.setAlignment(Qt.AlignCenter)
         layout.addWidget(sub)
         layout.addSpacing(12)
-        info = QLabel("Version 5.0.0\nMedia Player for CASU & Legacy Media\nIn-process playback · No external player")
+        info = QLabel("Version 6.0.0\nMedia Player for CASU & Legacy Media\nIn-process playback · No external player")
         info.setObjectName("NowPlayingMeta")
         info.setAlignment(Qt.AlignCenter)
         layout.addWidget(info)
@@ -2267,6 +2267,10 @@ class SourcesView(QFrame):
     }
 
     sourceActivated = Signal(object)
+    # Emitted with a flat list of SearchResult-style objects (individual
+    # YouTube videos, expanded from playlists and/or several pasted URLs) that
+    # the main window drops straight into the queue.
+    queueItemsRequested = Signal(object)
     consentAccepted = Signal()
     closeRequested = Signal()
     webPlayerRequested = Signal(str, str, str)  # provider, query, url
@@ -2282,6 +2286,9 @@ class SourcesView(QFrame):
         self._bridge = _ThreadBridge()
         self._bridge.resultReady.connect(self._present_results)
         self._bridge.errorReady.connect(self._present_error)
+        self._queue_bridge = _ThreadBridge()
+        self._queue_bridge.resultReady.connect(self._present_queue_items)
+        self._queue_bridge.errorReady.connect(self._present_error)
         self._thumb_bridge = _ThreadBridge()
         self._thumb_bridge.resultReady.connect(self._apply_thumb)
         self._build()
@@ -2375,8 +2382,11 @@ class SourcesView(QFrame):
         text = self._entry.text().strip()
         if not text:
             return
-        if is_youtube_url(text) and "list=" in text:
-            self._expand_youtube_playlist(text)
+        # A free-form YouTube field: several videos and/or complete playlists
+        # separated by commas/line breaks expand straight into the queue so
+        # shuffle/repeat act per-video (Windows/Linux parity).
+        if self._is_expandable_youtube(text):
+            self._expand_youtube_input(text)
             return
         is_url = text.startswith(("http://", "https://", "rtsp://", "rtmp://",
                                   "udp://", "rtp://", "ftp://", "smb://"))
@@ -2384,6 +2394,43 @@ class SourcesView(QFrame):
             self._run_search(text)
             return
         self.sourceActivated.emit(text)
+
+    def _is_expandable_youtube(self, text: str) -> bool:
+        from casu.search import split_youtube_input, youtube_playlist_id
+        tokens = split_youtube_input(text)
+        if not tokens:
+            return False
+        youtube = [t for t in tokens if is_youtube_url(t)]
+        if not youtube:
+            return False
+        # A single plain video URL keeps the existing one-shot path; anything
+        # with several entries (comma/line separated) or a playlist link goes
+        # through the queue expansion.
+        return len(youtube) > 1 or any(youtube_playlist_id(t) for t in youtube)
+
+    def _expand_youtube_input(self, text: str):
+        if self._searching:
+            return
+        self._searching = True
+        self._list.clear()
+        self._results = []
+        self._status.setText("Expanding YouTube into the queue…")
+
+        def worker():
+            from casu.search import SearchError, expand_youtube_input
+            try:
+                found = expand_youtube_input(text)
+            except SearchError as exc:
+                self._queue_bridge.errorReady.emit(str(exc))
+            else:
+                self._queue_bridge.resultReady.emit(found)
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _present_queue_items(self, found):
+        self._searching = False
+        self.queueItemsRequested.emit(list(found))
+        self._status.setText(
+            f"{len(found)} video(s) added to the queue — playing now")
 
     def _expand_spotify_url(self, url: str):
         if self._searching:
@@ -3032,6 +3079,7 @@ class MainWindow(QMainWindow):
 
         self._sources_view = SourcesView(self.settings_store)
         self._sources_view.sourceActivated.connect(self._on_source_activated)
+        self._sources_view.queueItemsRequested.connect(self._on_queue_items_requested)
         self._sources_view.closeRequested.connect(self._show_player_page)
         self._sources_view.webPlayerRequested.connect(self._open_web_player)
         self._sources_view.consentAccepted.connect(
@@ -3092,7 +3140,7 @@ class MainWindow(QMainWindow):
 
         status_bar = QStatusBar()
         status_bar.setObjectName("StatusBar")
-        self._status_left = QLabel("MPCASU 5.0.0")
+        self._status_left = QLabel("MPCASU 6.0.0")
         self._status_left.setObjectName("StatusText")
         self._status_left.setStyleSheet(f"color: {PALETTE.text_muted};")
         status_bar.addWidget(self._status_left)
@@ -4928,6 +4976,43 @@ class MainWindow(QMainWindow):
             return
         self._resolve_and_open_external_source(payload.url,
                                                display_label=payload.title)
+
+    def _on_queue_items_requested(self, found):
+        """Add several individual YouTube videos (expanded from playlists
+        and/or several pasted URLs) to the queue and start the first one.
+
+        Each video becomes its own queue entry, so shuffle/repeat and the
+        normal Next/Previous controls act per-video (Windows/Linux parity).
+        """
+        if not found:
+            return
+        urls: list[str] = []
+        labels: dict = {}
+        for item in found:
+            url = str(getattr(item, "url", "") or "").strip()
+            if not url:
+                continue
+            title = str(getattr(item, "title", "") or "").strip()
+            if title and title != url:
+                labels[url] = title
+            urls.append(url)
+        if not urls:
+            return
+        self._playlist_pane._display_titles.update(labels)
+        try:
+            self.playlist_model.add(urls)
+            self._invalidate_play_seq()
+            self._render_playlist()
+            first_row = self.playlist_model.index_of(urls[0])
+            if first_row is not None:
+                self._playlist_pane.select_row(first_row)
+        except Exception:  # noqa: BLE001 - queue must never block playback
+            pass
+        first = urls[0]
+        self._show_player_page()
+        self._play_youtube(first, label=labels.get(first, first))
+        for url in urls:
+            self._tag_queue_title(url)
 
     def _queue_and_play(self, url: str, *, label: str = ""):
         """Add a YouTube source to the queue (with a display tag) and play it.

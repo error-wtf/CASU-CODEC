@@ -1042,6 +1042,23 @@ async function installMediaTracks(item) {
 
 function openUrl(value) {
   if (!value) return;
+  const tokens = String(value).split(/[\n,;]+/).map((t) => t.trim()).filter(Boolean);
+  // Several individual YouTube videos pasted into one field are split into
+  // separate queue items (each plays via the embed) even without a backend.
+  // A single plain video URL keeps the existing one-shot path. A complete
+  // playlist URL stays a single item (an embed carries one list at a time);
+  // a backend can expand the internal videos for individual queuing.
+  const youtubeTokens = tokens.filter((t) => youtubeId(t));
+  const several = youtubeTokens.length > 1;
+  const playlistOnly = tokens.length === 1 && youtubeList(tokens[0]);
+  if (several && !playlistOnly) {
+    for (const token of youtubeTokens) {
+      addItem({ title: token, url: networkUrl(token), kind: "youtube" });
+      hydrateYouTubeTitle(state.items[state.items.length - 1], token);
+    }
+    if (tokens.length !== youtubeTokens.length) toast("Non-YouTube entries need a backend to expand");
+    return;
+  }
   const yt = youtubeId(value);
   if (yt) {
     addItem({ title: value, url: networkUrl(value), kind: "youtube" });

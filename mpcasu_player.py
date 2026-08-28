@@ -1368,6 +1368,10 @@ class MPCASUPlayer(tk.Tk):
             text = value.get().strip()
             if not text:
                 return
+            if self._is_expandable_youtube(text):
+                dialog.destroy()
+                self._expand_youtube_input(text)
+                return
             if text.startswith(("http://", "https://")):
                 dialog.destroy()
                 self._queue_and_play(text)
@@ -1491,6 +1495,69 @@ class MPCASUPlayer(tk.Tk):
                 self._resolve_and_open_external_source(url)
         ttk.Button(dialog, text="Open", style="MPC.TButton", command=open_source).pack(anchor="e", padx=16, pady=14)
         entry.bind("<Return>", lambda _event: open_source())
+
+    def _is_expandable_youtube(self, text: str) -> bool:
+        from casu.search import split_youtube_input, youtube_playlist_id
+        tokens = split_youtube_input(text)
+        if not tokens:
+            return False
+        youtube = [t for t in tokens if is_youtube_url(t)]
+        if not youtube:
+            return False
+        return len(youtube) > 1 or any(youtube_playlist_id(t) for t in youtube)
+
+    def _expand_youtube_input(self, text: str) -> None:
+        """Qt parity: expand a playlist and/or several pasted YouTube videos
+        into individual queue entries and start the first one."""
+        from casu.search import SearchError, expand_youtube_input
+        holder: dict = {}
+
+        def worker() -> None:
+            try:
+                found = expand_youtube_input(text)
+            except SearchError as exc:
+                holder["error"] = str(exc)
+            else:
+                holder["found"] = found
+
+        threading.Thread(target=worker, daemon=True).start()
+
+        def poll() -> None:
+            if "found" not in holder and "error" not in holder:
+                self.after(150, poll)
+                return
+            if "error" in holder:
+                self.status.set(f"Could not expand YouTube: {holder['error']}")
+                messagebox.showerror("MPCASU", holder["error"])
+                return
+            found = holder["found"]
+            if not found:
+                return
+            urls: list = []
+            titles: dict = {}
+            for item in found:
+                url = str(getattr(item, "url", "") or "").strip()
+                if not url:
+                    continue
+                title = str(getattr(item, "title", "") or "").strip()
+                if title and title != url:
+                    titles[url] = title
+                urls.append(url)
+            if not urls:
+                return
+            self._display_titles.update(titles)
+            try:
+                self.playlist_model.add(urls)
+            except PlaylistError:
+                pass
+            self._render_playlist()
+            self._resolve_and_open_external_source(
+                urls[0], display_label=titles.get(urls[0], urls[0]))
+            for url in urls:
+                self._tag_queue_title(url)
+            self.status.set(f"{len(urls)} video(s) added to the queue — playing now")
+
+        self.after(150, poll)
 
     def _queue_and_play(self, url: str, label: str = "") -> None:
         """Qt parity (_queue_and_play): the URL lands IN the queue (with its

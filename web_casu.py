@@ -439,6 +439,14 @@ class WebPlayerHandler(http.server.SimpleHTTPRequestHandler):
                     raise WebPlayerError("search request must be a JSON object")
                 self._search(request)
                 return
+            elif self.path == "/api/youtube-items":
+                if length <= 0 or length > 64 * 1024:
+                    raise WebPlayerError("items request size is invalid")
+                request = json.loads(self.rfile.read(length))
+                if not isinstance(request, dict):
+                    raise WebPlayerError("items request must be a JSON object")
+                self._youtube_items(request)
+                return
             elif self.path == "/api/resolve":
                 if length <= 0 or length > 64 * 1024:
                     raise WebPlayerError("resolve request size is invalid")
@@ -470,6 +478,27 @@ class WebPlayerHandler(http.server.SimpleHTTPRequestHandler):
         except (BrokenPipeError, json.JSONDecodeError, OSError, ValueError,
                 WebPlayerError) as exc:
             self._json(400, {"error": str(exc)[:1000]})
+
+    def _youtube_items(self, request: dict) -> None:
+        """Expand a free-form YouTube field into individual videos.
+
+        The field may contain several video URLs and/or complete playlist
+        links (separated by commas, semicolons or line breaks), which are
+        expanded into individual queue items so shuffle/repeat act per-video.
+        """
+        text = str(request.get("text", "")).strip()
+        if not text:
+            raise WebPlayerError("youtube items request needs text")
+        try:
+            limit = int(request.get("limit", 100))
+        except (TypeError, ValueError):
+            limit = 100
+        try:
+            from casu.search import SearchError, expand_youtube_input
+            items = expand_youtube_input(text, limit=limit)
+        except SearchError as exc:
+            raise WebPlayerError(str(exc)) from exc
+        self._json(200, {"results": [item.as_dict() for item in items]})
 
     def _search(self, request: dict) -> None:
         """YouTube search via yt-dlp; Spotify search via spotDL.
