@@ -1260,54 +1260,12 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     }
 
     private void openPlaylistFile(String path) {
-        try {
-            java.io.File f = new java.io.File(path);
-            if (!f.exists()) { toast("File not found: " + path); return; }
-            String ext = f.getName().toLowerCase(java.util.Locale.ROOT);
-            String content;
-            try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(f))) {
-                StringBuilder sb = new StringBuilder();
-                String line;
-                while ((line = br.readLine()) != null) { sb.append(line).append("\n"); }
-                content = sb.toString();
-            }
-            java.util.List<String> entries = new java.util.ArrayList<>();
-            if (ext.endsWith(".m3u") || ext.endsWith(".m3u8")) {
-                for (String line : content.split("\n")) {
-                    line = line.trim();
-                    if (!line.isEmpty() && !line.startsWith("#")) entries.add(line);
-                }
-            } else if (ext.endsWith(".pls")) {
-                for (String line : content.split("\n")) {
-                    String lo = line.trim().toLowerCase(java.util.Locale.ROOT);
-                    if (lo.startsWith("file")) {
-                        int eq = lo.indexOf('=');
-                        if (eq >= 0) entries.add(line.trim().substring(eq + 1).trim());
-                    }
-                }
-            } else if (ext.endsWith(".xspf")) {
-                java.util.regex.Matcher m = java.util.regex.Pattern.compile(
-                    "<location>(.*?)</location>", java.util.regex.Pattern.CASE_INSENSITIVE)
-                    .matcher(content);
-                while (m.find()) entries.add(m.group(1).trim());
-            }
-            if (entries.isEmpty()) { toast("No tracks in playlist"); return; }
-            for (String entry : entries) {
-                java.io.File ef = new java.io.File(entry);
-                if (!ef.isAbsolute()) ef = new java.io.File(f.getParentFile(), entry);
-                if (ef.exists()) {
-                    MediaItem item = new MediaItem();
-                    item.url = ef.getAbsolutePath();
-                    item.title = ef.getName();
-                    item.playlist = "PLAYLIST";
-                    engine.add(item);
-                }
-            }
-            toast("≡ " + entries.size() + " tracks added to queue");
-            showTab(TAB_PLAY);
-        } catch (Exception e) {
-            toast("Error: " + e.getMessage());
+        java.io.File file = new java.io.File(path);
+        if (!file.isFile()) {
+            toast("Playlist nicht gefunden: " + path);
+            return;
         }
+        loadPlaylist(Uri.fromFile(file));
     }
 
     private final class LibraryAdapter extends BaseAdapter {
@@ -2538,7 +2496,8 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     private void loadPlaylist(Uri uri) {
         new Thread(() -> {
             try {
-                PlaylistIO.Playlist playlist = PlaylistIO.load(uri.toString(), PlaylistIO::fetchText);
+                PlaylistIO.Playlist playlist = PlaylistIO.load(uri.toString(),
+                        location -> PlaylistIO.fetchText(this, location));
                 List<MediaItem> items = new ArrayList<>();
                 for (PlaylistIO.Entry entry : playlist.items) {
                     if (entry.url == null || entry.url.isEmpty()) continue;
@@ -2547,9 +2506,16 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                     items.add(item);
                 }
                 ui.post(() -> {
+                    if (items.isEmpty()) {
+                        toast("Playlist enthält keine abspielbaren Einträge");
+                        return;
+                    }
+                    int firstAdded = engine.items().size();
                     engine.addAll(items);
-                    toast(playlist.items.size() + " Einträge · " + playlist.name);
+                    engine.playIndex(firstAdded);
+                    toast(items.size() + " Einträge · " + playlist.name);
                     refreshQueueUi();
+                    showTab(TAB_PLAY);
                 });
             } catch (Exception e) {
                 ui.post(() -> toast("Playlist fehlgeschlagen: " + e.getMessage()));

@@ -5,6 +5,8 @@ import static org.junit.Assert.*;
 
 import org.junit.Test;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.List;
 
 /** Playlist format fixtures — every format the Linux reference supports. */
@@ -109,6 +111,22 @@ public class PlaylistIOTest {
         PlaylistIO.Playlist rel = PlaylistIO.load(
                 "/home/user/lists/fav.m3u", loc -> relative);
         assertEquals("/home/user/lists/song.mp3", rel.items.get(0).url);
+    }
+
+    @Test
+    public void file_uri_from_android_picker_is_read_and_resolved() throws Exception {
+        java.io.File dir = Files.createTempDirectory("mpcasu-playlist").toFile();
+        java.io.File playlistFile = new java.io.File(dir, "radio list.m3u");
+        Files.write(playlistFile.toPath(),
+                ("#EXTM3U\n#EXTINF:-1,Test Radio\nhttps://radio.example/live\n")
+                        .getBytes(StandardCharsets.UTF_8));
+
+        String location = "file://" + playlistFile.getAbsolutePath().replace(" ", "%20");
+        PlaylistIO.Playlist playlist = PlaylistIO.load(location, PlaylistIO::fetchText);
+
+        assertEquals(1, playlist.items.size());
+        assertEquals("Test Radio", playlist.items.get(0).title);
+        assertEquals("https://radio.example/live", playlist.items.get(0).url);
     }
 
     @Test

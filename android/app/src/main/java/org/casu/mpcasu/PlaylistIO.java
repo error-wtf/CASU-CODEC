@@ -2,6 +2,9 @@
 // SPDX-FileCopyrightText: 2026 Lino Casu
 package org.casu.mpcasu;
 
+import android.content.Context;
+import android.net.Uri;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -323,13 +326,32 @@ public final class PlaylistIO {
                 conn.disconnect();
             }
         }
-        try (InputStream in = new java.io.FileInputStream(location)) {
+        String path = location != null && location.startsWith("file://")
+                ? java.net.URLDecoder.decode(location.substring("file://".length()), "UTF-8")
+                : location;
+        try (InputStream in = new java.io.FileInputStream(path)) {
+            return readUtf8(in);
+        }
+    }
+
+    /** Read URLs, ordinary paths and Storage Access Framework content URIs. */
+    public static String fetchText(Context context, String location) throws Exception {
+        if (location != null && location.startsWith("content://")) {
+            InputStream opened = context.getContentResolver().openInputStream(Uri.parse(location));
+            if (opened == null) throw new Exception("Playlist konnte nicht gelesen werden");
+            try (InputStream in = opened) {
+                return readUtf8(in);
+            }
+        }
+        return fetchText(location);
+    }
+
+    private static String readUtf8(InputStream in) throws Exception {
             ByteArrayOutputStream buf = new ByteArrayOutputStream();
             byte[] chunk = new byte[16 * 1024];
             int n;
             while ((n = in.read(chunk)) > 0) buf.write(chunk, 0, n);
             return new String(buf.toByteArray(), StandardCharsets.UTF_8);
-        }
     }
 
     public static void writeText(String path, String text) throws Exception {
