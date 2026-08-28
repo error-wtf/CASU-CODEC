@@ -12,21 +12,35 @@ import android.media.audiofx.Visualizer;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
-import android.view.SurfaceHolder;
 
-import org.json.JSONObject;
+import org.videolan.libvlc.LibVLC;
+import org.videolan.libvlc.Media;
+import org.videolan.libvlc.interfaces.IVLCVout;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-/** Single playback engine: MediaPlayer lifecycle + queue + modes + A-B +
- *  rate + audio focus + persistence. One instance, owned by PlayerService.
- *  All public methods are main-thread; MediaPlayer events arrive on our
- *  looper. Every open is prepareAsync — the UI never blocks. */
-public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
-        MediaPlayer.OnCompletionListener, MediaPlayer.OnErrorListener,
-        MediaPlayer.OnInfoListener, MediaPlayer.OnSeekCompleteListener,
+/**
+ * Single playback engine with a dual backend:
+ *
+ *  - Network streams (http/https, HLS, ICY/Shoutcast, remote playlists/chains)
+ *    are played through libVLC — exactly like the Linux/Windows builds — because
+ *    Android's MediaPlayer cannot reliably decode the full variety of stream
+ *    formats and transport wrappers.
+ *  - Local files, content:// and local video files keep using Android's
+ *    MediaPlayer so video surface, gain, metadata retriever and local playback
+ *    behave exactly as before.
+ *
+ * The rest (queue, modes, A-B, rate, audio focus, persistence) is identical for
+ * both backends. All public methods run on the main thread; both backends
+ * deliver their events asynchronously and are marshalled onto the main loop.
+ * libVLC events originate on VLC's own thread, so they are posted into `main`.
+ */
+public final class PlayerEngine implements
+        MediaPlayer.OnPreparedListener, MediaPlayer.OnCompletionListener,
+        MediaPlayer.OnErrorListener, MediaPlayer.OnInfoListener,
+        MediaPlayer.OnSeekCompleteListener,
         AudioManager.OnAudioFocusChangeListener {
 
     public interface Listener {
@@ -36,7 +50,7 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
         void onEnded(int finishedIndex);          // EOF before auto-advance
         void onError(String userMessage);
         void onQueueChanged();
-        void onTracksReady(MediaPlayer player);   // for track menus/subtitles
+        void onTracksReady();                     // tracks/stream ready (any backend)
         void onVideoSizeChanged(int width, int height);  // for aspect-ratio
     }
 
@@ -49,7 +63,16 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
     private final Random random = new Random();
     private final List<Listener> listeners = new ArrayList<>();
 
+    // libVLC backend (network streams). Created on first use.
+    private LibVLC libvlc;
+    private org.videolan.libvlc.MediaPlayer vlc;
+
+    // Android MediaPlayer backend (local/video).
     private MediaPlayer player;
+
+    // Which backend owns the current open().
+    private boolean usingVlc;
+
     private android.view.Surface surface;   // kept across player recreation
     private final List<MediaItem> items = new ArrayList<>();
     private int index = -1;
@@ -72,13 +95,11 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
 
     private final Runnable abTicker = new Runnable() {
         @Override public void run() {
-            if (abEndMs > 0 && playing && player != null) {
-                try {
-                    long pos = player.getCurrentPosition();
-                    if (pos >= abEndMs) {
-                        player.seekTo((int) (abStartMs < 0 ? 0L : abStartMs));
-                    }
-                } catch (Exception ignored) {}
+            if (abEndMs > 0 && playing) {
+                long pos = position();
+                if (pos >= abEndMs) {
+                    seekRaw(abStartMs < 0 ? 0L : abStartMs);
+                }
             }
             main.postDelayed(this, 250);
         }
@@ -124,6 +145,10 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
         for (Listener l : new ArrayList<>(listeners)) l.onVideoSizeChanged(width, height);
     }
 
+    private void fireTracksReady() {
+        for (Listener l : new ArrayList<>(listeners)) l.onTracksReady();
+    }
+
     // ------------------------------------------------------------------ state
 
     public MediaItem current() {
@@ -142,28 +167,36 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
 
     public long position() {
         try {
+            if (usingVlc) return vlc != null ? Math.max(0, vlc.getTime()) : 0;
             return player != null ? Math.max(0, player.getCurrentPosition()) : 0;
         } catch (Exception e) { return 0; }
     }
 
     public long duration() {
         try {
+            if (usingVlc) return vlc != null ? Math.max(0, vlc.getLength()) : 0;
             return player != null && prepared ? Math.max(0, player.getDuration()) : 0;
         } catch (Exception e) { return 0; }
     }
 
     /** Poll tick (200 ms) from the service: pushes position to listeners. */
     public void pollPosition() {
-        if (player == null || !prepared) return;
-        long pos = position();
-        long dur = duration();
-        for (Listener l : new ArrayList<>(listeners)) l.onPosition(pos, dur);
+        if (prepared) {
+            long pos = position();
+            long dur = duration();
+            for (Listener l : new ArrayList<>(listeners)) l.onPosition(pos, dur);
+        }
     }
 
     public Visualizer attachVisualizer(int rateHz, Visualizer.OnDataCaptureListener l) {
         try {
             releaseVisualizer();
-            int sessionId = player != null ? player.getAudioSessionId() : 0;
+            int sessionId = 0;
+            if (!usingVlc && player != null) sessionId = player.getAudioSessionId();
+            // With libVLC the audio is decoded inside VLC, which does not expose
+            // an AudioTrack session. The visualizer therefore only binds to the
+            // MediaPlayer backend (local playback); for network streams it is
+            // skipped so the UI never attaches a dead audio session.
             if (sessionId == 0) return null;
             visualizer = new Visualizer(sessionId);
             visualizer.setDataCaptureListener(l, rateHz, true, false);
@@ -207,7 +240,6 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
         if (position < index) {
             index--;
         } else if (position == index) {
-            // removing the playing item: stop playback, keep position marker
             stopInternal(false);
             if (index >= items.size()) index = items.size() - 1;
         }
@@ -265,7 +297,6 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
 
     // ------------------------------------------------------------------ transport
 
-    /** Play a queue index; resolves CASU containers transparently. */
     public void playIndex(int position) {
         playIndex(position, 0);
     }
@@ -295,19 +326,19 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
     }
 
     public void playPause() {
-        if (player == null || !prepared) {
+        if (!prepared) {
             if (index < 0 && !items.isEmpty()) playIndex(0);
             else if (current() != null) openCurrent(0);
             return;
         }
         try {
             if (playing) {
-                player.pause();
+                pauseBackend();
                 setPlaying(false, true);
             } else {
                 requestFocus();
-                player.start();
-                applyRate();
+                if (usingVlc) { if (vlc != null) vlc.play(); }
+                else if (player != null) { player.start(); applyRatePlayer(); }
                 setPlaying(true, false);
             }
             persist();
@@ -317,13 +348,18 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
     }
 
     public void pause() {
-        if (player != null && playing) {
-            try {
-                player.pause();
-                setPlaying(false, true);
-                persist();
-            } catch (Exception ignored) {}
+        if (playing) {
+            pauseBackend();
+            setPlaying(false, true);
+            persist();
         }
+    }
+
+    private void pauseBackend() {
+        try {
+            if (usingVlc) { if (vlc != null) vlc.pause(); }
+            else if (player != null) player.pause();
+        } catch (Exception ignored) {}
     }
 
     public void stop() {
@@ -332,17 +368,35 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
 
     private void stopInternal(boolean persist) {
         releaseVisualizer();
+        releaseVlc();
         if (player != null) {
             try { player.stop(); } catch (Exception ignored) {}
             try { player.release(); } catch (Exception ignored) {}
             player = null;
         }
+        usingVlc = false;
         prepared = false;
         if (playing) {
             playing = false;
             fireStateChanged();
         }
         if (persist) persist();
+    }
+
+    private void releaseVlc() {
+        if (vlc != null) {
+            try {
+                IVLCVout vout = vlc.getVLCVout();
+                try { vout.detachViews(); } catch (Exception ignored) {}
+            } catch (Exception ignored) {}
+            try { vlc.stop(); } catch (Exception ignored) {}
+            try { vlc.release(); } catch (Exception ignored) {}
+            vlc = null;
+        }
+        if (libvlc != null) {
+            try { libvlc.release(); } catch (Exception ignored) {}
+            libvlc = null;
+        }
     }
 
     public void next() {
@@ -361,17 +415,13 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
     }
 
     public void seekTo(long ms) {
-        if (player != null && prepared) {
-            try {
-                player.seekTo((int) Math.max(0, ms));
-                if (!playing && !pausedByUser) {
-                    requestFocus();
-                    player.start();
-                    applyRate();
-                    setPlaying(true, false);
-                }
-            } catch (Exception e) {
-                fireError(userError(e));
+        if (prepared) {
+            seekRaw(ms);
+            if (!playing && !pausedByUser) {
+                requestFocus();
+                if (usingVlc) { if (vlc != null) vlc.play(); }
+                else if (player != null) { player.start(); applyRatePlayer(); }
+                setPlaying(true, false);
             }
         } else {
             pendingSeekMs = ms;
@@ -380,6 +430,13 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
 
     public void seekBy(long deltaMs) {
         seekTo(position() + deltaMs);
+    }
+
+    private void seekRaw(long ms) {
+        try {
+            if (usingVlc) { if (vlc != null) vlc.setTime(Math.max(0, ms)); }
+            else if (player != null) player.seekTo((int) Math.max(0, ms));
+        } catch (Exception ignored) {}
     }
 
     public void cycleRate() {
@@ -391,6 +448,15 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
     }
 
     private void applyRate() {
+        try {
+            if (usingVlc) { if (vlc != null) vlc.setRate(rate); }
+            else applyRatePlayer();
+        } catch (Exception e) {
+            Log.i(TAG, "rate " + rate + " unavailable: " + e.getMessage());
+        }
+    }
+
+    private void applyRatePlayer() {
         if (player == null) return;
         try {
             PlaybackParams params = new PlaybackParams();
@@ -437,6 +503,12 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
         return -1;
     }
 
+    private boolean isNetworkSource(String source) {
+        return source != null
+                && (source.startsWith("http://") || source.startsWith("https://")
+                || source.startsWith("rtsp://") || source.startsWith("mms://"));
+    }
+
     /** Resolve the playable URL (CASU containers → cache file) and open. */
     private void openCurrent(long startMs) {
         MediaItem item = current();
@@ -464,19 +536,139 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
 
     private void openSource(String source) {
         final long seq = ++openSeq;
-        if (source.startsWith("http://") || source.startsWith("https://")) {
-            // Radio / playlist streams: resolve async so Android's MediaPlayer
-            // gets a direct playable URL (handles .pls/.m3u chains + UA header).
-            StreamResolver.resolve(source, result -> main.post(() -> {
-                if (seq != openSeq) return; // superseded by a newer open
-                openResolved(result.url, result.headers);
-            }));
-            return;
+        boolean network = isNetworkSource(source);
+        usingVlc = network;
+        if (network) {
+            // libVLC resolves playlists/chains and decodes every stream type
+            // itself — the same engine the Linux/Windows builds use. No side
+            // resolution step is needed.
+            main.post(() -> {
+                if (seq != openSeq) return;
+                openVlc(source);
+            });
+        } else {
+            openResolved(source);
         }
-        openResolved(source, null);
     }
 
-    private void openResolved(String source, java.util.Map<String, String> headers) {
+    // ------------------------------------------------------------------ libVLC backend
+
+    private void ensureLibVlc() {
+        if (libvlc == null) {
+            List<String> args = new ArrayList<>();
+            args.add("--no-video-title-show");
+            args.add("--avcodec-hw=none");
+            libvlc = new LibVLC(context, args);
+        }
+    }
+
+    private void openVlc(String source) {
+        releaseVlc();
+        try {
+            ensureLibVlc();
+            vlc = new org.videolan.libvlc.MediaPlayer(libvlc);
+            vlc.setEventListener(event -> main.post(() -> onVlcEvent(event)));
+            ensureVoutAttached();
+            Media media = new Media(libvlc, android.net.Uri.parse(source));
+            media.setHWDecoderEnabled(false, false);
+            vlc.setMedia(media);
+            requestFocus();
+            vlc.play();
+            fireItemChanged();
+            setPlaying(false, false);
+        } catch (Exception e) {
+            Log.w(TAG, "vlc open failed", e);
+            fireError(userError(e));
+        }
+    }
+
+    private static int clampVolume(int v) {
+        if (v < 0) return 0;
+        if (v > 100) return 100;
+        return v;
+    }
+
+    private void ensureVoutAttached() {
+        if (vlc == null) return;
+        try {
+            IVLCVout vout = vlc.getVLCVout();
+            if (surface != null) {
+                // Bind the Surface from the UI (TextureView) so video renders.
+                vout.setVideoSurface(surface, null);
+                vout.attachViews();
+            } else {
+                vout.attachViews();
+            }
+        } catch (Exception e) {
+            Log.i(TAG, "vout attach skipped: " + e.getMessage());
+        }
+    }
+
+    private void onVlcEvent(org.videolan.libvlc.MediaPlayer.Event event) {
+        switch (event.type) {
+            case org.videolan.libvlc.MediaPlayer.Event.Playing:
+                Log.i(TAG, "vlc event: PLAYING");
+                prepared = true;
+                if (pendingRate > 0 && pendingRate != 1.0f) applyRate();
+                if (pendingSeekMs > 0) {
+                    long dur = duration();
+                    if (pendingSeekMs < Math.max(dur - 500, pendingSeekMs + 500)) {
+                        try { vlc.setTime(pendingSeekMs); } catch (Exception ignored) {}
+                    }
+                }
+                pendingSeekMs = -1;
+                setPlaying(true, false);
+                fireTracksReady();
+                if (videoWidth() > 0 && videoHeight() > 0) {
+                    fireVideoSizeChanged(videoWidth(), videoHeight());
+                }
+                break;
+            case org.videolan.libvlc.MediaPlayer.Event.Paused:
+                setPlaying(false, false);
+                break;
+            case org.videolan.libvlc.MediaPlayer.Event.EndReached:
+                if ("one".equals(repeat) && current() != null) {
+                    try { vlc.setTime(0); vlc.play(); setPlaying(true, false); }
+                    catch (Exception ignored) {}
+                    return;
+                }
+                for (Listener l : new ArrayList<>(listeners)) l.onEnded(index);
+                nextInternal(true);
+                break;
+            case org.videolan.libvlc.MediaPlayer.Event.EncounteredError:
+                Log.w(TAG, "vlc error event");
+                setPlaying(false, false);
+                fireError("Wiedergabefehler der Quelle (stream-error)");
+                break;
+            case org.videolan.libvlc.MediaPlayer.Event.Vout:
+                main.post(() -> {
+                    int vw = videoWidth(), vh = videoHeight();
+                    if (vw > 0 && vh > 0) fireVideoSizeChanged(vw, vh);
+                });
+                break;
+            default:
+                break;
+        }
+    }
+
+    /** Public gain control (0..1), mirrors the old MediaPlayer volume API. */
+    public void setGain(float gain) {
+        try {
+            if (usingVlc && vlc != null) {
+                vlc.setVolume(clampVolume((int) (gain * 100)));
+            } else if (player != null) {
+                float g = Math.max(0f, Math.min(1f, gain));
+                player.setVolume(g, g);
+            }
+        } catch (Exception e) {
+            Log.i(TAG, "gain unavailable: " + e.getMessage());
+        }
+    }
+
+    // ------------------------------------------------------------------ MediaPlayer backend
+
+    private void openResolved(String source) {
+        releaseVlc();
         if (player != null) {
             try { player.reset(); } catch (Exception ignored) {}
         } else {
@@ -488,8 +680,6 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
                 player.setDataSource(context, android.net.Uri.parse(source));
             } else if (source.startsWith("/")) {
                 player.setDataSource(source);
-            } else if (headers != null && !headers.isEmpty()) {
-                player.setDataSource(context, android.net.Uri.parse(source), headers);
             } else {
                 player.setDataSource(source);
             }
@@ -498,7 +688,6 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
                     .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                     .build());
             player.prepareAsync();
-            // UI gets the item immediately; prepared event follows async.
             fireItemChanged();
             setPlaying(false, false);
         } catch (Exception e) {
@@ -524,39 +713,61 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
         return mp;
     }
 
-    /** Attach a video surface. Kept referenced so EVERY future MediaPlayer
-     *  instance (after stop/open cycles) is bound again — otherwise video
-     *  plays blind (audio only) after the first teardown. */
-    public void setSurface(android.view.Surface surface) {
-        this.surface = surface;
-        if (player != null) {
-            try { player.setSurface(surface); } catch (Exception ignored) {}
+    /** Attach a video surface, kept referenced so every player instance is bound. */
+    public void setSurface(android.view.Surface newSurface) {
+        this.surface = newSurface;
+        if (usingVlc && vlc != null) {
+            try {
+                IVLCVout vout = vlc.getVLCVout();
+                if (newSurface != null) {
+                    vout.setVideoSurface(newSurface, null);
+                    vout.attachViews();
+                } else {
+                    vout.detachViews();
+                }
+            } catch (Exception ignored) {}
+        } else if (player != null) {
+            try { player.setSurface(newSurface); } catch (Exception ignored) {}
         }
     }
 
     public int videoWidth() {
-        try { return player != null && prepared ? player.getVideoWidth() : 0; }
-        catch (Exception e) { return 0; }
+        try {
+            if (usingVlc) {
+                if (vlc == null) return 0;
+                org.videolan.libvlc.interfaces.IMedia.VideoTrack t = vlc.getCurrentVideoTrack();
+                if (t != null && t.width > 0) return t.width;
+                return 0;
+            }
+            return player != null && prepared ? player.getVideoWidth() : 0;
+        } catch (Exception e) { return 0; }
     }
 
     public int videoHeight() {
-        try { return player != null && prepared ? player.getVideoHeight() : 0; }
-        catch (Exception e) { return 0; }
+        try {
+            if (usingVlc) {
+                if (vlc == null) return 0;
+                org.videolan.libvlc.interfaces.IMedia.VideoTrack t = vlc.getCurrentVideoTrack();
+                if (t != null && t.height > 0) return t.height;
+                return 0;
+            }
+            return player != null && prepared ? player.getVideoHeight() : 0;
+        } catch (Exception e) { return 0; }
     }
 
-    public MediaPlayer player() { return player; }
+    /** Retained for source compatibility: returns the active MediaPlayer or null. */
+    public MediaPlayer player() {
+        return usingVlc ? null : player;
+    }
 
-    // ------------------------------------------------------------------ events
+    // ------------------------------------------------------------------ MediaPlayer events
 
     @Override public void onPrepared(MediaPlayer mp) {
         prepared = true;
-        // BUG 5 FIX: Re-apply surface after prepare — if the TextureView
-        // wasn't laid out when createPlayer() ran, the surface was null then.
-        // This is the most common cause of "video plays but no picture".
         if (surface != null) {
             try { mp.setSurface(surface); } catch (Exception ignored) {}
         }
-        if (pendingRate > 0 && pendingRate != 1.0f) applyRate();
+        if (pendingRate > 0 && pendingRate != 1.0f) applyRatePlayer();
         long dur = duration();
         if (pendingSeekMs > 0 && pendingSeekMs < Math.max(dur - 500, pendingSeekMs + 500)) {
             try { mp.seekTo((int) pendingSeekMs); } catch (Exception ignored) {}
@@ -565,15 +776,12 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
         requestFocus();
         try {
             mp.start();
-            applyRate();
+            applyRatePlayer();
             setPlaying(true, false);
         } catch (Exception e) {
             fireError(userError(e));
         }
-        for (Listener l : new ArrayList<>(listeners)) l.onTracksReady(mp);
-        // Fire video size if the player already knows it (some codecs
-        // report size on prepare, others on first frame — onInfo handles
-        // the latter case).
+        fireTracksReady();
         int vw = videoWidth(), vh = videoHeight();
         if (vw > 0 && vh > 0) fireVideoSizeChanged(vw, vh);
     }
@@ -601,23 +809,17 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
             message = "Wiedergabefehler der Quelle (http-error/unsupported)";
         }
         fireError(message);
-        return true; // handled: no system dialogs
+        return true;
     }
 
     @Override public boolean onInfo(MediaPlayer mp, int what, int extra) {
-        // MEDIA_INFO_VIDEO_RENDERING_START = 3 — first frame rendered.
-        // This is the authoritative signal that video is actually playing.
         if (what == 3) {
-            // Ensure the surface is still attached (some devices detach
-            // during prepare → start transition).
             if (surface != null) {
                 try { mp.setSurface(surface); } catch (Exception ignored) {}
             }
             int vw = videoWidth(), vh = videoHeight();
             if (vw > 0 && vh > 0) fireVideoSizeChanged(vw, vh);
         }
-        // MEDIA_INFO_VIDEO_SIZE_CHANGED = ?
-        // Different devices use different codes; always check dimensions.
         int vw = videoWidth(), vh = videoHeight();
         if (vw > 0 && vh > 0) fireVideoSizeChanged(vw, vh);
         return false;
@@ -706,11 +908,7 @@ public final class PlayerEngine implements MediaPlayer.OnPreparedListener,
     }
 
     private void restore() {
-        // Product decision (user): the QUEUE STARTS EMPTY on a fresh app
-        // start. queue.json still persists during a session (crash safety,
-        // position resume while the service lives) but the queue is never
-        // silently repopulated from old sessions — library content belongs
-        // in the LIBRARY tab, not preloaded into the queue.
+        // Product decision (user): the QUEUE STARTS EMPTY on a fresh app start.
     }
 
     public QueueStore.Saved savedState() {

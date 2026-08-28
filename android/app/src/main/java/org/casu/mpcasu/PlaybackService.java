@@ -11,7 +11,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.media.MediaMetadata;
-import android.media.MediaPlayer;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.os.Build;
@@ -144,7 +143,7 @@ public final class PlaybackService extends Service {
             main.post(() -> pushSessionState());
         }
 
-        @Override public void onTracksReady(MediaPlayer player) { }
+        @Override public void onTracksReady() { }
 
         @Override public void onVideoSizeChanged(int width, int height) { }
     };

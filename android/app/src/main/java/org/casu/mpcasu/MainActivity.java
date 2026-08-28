@@ -14,7 +14,6 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.media.MediaMetadataRetriever;
-import android.media.MediaPlayer;
 import android.media.audiofx.Visualizer;
 import android.net.Uri;
 import android.os.Build;
@@ -1851,12 +1850,13 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         ui.post(this::refreshQueueUi);
     }
 
-    @Override public void onTracksReady(MediaPlayer player) {
+    @Override public void onTracksReady() {
         ui.post(() -> {
             boolean video = engine.videoWidth() > 0 && engine.videoHeight() > 0;
             videoActive = video;
             updateStageFor(engine.current());
             attachVisualizer();
+            applyVolume();
         });
     }
 
@@ -1960,10 +1960,11 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     // ================================================================== ACTIONS
 
     private void applyVolume() {
-        // MediaPlayer has no gain > 1; map settings.volume (0..100) linearly.
-        if (engine != null && engine.player() != null) {
+        // Volume maps linearly from settings.volume (0..100) to the engine's
+        // gain control, which routes to MediaPlayer (local) or libVLC (streams).
+        if (engine != null) {
             float gain = Math.max(0f, Math.min(1f, settings.volume / 100f));
-            try { engine.player().setVolume(gain, gain); } catch (Exception ignored) {}
+            engine.setGain(gain);
         }
     }
 
