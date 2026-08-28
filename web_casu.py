@@ -526,8 +526,13 @@ class WebPlayerHandler(http.server.SimpleHTTPRequestHandler):
                  "uploader": r.artist or "Spotify", "source": "spotify"}
                 for r in found]})
             return
+        source = source.lower()
         try:
-            results = search_youtube(query, limit=limit)
+            if source == "youtube_playlist":
+                from casu.search import search_youtube_playlists
+                results = search_youtube_playlists(query, limit=limit)
+            else:
+                results = search_youtube(query, limit=limit)
         except SearchError as exc:
             raise WebPlayerError(str(exc)) from exc
         self._json(200, {"results": [item.as_dict() for item in results]})

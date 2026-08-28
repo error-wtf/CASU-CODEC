@@ -121,6 +121,30 @@ def search_music(query: str, *, limit: int = 12,
     return _to_results(_run_ytdlp_search(query, limit, timeout), "youtube", limit)
 
 
+def search_youtube_playlists(query: str, *, limit: int = 12,
+                             timeout: float = DEFAULT_TIMEOUT) -> list[SearchResult]:
+    """Search YouTube for playlists.
+
+    Uses a modified query to increase likelihood of playlist results and
+    filters for playlist-like entries (titles/URLs suggesting playlists).
+    Returns SearchResult objects with kind='youtube_playlist' that can be
+    expanded via search_youtube_playlist().
+    """
+    query = (query or "").strip()
+    if not query:
+        raise SearchError("search query must not be empty")
+    playlist_query = f"playlist {query}"
+    results = _to_results(_run_ytdlp_search(playlist_query, limit, timeout),
+                          "youtube_playlist", limit)
+    filtered = []
+    for r in results:
+        url = r.url or ""
+        title = (r.title or "").lower()
+        if ("list=" in url) or ("playlist" in title):
+            filtered.append(r)
+    return filtered or results
+
+
 def search_youtube_playlist(url: str, *, limit: int = 100,
                             timeout: float = 60.0) -> list[SearchResult]:
     """Expand a YouTube playlist URL into its individual videos.
