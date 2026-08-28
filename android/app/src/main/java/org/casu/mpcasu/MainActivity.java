@@ -2553,6 +2553,17 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         }).start();
     }
 
+    /** Route every external Android entry point like the Linux player:
+     *  expand playlist containers first; only actual media reaches the engine. */
+    private void openIncomingUri(Uri uri) {
+        String kind = guessKind(uri);
+        if ("playlist".equals(kind)) {
+            loadPlaylist(uri);
+            return;
+        }
+        engine.openExternal(new MediaItem(uri.toString(), null, kind, null), true, 0);
+    }
+
     // ================================================================== INTENTS
 
     private void handleIntent(Intent intent) {
@@ -2560,20 +2571,11 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         String action = intent.getAction();
         if (Intent.ACTION_VIEW.equals(action) && intent.getData() != null) {
             Uri uri = intent.getData();
-            String kind = guessKind(uri);
-            withEngine(() -> {
-                if ("playlist".equals(kind)) {
-                    loadPlaylist(uri);
-                } else {
-                    MediaItem item = new MediaItem(uri.toString(), null, kind, null);
-                    engine.openExternal(item, true, 0);
-                }
-            });
+            withEngine(() -> openIncomingUri(uri));
         } else if (Intent.ACTION_SEND.equals(action)) {
             Uri uri = intent.getParcelableExtra(Intent.EXTRA_STREAM);
             if (uri != null) {
-                withEngine(() -> engine.openExternal(new MediaItem(uri.toString(), null,
-                        guessKind(uri), null), true, 0));
+                withEngine(() -> openIncomingUri(uri));
             } else {
                 String text = intent.getStringExtra(Intent.EXTRA_TEXT);
                 if (text != null && text.contains("youtu")) {
