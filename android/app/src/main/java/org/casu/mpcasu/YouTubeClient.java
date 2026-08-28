@@ -55,7 +55,6 @@ public final class YouTubeClient {
             ctx.put("client", client);
             JSONObject body = new JSONObject();
             body.put("context", ctx);
-            body.put("apiKey", "AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w");
             return body;
         } catch (Exception e) {
             throw new RuntimeException(e);

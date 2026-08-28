@@ -2464,6 +2464,13 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             List<MediaItem> items = new ArrayList<>();
             for (Uri uri : uris) {
                 String kind = guessKind(uri);
+                if ("playlist".equals(kind)) {
+                    // The generic media picker may return playlists too. They
+                    // must be expanded just like the dedicated playlist
+                    // picker, never handed to the local MediaPlayer as a file.
+                    loadPlaylist(uri);
+                    continue;
+                }
                 items.add(new MediaItem(uri.toString(), null, kind, null));
             }
             boolean wasEmpty = engine.items().isEmpty();
@@ -2471,7 +2478,7 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             if (wasEmpty && !items.isEmpty()) {
                 engine.playIndex(engine.items().size() - items.size());
             }
-            toast(items.size() + " zur Queue hinzugefügt");
+            if (!items.isEmpty()) toast(items.size() + " zur Queue hinzugefügt");
         } else if (requestCode == REQUEST_OPEN_PLAYLIST) {
             Uri uri = uris.get(0);
             loadPlaylist(uri);
