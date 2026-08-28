@@ -1,7 +1,0 @@
-org.casu.mpcasu.app-pngs-0 /home/error/Codec-Casu/android/app/build/generated/res/pngs/release
-org.casu.mpcasu.app-resValues-1 /home/error/Codec-Casu/android/app/build/generated/res/resValues/release
-org.casu.mpcasu.app-packageReleaseResources-2 /home/error/Codec-Casu/android/app/build/intermediates/incremental/release/packageReleaseResources/merged.dir
-org.casu.mpcasu.app-packageReleaseResources-3 /home/error/Codec-Casu/android/app/build/intermediates/incremental/release/packageReleaseResources/stripped.dir
-org.casu.mpcasu.app-release-4 /home/error/Codec-Casu/android/app/build/intermediates/merged_res/release/mergeReleaseResources
-org.casu.mpcasu.app-main-5 /home/error/Codec-Casu/android/app/src/main/res
-org.casu.mpcasu.app-release-6 /home/error/Codec-Casu/android/app/src/release/res

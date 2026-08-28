@@ -1,3 +1,0 @@
-/home/error/Codec-Casu/android/app/.cxx/RelWithDebInfo/51534o2e/x86_64/CMakeFiles/casucore.dir
-/home/error/Codec-Casu/android/app/.cxx/RelWithDebInfo/51534o2e/x86_64/CMakeFiles/edit_cache.dir
-/home/error/Codec-Casu/android/app/.cxx/RelWithDebInfo/51534o2e/x86_64/CMakeFiles/rebuild_cache.dir

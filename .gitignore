@@ -23,6 +23,11 @@ venv/
 *.tmp
 *~
 backups/
+backup/
+HANDOVER.md
+codec-handover.md
+*.root-owned-backup/
+dist.root-owned-backup/
 
 # ---------------------------------------------------------------------------
 # Secrets — NEVER commit tokens, keys or credentials
@@ -31,6 +36,15 @@ gittoken.env
 *.token
 .env
 .env.*
+.secrets
+.secrets.*
+credentials*.json
+service-account*.json
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
 
 # ---------------------------------------------------------------------------
 # Local-only media
@@ -49,6 +63,11 @@ test_media/lino_casu_error.mp3.casu
 # ---------------------------------------------------------------------------
 # Generated artifacts (reproducible, kept outside the repository)
 # ---------------------------------------------------------------------------
+android/.gradle/
+android/build/
+android/app/.cxx/
+android/app/build/
+android/local.properties
 artifacts/*.mp4
 artifacts/*.mp3
 artifacts/*.opus

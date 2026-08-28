@@ -1,4 +1,0 @@
-/opt/android-sdk/cmake/3.22.1/bin/ninja \
-  -C \
-  /home/error/Codec-Casu/android/app/.cxx/RelWithDebInfo/51534o2e/armeabi-v7a \
-  casucore
