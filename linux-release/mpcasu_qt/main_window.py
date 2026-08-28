@@ -1562,7 +1562,6 @@ class LibraryPage(QFrame):
         folders = []
         if self._settings_store is not None:
             try:
-                from .settings import Settings
                 settings = self._settings_store.load()
                 folders = list(settings.watched_folders)
             except Exception:
@@ -1575,11 +1574,14 @@ class LibraryPage(QFrame):
                 continue
             try:
                 for p in sorted(fpath.rglob("*")):
-                    if p.suffix.lower() in playlist_exts and p.is_file():
-                        name = p.stem
-                        self._playlist_files[name] = p
-                        self._groups_list.addItem(name)
-            except PermissionError:
+                    try:
+                        if p.suffix.lower() in playlist_exts and p.is_file():
+                            name = p.stem
+                            self._playlist_files[name] = p
+                            self._groups_list.addItem(name)
+                    except (PermissionError, OSError):
+                        continue
+            except (PermissionError, OSError):
                 continue
         self._groups_list.blockSignals(False)
         self._groups_list.setEnabled(True)
@@ -1609,7 +1611,7 @@ class LibraryPage(QFrame):
                     lib_item = it
                     break
             if lib_item is None:
-                from .casu import LibraryItem as LI
+                from casu.library import LibraryItem as LI
                 lib_item = LI(Path(resolved), 0, 0, False, 0.0, None, {})
             self._tracks.append(Path(resolved))
             self._append_track(lib_item)

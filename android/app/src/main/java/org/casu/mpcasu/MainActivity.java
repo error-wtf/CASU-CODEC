@@ -2078,10 +2078,9 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
 
     private void showRecordingSetupDialog(MediaItem item) {
         final boolean srcIsVideo = item.isVideo();
-        final String[] formats = {StreamRecorder.FMT_MP4, StreamRecorder.FMT_MP3,
-                StreamRecorder.FMT_M4A, StreamRecorder.FMT_OGG, StreamRecorder.FMT_COPY};
-        final String[] labels = {"MP4 — Video + Audio", "MP3 — nur Audio",
-                "M4A/AAC — nur Audio", "OGG — nur Audio",
+        final String[] formats = {StreamRecorder.FMT_MP4, StreamRecorder.FMT_M4A,
+                StreamRecorder.FMT_COPY};
+        final String[] labels = {"MP4 — Video + Audio", "M4A/AAC — nur Audio",
                 "Original — Stream-Kopie (Radio/TS)"};
         int checked = 0;
         for (int i = 0; i < formats.length; i++) {
@@ -2100,8 +2099,9 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         dialog.addView(formatLabel);
 
         final int[] selectedFormat = {checked};
+        android.widget.RadioGroup formatGroup = new android.widget.RadioGroup(this);
+        formatGroup.setOrientation(android.widget.RadioGroup.VERTICAL);
         for (int i = 0; i < formats.length; i++) {
-            if (!StreamRecorder.formatSupported(formats[i])) continue;
             android.widget.RadioButton rb = new android.widget.RadioButton(this);
             rb.setText(labels[i]);
             rb.setTextColor(TEXT);
@@ -2111,8 +2111,9 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             rb.setOnCheckedChangeListener((b, isChecked) -> {
                 if (isChecked) selectedFormat[0] = java.util.Arrays.asList(formats).indexOf(fmt);
             });
-            dialog.addView(rb);
+            formatGroup.addView(rb);
         }
+        dialog.addView(formatGroup);
 
         // ---- folder picker row (SAF) ----
         TextView folderLabel = new TextView(this);
@@ -2180,32 +2181,18 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     }
 
     private void startRecording(MediaItem item) {
-        androidx.documentfile.provider.DocumentFile safDir = null;
-        File target = null;
-        if (recordFolderUri != null) {
-            try {
-                safDir = androidx.documentfile.provider.DocumentFile.fromTreeUri(
-                        this, Uri.parse(recordFolderUri));
-                if (safDir == null || !safDir.canWrite()) {
-                    toast("Zielordner nicht mehr verfügbar — nutze Standard");
-                    safDir = null;
-                }
-            } catch (Exception e) {
-                safDir = null;
-            }
-        }
-        if (safDir == null) {
-            File dir = new File(getExternalFilesDir(Environment.DIRECTORY_MUSIC),
-                    "MPCASU");
-            if (!dir.exists()) dir.mkdirs();
-            String ext = StreamRecorder.extensionFor(recordFormat, item.url);
-            target = new File(dir, "rec-"
-                    + new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
-                    .format(new Date()) + "." + ext);
-        }
+        // Recording always lands in the app's Music/MPCASU dir (no storage
+        // permission needed). libVLC writes the transcode output there.
+        File dir = new File(getExternalFilesDir(Environment.DIRECTORY_MUSIC),
+                "MPCASU");
+        if (!dir.exists()) dir.mkdirs();
+        String ext = StreamRecorder.extensionFor(recordFormat, item.url);
+        File target = new File(dir, "rec-"
+                + new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
+                .format(new Date()) + "." + ext);
 
         final String format = recordFormat;
-        recorder = new StreamRecorder(this, item.url, target, safDir, format,
+        recorder = new StreamRecorder(this, item.url, target, format,
                 new StreamRecorder.Listener() {
                     private String fileName = "rec";
 

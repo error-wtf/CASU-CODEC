@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "org.casu.mpcasu"
-    compileSdk = 34
+    compileSdk = 36
     ndkVersion = "26.3.11579264"
 
     defaultConfig {
@@ -14,6 +14,7 @@ android {
         targetSdk = 34
         versionCode = 5
         versionName = "5.0.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
@@ -73,6 +74,11 @@ android {
 
 dependencies {
     implementation("androidx.documentfile:documentfile:1.0.1")
+    // libVLC: robust playback of ALL media types (radio/IP-TV/HLS/Streams/
+    // playlists) — the parity engine used by the Linux/Windows builds.
+    implementation("org.videolan.android:libvlc-all:3.7.5")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20231013")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }

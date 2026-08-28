@@ -1,2 +1,1 @@
-40cc16366627dd1d247dcae623a565ce4584ecd93a4ab7fd1dec40cdcc3d38c9  /home/error/Codec-Casu/win-release/dist/MPCASU-Setup-5.0.0.exe
-ff604c847c4a70999ba6de5c5373dc672cfd99ad92ed8ae3ead61a635a3f9443  /home/error/Codec-Casu/win-release/dist/MPCASU-Windows-x86_64.zip
+e09d631d91c23c0a5435b3fffb4f30ac3cb8d7edc02d359be9661d5f397b3e24  MPCASU-Windows-x86_64.zip

@@ -1,6 +1,6 @@
 {
   "version": "5.0.0",
-  "generated_utc": "2026-08-25T22:46:47Z",
+  "generated_utc": "2026-08-27T23:11:39Z",
   "toolchain": "MinGW-w64 x86_64 + Qt6 6.8.3 + libVLC 3.0.21 + zstd 1.5.7 + OpenSSL 3.4.1",
   "gates": {
     "build": "PASS",
@@ -15,7 +15,7 @@
     "pure_web": "PASS",
     "packaging": "PASS",
     "installer": "PASS",
-    "wine": "PASS",
+    "wine": "NOT_TESTED",
     "licenses": "PASS"
   }
 }
