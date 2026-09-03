@@ -141,6 +141,8 @@ class AtomicQueueStateStore:
             raise
 
     def _sync_directory(self) -> None:
+        if os.name == "nt":
+            return
         flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
         descriptor = os.open(self.path.parent, flags)
         try:
