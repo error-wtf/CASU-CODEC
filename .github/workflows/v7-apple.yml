@@ -25,6 +25,7 @@ jobs:
         run: |
           brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
           brew list ffmpeg >/dev/null 2>&1 || brew install ffmpeg
+          brew list dylibbundler >/dev/null 2>&1 || brew install dylibbundler
           brew list python-tk@3.14 >/dev/null 2>&1 || brew install python-tk@3.14
           if [ ! -d /Applications/VLC.app ]; then brew install --cask vlc; fi
       - name: Build and test MPCASU Qt for macOS

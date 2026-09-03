@@ -19,6 +19,14 @@ _project_root = str(Path(__file__).resolve().parent.parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
+# Frozen macOS releases carry their helper executables inside the app. Keep
+# source/development launches unchanged while making ffmpeg, ffprobe and
+# yt-dlp available without Homebrew or another machine-level installation.
+if getattr(sys, "frozen", False) and sys.platform == "darwin":
+    helpers = Path(sys.executable).resolve().parent.parent / "Helpers"
+    if helpers.is_dir():
+        os.environ["PATH"] = str(helpers) + os.pathsep + os.environ.get("PATH", "")
+
 from mpcasu_qt.main_window import MainWindow
 from PySide6.QtCore import QLockFile, QStandardPaths, Qt, QTimer
 from PySide6.QtWidgets import QApplication, QMainWindow
@@ -120,6 +128,8 @@ def _older_mpcasu_peer() -> int | None:
     newer one sees an older peer, so exactly one process may ever open a
     window.
     """
+    if not os.path.isdir("/proc"):
+        return None
     mine = _proc_starttime(os.getpid())
     for entry in os.listdir("/proc"):
         if not entry.isdigit() or int(entry) == os.getpid():
@@ -141,6 +151,9 @@ def _older_mpcasu_peer() -> int | None:
 
 
 def _log_peer_processes() -> None:
+    if not os.path.isdir("/proc"):
+        _log("PEER process scan unavailable on this platform")
+        return
     peers = []
     for entry in os.listdir("/proc"):
         if not entry.isdigit():

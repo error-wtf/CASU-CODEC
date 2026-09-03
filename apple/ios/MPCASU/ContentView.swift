@@ -21,7 +21,6 @@ struct ContentView: View {
             settingsView
                 .tabItem { Label("Settings", systemImage: "gearshape") }
         }
-        .onOpenURL { model.importURLs([$0]) }
     }
 
     private var playerView: some View {

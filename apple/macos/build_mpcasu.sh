@@ -10,6 +10,7 @@ python3 -m venv .venv-v7-macos
 source .venv-v7-macos/bin/activate
 python -m pip install --disable-pip-version-check -U pip wheel setuptools
 python -m pip install --disable-pip-version-check -e . 'PySide6==6.10.2' python-vlc pytest pytest-qt pyinstaller
+python -m pip install --disable-pip-version-check yt-dlp
 
 python - <<'PY'
 from PySide6 import QtCore
@@ -23,6 +24,23 @@ PY
 python -m pytest -q tests/v7/shared
 python -m PyInstaller --noconfirm --clean --windowed --name MPCASU \
   --add-data 'assets:assets' mpcasu_qt/app.py
+
+mkdir -p dist/MPCASU.app/Contents/Helpers dist/MPCASU.app/Contents/Frameworks/FFmpeg
+python -m PyInstaller --noconfirm --clean --onefile --name yt-dlp "$(command -v yt-dlp)"
+cp dist/yt-dlp dist/MPCASU.app/Contents/Helpers/yt-dlp
+
+# Homebrew's ffmpeg is dynamically linked. dylibbundler copies and rewrites
+# only its concrete non-system dependencies so conversion, probing, recording
+# and the Wave visualizer also work on a clean Mac.
+cp "$(command -v ffmpeg)" dist/MPCASU.app/Contents/Helpers/ffmpeg
+cp "$(command -v ffprobe)" dist/MPCASU.app/Contents/Helpers/ffprobe
+dylibbundler -od -b -x dist/MPCASU.app/Contents/Helpers/ffmpeg \
+  -d dist/MPCASU.app/Contents/Frameworks/FFmpeg \
+  -p @executable_path/../Frameworks/FFmpeg
+dylibbundler -od -b -x dist/MPCASU.app/Contents/Helpers/ffprobe \
+  -d dist/MPCASU.app/Contents/Frameworks/FFmpeg \
+  -p @executable_path/../Frameworks/FFmpeg
+chmod +x dist/MPCASU.app/Contents/Helpers/*
 
 # python-vlc is only bindings. Ship the real VLC runtime and plugins inside
 # MPCASU.app so playback never depends on /Applications/VLC.app.
