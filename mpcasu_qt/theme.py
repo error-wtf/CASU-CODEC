@@ -77,6 +77,38 @@ PALETTE = Palette()
 METRICS = Metrics()
 
 
+def apply_dark_combo_popup(combo, palette: Palette = PALETTE) -> None:
+    """Force the real popup view dark; native Linux/macOS styles can ignore QSS ancestry."""
+    from PySide6.QtGui import QColor, QPalette
+
+    view = combo.view()
+    qt_palette = view.palette()
+    roles = {
+        QPalette.Base: palette.input_bg,
+        QPalette.Window: palette.input_bg,
+        QPalette.Text: palette.text,
+        QPalette.WindowText: palette.text,
+        QPalette.Button: palette.input_bg,
+        QPalette.ButtonText: palette.text,
+        QPalette.Highlight: palette.accent_dim,
+        QPalette.HighlightedText: palette.text_on_accent,
+    }
+    for role, colour in roles.items():
+        qt_palette.setColor(QPalette.Active, role, QColor(colour))
+        qt_palette.setColor(QPalette.Inactive, role, QColor(colour))
+    qt_palette.setColor(QPalette.Disabled, QPalette.Text, QColor(palette.text_faint))
+    qt_palette.setColor(QPalette.Disabled, QPalette.WindowText, QColor(palette.text_faint))
+    view.setPalette(qt_palette)
+    view.setAutoFillBackground(True)
+    view.setStyleSheet(f"""
+        QAbstractItemView {{ background-color: {palette.input_bg}; color: {palette.text};
+          selection-background-color: {palette.accent_dim}; selection-color: {palette.text_on_accent}; }}
+        QAbstractItemView::item {{ background-color: {palette.input_bg}; color: {palette.text}; padding: 5px 8px; }}
+        QAbstractItemView::item:selected {{ background-color: {palette.accent_dim}; color: {palette.text_on_accent}; }}
+        QAbstractItemView::item:disabled {{ background-color: {palette.input_bg}; color: {palette.text_faint}; }}
+    """)
+
+
 def format_duration(seconds: float) -> str:
     """Render a playback position as H:MM:SS / M:SS like the web player."""
     try:
@@ -323,8 +355,14 @@ QComboBox QAbstractItemView {{
     padding: 4px;
 }}
 QComboBox QAbstractItemView::item {{
+    background-color: {p.input_bg};
+    color: {p.text};
     padding: 5px 8px;
     border-radius: 4px;
+}}
+QComboBox QAbstractItemView::item:selected {{
+    background-color: {p.accent_dim};
+    color: {p.text_on_accent};
 }}
 QSpinBox, QDoubleSpinBox {{
     background-color: {p.input_bg};

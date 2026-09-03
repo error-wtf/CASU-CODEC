@@ -35,8 +35,11 @@ std::string application_stylesheet() {
     css += "QComboBox::drop-down { border: none; width: 20px; }\n";
     css += "QComboBox::down-arrow { image: none; border-left: 5px solid transparent; "
            "border-right: 5px solid transparent; border-top: 6px solid " + t.secondary + "; }\n";
-    css += "QComboBox QAbstractItemView { background: " + t.panel2 + "; color: " + t.text +
-           "; border: 1px solid " + t.line + "; selection-background-color: " + t.red_dark + "; }\n";
+    css += "QComboBox QAbstractItemView { background: " + t.input_bg + "; color: " + t.text +
+           "; border: 1px solid " + t.line + "; selection-background-color: " + t.red_dark +
+           "; selection-color: #ffffff; }\n";
+    css += "QComboBox QAbstractItemView::item { background: " + t.input_bg + "; color: " + t.text + "; }\n";
+    css += "QComboBox QAbstractItemView::item:selected { background: " + t.red_dark + "; color: #ffffff; }\n";
     css += "QPushButton { background: " + t.button + "; color: " + t.button_text +
            "; border: none; border-radius: 7px; padding: 7px 14px; }\n";
     css += "QPushButton:hover { background: " + t.red_dark + "; }\n";

@@ -14,6 +14,8 @@ struct MPCASUApp: App {
         WindowGroup {
             ContentView().environmentObject(model)
                 .onOpenURL { model.importURLs([$0]) }
+                .preferredColorScheme(.dark)
+                .tint(Color(red: 1.0, green: 0.12, blue: 0.18))
         }
     }
 }

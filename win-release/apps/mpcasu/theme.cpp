@@ -277,8 +277,18 @@ QComboBox QAbstractItemView {
     padding: 4px;
 }
 QComboBox QAbstractItemView::item {
+    background-color: %24;
+    color: %2;
     padding: 5px 8px;
     border-radius: 4px;
+}
+QComboBox QAbstractItemView::item:selected {
+    background-color: %8;
+    color: #ffffff;
+}
+QComboBox QAbstractItemView::item:disabled {
+    background-color: %24;
+    color: %14;
 }
 QSpinBox, QDoubleSpinBox {
     background-color: %24;

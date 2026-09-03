@@ -65,7 +65,7 @@ from mpcasu_backend import (
 from mpcasu_native_backend import NativeCasuBackend, PulseAudioSink
 from mpcasu_playback import PlaybackController
 
-from mpcasu_qt.theme import PALETTE, METRICS, format_duration, stylesheet
+from mpcasu_qt.theme import PALETTE, METRICS, apply_dark_combo_popup, format_duration, stylesheet
 from mpcasu_qt.videoframe import QtVideoSurfaceSink, VideoSurface
 from mpcasu_qt.youtube_proxy import YouTubeMediaProxy, YouTubeProxyError
 
@@ -2682,6 +2682,8 @@ class MainWindow(QMainWindow):
         self._title_bridge.resultReady.connect(self._apply_queue_title)
 
         self._build_ui()
+        for combo in self.findChildren(QComboBox):
+            apply_dark_combo_popup(combo)
         self._restore_session()
         self._setup_shortcuts()
 
@@ -4615,6 +4617,7 @@ class MainWindow(QMainWindow):
         for fmt in ("mkv", "mp4", "ts", "webm", "ogg", "mp3", "flac", "wav"):
             format_combo.addItem(fmt)
         format_combo.setCurrentText(str(settings.record_format))
+        apply_dark_combo_popup(format_combo)
         format_row.addWidget(format_combo)
         format_row.addStretch()
         layout.addLayout(format_row)
@@ -4627,6 +4630,7 @@ class MainWindow(QMainWindow):
                              ("Bei Titel-/Tagwechsel", "tags")):
             split_mode.addItem(label, value)
         split_mode.setCurrentIndex(max(0, split_mode.findData(settings.record_split_mode)))
+        apply_dark_combo_popup(split_mode)
         split_row.addWidget(split_mode)
         split_spin = QSpinBox()
         split_spin.setObjectName("IconButton")

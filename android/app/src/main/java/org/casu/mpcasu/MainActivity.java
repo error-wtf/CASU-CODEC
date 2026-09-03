@@ -2153,8 +2153,7 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         String[] splitLabels = {"Eine Datei", "Nach Zeit", "Bei Trackwechsel",
                 "Bei Titel-/Tagwechsel"};
         String[] splitValues = {"continuous", "time", "track", "tags"};
-        ArrayAdapter<String> splitAdapter = new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_dropdown_item, splitLabels);
+        ArrayAdapter<String> splitAdapter = darkSpinnerAdapter(splitLabels);
         splitSpinner.setAdapter(splitAdapter);
         int splitIndex = java.util.Arrays.asList(splitValues).indexOf(recordSplitMode);
         splitSpinner.setSelection(Math.max(0, splitIndex));
@@ -2237,6 +2236,32 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                 })
                 .setNegativeButton("Abbrechen", null)
                 .show();
+    }
+
+    /** Keep both the collapsed field and platform popup inside the MPCASU dark contract. */
+    private ArrayAdapter<String> darkSpinnerAdapter(String[] labels) {
+        return new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, labels) {
+            private View style(View row, boolean selected) {
+                TextView text = (TextView) row;
+                text.setTextColor(TEXT);
+                text.setBackgroundColor(selected ? Color.parseColor("#3a1015") : Color.parseColor("#080a0c"));
+                text.setPadding(dp(12), dp(10), dp(12), dp(10));
+                return text;
+            }
+
+            @Override public View getView(int position, View convertView, ViewGroup parent) {
+                return style(super.getView(position, convertView, parent), false);
+            }
+
+            @Override public View getDropDownView(int position, View convertView, ViewGroup parent) {
+                return style(super.getDropDownView(position, convertView, parent),
+                        position == splitSpinnerPosition(parent));
+            }
+
+            private int splitSpinnerPosition(ViewGroup parent) {
+                return parent instanceof ListView ? ((ListView) parent).getCheckedItemPosition() : -1;
+            }
+        };
     }
 
     private void startRecording(MediaItem item) {
