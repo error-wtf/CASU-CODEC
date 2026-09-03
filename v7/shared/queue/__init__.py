@@ -13,6 +13,7 @@ from .serialization import (
     serialize_queue_state,
 )
 from .persistence import AtomicQueueStateStore, QueueLoadResult, QueuePersistenceError
+from .controller import QueueController, QueueControllerSnapshot, QueueOwnerError
 
 __all__ = [
     "MAX_QUEUE_OCCURRENCES",
@@ -22,6 +23,9 @@ __all__ = [
     "QueueState",
     "QueueStateDecodeError",
     "QueueLoadResult",
+    "QueueController",
+    "QueueControllerSnapshot",
+    "QueueOwnerError",
     "QueuePersistenceError",
     "QueueStateValidationError",
     "deserialize_queue_state",
