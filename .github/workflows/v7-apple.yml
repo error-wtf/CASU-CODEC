@@ -39,10 +39,13 @@ jobs:
           set -euo pipefail
           runtime="$(xcrun simctl list runtimes -j | jq -r '[.runtimes[] | select(.isAvailable and (.identifier | contains(".iOS-")))] | sort_by(.version | split(".") | map(tonumber)) | last.identifier')"
           test -n "$runtime"; test "$runtime" != null
-          phone_type="$(xcrun simctl list devicetypes -j | jq -r '[.devicetypes[] | select(.name | startswith("iPhone"))] | last.identifier')"
-          tablet_type="$(xcrun simctl list devicetypes -j | jq -r '[.devicetypes[] | select(.name | startswith("iPad"))] | last.identifier')"
-          phone="$(xcrun simctl create MPCASU-V7-iPhone "$phone_type" "$runtime")"
-          tablet="$(xcrun simctl create MPCASU-V7-iPad "$tablet_type" "$runtime")"
+          devices="$(xcrun simctl list devices available -j)"
+          phone_template="$(jq -r --arg runtime "$runtime" '[.devices[$runtime][] | select(.isAvailable and (.name | startswith("iPhone")))] | last.udid' <<<"$devices")"
+          tablet_template="$(jq -r --arg runtime "$runtime" '[.devices[$runtime][] | select(.isAvailable and (.name | startswith("iPad")))] | last.udid' <<<"$devices")"
+          test -n "$phone_template"; test "$phone_template" != null
+          test -n "$tablet_template"; test "$tablet_template" != null
+          phone="$(xcrun simctl clone "$phone_template" MPCASU-V7-iPhone)"
+          tablet="$(xcrun simctl clone "$tablet_template" MPCASU-V7-iPad)"
           echo "phone=$phone" >> "$GITHUB_OUTPUT"
           echo "tablet=$tablet" >> "$GITHUB_OUTPUT"
       - name: Build and test iPhone simulator
@@ -70,4 +73,3 @@ jobs:
           name: v7-apple-build
           path: dist/apple/
           if-no-files-found: error
-
