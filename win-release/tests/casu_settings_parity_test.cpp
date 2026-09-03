@@ -43,7 +43,7 @@ PlayerSettings fixture_settings() {
     s.watched_folders = QStringList{QStringLiteral("/home/tester/Musik"),
                                     QStringLiteral("/home/tester/Videos")};
     s.ytdlp_consent = true;
-    s.visualizer = QStringLiteral("both");
+    s.visualizer = QStringLiteral("waveform");
     s.resume_playback = false;
     s.cache_limit_mib = 4096;
     s.recordings_dir = QStringLiteral("/home/tester/Aufnahmen");
@@ -91,7 +91,7 @@ int main(int argc, char** argv) {
                          QStringLiteral("pulse:alsa_output.test") &&
                      back.watched_folders.size() == 2 &&
                      back.ytdlp_consent &&
-                     back.visualizer == QStringLiteral("both") &&
+                     back.visualizer == QStringLiteral("waveform") &&
                      !back.resume_playback && back.cache_limit_mib == 4096 &&
                      back.recordings_dir ==
                          QStringLiteral("/home/tester/Aufnahmen") &&
@@ -115,7 +115,7 @@ int main(int argc, char** argv) {
               clamped.record_split_minutes == 1440 &&
               clamped.record_format == QStringLiteral("mkv") &&
               clamped.repeat_mode == QStringLiteral("off") &&
-              clamped.visualizer == QStringLiteral("spectrum"),
+              clamped.visualizer == QStringLiteral("waveform"),
           "validated() clamp parity");
 
     PlayerSettings nan_case;

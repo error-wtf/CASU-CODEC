@@ -24,7 +24,7 @@ struct PlayerSettings {
     QString audio_device;  // empty == None
     QStringList watched_folders;
     bool ytdlp_consent = false;
-    QString visualizer = "spectrum";
+    QString visualizer = "waveform";
     bool resume_playback = true;
     int cache_limit_mib = 512;
     QString recordings_dir;

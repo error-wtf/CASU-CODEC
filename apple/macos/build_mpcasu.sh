@@ -37,3 +37,21 @@ wait "$app_pid" 2>/dev/null || true
 echo "MACOS_PACKAGED_APP_SMOKE=PASS"
 ditto -c -k --keepParent dist/MPCASU.app "$OUT/MPCASU-macOS-7.0.0.zip"
 shasum -a 256 "$OUT/MPCASU-macOS-7.0.0.zip" > "$OUT/MPCASU-macOS-7.0.0.zip.sha256"
+
+# Produce the real macOS distribution container and verify its contents by
+# mounting it. Production signing/notarization is a separate credential gate.
+dmg_stage="$(mktemp -d "$OUT/.dmg-stage.XXXXXX")"
+mount_point="$(mktemp -d "$OUT/.dmg-mount.XXXXXX")"
+trap 'hdiutil detach "$mount_point" -quiet 2>/dev/null || true; rm -rf "$dmg_stage" "$mount_point"' EXIT
+ditto dist/MPCASU.app "$dmg_stage/MPCASU.app"
+ln -s /Applications "$dmg_stage/Applications"
+hdiutil create -quiet -volname "MPCASU 7.0.0" -srcfolder "$dmg_stage" \
+  -ov -format UDZO "$OUT/MPCASU-macOS-7.0.0.dmg"
+hdiutil attach -quiet -readonly -nobrowse -mountpoint "$mount_point" \
+  "$OUT/MPCASU-macOS-7.0.0.dmg"
+test -d "$mount_point/MPCASU.app"
+test -L "$mount_point/Applications"
+codesign --verify --deep --strict --verbose=2 "$mount_point/MPCASU.app"
+hdiutil detach "$mount_point" -quiet
+shasum -a 256 "$OUT/MPCASU-macOS-7.0.0.dmg" > "$OUT/MPCASU-macOS-7.0.0.dmg.sha256"
+echo "MACOS_DMG=PASS"

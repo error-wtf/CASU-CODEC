@@ -1744,9 +1744,7 @@ void MainWindow::build_settings_page() {
     add_section(QStringLiteral("VISUALIZER"));
     auto* viz_row = new QHBoxLayout();
     settings_viz_ = new QComboBox(content);
-    settings_viz_->addItem(QStringLiteral("Spectrum"), QStringLiteral("spectrum"));
     settings_viz_->addItem(QStringLiteral("Waveform"), QStringLiteral("waveform"));
-    settings_viz_->addItem(QStringLiteral("Both"), QStringLiteral("both"));
     settings_viz_->addItem(QStringLiteral("Off"), QStringLiteral("off"));
     const int viz_index = settings_viz_->findData(app_settings_.player.visualizer);
     settings_viz_->setCurrentIndex(qMax(0, viz_index));
@@ -2098,8 +2096,8 @@ void MainWindow::build_visualizer_page() {
     auto* title = new QLabel(QStringLiteral("VISUALIZER"), page);
     title->setObjectName("NowPlayingTitle");
     layout->addWidget(title);
-    auto* hint = new QLabel(QStringLiteral("Decorative spectrum (libVLC owns the audio output, so "
-                                           "a real FFT needs a native audio sink)."), page);
+    auto* hint = new QLabel(QStringLiteral(
+        "Lightweight waveform · bounded resolution · 30 FPS"), page);
     hint->setObjectName("NowPlayingMeta");
     hint->setWordWrap(true);
     layout->addWidget(hint);

@@ -10,7 +10,7 @@
       "/home/tester/Videos"
     ],
     "ytdlp_consent": true,
-    "visualizer": "both",
+    "visualizer": "waveform",
     "resume_playback": false,
     "cache_limit_mib": 4096,
     "recordings_dir": "/home/tester/Aufnahmen",

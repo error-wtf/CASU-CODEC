@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
-// Visualizer widget — REAL FFT over decoded PCM (casu/waveform.py parity):
+// Visualizer widget — bounded waveform over decoded PCM:
 // local files are decoded once via an ffmpeg s16le/44100 Hz mono pipe
 // (decode_all_pcm), network streams feed a live ~40 Hz pipe into a ring
-// buffer; bars come from live_fft (2048-sample Hann window ending at the
-// playhead, rfft, max-normalized) and the oscilloscope from window_wave.
+// buffer; the oscilloscope is downsampled to 64-128 visible points.
 // CPU-throttle parity: ticking only while visible AND playing.
 #pragma once
 #include <QProcess>
@@ -32,7 +31,7 @@ public:
     void set_audio_file(const QString& path);   // full decode via pipe
     void set_stream_url(const QString& url);    // live s16le pipe (~40 Hz)
     void clear_audio();
-    // Current playback position in seconds (playhead for FFT windows).
+    // Current playback position in seconds (playhead for waveform windows).
     void set_position_provider(std::function<double()> provider) {
         position_ = std::move(provider);
     }
@@ -44,7 +43,6 @@ protected:
 private:
     void tick();
     void compute_frame();
-    QVector<double> live_fft_bars(int bins) const;
     QVector<double> wave_samples(int points) const;
     const float* ring_tail(std::size_t* count) const;
 
@@ -54,10 +52,8 @@ private:
     bool playing_ = false;
     bool active_ = true;
     bool visible_ = true;
-    QString mode_ = "spectrum";
+    QString mode_ = "waveform";
     double phase_ = 0.0;
-    QVector<double> smoothed_bands_;  // analyser 0.85 smoothing
-    QVector<double> current_bars_;
     QVector<double> current_wave_;
     const QPixmap* cover_ = nullptr;  // non-owning; owned by MainWindow
 

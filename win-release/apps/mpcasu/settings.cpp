@@ -179,9 +179,9 @@ PlayerSettings PlayerSettings::validated() const {
     out.watched_folders = folders;
 
     out.ytdlp_consent = ytdlp_consent;
-    static const QStringList viz_ok = {"spectrum", "waveform", "both", "off"};
+    static const QStringList viz_ok = {"waveform", "off"};
     out.visualizer =
-        viz_ok.contains(visualizer) ? visualizer : QStringLiteral("spectrum");
+        viz_ok.contains(visualizer) ? visualizer : QStringLiteral("waveform");
     out.resume_playback = resume_playback;
     out.cache_limit_mib = clamp_int(cache_limit_mib, 0, 65536);
     QString recordings = recordings_dir;

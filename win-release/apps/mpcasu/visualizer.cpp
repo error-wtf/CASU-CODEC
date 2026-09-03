@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
-// Real-FFT visualizer (see header). FFT: iterative radix-2 Cooley–Tukey,
-// matching numpy rfft magnitudes for the 2048-sample Hann window.
+// Lightweight waveform-only visualizer (see header).
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -8,7 +7,6 @@
 #include <windows.h>  // CREATE_NO_WINDOW: keep GUI child processes silent
 #endif
 #include "visualizer.hpp"
-#include "viz_fft.hpp"
 
 #include "casu/codec/tools.hpp"
 #include "theme.hpp"
@@ -23,31 +21,14 @@
 
 #include <algorithm>
 #include <cmath>
-#include <complex>
 #include <fstream>
-#include <thread>
 
 namespace mpcasu {
 
 namespace {
-
-using namespace mpcasu::viz;
-
-// Web analyser smoothing (smoothingTimeConstant = 0.85) for the bars.
-void smooth_bands(QVector<double>* out, const QVector<double>& fresh) {
-    if (out->isEmpty()) {
-        *out = fresh;
-        return;
-    }
-    const int n = qMax(out->size(), fresh.size());
-    out->resize(n);
-    for (int i = 0; i < n; ++i) {
-        const double value = i < fresh.size() ? fresh[i] : 0.0;
-        (*out)[i] = 0.85 * (*out)[i] + 0.15 * value;
-    }
+constexpr int kWaveWindowSamples = 2048;
+constexpr double kWaveWindowSeconds = 0.045;
 }
-
-}  // namespace
 
 VisualizerWidget::VisualizerWidget(QWidget* parent) : QWidget(parent) {
     setMinimumHeight(120);
@@ -106,7 +87,6 @@ void VisualizerWidget::clear_audio() {
     stream_ring_.assign(stream_ring_.size(), 0.0f);
     ring_write_pos_ = 0;
     pcm_source_.clear();
-    current_bars_.fill(0.02);
     current_wave_.clear();
     update();
 }
@@ -165,15 +145,15 @@ void VisualizerWidget::compute_frame() {
         centre = std::clamp<qint64>(centre, 0,
                                     static_cast<qint64>(pcm_.size()) - 1);
         const qint64 start =
-            std::max<qint64>(0, centre - static_cast<qint64>(kFftSize));
+            std::max<qint64>(0, centre - static_cast<qint64>(kWaveWindowSamples));
         for (qint64 i = start; i <= centre &&
-                                tail.size() < kFftSize;
+                                tail.size() < kWaveWindowSamples;
              ++i)
             tail.append(pcm_[static_cast<std::size_t>(i)]);
     } else if (!stream_ring_.empty()) {
         // Most recent samples up to write cursor (wrap-aware).
         const std::size_t n = stream_ring_.size();
-        std::size_t count = std::min<std::size_t>(n, kFftSize);
+        std::size_t count = std::min<std::size_t>(n, kWaveWindowSamples);
         tail.reserve(static_cast<int>(count));
         std::size_t idx =
             (ring_write_pos_ + n - count % n) % n;
@@ -182,55 +162,35 @@ void VisualizerWidget::compute_frame() {
         }
     }
     if (tail.size() < 64) {
-        current_bars_.fill(0.04);
         current_wave_.clear();
         return;
     }
 
-    // live_fft via the shared reference-parity implementation.
-    if (mode_ == "spectrum" || mode_ == "both") {
-        QVector<double> fresh;
-        if (!pcm_.empty()) {
-            fresh = viz::live_fft_bins(pcm_.data(), pcm_.size(), position);
-        } else if (!stream_ring_.empty()) {
-            std::vector<float> ordered(stream_ring_.begin(),
-                                       stream_ring_.end());
-            // Rotate so the write cursor is the end (live buffer semantics).
-            std::rotate(ordered.begin(),
-                        ordered.begin() +
-                            static_cast<std::ptrdiff_t>(
-                                ring_write_pos_ % ordered.size()),
-                        ordered.end());
-            fresh = viz::live_fft_bins(ordered.data(), ordered.size(),
-                                       position);
-        }
-        if (!fresh.isEmpty()) smooth_bands(&smoothed_bands_, fresh);
-        current_bars_ = smoothed_bands_;
-    }
-
-    // window_wave: most recent 45 ms up to playhead, downsampled.
-    if (mode_ == "waveform" || mode_ == "both") {
+    // Wave only: most recent 45 ms, bounded by the visible widget width.
+    if (mode_ != "off") {
         const int window_samples =
-            std::max(64, static_cast<int>(sample_rate_ * kWelchWindowS));
+            std::max(64, static_cast<int>(sample_rate_ * kWaveWindowSeconds));
         QVector<double> wave_tail;
         const qint64 total = tail.size();
         const qint64 start =
             std::max<qint64>(0, total - window_samples);
         for (qint64 i = start; i < total; ++i)
             wave_tail.append(tail[int(i)]);
-        current_wave_.clear();
+        const int points = qBound(64, std::max(1, width() / 6), 128);
+        QVector<double> fresh;
         if (wave_tail.size() >= 32) {
             const double width = std::max(
-                1.0, std::ceil(double(wave_tail.size()) / kWavePoints));
+                1.0, std::ceil(double(wave_tail.size()) / points));
             for (double i = 0; i < wave_tail.size(); i += width)
-                current_wave_.append(wave_tail[int(i)]);
+                fresh.append(wave_tail[int(i)]);
+        }
+        if (current_wave_.size() != fresh.size()) {
+            current_wave_ = fresh;
+        } else {
+            for (int i = 0; i < fresh.size(); ++i)
+                current_wave_[i] = 0.65 * current_wave_[i] + 0.35 * fresh[i];
         }
     }
-}
-
-QVector<double> VisualizerWidget::live_fft_bars(int bins) const {
-    Q_UNUSED(bins);
-    return current_bars_;
 }
 
 QVector<double> VisualizerWidget::wave_samples(int points) const {
@@ -326,28 +286,7 @@ void VisualizerWidget::paintEvent(QPaintEvent* event) {
         p.restore();
     }
 
-    const bool show_bars = mode_ == "spectrum" || mode_ == "both";
-    const bool show_wave = mode_ == "waveform" || mode_ == "both";
-
-    if (show_bars) {
-        // 128 raw FFT bins (live_fft output), alternating red/dark-red.
-        const int bars = 128;
-        const double gap = 1.0;
-        const double w = (double(width()) - gap * (bars - 1)) / bars;
-        const double mid = height() * 0.75;
-        for (int i = 0; i < bars; ++i) {
-            double h = 0.02;
-            if (i < current_bars_.size())
-                h = qBound(0.02, current_bars_[i], 1.0);
-            const double height_px = h * (height() - 40.0) * 0.7;
-            const double x = i * (w + gap);
-            const QColor color =
-                (i % 2 == 0) ? QColor(P.red) : QColor(P.red_dark);
-            p.fillRect(QRectF(x, mid - height_px, w, height_px), color);
-        }
-    }
-
-    if (show_wave && !current_wave_.isEmpty()) {
+    if (!current_wave_.isEmpty()) {
         const int samples = current_wave_.size();
         QPolygonF wave;
         for (int i = 0; i < samples; ++i) {
@@ -370,8 +309,8 @@ void VisualizerWidget::paintEvent(QPaintEvent* event) {
     p.drawText(rect().adjusted(8, 0, -8, -4), Qt::AlignBottom | Qt::AlignLeft,
                pcm_.empty() && pipe_ == nullptr
                    ? QStringLiteral(
-                         "Visualizer: open media to enable the spectrum")
-                   : QStringLiteral("FFT 2048 · 128 bins · decoded PCM"));
+                         "Visualizer: open media to enable the waveform")
+                   : QStringLiteral("Waveform · 30 FPS · decoded PCM"));
 }
 
 }  // namespace mpcasu
