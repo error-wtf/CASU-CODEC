@@ -3518,9 +3518,12 @@ class MainWindow(QMainWindow):
                 self._native_sink = QtVideoSurfaceSink(self._video_surface)
                 self.backend = NativeCasuBackend(self._native_sink, audio_sink)
             else:
+                runtime_options = (("--aout=dummy", "--vout=dummy")
+                                   if os.environ.get("MPCASU_PACKAGED_PLAYBACK_SMOKE") else ())
                 self.backend = (CasuBackend(self._video_surface.handle)
                                 if is_casu_container
-                                else LibVLCBackend(self._video_surface.handle))
+                                else LibVLCBackend(self._video_surface.handle,
+                                                   runtime_options=runtime_options))
             self.backend.on_event = self._backend_event
             if is_casu_container:
                 self.backend.open_casu(path)

@@ -44,7 +44,7 @@ with wave.open(sys.argv[1], "wb") as output:
     output.setnchannels(1); output.setsampwidth(2); output.setframerate(44100)
     output.writeframes(b"".join(struct.pack("<h", int(7000 * math.sin(2 * math.pi * 440 * i / 44100))) for i in range(88200)))
 PY
-MPCASU_PACKAGED_PLAYBACK_SMOKE="$smoke_wav" \
+QT_QPA_PLATFORM=offscreen MPCASU_PACKAGED_PLAYBACK_SMOKE="$smoke_wav" \
   dist/MPCASU.app/Contents/MacOS/MPCASU \
   >"$OUT/macos-launch.log" 2>&1 &
 app_pid=$!

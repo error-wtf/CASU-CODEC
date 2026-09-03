@@ -45,4 +45,17 @@ final class QueueModelsTests: XCTestCase {
         XCTAssertEqual(RecordingController.segmentRanges(
             duration: 125, mode: .continuous, intervalMinutes: 1).count, 1)
     }
+
+    func testPlaylistImporterKeepsAllEntriesAndRelativeURLs() throws {
+        let text = (0..<250).map { "#EXTINF:-1,Track \($0)\ntrack-\($0).mp3" }.joined(separator: "\n")
+        let entries = try PlaylistImporter.parseM3U(text, relativeTo: URL(fileURLWithPath: "/tmp/list.m3u"))
+        XCTAssertEqual(entries.count, 250)
+        XCTAssertEqual(entries.first?.title, "Track 0")
+        XCTAssertEqual(entries.last?.url.lastPathComponent, "track-249.mp3")
+    }
+
+    func testPlaylistImporterMakesSafetyCeilingExplicit() {
+        let text = (0...PlaylistImporter.maximumEntries).map { "https://example.test/\($0).mp3" }.joined(separator: "\n")
+        XCTAssertThrowsError(try PlaylistImporter.parseM3U(text, relativeTo: URL(string: "https://example.test/list.m3u")!))
+    }
 }

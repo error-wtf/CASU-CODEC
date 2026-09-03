@@ -8,16 +8,36 @@ final class PlayerModel: ObservableObject {
     @Published private(set) var queue = QueueSnapshot()
     @Published private(set) var isPlaying = false
     @Published var errorMessage: String?
+    @Published private(set) var position: Double = 0
+    @Published private(set) var duration: Double = 0
+    @Published var volume: Float = UserDefaults.standard.object(forKey: "playbackVolume") as? Float ?? 1 {
+        didSet { player.volume = volume; UserDefaults.standard.set(volume, forKey: "playbackVolume") }
+    }
+    @Published var shuffle = UserDefaults.standard.bool(forKey: "queueShuffle") {
+        didSet { UserDefaults.standard.set(shuffle, forKey: "queueShuffle") }
+    }
+    @Published var repeatMode = UserDefaults.standard.string(forKey: "queueRepeat") ?? "off" {
+        didSet { UserDefaults.standard.set(repeatMode, forKey: "queueRepeat") }
+    }
     let player = AVPlayer()
     private let storageURL: URL
+    private var timeObserver: Any?
 
     init(storageURL: URL? = nil) {
         self.storageURL = storageURL ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("MPCASU/queue-v1.json")
         restore()
+        player.volume = volume
         configureRemoteCommands()
         NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: nil, queue: .main) {
             [weak self] _ in Task { @MainActor in self?.advance() }
+        }
+        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main) {
+            [weak self] time in Task { @MainActor in
+                self?.position = max(0, time.seconds.isFinite ? time.seconds : 0)
+                let value = self?.player.currentItem?.duration.seconds ?? 0
+                self?.duration = value.isFinite ? max(0, value) : 0
+            }
         }
     }
 
@@ -31,6 +51,35 @@ final class PlayerModel: ObservableObject {
         }
         if queue.currentOccurrenceID == nil { queue.currentOccurrenceID = queue.occurrences.first?.id }
         persist()
+    }
+
+    func importDocuments(_ urls: [URL]) async {
+        for url in urls {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            if ["m3u", "m3u8", "pls"].contains(url.pathExtension.lowercased()) {
+                await importPlaylist(url)
+            } else {
+                append(title: url.deletingPathExtension().lastPathComponent, url: url,
+                       kind: url.isFileURL ? .local : .network)
+            }
+        }
+    }
+
+    func append(title: String, url: URL, kind: MediaIdentity.Kind = .network, play: Bool = false) {
+        let identity = MediaIdentity(kind: kind, canonicalKey: url.absoluteString)
+        let occurrence = QueueOccurrence(media: identity, title: title, url: url)
+        queue.occurrences.append(occurrence)
+        if queue.currentOccurrenceID == nil || play { select(occurrence) }
+        persist()
+        if play { player.play(); isPlaying = true }
+    }
+
+    func importPlaylist(_ url: URL) async {
+        do {
+            let entries = try await PlaylistImporter.load(url)
+            for entry in entries { append(title: entry.title, url: entry.url) }
+        } catch { errorMessage = "Playlist import failed: \(error.localizedDescription)" }
     }
 
     func select(_ occurrence: QueueOccurrence) {
@@ -66,10 +115,31 @@ final class PlayerModel: ObservableObject {
     func advance() {
         guard let id = queue.currentOccurrenceID,
               let index = queue.occurrences.firstIndex(where: { $0.id == id }),
-              index + 1 < queue.occurrences.count else {
-            isPlaying = false; return
-        }
-        select(queue.occurrences[index + 1]); player.play(); isPlaying = true
+              !queue.occurrences.isEmpty else { isPlaying = false; return }
+        if repeatMode == "one" { player.seek(to: .zero); player.play(); return }
+        let next: Int
+        if shuffle { next = Int.random(in: 0..<queue.occurrences.count) }
+        else if index + 1 < queue.occurrences.count { next = index + 1 }
+        else if repeatMode == "all" { next = 0 }
+        else { isPlaying = false; return }
+        select(queue.occurrences[next]); player.play(); isPlaying = true
+    }
+
+    func previous() {
+        guard let id = queue.currentOccurrenceID,
+              let index = queue.occurrences.firstIndex(where: { $0.id == id }),
+              !queue.occurrences.isEmpty else { return }
+        let previous = index > 0 ? index - 1 : (repeatMode == "all" ? queue.occurrences.count - 1 : 0)
+        select(queue.occurrences[previous]); player.play(); isPlaying = true
+    }
+
+    func seek(to seconds: Double) {
+        player.seek(to: CMTime(seconds: max(0, seconds), preferredTimescale: 600))
+    }
+
+    func cycleRepeat() {
+        let modes = ["off", "all", "one"]
+        repeatMode = modes[((modes.firstIndex(of: repeatMode) ?? 0) + 1) % modes.count]
     }
 
     var current: QueueOccurrence? {
@@ -102,6 +172,11 @@ final class PlayerModel: ObservableObject {
         center.playCommand.addTarget { [weak self] _ in Task { @MainActor in self?.togglePlayback() }; return .success }
         center.pauseCommand.addTarget { [weak self] _ in Task { @MainActor in self?.togglePlayback() }; return .success }
         center.nextTrackCommand.addTarget { [weak self] _ in Task { @MainActor in self?.advance() }; return .success }
+        center.previousTrackCommand.addTarget { [weak self] _ in Task { @MainActor in self?.previous() }; return .success }
+        center.changePlaybackPositionCommand.addTarget { [weak self] event in
+            guard let event = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
+            Task { @MainActor in self?.seek(to: event.positionTime) }
+            return .success
+        }
     }
 }
-

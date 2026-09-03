@@ -12,7 +12,7 @@ struct LibraryTrack: Identifiable, Equatable {
 }
 
 enum LibrarySection: String, CaseIterable, Identifiable {
-    case songs = "Songs"
+    case songs = "Tracks"
     case artists = "Artists"
     case albums = "Albums"
     case genres = "Genres"

@@ -1,8 +1,14 @@
 import SwiftUI
+import AVFoundation
 
 @main
 struct MPCASUApp: App {
     @StateObject private var model = PlayerModel()
+
+    init() {
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+        try? AVAudioSession.sharedInstance().setActive(true)
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -11,4 +17,3 @@ struct MPCASUApp: App {
         }
     }
 }
-
