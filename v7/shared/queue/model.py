@@ -8,9 +8,10 @@ from typing import ClassVar, Literal
 from uuid import uuid4
 
 from v7.shared.core.identity import MediaIdentity
+from v7.shared.limits import QUEUE_OCCURRENCES
 
 
-MAX_QUEUE_OCCURRENCES = 10_000
+MAX_QUEUE_OCCURRENCES = QUEUE_OCCURRENCES.maximum
 InsertionClass = Literal["permanent", "play_next"]
 
 

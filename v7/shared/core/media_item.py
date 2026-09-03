@@ -11,6 +11,7 @@ from typing import Any
 
 from .errors import StructuredError, StructuredErrorValidationError
 from .identity import IdentityValidationError, MediaIdentity
+from v7.shared.limits import MEDIA_DIAGNOSTICS, MEDIA_METADATA_PROPERTIES
 
 
 MEDIA_KINDS = frozenset(
@@ -73,14 +74,14 @@ class MediaItem:
         _optional_nonnegative_int(self.ordinal, "ordinal")
         if type(self.resume_position_ms) is not int or self.resume_position_ms < 0:
             raise MediaItemValidationError("resume_position_ms must be non-negative")
-        if not isinstance(self.metadata, Mapping) or len(self.metadata) > 128:
+        if not isinstance(self.metadata, Mapping) or len(self.metadata) > MEDIA_METADATA_PROPERTIES.maximum:
             raise MediaItemValidationError("metadata must be an object with at most 128 properties")
         try:
             frozen = _freeze_json(dict(self.metadata))
         except (TypeError, ValueError) as error:
             raise MediaItemValidationError(str(error)) from error
         object.__setattr__(self, "metadata", frozen)
-        if not isinstance(self.diagnostics, tuple) or len(self.diagnostics) > 64:
+        if not isinstance(self.diagnostics, tuple) or len(self.diagnostics) > MEDIA_DIAGNOSTICS.maximum:
             raise MediaItemValidationError("diagnostics must contain at most 64 entries")
         if any(not isinstance(value, StructuredError) for value in self.diagnostics):
             raise MediaItemValidationError("diagnostics must contain StructuredError values")

@@ -9,9 +9,10 @@ import tempfile
 
 from .model import QueueState
 from .serialization import QueueStateDecodeError, deserialize_queue_state, serialize_queue_state
+from v7.shared.limits import QUEUE_DOCUMENT_BYTES
 
 
-DEFAULT_MAX_QUEUE_DOCUMENT_BYTES = 64 * 1024 * 1024
+DEFAULT_MAX_QUEUE_DOCUMENT_BYTES = QUEUE_DOCUMENT_BYTES.maximum
 
 
 class QueuePersistenceError(OSError):
