@@ -6,6 +6,7 @@ struct ContentView: View {
     @EnvironmentObject private var model: PlayerModel
     @State private var importing = false
     @StateObject private var library = MediaLibraryModel()
+    @StateObject private var recording = RecordingController()
 
     var body: some View {
         TabView {
@@ -36,6 +37,21 @@ struct ContentView: View {
                 Button(action: model.togglePlayback) {
                     Label(model.isPlaying ? "Pause" : "Play", systemImage: model.isPlaying ? "pause.fill" : "play.fill")
                 }.buttonStyle(.borderedProminent).disabled(model.current == nil).accessibilityIdentifier("playback.toggle")
+                Picker("Recording split", selection: $recording.mode) {
+                    ForEach(RecordingSplitMode.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.menu)
+                .accessibilityIdentifier("recording.split-mode")
+                if recording.mode == .time {
+                    Stepper("Every \(recording.intervalMinutes) minutes", value: $recording.intervalMinutes, in: 1...1440)
+                }
+                Button { recording.toggle(model.current) } label: {
+                    Label(recording.isRecording ? "Stop recording" : "Record",
+                          systemImage: recording.isRecording ? "stop.circle.fill" : "record.circle")
+                }
+                .disabled(model.current == nil)
+                .accessibilityIdentifier("recording.toggle")
+                if !recording.status.isEmpty { Text(recording.status).font(.caption) }
             }.padding()
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.audio, .movie, .playlist, .data], allowsMultipleSelection: true) { result in
@@ -44,6 +60,9 @@ struct ContentView: View {
         .alert("MPCASU", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
             Button("OK") { model.errorMessage = nil }
         } message: { Text(model.errorMessage ?? "") }
+        .onChange(of: model.queue.currentOccurrenceID) {
+            if let item = model.current { recording.sourceChanged(item) }
+        }
     }
 
     private var libraryView: some View {

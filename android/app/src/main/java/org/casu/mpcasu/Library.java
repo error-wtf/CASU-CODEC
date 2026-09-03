@@ -38,9 +38,15 @@ public final class Library {
         public final String genre;
         public final long durationMs;
         public final boolean video;
+        public final int trackNumber;
 
         Track(long id, String uri, String title, String artist, String album,
               String genre, long durationMs, boolean video) {
+            this(id, uri, title, artist, album, genre, durationMs, video, 0);
+        }
+
+        Track(long id, String uri, String title, String artist, String album,
+              String genre, long durationMs, boolean video, int trackNumber) {
             this.id = id;
             this.uri = uri;
             this.title = title;
@@ -49,6 +55,7 @@ public final class Library {
             this.genre = genre;
             this.durationMs = durationMs;
             this.video = video;
+            this.trackNumber = trackNumber;
         }
 
         public MediaItem toItem() {
@@ -84,7 +91,7 @@ public final class Library {
         for (Track track : tracks) {
             if (track.video) continue;
             String value = groupValue(track, field);
-            if (value == null || value.trim().isEmpty()) value = "Unknown";
+            if (value == null || value.trim().isEmpty()) value = unknownFor(field);
             if (needle.isEmpty() || value.toLowerCase(Locale.ROOT).contains(needle)) {
                 values.add(value);
             }
@@ -98,10 +105,14 @@ public final class Library {
         List<Track> out = new ArrayList<>();
         for (Track track : tracks) {
             String candidate = groupValue(track, field);
-            if (candidate == null || candidate.trim().isEmpty()) candidate = "Unknown";
+            if (candidate == null || candidate.trim().isEmpty()) candidate = unknownFor(field);
             if (!track.video && candidate.equalsIgnoreCase(value)) out.add(track);
         }
-        out.sort(Comparator.comparing(t -> t.title, String.CASE_INSENSITIVE_ORDER));
+        out.sort(Comparator.comparingInt((Track t) -> "albums".equals(field)
+                        ? t.trackNumber : 0)
+                .thenComparing(t -> t.album == null ? "" : t.album,
+                        String.CASE_INSENSITIVE_ORDER)
+                .thenComparing(t -> t.title, String.CASE_INSENSITIVE_ORDER));
         return out;
     }
 
@@ -110,6 +121,13 @@ public final class Library {
         if ("albums".equals(field)) return track.album;
         if ("genres".equals(field)) return track.genre;
         throw new IllegalArgumentException("Unsupported library group: " + field);
+    }
+
+    private static String unknownFor(String field) {
+        if ("artists".equals(field)) return "Unknown Artist";
+        if ("albums".equals(field)) return "Unknown Album";
+        if ("genres".equals(field)) return "Unknown Genre";
+        return "Unknown";
     }
 
     public void rescan() {
@@ -133,10 +151,11 @@ public final class Library {
                     : inlineGenre ? new String[]{MediaStore.Audio.Media._ID,
                        MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST,
                        MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.GENRE,
-                       MediaStore.Audio.Media.DURATION}
+                       MediaStore.Audio.Media.TRACK, MediaStore.Audio.Media.DURATION}
                     : new String[]{MediaStore.Audio.Media._ID,
                        MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST,
-                       MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.DURATION};
+                       MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.TRACK,
+                       MediaStore.Audio.Media.DURATION};
             Map<Long, String> legacyGenres = !video && !inlineGenre
                     ? queryLegacyGenres() : Collections.emptyMap();
             String selection = null;
@@ -162,12 +181,13 @@ public final class Library {
                     String album = !video ? cursor.getString(3) : null;
                     String genre = !video ? (inlineGenre ? cursor.getString(4)
                             : legacyGenres.get(id)) : null;
-                    long duration = cursor.getLong(video ? 2 : (inlineGenre ? 5 : 4));
+                    int trackNumber = !video ? cursor.getInt(inlineGenre ? 5 : 4) : 0;
+                    long duration = cursor.getLong(video ? 2 : (inlineGenre ? 6 : 5));
                     if (duration <= 0 && video) duration = cursor.getLong(2);
                     String uri = ContentUris.withAppendedId(collection, id).toString();
                     out.add(new Track(id, uri, title == null || title.isEmpty()
                             ? MediaItem.fallbackTitle(uri) : title,
-                            artist, album, genre, duration, video));
+                            artist, album, genre, duration, video, trackNumber));
                 }
             }
         } catch (Exception ignored) {

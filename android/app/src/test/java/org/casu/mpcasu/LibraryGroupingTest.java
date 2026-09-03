@@ -25,7 +25,7 @@ public class LibraryGroupingTest {
 
     @Test public void blankMetadataUsesUnknownGroup() {
         List<Library.Track> tracks = Arrays.asList(track(1, "Untitled", null, "", null));
-        assertEquals(Arrays.asList("Unknown"), Library.groups(tracks, "albums", ""));
-        assertEquals(1, Library.tracksInGroup(tracks, "genres", "Unknown").size());
+        assertEquals(Arrays.asList("Unknown Album"), Library.groups(tracks, "albums", ""));
+        assertEquals(1, Library.tracksInGroup(tracks, "genres", "Unknown Genre").size());
     }
 }

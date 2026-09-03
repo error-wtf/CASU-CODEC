@@ -25,13 +25,24 @@ final class QueueModelsTests: XCTestCase {
 
     func testLibraryGroupsAreRealSortedSelections() {
         let tracks = [
-            LibraryTrack(id: 1, title: "Zulu", artist: "Beta", album: "Second", genre: "Rock", assetURL: nil),
-            LibraryTrack(id: 2, title: "Alpha", artist: "alpha", album: "First", genre: "Jazz", assetURL: nil),
-            LibraryTrack(id: 3, title: "Bravo", artist: "Beta", album: "Second", genre: "Rock", assetURL: nil),
+            LibraryTrack(id: 1, title: "Zulu", artist: "Beta", album: "Second", genre: "Rock", trackNumber: 2, assetURL: nil),
+            LibraryTrack(id: 2, title: "Alpha", artist: "alpha", album: "First", genre: "Jazz", trackNumber: 1, assetURL: nil),
+            LibraryTrack(id: 3, title: "Bravo", artist: "Beta", album: "Second", genre: "Rock", trackNumber: 1, assetURL: nil),
         ]
         XCTAssertEqual(MediaLibraryModel.groups(in: tracks, by: .artists), ["alpha", "Beta"])
         XCTAssertEqual(MediaLibraryModel.tracks(in: tracks, section: .artists, group: "Beta").map(\.title),
                        ["Bravo", "Zulu"])
         XCTAssertEqual(MediaLibraryModel.groups(in: tracks, by: .genres), ["Jazz", "Rock"])
+    }
+
+    func testRecordingSplitPolicyCreatesRealTimeSegments() {
+        let ranges = RecordingController.segmentRanges(duration: 125, mode: .time,
+                                                        intervalMinutes: 1)
+        XCTAssertEqual(ranges.count, 3)
+        XCTAssertEqual(ranges[0].0, 0)
+        XCTAssertEqual(ranges[0].1, 60)
+        XCTAssertEqual(ranges[2].1, 5)
+        XCTAssertEqual(RecordingController.segmentRanges(
+            duration: 125, mode: .continuous, intervalMinutes: 1).count, 1)
     }
 }

@@ -7,6 +7,7 @@ struct LibraryTrack: Identifiable, Equatable {
     let artist: String
     let album: String
     let genre: String
+    let trackNumber: Int
     let assetURL: URL?
 }
 
@@ -35,9 +36,10 @@ final class MediaLibraryModel: ObservableObject {
                 self.tracks = (MPMediaQuery.songs().items ?? []).map {
                     LibraryTrack(id: $0.persistentID,
                                  title: $0.title ?? "Unknown title",
-                                 artist: $0.artist ?? "Unknown",
-                                 album: $0.albumTitle ?? "Unknown",
-                                 genre: $0.genre ?? "Unknown",
+                                 artist: $0.artist ?? "Unknown Artist",
+                                 album: $0.albumTitle ?? "Unknown Album",
+                                 genre: $0.genre ?? "Unknown Genre",
+                                 trackNumber: $0.albumTrackNumber,
                                  assetURL: $0.assetURL)
                 }.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
             }
@@ -69,7 +71,12 @@ final class MediaLibraryModel: ObservableObject {
     nonisolated static func tracks(in tracks: [LibraryTrack], section: LibrarySection,
                                    group: String) -> [LibraryTrack] {
         tracks.filter { value(for: $0, section: section).caseInsensitiveCompare(group) == .orderedSame }
-            .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+            .sorted {
+                if section == .albums && $0.trackNumber != $1.trackNumber {
+                    return $0.trackNumber < $1.trackNumber
+                }
+                return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+            }
     }
 
     nonisolated private static func value(for track: LibraryTrack, section: LibrarySection) -> String {

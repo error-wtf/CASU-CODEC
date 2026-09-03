@@ -16,9 +16,11 @@ import json
 import re
 import shutil
 import subprocess
+from urllib.parse import quote_plus
 from dataclasses import asdict, dataclass
 
 MAX_SEARCH_LIMIT = 25
+MAX_PLAYLIST_ENTRIES = 10_000
 DEFAULT_TIMEOUT = 30.0
 
 
@@ -123,29 +125,52 @@ def search_music(query: str, *, limit: int = 12,
 
 def search_youtube_playlists(query: str, *, limit: int = 12,
                              timeout: float = DEFAULT_TIMEOUT) -> list[SearchResult]:
-    """Search YouTube for playlists.
-
-    Uses a modified query to increase likelihood of playlist results and
-    filters for playlist-like entries (titles/URLs suggesting playlists).
-    Returns SearchResult objects with kind='youtube_playlist' that can be
-    expanded via search_youtube_playlist().
-    """
+    """Search YouTube's actual playlist result type, never title guessing."""
     query = (query or "").strip()
     if not query:
         raise SearchError("search query must not be empty")
-    playlist_query = f"playlist {query}"
-    results = _to_results(_run_ytdlp_search(playlist_query, limit, timeout),
-                          "youtube_playlist", limit)
-    filtered = []
-    for r in results:
-        url = r.url or ""
-        title = (r.title or "").lower()
-        if ("list=" in url) or ("playlist" in title):
-            filtered.append(r)
-    return filtered or results
+    executable = shutil.which("yt-dlp")
+    if not executable:
+        raise SearchError("playlist search requires yt-dlp")
+    limit = max(1, min(int(limit), MAX_SEARCH_LIMIT))
+    # YouTube's sp=EgIQAw%3D%3D filter selects the Playlist result type.
+    url = ("https://www.youtube.com/results?search_query="
+           f"{quote_plus(query)}&sp=EgIQAw%253D%253D")
+    command = [executable, "--no-warnings", "--flat-playlist", "--dump-json",
+               "--playlist-end", str(limit), "--socket-timeout", "10", url]
+    try:
+        proc = subprocess.run(command, check=False, text=True,
+                              capture_output=True,
+                              timeout=max(5.0, float(timeout)))
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise SearchError(f"playlist search failed: {exc}") from exc
+    results: list[SearchResult] = []
+    for line in proc.stdout.splitlines():
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        playlist_id = str(entry.get("id") or "").strip()
+        candidate = str(entry.get("webpage_url") or entry.get("url") or "")
+        if "list=" not in candidate and playlist_id:
+            candidate = f"https://www.youtube.com/playlist?list={playlist_id}"
+        if "list=" not in candidate:
+            continue
+        results.append(SearchResult(
+            title=str(entry.get("title") or playlist_id)[:300], url=candidate,
+            duration=None,
+            uploader=str(entry.get("uploader") or entry.get("channel") or "")[:200],
+            source="youtube_playlist",
+            thumbnail=str(entry.get("thumbnail") or "")[:500]))
+        if len(results) >= limit:
+            break
+    if not results:
+        detail = proc.stderr.strip().splitlines()
+        raise SearchError(detail[-1][:300] if detail else "no playlists found")
+    return results
 
 
-def search_youtube_playlist(url: str, *, limit: int = 100,
+def search_youtube_playlist(url: str, *, limit: int = MAX_PLAYLIST_ENTRIES,
                             timeout: float = 60.0) -> list[SearchResult]:
     """Expand a YouTube playlist URL into its individual videos.
 
@@ -158,7 +183,7 @@ def search_youtube_playlist(url: str, *, limit: int = 100,
     executable = shutil.which("yt-dlp")
     if not executable:
         raise SearchError("YouTube playlist expansion requires yt-dlp")
-    limit = max(1, min(int(limit), 200))
+    limit = max(1, min(int(limit), MAX_PLAYLIST_ENTRIES))
     command = [executable, "--flat-playlist", "--no-warnings",
                "--dump-json", "--socket-timeout", "15", url]
     try:
@@ -182,6 +207,9 @@ def search_youtube_playlist(url: str, *, limit: int = 100,
         detail = proc.stderr.strip().splitlines()
         raise SearchError(
             detail[-1][:300] if detail else "playlist returned no videos")
+    if len(entries) > limit and limit >= MAX_PLAYLIST_ENTRIES:
+        raise SearchError(
+            f"playlist exceeds safety ceiling of {MAX_PLAYLIST_ENTRIES} entries")
     return _to_results(entries, "youtube", limit)
 
 
@@ -223,7 +251,7 @@ def split_youtube_input(text: str) -> list[str]:
     return tokens
 
 
-def expand_youtube_input(text: str, *, limit: int = 100,
+def expand_youtube_input(text: str, *, limit: int = MAX_PLAYLIST_ENTRIES,
                          timeout: float = 60.0) -> list[SearchResult]:
     """Expand a free-form YouTube field into a flat list of individual videos.
 

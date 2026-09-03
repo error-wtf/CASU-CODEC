@@ -32,7 +32,7 @@ from PySide6.QtWidgets import (
     QListWidget, QListWidgetItem, QMainWindow, QMenu,
     QPushButton, QScrollArea, QSizePolicy, QSlider, QSpinBox,
     QStackedWidget, QStatusBar, QTextBrowser, QTreeWidget, QTreeWidgetItem,
-    QVBoxLayout, QWidget, QDoubleSpinBox, QGridLayout, QSplitter,
+    QVBoxLayout, QWidget, QDoubleSpinBox, QGridLayout, QSplitter, QTabBar,
 )
 
 from casu.core import CasuError, ffprobe, resolve_casu_source
@@ -1411,11 +1411,12 @@ class LibraryPage(QFrame):
         self._search_entry.textChanged.connect(lambda _text: self._refresh())
         top.addWidget(self._search_entry, 1)
 
-        self._mode_combo = QComboBox()
-        self._mode_combo.setObjectName("IconButton")
+        self._mode_combo = QTabBar()
+        self._mode_combo.setObjectName("LibraryTabs")
         for value, label in self.MODES.items():
-            self._mode_combo.addItem(label, value)
-        self._mode_combo.currentIndexChanged.connect(lambda _i: self._refresh())
+            index = self._mode_combo.addTab(label)
+            self._mode_combo.setTabData(index, value)
+        self._mode_combo.currentChanged.connect(lambda _i: self._refresh())
         top.addWidget(self._mode_combo)
 
         refresh_btn = QPushButton("Refresh")
@@ -1486,7 +1487,7 @@ class LibraryPage(QFrame):
         return str(self._search_entry.text()).strip().casefold()
 
     def _mode(self) -> str:
-        return str(self._mode_combo.currentData() or "all")
+        return str(self._mode_combo.tabData(self._mode_combo.currentIndex()) or "all")
 
     def _key(self) -> str:
         return {"artists": "artist", "albums": "album", "genres": "genre"}[self._mode()]
@@ -1580,6 +1581,12 @@ class LibraryPage(QFrame):
         key = self._key()
         values = [v for v in self._media_library.field_values(key)
                   if not query or query in v.casefold()]
+        has_unknown = any(not str((item.metadata or {}).get(key) or "").strip()
+                          for item in self._media_library.items())
+        unknown_label = {"artists": "Unknown Artist", "albums": "Unknown Album",
+                         "genres": "Unknown Genre"}.get(mode, "Unknown")
+        if has_unknown and (not query or query in unknown_label.casefold()):
+            values.append("")
         if mode == "favorites":
             favorites = {str(i.path) for i in self._media_library.items(favorites_only=True)}
             values = [v for v in values
@@ -1587,9 +1594,11 @@ class LibraryPage(QFrame):
                              str((i.metadata or {}).get(key) or "").casefold() == v.casefold()
                              for i in self._media_library.items())]
         if not values:
-            values = ["(unknown)"]
+            values = []
         for value in values:
-            self._groups_list.addItem(value if value else "(unknown)")
+            row = QListWidgetItem(value if value else unknown_label)
+            row.setData(Qt.UserRole, value)
+            self._groups_list.addItem(row)
         self._groups_list.blockSignals(False)
 
     def _on_group_selected(self, current):
@@ -1604,10 +1613,10 @@ class LibraryPage(QFrame):
         if mode == "playlists":
             self._on_playlist_group_selected(current)
             return
-        value = current.text()
+        value = str(current.data(Qt.UserRole) or "")
         key = self._key()
         query = self._query()
-        if value == "(unknown)":
+        if not value:
             items = [i for i in self._media_library.items()
                      if not str((i.metadata or {}).get(key) or "").strip()]
         else:
@@ -1957,13 +1966,27 @@ class OptionsPage(QFrame):
         rec_row.addWidget(rec_btn)
         layout.addLayout(rec_row)
         split_row = QHBoxLayout()
-        split_row.addWidget(QLabel("Split recordings every"))
+        split_row.addWidget(QLabel("Recording split"))
+        self._split_mode_combo = QComboBox()
+        self._split_mode_combo.setObjectName("IconButton")
+        for label, value in (("Single recording", "continuous"),
+                             ("By time", "time"),
+                             ("At track changes", "track"),
+                             ("At title/tag changes", "tags")):
+            self._split_mode_combo.addItem(label, value)
+        self._split_mode_combo.setCurrentIndex(max(
+            0, self._split_mode_combo.findData(settings.record_split_mode)))
+        split_row.addWidget(self._split_mode_combo)
         self._split_spin = QSpinBox()
         self._split_spin.setObjectName("IconButton")
         self._split_spin.setRange(0, 24 * 60)
         self._split_spin.setSuffix(" min")
         self._split_spin.setSpecialValueText("no splitting")
         self._split_spin.setValue(settings.record_split_minutes)
+        self._split_spin.setEnabled(settings.record_split_mode == "time")
+        self._split_mode_combo.currentIndexChanged.connect(
+            lambda _i: self._split_spin.setEnabled(
+                self._split_mode_combo.currentData() == "time"))
         split_row.addWidget(self._split_spin)
         split_row.addSpacing(12)
         split_row.addWidget(QLabel("Format"))
@@ -2013,6 +2036,7 @@ class OptionsPage(QFrame):
                           cache_limit_mib=self._cache_spin.value(),
                           recordings_dir=self._recordings_entry.text().strip(),
                           record_split_minutes=self._split_spin.value(),
+                          record_split_mode=str(self._split_mode_combo.currentData()),
                           record_format=str(self._format_combo.currentText()),
                           watched_folders=self._library_folders())
         self._settings_store.save(updated)
@@ -2073,6 +2097,8 @@ class OptionsPage(QFrame):
         self._cache_spin.setValue(settings.cache_limit_mib)
         self._recordings_entry.setText(settings.recordings_dir)
         self._split_spin.setValue(settings.record_split_minutes)
+        self._split_mode_combo.setCurrentIndex(max(
+            0, self._split_mode_combo.findData(settings.record_split_mode)))
         index = self._format_combo.findText(settings.record_format)
         self._format_combo.setCurrentIndex(max(0, index))
         index = self._viz_combo.findData(settings.visualizer)
@@ -2325,6 +2351,11 @@ class SourcesView(QFrame):
         self._entry.setFixedHeight(34)
         self._entry.returnPressed.connect(self._open_typed)
         entry_row.addWidget(self._entry, 1)
+        self._youtube_search_type = QComboBox()
+        self._youtube_search_type.setObjectName("IconButton")
+        self._youtube_search_type.addItem("Videos", "videos")
+        self._youtube_search_type.addItem("Playlists", "playlists")
+        entry_row.addWidget(self._youtube_search_type)
         self._go_btn = QPushButton("Play / search")
         self._go_btn.setObjectName("NavItem")
         self._go_btn.setStyleSheet(
@@ -2334,6 +2365,7 @@ class SourcesView(QFrame):
         layout.addLayout(entry_row)
 
         self._list = QListWidget()
+        self._list.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self._list.itemDoubleClicked.connect(
             lambda item: self._play_row(self._list.row(item)))
         layout.addWidget(self._list, 1)
@@ -2354,6 +2386,7 @@ class SourcesView(QFrame):
         self._results = []
         self._searching = False
         self._go_btn.setText("Play / search" if spec["search"] else "Play")
+        self._youtube_search_type.setVisible(mode == "youtube")
         # The yt-dlp consent gate only applies to YouTube search.
         self._consent_frame.setVisible(
             mode == "youtube" and not self._consent_given())
@@ -2466,9 +2499,9 @@ class SourcesView(QFrame):
             try:
                 found = search_youtube_playlist(url)
             except SearchError as exc:
-                self._bridge.errorReady.emit(str(exc))
+                self._queue_bridge.errorReady.emit(str(exc))
             else:
-                self._bridge.resultReady.emit(found)
+                self._queue_bridge.resultReady.emit(found)
         threading.Thread(target=worker, daemon=True).start()
 
     def _fetch_spotify_handoff(self, url: str):
@@ -2485,10 +2518,12 @@ class SourcesView(QFrame):
         else:
             self._status.setText("Searching YouTube via yt-dlp…")
         mode = self._mode
+        youtube_search_type = str(self._youtube_search_type.currentData() or "videos")
 
         def worker():
             try:
-                from casu.search import SearchResult, search_youtube
+                from casu.search import (SearchResult, search_youtube,
+                                         search_youtube_playlists)
                 if mode == "spotify":
                     found = [SearchResult(title=r.title, url=r.url,
                                           duration=r.duration,
@@ -2496,7 +2531,9 @@ class SourcesView(QFrame):
                                           source="spotify")
                              for r in search_spotify(query, limit=12)]
                 else:
-                    found = search_youtube(query, limit=12)
+                    found = (search_youtube_playlists(query, limit=25)
+                             if youtube_search_type == "playlists"
+                             else search_youtube(query, limit=25))
             except Exception as exc:  # noqa: BLE001 - surface any engine failure
                 self._bridge.errorReady.emit(str(exc))
             else:
@@ -2512,13 +2549,14 @@ class SourcesView(QFrame):
         for row, item in enumerate(self._results):
             duration = (f"{int(item.duration // 60)}:{int(item.duration % 60):02d}"
                         if item.duration else "live")
-            tag = "YT" if item.source != "handoff" else "FIND"
+            tag = ("PLAYLIST" if item.source == "youtube_playlist" else
+                   ("YT" if item.source != "handoff" else "FIND"))
             uploader = item.uploader or "unknown"
             title = item.title
             if len(title) > 70:
                 title = title[:67] + "…"
             entry = QListWidgetItem(
-                f"  {title}\n  {uploader}  ·  {duration}  ▶")
+                f"  {title}\n  {tag} · {uploader}  ·  {duration}  ▶")
             entry.setSizeHint(QSize(0, 76))
             self._list.addItem(entry)
             self._thumb_jobs.append((row, item))
@@ -2565,6 +2603,9 @@ class SourcesView(QFrame):
     def _play_row(self, row: int):
         if 0 <= row < len(self._results):
             item = self._results[row]
+            if item.source == "youtube_playlist":
+                self._expand_youtube_playlist(item.url)
+                return
             if item.source == "handoff":
                 if not self._consent_given():
                     self._status.setText("Accept the yt-dlp legal notice above to enable the YouTube handoff")
@@ -3432,6 +3473,7 @@ class MainWindow(QMainWindow):
         if not Path(text).is_file():
             self.status("Add a media file first.")
             return
+        self._recording_source_boundary(str(path))
         self.stop()
         self._show_player_page()
         self._stop_stream_viz()
@@ -4310,6 +4352,7 @@ class MainWindow(QMainWindow):
         self._viz_mode = str(settings.visualizer)
         self._record_format = str(settings.record_format)
         self._record_split_minutes = int(settings.record_split_minutes)
+        self._record_split_mode = str(settings.record_split_mode)
         self._volume_slider.setValue(self._volume)
         self._apply_backend_settings()
         self._apply_playback_rate()
@@ -4623,18 +4666,23 @@ class MainWindow(QMainWindow):
         format_row.addStretch()
         layout.addLayout(format_row)
 
-        split_cb = QCheckBox("Aufzeichnung automatisch teilen")
-        split_cb.setChecked(int(settings.record_split_minutes) > 0)
-        layout.addWidget(split_cb)
         split_row = QHBoxLayout()
-        split_row.addWidget(QLabel("Alle"))
+        split_row.addWidget(QLabel("Aufteilen"))
+        split_mode = QComboBox()
+        for label, value in (("Eine Datei", "continuous"), ("Nach Zeit", "time"),
+                             ("Bei Trackwechsel", "track"),
+                             ("Bei Titel-/Tagwechsel", "tags")):
+            split_mode.addItem(label, value)
+        split_mode.setCurrentIndex(max(0, split_mode.findData(settings.record_split_mode)))
+        split_row.addWidget(split_mode)
         split_spin = QSpinBox()
         split_spin.setObjectName("IconButton")
         split_spin.setRange(1, 24 * 60)
         split_spin.setSuffix(" min")
         split_spin.setValue(max(1, int(settings.record_split_minutes)))
-        split_spin.setEnabled(split_cb.isChecked())
-        split_cb.toggled.connect(split_spin.setEnabled)
+        split_spin.setEnabled(settings.record_split_mode == "time")
+        split_mode.currentIndexChanged.connect(
+            lambda _i: split_spin.setEnabled(split_mode.currentData() == "time"))
         split_row.addWidget(split_spin)
         split_row.addStretch()
         layout.addLayout(split_row)
@@ -4650,10 +4698,12 @@ class MainWindow(QMainWindow):
             settings,
             recordings_dir=folder_entry.text().strip(),
             record_format=str(format_combo.currentText()),
-            record_split_minutes=split_spin.value() if split_cb.isChecked() else 0,
+            record_split_minutes=split_spin.value(),
+            record_split_mode=str(split_mode.currentData()),
         )
         self.settings_store.save(updated)
         self._record_split_minutes = updated.record_split_minutes
+        self._record_split_mode = updated.record_split_mode
         self._record_format = updated.record_format
         self.toast("Recording settings gespeichert")
         self.status("Recording: Speicherort/Format/Splitting gespeichert")
@@ -4680,6 +4730,7 @@ class MainWindow(QMainWindow):
         settings = self.settings_store.load()
         self._record_format = str(settings.record_format)
         self._record_split_minutes = int(settings.record_split_minutes)
+        self._record_split_mode = str(settings.record_split_mode)
         self._record_part = 1
         self._record_stem = time.strftime("%Y%m%d-%H%M%S") + "-" + (
             self.current.stem if self.current else "stream")
@@ -4688,7 +4739,7 @@ class MainWindow(QMainWindow):
         self._record_timer = QTimer(self)
         self._record_timer.setSingleShot(True)
         self._record_timer.timeout.connect(self._rotate_recording)
-        if self._record_split_minutes > 0:
+        if self._record_split_mode == "time" and self._record_split_minutes > 0:
             self._record_timer.start(self._record_split_minutes * 60 * 1000)
         self._record_btn.setProperty("on", "true")
         self._record_btn.style().unpolish(self._record_btn)
@@ -4696,7 +4747,7 @@ class MainWindow(QMainWindow):
 
     def _record_destination(self) -> Path:
         suffix = f".{self._record_format}"
-        if self._record_split_minutes > 0:
+        if self._record_split_mode != "continuous":
             return self._recordings_root() / (
                 f"{self._record_stem}-part{self._record_part:03d}{suffix}")
         return self._recordings_root() / f"{self._record_stem}{suffix}"
@@ -4711,24 +4762,36 @@ class MainWindow(QMainWindow):
             return False
         self._recorder = recorder
         self.toast(f"Recording · {destination.name}"
-                   + (f" · split every {self._record_split_minutes} min"
-                      if self._record_split_minutes > 0 else ""))
+                   + (f" · split {self._record_split_mode}"
+                      if self._record_split_mode != "continuous" else ""))
         return True
 
     def _rotate_recording(self) -> None:
         if self._recorder is None:
             return
-        self._finish_recording_async(quiet=True)
-        self._record_part += 1
         try:
             source = self._recording_source()
         except (RecordingError, OSError) as exc:
             self.toast(str(exc))
             return
-        if self._start_recording_part(source) and self._record_split_minutes > 0:
-            self._record_timer.start(self._record_split_minutes * 60 * 1000)
+        self._finish_recording_async(quiet=True, restart_source=source)
 
-    def _finish_recording_async(self) -> None:
+    def _recording_source_boundary(self, source: str) -> None:
+        if (self._recorder is not None
+                and self._record_split_mode in {"track", "tags"}):
+            self._finish_recording_async(quiet=True, restart_source=source)
+
+    def _recording_tag_boundary(self) -> None:
+        if self._recorder is None or self._record_split_mode != "tags":
+            return
+        try:
+            source = self._recording_source()
+        except (RecordingError, OSError):
+            return
+        self._finish_recording_async(quiet=True, restart_source=source)
+
+    def _finish_recording_async(self, quiet: bool = False,
+                                restart_source: str | None = None) -> None:
         recorder = self._recorder
         if recorder is None or self._recording_finishing:
             return
@@ -4750,9 +4813,17 @@ class MainWindow(QMainWindow):
                 self._record_btn.style().unpolish(self._record_btn)
                 self._record_btn.style().polish(self._record_btn)
                 if error is None:
-                    self.toast(f"Recording saved · {Path(result).name}")
+                    if not quiet:
+                        self.toast(f"Recording saved · {Path(result).name}")
                 else:
                     self.toast(f"Recording failed: {error}")
+                if restart_source is not None and error is None:
+                    self._record_part += 1
+                    if self._start_recording_part(restart_source):
+                        if (self._record_split_mode == "time"
+                                and self._record_split_minutes > 0):
+                            self._record_timer.start(
+                                self._record_split_minutes * 60 * 1000)
             QTimer.singleShot(0, present)
         threading.Thread(target=worker, daemon=True).start()
 
@@ -5086,6 +5157,7 @@ class MainWindow(QMainWindow):
                 or url == getattr(self, "_yt_source_url", "")):
             self._now_playing_bar.set_now_playing(title)
             self._set_caption(title)
+            self._recording_tag_boundary()
 
     def _resolve_spotify_playback(self, url: str, *, title: str = "",
                                   artist: str = "", display_label: str = ""):
@@ -5193,6 +5265,7 @@ class MainWindow(QMainWindow):
         if index is not None:
             self._playlist_pane.select_row(index)
         self._show_player_page()
+        self._recording_source_boundary(str(source))
         if preserve_proxy:
             # The loopback transport for THIS source is already running and
             # must survive the teardown of the previous session.

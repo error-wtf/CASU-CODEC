@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 
 from casu import search as search_module
-from casu.search import (MAX_SEARCH_LIMIT, SearchError, search_music,
-                         search_youtube)
+from casu.search import (MAX_PLAYLIST_ENTRIES, MAX_SEARCH_LIMIT, SearchError, search_music,
+                         search_youtube, search_youtube_playlists)
 
 
 def _fake_ytdlp(tmp_path: Path, stdout: str, returncode: int = 0,
@@ -91,6 +91,27 @@ def test_youtube_playlist_expands_to_videos(tmp_path, monkeypatch):
     assert all(item.source == "youtube" for item in results)
 
 
+def test_youtube_playlist_is_not_truncated_at_legacy_200_limit(tmp_path, monkeypatch):
+    entries = "\n".join(json.dumps({"id": f"vid{i}", "title": f"Video {i}"})
+                          for i in range(250)) + "\n"
+    _fake_ytdlp(tmp_path, entries)
+    monkeypatch.setenv("PATH", f"{tmp_path}:{__import__('os').environ['PATH']}")
+    from casu.search import search_youtube_playlist
+    assert len(search_youtube_playlist(
+        "https://www.youtube.com/playlist?list=PLmany")) == 250
+
+
+def test_playlist_search_returns_real_playlist_urls(tmp_path, monkeypatch):
+    payload = json.dumps({"id": "PLreal123", "title": "Actual collection",
+                          "uploader": "Channel"}) + "\n"
+    _fake_ytdlp(tmp_path, payload)
+    monkeypatch.setenv("PATH", f"{tmp_path}:{__import__('os').environ['PATH']}")
+    results = search_youtube_playlists("ambient", limit=5)
+    assert results[0].source == "youtube_playlist"
+    assert results[0].url == "https://www.youtube.com/playlist?list=PLreal123"
+    assert "playlist " not in results[0].title.lower()
+
+
 def test_search_empty_query_rejected():
     with pytest.raises(SearchError, match="empty"):
         search_youtube("   ")
@@ -113,3 +134,4 @@ def test_search_missing_ytdlp_raises(monkeypatch):
 
 def test_search_limit_is_bounded():
     assert MAX_SEARCH_LIMIT == 25
+    assert MAX_PLAYLIST_ENTRIES >= 10_000

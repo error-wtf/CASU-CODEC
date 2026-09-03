@@ -37,6 +37,8 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.SeekBar;
+import android.widget.Spinner;
+import android.widget.ArrayAdapter;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -144,6 +146,12 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     private String recordFormat = "mp4";
     private String recordFolderUri;   // SAF tree uri (or null → app dir)
     private String recordFolderName = "MPCASU (Standard)";
+    private String recordSplitMode = "continuous";
+    private int recordSplitMinutes = 10;
+    private MediaItem pendingRecordItem;
+    private String recordingItemUri;
+    private String recordingTagSignature;
+    private int recordingPart;
     private TextView recFolderLabel;  // folder label inside the open dialog
 
     // queue multi-select
@@ -167,6 +175,8 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         public String subtitlePath = null;
         public String recordFormat = "mp4";
         public String recordFolder = null;
+        public String recordSplitMode = "continuous";
+        public int recordSplitMinutes = 10;
 
         public static Settings load(android.content.Context context) {
             Settings out = new Settings();
@@ -189,6 +199,11 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                 }
                 out.recordFolder = o.optString("recordFolder", null);
                 if (out.recordFolder != null && out.recordFolder.isEmpty()) out.recordFolder = null;
+                out.recordSplitMode = o.optString("recordSplitMode", "continuous");
+                if (!java.util.Arrays.asList("continuous", "time", "track", "tags")
+                        .contains(out.recordSplitMode)) out.recordSplitMode = "continuous";
+                out.recordSplitMinutes = Math.max(1, Math.min(1440,
+                        o.optInt("recordSplitMinutes", 10)));
             } catch (Exception ignored) {
             }
             return out;
@@ -205,6 +220,8 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                 o.put("subtitlePath", subtitlePath == null ? "" : subtitlePath);
                 o.put("recordFormat", recordFormat);
                 o.put("recordFolder", recordFolder == null ? "" : recordFolder);
+                o.put("recordSplitMode", recordSplitMode);
+                o.put("recordSplitMinutes", recordSplitMinutes);
                 try (java.io.FileOutputStream out = new java.io.FileOutputStream(
                         new java.io.File(context.getFilesDir(), "settings.json"))) {
                     out.write(o.toString().getBytes());
@@ -221,6 +238,8 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         settings = Settings.load(this);
         recordFormat = settings.recordFormat;
         recordFolderUri = settings.recordFolder;
+        recordSplitMode = settings.recordSplitMode;
+        recordSplitMinutes = settings.recordSplitMinutes;
         // restore the persisted SAF permission (may be gone after reboot)
         if (recordFolderUri != null) {
             try {
@@ -1856,6 +1875,17 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
 
     @Override public void onItemChanged(MediaItem item, int index) {
         ui.post(() -> {
+            String nextUri = item == null ? "" : item.url;
+            String nextTags = item == null ? "" : (String.valueOf(item.title) + "\n"
+                    + String.valueOf(item.artist) + "\n" + String.valueOf(item.badge));
+            boolean trackBoundary = "track".equals(recordSplitMode)
+                    && !nextUri.equals(recordingItemUri);
+            boolean tagBoundary = "tags".equals(recordSplitMode)
+                    && !nextTags.equals(recordingTagSignature);
+            if (recording && recorder != null && (trackBoundary || tagBoundary)) {
+                pendingRecordItem = item;
+                recorder.stop();
+            }
             titleView.setText(item != null && item.title != null ? item.title : "MPCASU");
             artistView.setText(item != null && item.badge != null ? item.badge : "");
             updateStageFor(item);
@@ -2113,6 +2143,30 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         }
         dialog.addView(formatGroup);
 
+        TextView splitLabel = new TextView(this);
+        splitLabel.setText("Aufnahme aufteilen:");
+        splitLabel.setTextColor(TEXT);
+        splitLabel.setTypeface(null, Typeface.BOLD);
+        splitLabel.setPadding(0, dp(12), 0, 0);
+        dialog.addView(splitLabel);
+        Spinner splitSpinner = new Spinner(this);
+        String[] splitLabels = {"Eine Datei", "Nach Zeit", "Bei Trackwechsel",
+                "Bei Titel-/Tagwechsel"};
+        String[] splitValues = {"continuous", "time", "track", "tags"};
+        ArrayAdapter<String> splitAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item, splitLabels);
+        splitSpinner.setAdapter(splitAdapter);
+        int splitIndex = java.util.Arrays.asList(splitValues).indexOf(recordSplitMode);
+        splitSpinner.setSelection(Math.max(0, splitIndex));
+        dialog.addView(splitSpinner);
+
+        EditText minutesInput = new EditText(this);
+        minutesInput.setHint("Minuten (nur bei Nach Zeit)");
+        minutesInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        minutesInput.setText(String.valueOf(recordSplitMinutes));
+        minutesInput.setTextColor(TEXT);
+        dialog.addView(minutesInput);
+
         // ---- folder picker row (SAF) ----
         TextView folderLabel = new TextView(this);
         folderLabel.setText("Zielordner:");
@@ -2171,7 +2225,14 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                 .setPositiveButton("● Aufnahme", (d, w) -> {
                     recordFormat = formats[selectedFormat[0]];
                     settings.recordFormat = recordFormat;
+                    recordSplitMode = splitValues[splitSpinner.getSelectedItemPosition()];
+                    try { recordSplitMinutes = Math.max(1,
+                            Integer.parseInt(minutesInput.getText().toString())); }
+                    catch (NumberFormatException ignored) { recordSplitMinutes = 10; }
+                    settings.recordSplitMode = recordSplitMode;
+                    settings.recordSplitMinutes = recordSplitMinutes;
                     settings.save(MainActivity.this);
+                    recordingPart = 0;
                     startRecording(item);
                 })
                 .setNegativeButton("Abbrechen", null)
@@ -2185,9 +2246,13 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                 "MPCASU");
         if (!dir.exists()) dir.mkdirs();
         String ext = StreamRecorder.extensionFor(recordFormat, item.url);
-        File target = new File(dir, "rec-"
-                + new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
-                .format(new Date()) + "." + ext);
+        String stamp = new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date());
+        String part = "continuous".equals(recordSplitMode) ? ""
+                : String.format(Locale.US, "-part%03d", ++recordingPart);
+        File target = new File(dir, "rec-" + stamp + part + "." + ext);
+        recordingItemUri = item.url;
+        recordingTagSignature = String.valueOf(item.title) + "\n"
+                + String.valueOf(item.artist) + "\n" + String.valueOf(item.badge);
 
         final String format = recordFormat;
         recorder = new StreamRecorder(this,
@@ -2222,6 +2287,9 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                                 toast("Aufnahme gespeichert · " + name + " · "
                                         + (bytes / 1024) + " KB");
                             }
+                            MediaItem restart = pendingRecordItem;
+                            pendingRecordItem = null;
+                            if (restart != null && error == null) startRecording(restart);
                         });
                     }
                 });
@@ -2231,6 +2299,14 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         toast("Aufnahme läuft · Format " + recordFormat.toUpperCase(Locale.ROOT)
                 + " · Ziel: " + recordFolderName);
         recorder.start();
+        if ("time".equals(recordSplitMode)) {
+            ui.postDelayed(() -> {
+                if (recording && recorder != null && "time".equals(recordSplitMode)) {
+                    pendingRecordItem = engine != null ? engine.current() : item;
+                    recorder.stop();
+                }
+            }, recordSplitMinutes * 60_000L);
+        }
     }
 
     private void showMediaInfo() {
