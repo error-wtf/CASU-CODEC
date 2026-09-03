@@ -24,6 +24,7 @@ targets:
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         UIBackgroundModes: [audio]
+        NSAppleMusicUsageDescription: MPCASU uses your media library to browse songs by artist, album, and genre.
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
@@ -61,4 +62,3 @@ schemes:
         MPCASUTests: [test]
     test:
       targets: [MPCASUTests]
-

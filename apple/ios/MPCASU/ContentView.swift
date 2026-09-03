@@ -5,8 +5,18 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @EnvironmentObject private var model: PlayerModel
     @State private var importing = false
+    @StateObject private var library = MediaLibraryModel()
 
     var body: some View {
+        TabView {
+            playerView
+                .tabItem { Label("Player", systemImage: "play.circle") }
+            libraryView
+                .tabItem { Label("Library", systemImage: "music.note.list") }
+        }
+    }
+
+    private var playerView: some View {
         NavigationSplitView {
             List(selection: Binding(get: { model.queue.currentOccurrenceID }, set: { id in
                 if let item = model.queue.occurrences.first(where: { $0.id == id }) { model.select(item) }
@@ -35,5 +45,66 @@ struct ContentView: View {
             Button("OK") { model.errorMessage = nil }
         } message: { Text(model.errorMessage ?? "") }
     }
-}
 
+    private var libraryView: some View {
+        NavigationStack {
+            VStack(spacing: 8) {
+                Picker("Library section", selection: $library.section) {
+                    ForEach(LibrarySection.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("library.sections")
+                TextField("Search library", text: $library.search)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("library.search")
+                if library.authorizationDenied {
+                    ContentUnavailableView("Media Library Access Required",
+                                           systemImage: "music.note",
+                                           description: Text("Allow media-library access in Settings."))
+                } else if library.section != .songs && library.selectedGroup == nil {
+                    List(library.groups, id: \.self) { group in
+                        Button {
+                            library.selectedGroup = group
+                        } label: {
+                            HStack {
+                                Text(group)
+                                Spacer()
+                                Text("\(MediaLibraryModel.tracks(in: library.tracks, section: library.section, group: group).count)")
+                                    .foregroundStyle(.secondary)
+                                Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                            }
+                        }
+                        .accessibilityIdentifier("library.group.\(group)")
+                    }
+                } else {
+                    List(library.visibleTracks) { track in
+                        Button {
+                            guard let url = track.assetURL else {
+                                model.errorMessage = "This protected media item cannot be played."
+                                return
+                            }
+                            model.importURLs([url])
+                            if let item = model.queue.occurrences.last { model.select(item) }
+                        } label: {
+                            VStack(alignment: .leading) {
+                                Text(track.title)
+                                Text([track.artist, track.album, track.genre].joined(separator: " · "))
+                                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                            }
+                        }
+                        .accessibilityIdentifier("library.track.\(track.id)")
+                    }
+                }
+            }
+            .padding(.horizontal)
+            .navigationTitle(library.selectedGroup ?? "Library")
+            .toolbar {
+                if library.selectedGroup != nil {
+                    Button("All \(library.section.rawValue)") { library.selectedGroup = nil }
+                }
+                Button { library.refresh() } label: { Image(systemName: "arrow.clockwise") }
+            }
+            .task { library.refresh() }
+        }
+    }
+}

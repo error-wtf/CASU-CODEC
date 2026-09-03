@@ -117,6 +117,8 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     private LibraryAdapter libraryAdapter;
     private EditText librarySearch;
     private String libraryMode = "all";
+    private String libraryGroupSelection;
+    private List<String> libraryGroups = new ArrayList<>();
     private List<Library.Track> libraryTracks = new ArrayList<>();
 
     // web
@@ -1063,6 +1065,7 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             String mode = modes[i];
             chip.setOnClickListener(v -> {
                 libraryMode = mode;
+                libraryGroupSelection = null;
                 refreshLibrary();
             });
             chips.addView(chip);
@@ -1164,6 +1167,12 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             }
             if (position < libraryTracks.size()) {
                 Library.Track track = libraryTracks.get(position);
+                if (isLibraryGroupingMode() && libraryGroupSelection == null
+                        && position < libraryGroups.size()) {
+                    libraryGroupSelection = libraryGroups.get(position);
+                    refreshLibrary();
+                    return;
+                }
                 if ("playlists".equals(libraryMode) && playlistFiles.containsKey(track.title.replaceFirst("^≡ ", ""))) {
                     openPlaylistFile(playlistFiles.get(track.title.replaceFirst("^≡ ", "")));
                     return;
@@ -1199,6 +1208,27 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                 return;
             }
             String query = librarySearch != null ? librarySearch.getText().toString().trim() : "";
+            if (isLibraryGroupingMode()) {
+                List<Library.Track> allAudio = library.query("", true, false);
+                if (libraryGroupSelection == null) {
+                    libraryGroups = Library.groups(allAudio, libraryMode, query);
+                    List<Library.Track> groupRows = new ArrayList<>();
+                    long id = -1;
+                    for (String group : libraryGroups) {
+                        int count = Library.tracksInGroup(allAudio, libraryMode, group).size();
+                        groupRows.add(new Library.Track(id--, "library-group://" + libraryMode,
+                                group, count + (count == 1 ? " track" : " tracks"),
+                                libraryMode.substring(0, libraryMode.length() - 1), "", 0, false));
+                    }
+                    libraryTracks = groupRows;
+                } else {
+                    libraryGroups.clear();
+                    libraryTracks = Library.tracksInGroup(allAudio, libraryMode, libraryGroupSelection);
+                }
+                if (libraryAdapter != null) libraryAdapter.notifyDataSetChanged();
+                return;
+            }
+            libraryGroups.clear();
             boolean includeAudio = !"video-only".equals(libraryMode);
             boolean includeVideo = !"artists".equals(libraryMode) && !"albums".equals(libraryMode);
             List<Library.Track> tracks = library.query(query, includeAudio, includeVideo);
@@ -1208,6 +1238,11 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             libraryTracks = tracks;
             if (libraryAdapter != null) libraryAdapter.notifyDataSetChanged();
         });
+    }
+
+    private boolean isLibraryGroupingMode() {
+        return "artists".equals(libraryMode) || "albums".equals(libraryMode)
+                || "genres".equals(libraryMode);
     }
 
     private final java.util.Map<String, String> playlistFiles = new java.util.LinkedHashMap<>();

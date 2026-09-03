@@ -22,5 +22,16 @@ final class QueueModelsTests: XCTestCase {
         let invalid = QueueSnapshot(occurrences: [item], currentOccurrenceID: UUID())
         XCTAssertThrowsError(try QueuePersistence.encode(invalid))
     }
-}
 
+    func testLibraryGroupsAreRealSortedSelections() {
+        let tracks = [
+            LibraryTrack(id: 1, title: "Zulu", artist: "Beta", album: "Second", genre: "Rock", assetURL: nil),
+            LibraryTrack(id: 2, title: "Alpha", artist: "alpha", album: "First", genre: "Jazz", assetURL: nil),
+            LibraryTrack(id: 3, title: "Bravo", artist: "Beta", album: "Second", genre: "Rock", assetURL: nil),
+        ]
+        XCTAssertEqual(MediaLibraryModel.groups(in: tracks, by: .artists), ["alpha", "Beta"])
+        XCTAssertEqual(MediaLibraryModel.tracks(in: tracks, section: .artists, group: "Beta").map(\.title),
+                       ["Bravo", "Zulu"])
+        XCTAssertEqual(MediaLibraryModel.groups(in: tracks, by: .genres), ["Jazz", "Rock"])
+    }
+}

@@ -14,8 +14,14 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /** Media library backed by MediaStore (audio + video) with search,
@@ -70,6 +76,42 @@ public final class Library {
         return out;
     }
 
+    /** Distinct, alphabetically sorted values used by the Artists/Albums/Genres
+     * navigation. Blank MediaStore metadata is deliberately grouped as Unknown. */
+    public static List<String> groups(List<Track> tracks, String field, String search) {
+        Set<String> values = new LinkedHashSet<>();
+        String needle = search == null ? "" : search.trim().toLowerCase(Locale.ROOT);
+        for (Track track : tracks) {
+            if (track.video) continue;
+            String value = groupValue(track, field);
+            if (value == null || value.trim().isEmpty()) value = "Unknown";
+            if (needle.isEmpty() || value.toLowerCase(Locale.ROOT).contains(needle)) {
+                values.add(value);
+            }
+        }
+        List<String> out = new ArrayList<>(values);
+        Collections.sort(out, String.CASE_INSENSITIVE_ORDER);
+        return out;
+    }
+
+    public static List<Track> tracksInGroup(List<Track> tracks, String field, String value) {
+        List<Track> out = new ArrayList<>();
+        for (Track track : tracks) {
+            String candidate = groupValue(track, field);
+            if (candidate == null || candidate.trim().isEmpty()) candidate = "Unknown";
+            if (!track.video && candidate.equalsIgnoreCase(value)) out.add(track);
+        }
+        out.sort(Comparator.comparing(t -> t.title, String.CASE_INSENSITIVE_ORDER));
+        return out;
+    }
+
+    private static String groupValue(Track track, String field) {
+        if ("artists".equals(field)) return track.artist;
+        if ("albums".equals(field)) return track.album;
+        if ("genres".equals(field)) return track.genre;
+        throw new IllegalArgumentException("Unsupported library group: " + field);
+    }
+
     public void rescan() {
         // Force MediaStore re-read on next query (for refresh button).
         // MediaStore is a ContentProvider — each query is fresh by default;
@@ -83,13 +125,20 @@ public final class Library {
             Uri collection = video
                     ? MediaStore.Video.Media.EXTERNAL_CONTENT_URI
                     : MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
+            boolean inlineGenre = !video && android.os.Build.VERSION.SDK_INT >= 30;
             String[] projection = video
                     ? new String[]{MediaStore.Video.Media._ID,
                        MediaStore.Video.Media.TITLE, MediaStore.Video.Media.DURATION,
                        MediaStore.Video.Media.BUCKET_DISPLAY_NAME}
+                    : inlineGenre ? new String[]{MediaStore.Audio.Media._ID,
+                       MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST,
+                       MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.GENRE,
+                       MediaStore.Audio.Media.DURATION}
                     : new String[]{MediaStore.Audio.Media._ID,
                        MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST,
                        MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.DURATION};
+            Map<Long, String> legacyGenres = !video && !inlineGenre
+                    ? queryLegacyGenres() : Collections.emptyMap();
             String selection = null;
             String[] args = null;
             if (search != null && !search.isEmpty()) {
@@ -111,18 +160,44 @@ public final class Library {
                     String title = cursor.getString(1);
                     String artist = !video ? cursor.getString(2) : null;
                     String album = !video ? cursor.getString(3) : null;
-                    long duration = cursor.getLong(video ? 2 : 4);
+                    String genre = !video ? (inlineGenre ? cursor.getString(4)
+                            : legacyGenres.get(id)) : null;
+                    long duration = cursor.getLong(video ? 2 : (inlineGenre ? 5 : 4));
                     if (duration <= 0 && video) duration = cursor.getLong(2);
                     String uri = ContentUris.withAppendedId(collection, id).toString();
                     out.add(new Track(id, uri, title == null || title.isEmpty()
                             ? MediaItem.fallbackTitle(uri) : title,
-                            artist, album, null, duration, video));
+                            artist, album, genre, duration, video));
                 }
             }
         } catch (Exception ignored) {
             // MediaStore unavailable (weird profiles): library stays empty.
         }
         return out;
+    }
+
+    private Map<Long, String> queryLegacyGenres() {
+        Map<Long, String> genres = new HashMap<>();
+        try (android.database.Cursor genreCursor = context.getContentResolver().query(
+                MediaStore.Audio.Genres.EXTERNAL_CONTENT_URI,
+                new String[]{MediaStore.Audio.Genres._ID, MediaStore.Audio.Genres.NAME},
+                null, null, null)) {
+            if (genreCursor == null) return genres;
+            while (genreCursor.moveToNext()) {
+                long genreId = genreCursor.getLong(0);
+                String name = genreCursor.getString(1);
+                Uri members = MediaStore.Audio.Genres.Members.getContentUri("external", genreId);
+                try (android.database.Cursor memberCursor = context.getContentResolver().query(
+                        members, new String[]{MediaStore.Audio.Genres.Members.AUDIO_ID},
+                        null, null, null)) {
+                    if (memberCursor == null) continue;
+                    while (memberCursor.moveToNext()) genres.put(memberCursor.getLong(0), name);
+                }
+            }
+        } catch (Exception ignored) {
+            // Metadata availability varies by vendor; tracks remain under Unknown.
+        }
+        return genres;
     }
 
     // ------------------------------------------------------------------ favorites
