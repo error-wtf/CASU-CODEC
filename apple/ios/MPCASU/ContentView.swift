@@ -9,6 +9,7 @@ struct ContentView: View {
     @StateObject private var recording = RecordingController()
     @StateObject private var youtube = YouTubeModel()
     @State private var networkURL = ""
+    @State private var exportedPlaylist: URL?
 
     var body: some View {
         TabView {
@@ -37,7 +38,13 @@ struct ContentView: View {
             .navigationTitle("Queue")
             .toolbar {
                 EditButton()
+                Button { exportedPlaylist = try? model.exportPlaylist() } label: { Label("Save playlist", systemImage: "square.and.arrow.up") }
                 Button { importing = true } label: { Label("Open", systemImage: "folder") }.accessibilityIdentifier("queue.open")
+            }
+            .sheet(isPresented: Binding(get: { exportedPlaylist != nil }, set: { if !$0 { exportedPlaylist = nil } })) {
+                if let url = exportedPlaylist {
+                    ShareLink(item: url) { Label("Share MPCASU queue", systemImage: "square.and.arrow.up") }.padding()
+                }
             }
         } detail: {
             VStack(spacing: 20) {
@@ -50,6 +57,8 @@ struct ContentView: View {
                     Button(action: model.togglePlayback) {
                         Label(model.isPlaying ? "Pause" : "Play", systemImage: model.isPlaying ? "pause.fill" : "play.fill")
                     }.buttonStyle(.borderedProminent).disabled(model.current == nil).accessibilityIdentifier("playback.toggle")
+                    Button(action: model.stop) { Label("Stop", systemImage: "stop.fill") }.labelStyle(.iconOnly)
+                        .disabled(model.current == nil)
                     Button(action: model.advance) { Label("Next", systemImage: "forward.fill") }.labelStyle(.iconOnly)
                 }
                 HStack {
@@ -90,6 +99,15 @@ struct ContentView: View {
     private var searchView: some View {
         NavigationStack {
             VStack {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack {
+                        providerLink("Spotify", "https://open.spotify.com/")
+                        providerLink("HearThis", "https://hearthis.at/")
+                        providerLink("Tidal", "https://tidal.com/")
+                        providerLink("Netflix", "https://www.netflix.com/")
+                        providerLink("Browse", "https://www.google.com/")
+                    }
+                }
                 Picker("Search type", selection: $youtube.kind) {
                     ForEach(YouTubeSearchKind.allCases) { Text($0.rawValue).tag($0) }
                 }.pickerStyle(.segmented).accessibilityIdentifier("youtube.search-kind")
@@ -117,6 +135,10 @@ struct ContentView: View {
             Form {
                 Section("Playback") {
                     Slider(value: $model.volume, in: 0...1) { Text("Volume") }
+                    Picker("Playback rate", selection: $model.playbackRate) {
+                        Text("0.5×").tag(Float(0.5)); Text("1×").tag(Float(1))
+                        Text("1.25×").tag(Float(1.25)); Text("1.5×").tag(Float(1.5)); Text("2×").tag(Float(2))
+                    }
                     Toggle("Shuffle", isOn: $model.shuffle)
                     Picker("Repeat", selection: $model.repeatMode) {
                         Text("Off").tag("off"); Text("All").tag("all"); Text("One").tag("one")
@@ -144,6 +166,14 @@ struct ContentView: View {
         }
     }
 
+    private func providerLink(_ name: String, _ address: String) -> some View {
+        Link(destination: URL(string: address)!) {
+            Label(name, systemImage: "safari").padding(.horizontal, 8).padding(.vertical, 6)
+        }
+        .buttonStyle(.bordered)
+        .accessibilityIdentifier("provider.\(name.lowercased())")
+    }
+
     private var libraryView: some View {
         NavigationStack {
             VStack(spacing: 8) {
@@ -159,7 +189,7 @@ struct ContentView: View {
                     ContentUnavailableView("Media Library Access Required",
                                            systemImage: "music.note",
                                            description: Text("Allow media-library access in Settings."))
-                } else if library.section != .songs && library.selectedGroup == nil {
+                } else if library.section != .songs && library.section != .favorites && library.selectedGroup == nil {
                     List(library.groups, id: \.self) { group in
                         Button {
                             library.selectedGroup = group
@@ -189,6 +219,12 @@ struct ContentView: View {
                                 Text([track.artist, track.album, track.genre].joined(separator: " · "))
                                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                             }
+                        }
+                        .swipeActions(edge: .leading) {
+                            Button { library.toggleFavorite(track) } label: {
+                                Label(library.isFavorite(track) ? "Unfavorite" : "Favorite",
+                                      systemImage: library.isFavorite(track) ? "star.slash" : "star")
+                            }.tint(.yellow)
                         }
                         .accessibilityIdentifier("library.track.\(track.id)")
                     }

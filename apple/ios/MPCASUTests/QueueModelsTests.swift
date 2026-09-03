@@ -33,6 +33,7 @@ final class QueueModelsTests: XCTestCase {
         XCTAssertEqual(MediaLibraryModel.tracks(in: tracks, section: .artists, group: "Beta").map(\.title),
                        ["Bravo", "Zulu"])
         XCTAssertEqual(MediaLibraryModel.groups(in: tracks, by: .genres), ["Jazz", "Rock"])
+        XCTAssertEqual(MediaLibraryModel.groups(in: tracks, by: .favorites), [])
     }
 
     func testRecordingSplitPolicyCreatesRealTimeSegments() {
@@ -57,5 +58,19 @@ final class QueueModelsTests: XCTestCase {
     func testPlaylistImporterMakesSafetyCeilingExplicit() {
         let text = (0...PlaylistImporter.maximumEntries).map { "https://example.test/\($0).mp3" }.joined(separator: "\n")
         XCTAssertThrowsError(try PlaylistImporter.parseM3U(text, relativeTo: URL(string: "https://example.test/list.m3u")!))
+    }
+
+    func testPLSImporterKeepsOrderTitlesAndRelativeURLs() throws {
+        let text = """
+        [playlist]
+        File2=second.mp3
+        Title2=Second
+        File1=https://example.test/first.mp3
+        Title1=First
+        NumberOfEntries=2
+        """
+        let entries = try PlaylistImporter.parsePLS(text, relativeTo: URL(string: "https://example.test/lists/list.pls")!)
+        XCTAssertEqual(entries.map(\.title), ["First", "Second"])
+        XCTAssertEqual(entries[1].url.absoluteString, "https://example.test/lists/second.mp3")
     }
 }

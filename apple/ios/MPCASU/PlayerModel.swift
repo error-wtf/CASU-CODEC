@@ -19,6 +19,13 @@ final class PlayerModel: ObservableObject {
     @Published var repeatMode = UserDefaults.standard.string(forKey: "queueRepeat") ?? "off" {
         didSet { UserDefaults.standard.set(repeatMode, forKey: "queueRepeat") }
     }
+    @Published var playbackRate: Float = UserDefaults.standard.object(forKey: "playbackRate") as? Float ?? 1 {
+        didSet {
+            player.rate = isPlaying ? playbackRate : 0
+            UserDefaults.standard.set(playbackRate, forKey: "playbackRate")
+            refreshNowPlaying()
+        }
+    }
     let player = AVPlayer()
     private let storageURL: URL
     private var timeObserver: Any?
@@ -32,11 +39,18 @@ final class PlayerModel: ObservableObject {
         NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: nil, queue: .main) {
             [weak self] _ in Task { @MainActor in self?.advance() }
         }
+        NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) {
+            [weak self] notification in Task { @MainActor in self?.handleInterruption(notification) }
+        }
+        NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) {
+            [weak self] notification in Task { @MainActor in self?.handleRouteChange(notification) }
+        }
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main) {
             [weak self] time in Task { @MainActor in
                 self?.position = max(0, time.seconds.isFinite ? time.seconds : 0)
                 let value = self?.player.currentItem?.duration.seconds ?? 0
                 self?.duration = value.isFinite ? max(0, value) : 0
+                self?.refreshNowPlaying()
             }
         }
     }
@@ -82,6 +96,18 @@ final class PlayerModel: ObservableObject {
         } catch { errorMessage = "Playlist import failed: \(error.localizedDescription)" }
     }
 
+    func exportPlaylist() throws -> URL {
+        let target = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MPCASU-Queue.m3u")
+        var lines = ["#EXTM3U"]
+        for item in queue.occurrences {
+            lines.append("#EXTINF:-1,\(item.title.replacingOccurrences(of: "\n", with: " "))")
+            lines.append(item.url.absoluteString)
+        }
+        try (lines.joined(separator: "\n") + "\n").write(to: target, atomically: true, encoding: .utf8)
+        return target
+    }
+
     func select(_ occurrence: QueueOccurrence) {
         queue.currentOccurrenceID = occurrence.id
         player.replaceCurrentItem(with: AVPlayerItem(url: occurrence.url))
@@ -92,9 +118,17 @@ final class PlayerModel: ObservableObject {
     func togglePlayback() {
         guard let current = current else { return }
         if player.currentItem == nil { select(current) }
-        if isPlaying { player.pause() } else { player.play() }
+        if isPlaying { player.pause() } else { player.playImmediately(atRate: playbackRate) }
         isPlaying.toggle()
-        MPNowPlayingInfoCenter.default().playbackState = isPlaying ? .playing : .paused
+        refreshNowPlaying()
+    }
+
+    func stop() {
+        player.pause()
+        player.seek(to: .zero)
+        isPlaying = false
+        position = 0
+        refreshNowPlaying()
     }
 
     func remove(_ occurrence: QueueOccurrence) {
@@ -116,13 +150,14 @@ final class PlayerModel: ObservableObject {
         guard let id = queue.currentOccurrenceID,
               let index = queue.occurrences.firstIndex(where: { $0.id == id }),
               !queue.occurrences.isEmpty else { isPlaying = false; return }
-        if repeatMode == "one" { player.seek(to: .zero); player.play(); return }
+        if repeatMode == "one" { player.seek(to: .zero); player.playImmediately(atRate: playbackRate); return }
         let next: Int
         if shuffle { next = Int.random(in: 0..<queue.occurrences.count) }
         else if index + 1 < queue.occurrences.count { next = index + 1 }
         else if repeatMode == "all" { next = 0 }
         else { isPlaying = false; return }
-        select(queue.occurrences[next]); player.play(); isPlaying = true
+        select(queue.occurrences[next]); player.playImmediately(atRate: playbackRate); isPlaying = true
+        refreshNowPlaying()
     }
 
     func previous() {
@@ -130,7 +165,8 @@ final class PlayerModel: ObservableObject {
               let index = queue.occurrences.firstIndex(where: { $0.id == id }),
               !queue.occurrences.isEmpty else { return }
         let previous = index > 0 ? index - 1 : (repeatMode == "all" ? queue.occurrences.count - 1 : 0)
-        select(queue.occurrences[previous]); player.play(); isPlaying = true
+        select(queue.occurrences[previous]); player.playImmediately(atRate: playbackRate); isPlaying = true
+        refreshNowPlaying()
     }
 
     func seek(to seconds: Double) {
@@ -163,8 +199,15 @@ final class PlayerModel: ObservableObject {
     private func updateNowPlaying(_ occurrence: QueueOccurrence) {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = [
             MPMediaItemPropertyTitle: occurrence.title,
-            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0,
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: position,
+            MPMediaItemPropertyPlaybackDuration: duration,
+            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? playbackRate : 0,
         ]
+    }
+
+    private func refreshNowPlaying() {
+        if let current { updateNowPlaying(current) }
+        MPNowPlayingInfoCenter.default().playbackState = isPlaying ? .playing : .paused
     }
 
     private func configureRemoteCommands() {
@@ -178,5 +221,22 @@ final class PlayerModel: ObservableObject {
             Task { @MainActor in self?.seek(to: event.positionTime) }
             return .success
         }
+    }
+
+    private func handleInterruption(_ notification: Notification) {
+        guard let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+        if type == .began { player.pause(); isPlaying = false }
+        else if let optionsRaw = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt,
+                AVAudioSession.InterruptionOptions(rawValue: optionsRaw).contains(.shouldResume) {
+            player.playImmediately(atRate: playbackRate); isPlaying = true
+            refreshNowPlaying()
+        }
+    }
+
+    private func handleRouteChange(_ notification: Notification) {
+        guard let raw = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+              AVAudioSession.RouteChangeReason(rawValue: raw) == .oldDeviceUnavailable else { return }
+        player.pause(); isPlaying = false
     }
 }

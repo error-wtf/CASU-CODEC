@@ -16,6 +16,7 @@ enum LibrarySection: String, CaseIterable, Identifiable {
     case artists = "Artists"
     case albums = "Albums"
     case genres = "Genres"
+    case favorites = "Favorites"
     var id: String { rawValue }
 }
 
@@ -26,6 +27,17 @@ final class MediaLibraryModel: ObservableObject {
     @Published var selectedGroup: String?
     @Published var search = ""
     @Published private(set) var authorizationDenied = false
+    @Published private(set) var favoriteIDs: Set<UInt64> = Set(
+        (UserDefaults.standard.stringArray(forKey: "libraryFavoriteIDs") ?? []).compactMap(UInt64.init)
+    )
+
+    func toggleFavorite(_ track: LibraryTrack) {
+        if favoriteIDs.contains(track.id) { favoriteIDs.remove(track.id) }
+        else { favoriteIDs.insert(track.id) }
+        UserDefaults.standard.set(favoriteIDs.map(String.init), forKey: "libraryFavoriteIDs")
+    }
+
+    func isFavorite(_ track: LibraryTrack) -> Bool { favoriteIDs.contains(track.id) }
 
     func refresh() {
         MPMediaLibrary.requestAuthorization { [weak self] status in
@@ -51,7 +63,9 @@ final class MediaLibraryModel: ObservableObject {
     }
 
     var visibleTracks: [LibraryTrack] {
-        let base = selectedGroup.map { Self.tracks(in: tracks, section: section, group: $0) } ?? tracks
+        let base = section == .favorites
+            ? tracks.filter { favoriteIDs.contains($0.id) }
+            : selectedGroup.map { Self.tracks(in: tracks, section: section, group: $0) } ?? tracks
         guard !search.isEmpty else { return base }
         return base.filter {
             [$0.title, $0.artist, $0.album, $0.genre].contains {
@@ -62,7 +76,7 @@ final class MediaLibraryModel: ObservableObject {
 
     nonisolated static func groups(in tracks: [LibraryTrack], by section: LibrarySection,
                                    search: String = "") -> [String] {
-        guard section != .songs else { return [] }
+        guard section != .songs && section != .favorites else { return [] }
         let values = tracks.map { value(for: $0, section: section) }
             .filter { search.isEmpty || $0.localizedCaseInsensitiveContains(search) }
         return Array(Set(values)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
@@ -85,6 +99,7 @@ final class MediaLibraryModel: ObservableObject {
         case .artists: return track.artist
         case .albums: return track.album
         case .genres: return track.genre
+        case .favorites: return track.title
         }
     }
 }
