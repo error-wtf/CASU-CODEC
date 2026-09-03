@@ -2601,6 +2601,7 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(stylesheet())
 
         self.backend: LibVLCBackend | NativeCasuBackend | None = None
+        self.last_playback_error = ""
         self._native_sink: QtVideoSurfaceSink | None = None
         self.controller = PlaybackController()
         self.current: Path | None = None
@@ -3361,6 +3362,7 @@ class MainWindow(QMainWindow):
             self._seek_slider.set_position(pos)
             self._update_time_labels(pos)
         except (BackendError, CasuError, OSError) as exc:
+            self.last_playback_error = str(exc)
             self.status(f"Cannot seek — {exc}")
 
     def change_volume(self, delta: int):

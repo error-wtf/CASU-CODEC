@@ -346,7 +346,8 @@ def main() -> int:
             if time.monotonic() - smoke_started_at > 20.0:
                 state = window.backend.state().value if window.backend is not None else "NO_BACKEND"
                 position = window.backend.position() if window.backend is not None else 0.0
-                print(f"MACOS_PACKAGED_PLAYBACK_SMOKE=FAIL state={state} position={position:.3f}",
+                detail = getattr(window, "last_playback_error", "")
+                print(f"MACOS_PACKAGED_PLAYBACK_SMOKE=FAIL state={state} position={position:.3f} error={detail}",
                       file=sys.stderr, flush=True)
                 app.exit(3)
                 return

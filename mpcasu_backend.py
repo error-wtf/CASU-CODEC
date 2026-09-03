@@ -134,6 +134,19 @@ class LibVLCBackend:
             os.environ.setdefault("VLC_PLUGIN_PATH", plugin_path)
         library_names = self.library_candidates(sys.platform)
         load_error = None
+        # VLC's macOS distribution keeps libvlc and libvlccore side by side.
+        # A frozen executable does not inherit VLC.app's launcher environment,
+        # so make the core symbols globally available before loading libvlc.
+        if sys.platform == "darwin":
+            executable_dir = Path(sys.executable).resolve().parent
+            bundled_lib = executable_dir.parent / "Frameworks" / "VLC" / "lib"
+            bundled_core = bundled_lib / "libvlccore.dylib"
+            if bundled_core.is_file():
+                try:
+                    self._bundled_vlc_core = ctypes.CDLL(
+                        str(bundled_core), mode=getattr(ctypes, "RTLD_GLOBAL", 0))
+                except OSError as exc:
+                    load_error = exc
         for library_name in library_names:
             try:
                 self.lib = ctypes.CDLL(library_name)
@@ -141,7 +154,8 @@ class LibVLCBackend:
             except OSError as exc:
                 load_error = exc
         else:
-            raise BackendError("libVLC shared library is unavailable") from load_error
+            detail = f": {load_error}" if load_error else ""
+            raise BackendError(f"libVLC shared library is unavailable{detail}") from load_error
         self.widget = video_widget
         self.runtime_options = self.validate_runtime_options(runtime_options)
         # VLC 3.x discovers modules through VLC_PLUGIN_PATH. The historical
