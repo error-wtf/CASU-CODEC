@@ -75,6 +75,10 @@ if command -v makensis >/dev/null 2>&1; then
     rm -rf "$DIST_DIR/_stage/MPCASU-Windows-x86_64"
     (cd "$DIST_DIR/_stage" && unzip -oq "$DIST_DIR/MPCASU-Windows-x86_64.zip")
     if makensis scripts/setup.nsi > "$RESULTS_DIR/setup-nsis.log" 2>&1; then
+        installer="dist/MPCASU-Setup-7.0.0.exe"
+        if [[ "$DIST_DIR" != "$(realpath dist)" && -f "$installer" ]]; then
+            cp -f "$installer" "$DIST_DIR/"
+        fi
         echo "    OK: $(ls -1 "$DIST_DIR"/MPCASU-Setup-*.exe)"
     else
         echo "    makensis failed — see $RESULTS_DIR/setup-nsis.log"; tail -10 "$RESULTS_DIR/setup-nsis.log"; exit 1

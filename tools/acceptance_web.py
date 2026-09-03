@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import http.server
 import json
+import os
 import socketserver
 import subprocess
 import sys
@@ -43,8 +44,10 @@ class _Server(socketserver.TCPServer):
 def main() -> int:
     httpd = _Server(("127.0.0.1", HTTP_PORT), _Handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    executable = os.environ.get("WEB_CASU_EXECUTABLE")
+    command = ([executable] if executable else [sys.executable, str(ROOT / "web_casu.py")])
     server = subprocess.Popen(
-        ["/usr/bin/web-casu", "--no-browser", "--port", str(PORT)],
+        [*command, "--no-browser", "--port", str(PORT)],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(2.0)
     try:
@@ -58,6 +61,16 @@ def main() -> int:
                     if m.type == "error" and "Failed to load resource" not in m.text else None)
             page.goto(f"http://127.0.0.1:{PORT}/web/")
             page.wait_for_selector("#queue-open", timeout=10000)
+            try:
+                page.wait_for_function(
+                    "() => document.querySelector('#queue-open').onclick !== null",
+                    timeout=5000)
+            except Exception as exc:
+                scripts = page.eval_on_selector_all(
+                    "script[src]", "nodes => nodes.map(node => node.src)")
+                raise RuntimeError(
+                    f"web application did not bind input handlers; "
+                    f"scripts={scripts}; browser_errors={errors}") from exc
 
             # choose files -> queue -> playback
             with page.expect_file_chooser() as fc:

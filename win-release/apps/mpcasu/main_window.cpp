@@ -273,7 +273,7 @@ void MainWindow::build_ui() {
 
     // Linux parity: status bar shows version | tagline | telemetry placeholder;
     // transient status messages go to the center label.
-    status_label_ = new QLabel(QStringLiteral("MPCASU 6.0.0"), this);
+    status_label_ = new QLabel(QStringLiteral("MPCASU 7.0.0"), this);
     status_label_->setObjectName("StatusText");
     statusBar()->addWidget(status_label_);
     status_center_ = new QLabel(
@@ -501,7 +501,7 @@ void MainWindow::build_sidebar() {
     backend->setObjectName("StatusText");
     sidebar_layout->addWidget(backend);
     // Reference Sidebar footer: version label pinned to the bottom.
-    auto* sidebar_version = new QLabel(QStringLiteral("MPCASU 6.0.0"), sidebar_);
+    auto* sidebar_version = new QLabel(QStringLiteral("MPCASU 7.0.0"), sidebar_);
     sidebar_version->setObjectName("NowPlayingMeta");
     sidebar_version->setContentsMargins(16, 8, 16, 8);
     sidebar_version->setAlignment(Qt::AlignLeft | Qt::AlignBottom);
@@ -535,7 +535,7 @@ void MainWindow::build_about_page() {
     name->setObjectName("BrandName");
     name->setAlignment(Qt::AlignCenter);
     col->addWidget(name);
-    auto* version = new QLabel(QStringLiteral("Version 6.0.0 · Windows port (MinGW-w64 x64 + Qt 6)"), panel);
+    auto* version = new QLabel(QStringLiteral("Version 7.0.0 · Windows port (MinGW-w64 x64 + Qt 6)"), panel);
     version->setObjectName("BrandSub");
     version->setAlignment(Qt::AlignCenter);
     col->addWidget(version);

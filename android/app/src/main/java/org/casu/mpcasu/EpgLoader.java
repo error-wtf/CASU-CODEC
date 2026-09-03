@@ -73,13 +73,16 @@ public final class EpgLoader {
 
     /** Minimal XMLTV: programme start/stop/title per channel. */
     public static List<Programme> parseXmltv(String text) {
+        return parseXmltv(text, System.currentTimeMillis());
+    }
+
+    static List<Programme> parseXmltv(String text, long nowMs) {
         List<Programme> out = new ArrayList<>();
         Pattern programme = Pattern.compile(
                 "<programme\\s+[^>]*channel=\"([^\"]*)\"[^>]*start=\"(\\d{14})[\\s\\S]*?stop=\"(\\d{14})[\\s\\S]*?>"
                 + "[\\s\\S]*?<title[^>]*>([\\s\\S]*?)</title>");
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
         Matcher m = programme.matcher(text);
-        long now = System.currentTimeMillis();
         while (m.find() && out.size() < 5000) {
             Programme programme1 = new Programme();
             programme1.channel = m.group(1);
@@ -89,7 +92,7 @@ public final class EpgLoader {
                         .toInstant(java.time.ZoneOffset.UTC).toEpochMilli();
                 programme1.stopMs = LocalDateTime.parse(m.group(3), fmt)
                         .toInstant(java.time.ZoneOffset.UTC).toEpochMilli();
-                programme1.current = now >= programme1.startMs && now < programme1.stopMs;
+                programme1.current = nowMs >= programme1.startMs && nowMs < programme1.stopMs;
             } catch (Exception ignored) {
                 continue;
             }
@@ -102,7 +105,7 @@ public final class EpgLoader {
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setConnectTimeout(10000);
         conn.setReadTimeout(20000);
-        conn.setRequestProperty("User-Agent", "MPCASU/5.0");
+        conn.setRequestProperty("User-Agent", "MPCASU/7.0");
         int code = conn.getResponseCode();
         if (code < 200 || code >= 300) throw new Exception("HTTP " + code);
         try (InputStream in = conn.getInputStream()) {

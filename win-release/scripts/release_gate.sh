@@ -8,13 +8,14 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$HERE"
 
-ZIP="dist/MPCASU-Windows-x86_64.zip"
-BUILD="build-win64"
-RESULTS="test-results"
-OUT="dist/WINDOWS_RELEASE_GATE.json"
-mkdir -p dist
+DIST_DIR="${DIST_DIR:-dist}"
+BUILD="${BUILD_DIR:-build-win64}"
+RESULTS="${RESULTS_DIR:-test-results}"
+ZIP="$DIST_DIR/MPCASU-Windows-x86_64.zip"
+OUT="$DIST_DIR/WINDOWS_RELEASE_GATE.json"
+mkdir -p "$DIST_DIR"
 
-version="5.0.0"
+version="7.0.0"
 date_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 # helper: gate result from an on-disk marker (exit-code driven checks below).
@@ -91,7 +92,7 @@ fi
 
 # pure_web: frozen SHA256 verified + present in the package.
 pure_web_state=NOT_TESTED
-PURE_REF="$(cd /home/error/Codec-Casu/pure-web-release 2>/dev/null && sha256sum index.html 2>/dev/null | cut -d' ' -f1)"
+PURE_REF="$(cd web/pure 2>/dev/null && sha256sum index.html 2>/dev/null | cut -d' ' -f1)"
 ZIP_LIST="$(unzip -l "$ZIP" 2>/dev/null)"
 if [ -n "$PURE_REF" ] && printf '%s' "$ZIP_LIST" | grep -q "web/pure/index.html"; then
   PURE_PKG="$(unzip -p "$ZIP" '*web/pure/index.html' 2>/dev/null | sha256sum | cut -d' ' -f1)"
@@ -110,8 +111,8 @@ fi
 
 # installer: setup.exe present + SHA256 recorded.
 installer_state=NOT_TESTED
-if ls dist/MPCASU-Setup-*.exe >/dev/null 2>&1; then
-  if grep -q "MPCASU-Setup-.*\.exe" dist/SHA256SUMS 2>/dev/null; then
+if ls "$DIST_DIR"/MPCASU-Setup-*.exe >/dev/null 2>&1; then
+  if grep -q "MPCASU-Setup-.*\.exe" "$DIST_DIR/SHA256SUMS" 2>/dev/null; then
     installer_state=PASS
   else
     installer_state=FAIL

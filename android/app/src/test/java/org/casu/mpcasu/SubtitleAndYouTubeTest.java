@@ -85,7 +85,8 @@ public class SubtitleAndYouTubeTest {
                 + "<programme channel=\"ard.de\" start=\"20260826000000 +0000\" "
                 + "stop=\"20260826235900 +0000\"><title>Tagesschau</title></programme>"
                 + "</tv>";
-        List<EpgLoader.Programme> guide = EpgLoader.parseXmltv(xmltv);
+        long fixedNow = java.time.Instant.parse("2026-08-26T12:00:00Z").toEpochMilli();
+        List<EpgLoader.Programme> guide = EpgLoader.parseXmltv(xmltv, fixedNow);
         assertEquals(1, guide.size());
         EpgLoader.Channel channel = new EpgLoader.Channel();
         channel.name = "Das Erste";
