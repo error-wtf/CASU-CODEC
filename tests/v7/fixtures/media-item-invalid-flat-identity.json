@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "id": "med_MEDIAITEM0000001",
+  "kind": "youtube",
+  "original_source": "https://www.youtube.com/watch?v=fixture-1",
+  "stable_source": "youtube:video:fixture-1",
+  "title": "Legacy ambiguous identity fixture",
+  "availability": "available"
+}

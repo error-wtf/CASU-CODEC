@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "identity": {
+    "media_id": "med_MEDIAITEM0000001",
+    "identity_kind": "provider",
+    "canonical_key": "youtube:video:fixture-1"
+  },
+  "kind": "youtube",
+  "original_source": "https://www.youtube.com/watch?v=fixture-1",
+  "title": "Fixture video",
+  "availability": "available",
+  "provider": "youtube",
+  "provider_id": "fixture-1",
+  "metadata": {},
+  "diagnostics": []
+}

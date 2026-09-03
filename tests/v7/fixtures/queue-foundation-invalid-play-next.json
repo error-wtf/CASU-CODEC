@@ -1,0 +1,7 @@
+{
+  "schema_version":1,
+  "revision":3,
+  "occurrences":[{"occurrence_id":"occ_PERMANENT00000001","media":{"media_id":"med_RESOURCE000000003","identity_kind":"generated","canonical_key":"fixture:3"},"insertion_class":"permanent"}],
+  "current_occurrence_id":"occ_PERMANENT00000001",
+  "play_next_ids":["occ_PERMANENT00000001"]
+}

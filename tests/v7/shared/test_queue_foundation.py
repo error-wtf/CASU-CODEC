@@ -39,7 +39,10 @@ def _prep_root() -> Path:
 
 
 def _fixture(name: str) -> bytes:
-    return (_prep_root() / "contracts" / "fixtures" / name).read_bytes()
+    configured = os.environ.get("PREP_ROOT")
+    if configured:
+        return (Path(configured) / "contracts" / "fixtures" / name).read_bytes()
+    return (Path(__file__).resolve().parents[1] / "fixtures" / name).read_bytes()
 
 
 def _occurrence(

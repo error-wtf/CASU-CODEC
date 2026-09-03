@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "revision": 2,
+  "occurrences": [
+    {"occurrence_id":"occ_DUPLICATE00000001","media":{"media_id":"med_RESOURCE000000001","identity_kind":"generated","canonical_key":"fixture:1"},"insertion_class":"permanent"},
+    {"occurrence_id":"occ_DUPLICATE00000001","media":{"media_id":"med_RESOURCE000000002","identity_kind":"generated","canonical_key":"fixture:2"},"insertion_class":"permanent"}
+  ],
+  "current_occurrence_id":"occ_DUPLICATE00000001",
+  "play_next_ids":[]
+}

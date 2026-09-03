@@ -46,13 +46,10 @@ def _item() -> MediaItem:
 
 
 def _fixture(name: str) -> bytes:
-    prep_root = Path(
-        os.environ.get(
-            "PREP_ROOT",
-            Path(__file__).resolve().parents[3].parent / "ALL_RELEASE_V7",
-        )
-    )
-    return (prep_root / "contracts" / "fixtures" / name).read_bytes()
+    configured = os.environ.get("PREP_ROOT")
+    if configured:
+        return (Path(configured) / "contracts" / "fixtures" / name).read_bytes()
+    return (Path(__file__).resolve().parents[1] / "fixtures" / name).read_bytes()
 
 
 def test_media_item_round_trip_preserves_complete_identity_losslessly() -> None:

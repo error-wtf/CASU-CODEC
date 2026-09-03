@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "revision": 7,
+  "occurrences": [
+    {"occurrence_id": "occ_AAAAAAAAAAAAAAAA", "media": {"media_id": "med_SHAREDRESOURCE01", "identity_kind": "local", "canonical_key": "fixture:///tone.wav"}, "insertion_class": "permanent", "display_title": "First"},
+    {"occurrence_id": "occ_BBBBBBBBBBBBBBBB", "media": {"media_id": "med_SHAREDRESOURCE01", "identity_kind": "local", "canonical_key": "fixture:///tone.wav"}, "insertion_class": "permanent", "display_title": "Duplicate"},
+    {"occurrence_id": "occ_CCCCCCCCCCCCCCCC", "media": {"media_id": "med_NEXTRESOURCE0001", "identity_kind": "provider", "canonical_key": "fake-provider:item-1"}, "insertion_class": "play_next", "display_title": null}
+  ],
+  "current_occurrence_id": "occ_BBBBBBBBBBBBBBBB",
+  "play_next_ids": ["occ_CCCCCCCCCCCCCCCC"]
+}
