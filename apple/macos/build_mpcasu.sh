@@ -22,8 +22,7 @@ PY
 
 python -m pytest -q tests/v7/shared
 python -m PyInstaller --noconfirm --clean --windowed --name MPCASU \
-  --collect-all PySide6 --add-data 'assets:assets' mpcasu_player.py
-ditto -c -k --keepParent dist/MPCASU.app "$OUT/MPCASU-macOS-7.0.0.zip"
+  --add-data 'assets:assets' mpcasu_player.py
 codesign --verify --deep --strict --verbose=2 dist/MPCASU.app
+ditto -c -k --keepParent dist/MPCASU.app "$OUT/MPCASU-macOS-7.0.0.zip"
 shasum -a 256 "$OUT/MPCASU-macOS-7.0.0.zip" > "$OUT/MPCASU-macOS-7.0.0.zip.sha256"
-
