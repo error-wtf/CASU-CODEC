@@ -3520,8 +3520,10 @@ class MainWindow(QMainWindow):
                 self._native_sink = QtVideoSurfaceSink(self._video_surface)
                 self.backend = NativeCasuBackend(self._native_sink, audio_sink)
             else:
-                runtime_options = (("--aout=dummy", "--vout=dummy")
-                                   if os.environ.get("MPCASU_PACKAGED_PLAYBACK_SMOKE") else ())
+                # The packaged smoke must exercise the same real macOS output
+                # modules as users. Dummy output can leave VLC's media clock
+                # parked at zero on macOS even after successful decoding.
+                runtime_options = ()
                 self.backend = (CasuBackend(self._video_surface.handle)
                                 if is_casu_container
                                 else LibVLCBackend(self._video_surface.handle,
@@ -3537,6 +3539,8 @@ class MainWindow(QMainWindow):
             self.controller.play()
             self._apply_playback_rate()
             self._apply_backend_settings()
+            if os.environ.get("MPCASU_PACKAGED_PLAYBACK_SMOKE"):
+                self.backend.set_volume(0)
             self.duration = self.backend.duration()
             self._seek_slider.set_duration(self.duration)
             self._draw_chapter_markers()

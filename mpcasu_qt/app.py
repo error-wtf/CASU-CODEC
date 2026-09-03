@@ -343,8 +343,11 @@ def main() -> int:
                 window.stop()
                 app.exit(0)
                 return
-            if time.monotonic() - smoke_started_at > 8.0:
-                print("MACOS_PACKAGED_PLAYBACK_SMOKE=FAIL", file=sys.stderr, flush=True)
+            if time.monotonic() - smoke_started_at > 20.0:
+                state = window.backend.state().value if window.backend is not None else "NO_BACKEND"
+                position = window.backend.position() if window.backend is not None else 0.0
+                print(f"MACOS_PACKAGED_PLAYBACK_SMOKE=FAIL state={state} position={position:.3f}",
+                      file=sys.stderr, flush=True)
                 app.exit(3)
                 return
             QTimer.singleShot(100, _probe_packaged_playback)
