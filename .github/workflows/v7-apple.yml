@@ -33,6 +33,36 @@ jobs:
       - name: Generate native iOS project
         working-directory: apple/ios
         run: xcodegen generate
+      - name: Build and archive real iOS device target
+        working-directory: apple/ios
+        run: |
+          set -euo pipefail
+          mkdir -p ../../dist/apple
+          xcodebuild build \
+            -project MPCASU.xcodeproj \
+            -scheme MPCASU \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath ../../.v7-derived-data/device \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+          xcodebuild archive \
+            -project MPCASU.xcodeproj \
+            -scheme MPCASU \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath ../../dist/apple/MPCASU-iOS-7.0.0.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+          app='../../dist/apple/MPCASU-iOS-7.0.0.xcarchive/Products/Applications/MPCASU.app'
+          test -d "$app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Info.plist")" = 7.0.0
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")" = org.casu.mpcasu
+          file "$app/MPCASU" | grep -q arm64
+          ditto -c -k --keepParent "$app" ../../dist/apple/MPCASU-iOS-Device-Unsigned-7.0.0.zip
+          ditto -c -k --keepParent ../../dist/apple/MPCASU-iOS-7.0.0.xcarchive ../../dist/apple/MPCASU-iOS-Archive-7.0.0.zip
+          shasum -a 256 ../../dist/apple/MPCASU-iOS-Device-Unsigned-7.0.0.zip > ../../dist/apple/MPCASU-iOS-Device-Unsigned-7.0.0.zip.sha256
+          shasum -a 256 ../../dist/apple/MPCASU-iOS-Archive-7.0.0.zip > ../../dist/apple/MPCASU-iOS-Archive-7.0.0.zip.sha256
       - name: Select representative simulators
         id: sims
         run: |

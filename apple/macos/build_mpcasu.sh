@@ -24,5 +24,13 @@ python -m pytest -q tests/v7/shared
 python -m PyInstaller --noconfirm --clean --windowed --name MPCASU \
   --add-data 'assets:assets' mpcasu_player.py
 codesign --verify --deep --strict --verbose=2 dist/MPCASU.app
+QT_QPA_PLATFORM=offscreen dist/MPCASU.app/Contents/MacOS/MPCASU \
+  >"$OUT/macos-launch.log" 2>&1 &
+app_pid=$!
+sleep 8
+kill -0 "$app_pid"
+kill "$app_pid"
+wait "$app_pid" 2>/dev/null || true
+echo "MACOS_PACKAGED_APP_SMOKE=PASS"
 ditto -c -k --keepParent dist/MPCASU.app "$OUT/MPCASU-macOS-7.0.0.zip"
 shasum -a 256 "$OUT/MPCASU-macOS-7.0.0.zip" > "$OUT/MPCASU-macOS-7.0.0.zip.sha256"
