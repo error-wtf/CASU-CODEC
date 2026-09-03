@@ -12,13 +12,17 @@ from .serialization import (
     deserialize_queue_state,
     serialize_queue_state,
 )
+from .persistence import AtomicQueueStateStore, QueueLoadResult, QueuePersistenceError
 
 __all__ = [
     "MAX_QUEUE_OCCURRENCES",
+    "AtomicQueueStateStore",
     "OccurrenceNotFoundError",
     "QueueOccurrence",
     "QueueState",
     "QueueStateDecodeError",
+    "QueueLoadResult",
+    "QueuePersistenceError",
     "QueueStateValidationError",
     "deserialize_queue_state",
     "serialize_queue_state",
