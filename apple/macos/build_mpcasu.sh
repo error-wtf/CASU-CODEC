@@ -28,7 +28,10 @@ QT_QPA_PLATFORM=offscreen dist/MPCASU.app/Contents/MacOS/MPCASU \
   >"$OUT/macos-launch.log" 2>&1 &
 app_pid=$!
 sleep 8
-kill -0 "$app_pid"
+if ! kill -0 "$app_pid" 2>/dev/null; then
+  cat "$OUT/macos-launch.log"
+  exit 1
+fi
 kill "$app_pid"
 wait "$app_pid" 2>/dev/null || true
 echo "MACOS_PACKAGED_APP_SMOKE=PASS"
