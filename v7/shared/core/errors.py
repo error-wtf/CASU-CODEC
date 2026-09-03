@@ -3,11 +3,43 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
+import json
 import re
 
 
 class StructuredErrorValidationError(ValueError):
     pass
+
+
+class StructuredErrorDecodeError(ValueError):
+    def __init__(self, code: str, message: str) -> None:
+        self.code = code
+        super().__init__(f"{code}: {message}")
+
+
+class ErrorCode(str, Enum):
+    INVALID_INPUT = "INVALID_INPUT"
+    UNSUPPORTED_FORMAT = "UNSUPPORTED_FORMAT"
+    MISSING_DEPENDENCY = "MISSING_DEPENDENCY"
+    PERMISSION_DENIED = "PERMISSION_DENIED"
+    NETWORK_OFFLINE = "NETWORK_OFFLINE"
+    TIMEOUT = "TIMEOUT"
+    CANCELLED = "CANCELLED"
+    PROVIDER_CHANGED = "PROVIDER_CHANGED"
+    AUTHENTICATION_REQUIRED = "AUTHENTICATION_REQUIRED"
+    GEO_RESTRICTED = "GEO_RESTRICTED"
+    UNAVAILABLE_ENTRY = "UNAVAILABLE_ENTRY"
+    MALFORMED_RESPONSE = "MALFORMED_RESPONSE"
+    INTEGRITY_FAILURE = "INTEGRITY_FAILURE"
+    DECODER_FAILURE = "DECODER_FAILURE"
+    OUTPUT_FINALIZATION_FAILURE = "OUTPUT_FINALIZATION_FAILURE"
+    INTERNAL_INVARIANT_VIOLATION = "INTERNAL_INVARIANT_VIOLATION"
+
+
+_RETRYABLE_CODES = frozenset(
+    {ErrorCode.NETWORK_OFFLINE, ErrorCode.TIMEOUT, ErrorCode.PROVIDER_CHANGED}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +68,28 @@ class StructuredError:
         _optional(self.provider, "provider", 128)
         _optional(self.item_id, "item_id", 128)
         _optional(self.cause_class, "cause_class", 256)
+        if self.safe_detail is not None:
+            object.__setattr__(self, "safe_detail", redact_sensitive_text(self.safe_detail))
+
+    @classmethod
+    def for_code(
+        cls,
+        code: ErrorCode,
+        subsystem: str,
+        operation: str,
+        message: str,
+        **details: str | None,
+    ) -> StructuredError:
+        if not isinstance(code, ErrorCode):
+            raise StructuredErrorValidationError("code must be an ErrorCode")
+        return cls(
+            code.value,
+            subsystem,
+            operation,
+            code in _RETRYABLE_CODES,
+            message,
+            **details,
+        )
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -85,3 +139,48 @@ def _optional(value: object, name: str, maximum: int) -> None:
         raise StructuredErrorValidationError(
             f"{name} must be null or at most {maximum} characters"
         )
+
+
+_BEARER = re.compile(r"(?i)\bbearer\s+[^\s,;]+")
+_NAMED_SECRET = re.compile(
+    r"(?i)\b(access_token|refresh_token|token|password|passwd|cookie|api[_-]?key)"
+    r"(\s*[=:]\s*)"
+    r"([^\s&;,]+)"
+)
+_URL_USERINFO = re.compile(r"(?i)(https?://)([^/@\s]+)@")
+
+
+def redact_sensitive_text(value: str) -> str:
+    """Return bounded diagnostic text with common credential forms removed."""
+
+    if not isinstance(value, str):
+        raise StructuredErrorValidationError("diagnostic detail must be text")
+    result = _BEARER.sub("Bearer [REDACTED]", value)
+    result = _NAMED_SECRET.sub(lambda match: f"{match.group(1)}{match.group(2)}[REDACTED]", result)
+    result = _URL_USERINFO.sub(r"\1[REDACTED]@", result)
+    return result
+
+
+def serialize_structured_error(value: StructuredError) -> bytes:
+    if not isinstance(value, StructuredError):
+        raise TypeError("value must be StructuredError")
+    return json.dumps(
+        value.to_dict(), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+
+
+def deserialize_structured_error(raw: bytes | str) -> StructuredError:
+    try:
+        text = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+    except UnicodeDecodeError as error:
+        raise StructuredErrorDecodeError("INVALID_UTF8", str(error)) from error
+    if not isinstance(text, str):
+        raise StructuredErrorDecodeError("INVALID_INPUT_TYPE", "input must be bytes or str")
+    try:
+        value = json.loads(text)
+    except (json.JSONDecodeError, RecursionError) as error:
+        raise StructuredErrorDecodeError("MALFORMED_JSON", str(error)) from error
+    try:
+        return StructuredError.from_dict(value)
+    except (StructuredErrorValidationError, TypeError) as error:
+        raise StructuredErrorDecodeError("INVALID_VALUE", str(error)) from error
