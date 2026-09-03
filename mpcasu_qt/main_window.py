@@ -18,7 +18,7 @@ from pathlib import Path
 
 from PySide6.QtCore import (
     QEasingCurve, QObject, Property, QPropertyAnimation, QRect, QRectF, QPointF, Qt, QTimer,
-    Signal, Slot, QSize, QLineF,
+    Signal, Slot, QSize,
 )
 from PySide6.QtGui import (
     QAction, QColor, QFont, QIcon, QKeySequence, QPainter, QPen, QPixmap,
@@ -52,7 +52,7 @@ from casu.spotify import (SpotifyError, expand_spotify, fetch_spotify_metadata,
                           is_spotify_url, open_spotify_web, resolve_spotify_url,
                           search_spotify, spotify_kind, youtube_handoff_query)
 from casu.thumbnail import thumbnail_for
-from casu.waveform import decode_all_pcm, live_fft, window_wave
+from casu.waveform import decode_all_pcm, window_wave
 from casu.recording import MediaRecorder, RecordingError
 
 from casu.native import NativeCasuError, read_native
@@ -1037,14 +1037,7 @@ class PlaylistPane(QFrame):
 
 
 class VisualizerWidget(QWidget):
-    """Native Qt visualizer, pixel-equivalent to web/app.js drawViz.
-
-    128 raw FFT bars (alternating #ff1e2d/#3a1015, 0.7h, 1px gap) and a
-    256-point oscilloscope line (#ff1e2d@0x88, y=v*0.5h+0.75h) on the web
-    cover-layer background (radial gradient + centered art).  The analyser's
-    0.85 smoothing is applied to the bars.  One 60 Hz update path (no
-    double repaints) so it is as smooth as the web page.  Never over video.
-    """
+    """Lightweight, UI-thread-rendered waveform visualizer for desktop."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1054,41 +1047,36 @@ class VisualizerWidget(QWidget):
         self._cover = None
         self._cover_scaled = None
         self._cover_scaled_size = (0, 0)
-        self._mode = "spectrum"
-        self._wave: tuple = ()
-        self._bands: tuple = ()
+        self._mode = "waveform"
+        self._wave: list[float] = []
+        self._wave_buffer: list[float] = []
         self._live = None
         self._overview: tuple = ()
-        self._smoothed_bands: tuple = ()
         self._bg_cache = None
         self._bg_cache_size = (0, 0)
 
-    def _smooth_bands(self, new):
-        """Web analyser smoothing (smoothingTimeConstant = 0.85)."""
-        new = tuple(new or ())
-        if not self._smoothed_bands:
-            self._smoothed_bands = new
-            return new
-        old = list(self._smoothed_bands)
-        out = []
-        for index in range(max(len(old), len(new))):
-            prev = old[index] if index < len(old) else 0.0
-            value = new[index] if index < len(new) else 0.0
-            out.append(0.85 * prev + 0.15 * value)
-        self._smoothed_bands = tuple(out)
-        return self._smoothed_bands
-
     def configure(self, mode, wave, bands, duration, overview=()):
-        self._mode = mode
+        self._mode = "off" if mode == "off" else "waveform"
         self._duration = max(0.0, float(duration or 0.0))
-        self._wave = tuple(wave or ())
-        self._bands = tuple(bands or ())
+        self._assign_wave(wave)
         self._overview = tuple(overview or ())
         if self._small:
             self.setVisible(False)
         else:
             self.setVisible(mode != "off" or self._cover is not None)
         self.update()
+
+    def _assign_wave(self, wave):
+        """Reuse a small display buffer and lightly smooth adjacent frames."""
+        values = wave or ()
+        if len(self._wave_buffer) != len(values):
+            self._wave_buffer = [float(value) for value in values]
+        else:
+            for index, value in enumerate(values):
+                self._wave_buffer[index] = (
+                    0.65 * self._wave_buffer[index] + 0.35 * float(value)
+                )
+        self._wave = self._wave_buffer
 
     def set_mode(self, mode):
         self._mode = mode
@@ -1129,10 +1117,9 @@ class VisualizerWidget(QWidget):
         painter.drawPixmap(px, py, pix)
         painter.restore()
 
-    def set_live(self, bands, wave=()):
-        self._live = tuple(bands)
-        if wave:
-            self._wave = tuple(wave)
+    def set_live(self, wave):
+        self._live = tuple(wave or ())
+        self._assign_wave(self._live)
         if self._small:
             self.setVisible(False)
         elif self._live or self._cover:
@@ -1148,28 +1135,6 @@ class VisualizerWidget(QWidget):
         if small:
             self.setVisible(False)
         self.update()
-
-    def _paint_bottom_bars(self, painter, values, w, h):
-        """1024 dense bars like the web canvas, batched for speed."""
-        count = len(values)
-        if count < 2:
-            return
-        gap = 1.0
-        bar_w = w / count
-        even = []
-        odd = []
-        for index, value in enumerate(values):
-            bar_h = max(0.0, min(1.0, value) * h * 0.7)
-            x = index * bar_w
-            line = QLineF(x + gap, h - bar_h, x + gap, h)
-            (even if index % 2 == 0 else odd).append(line)
-        painter.setRenderHint(QPainter.Antialiasing, False)
-        if even:
-            painter.setPen(QPen(QColor(0xFF, 0x1E, 0x2D), max(1.0, bar_w - 2 * gap)))
-            painter.drawLines(even)
-        if odd:
-            painter.setPen(QPen(QColor(0x3A, 0x10, 0x15), max(1.0, bar_w - 2 * gap)))
-            painter.drawLines(odd)
 
     def _paint_wave_line(self, painter, wave, w, h):
         wave = list(wave or ())
@@ -1197,7 +1162,7 @@ class VisualizerWidget(QWidget):
         if w <= 0 or h <= 0:
             painter.end()
             return
-        # Cache the radial-gradient background so the 60 Hz repaint path does
+        # Cache the radial-gradient background so the 30 Hz repaint path does
         # not re-rasterise it every frame (big CPU saving).
         if self._bg_cache is None or self._bg_cache_size != (w, h):
             bg = QRadialGradient(w / 2.0, h / 2.0, max(w, h) * 0.7)
@@ -1214,9 +1179,6 @@ class VisualizerWidget(QWidget):
         if self._cover is not None and not self._cover.isNull():
             self._paint_cover_art(painter, self._cover, w, h)
         if self._mode != "off":
-            bands = self._live if self._live else self._bands
-            if bands:
-                self._paint_bottom_bars(painter, bands, w, h)
             if self._wave:
                 self._paint_wave_line(painter, self._wave, w, h)
         painter.end()
@@ -1899,8 +1861,7 @@ class OptionsPage(QFrame):
         viz_row = QHBoxLayout()
         self._viz_combo = QComboBox()
         self._viz_combo.setObjectName("IconButton")
-        for label, value in [("Spectrum", "spectrum"), ("Waveform", "waveform"),
-                             ("Both", "both"), ("Off", "off")]:
+        for label, value in [("Waveform", "waveform"), ("Off", "off")]:
             self._viz_combo.addItem(label, value)
         index = self._viz_combo.findData(settings.visualizer)
         self._viz_combo.setCurrentIndex(max(0, index))
@@ -2687,9 +2648,9 @@ class MainWindow(QMainWindow):
         self._viz_rate = 0
         self._viz_generation = 0
         self._viz_overview = ()
-        self._viz_mode = "spectrum"
+        self._viz_mode = "waveform"
         self._viz_timer = QTimer(self)
-        self._viz_timer.setInterval(16)  # ~60 Hz window update
+        self._viz_timer.setInterval(33)  # bounded ~30 FPS UI update
         self._viz_timer.timeout.connect(self._tick_visualizer)
 
         config_dir = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "mpcasu"
@@ -4454,10 +4415,7 @@ class MainWindow(QMainWindow):
             return
 
         if payload[0] == "live":
-            if len(payload) >= 3:
-                self._visualizer.set_live(payload[1], payload[2])
-            else:
-                self._visualizer.set_live(payload[1])
+            self._visualizer.set_live(payload[1])
 
     def _tick_visualizer(self):
         if (
@@ -4468,7 +4426,7 @@ class MainWindow(QMainWindow):
         ):
             return
 
-        mode = self._viz_mode or "spectrum"
+        mode = self._viz_mode or "waveform"
 
         if mode == "off":
             return
@@ -4484,27 +4442,19 @@ class MainWindow(QMainWindow):
         except Exception:  # noqa: BLE001 - visualizer is optional
             return
 
-        # The animated waveform window is always computed so the background
-        # waveform scrolls with the playhead in every visualizer mode.
+        points = max(64, min(128, max(1, self._visualizer.width()) // 6))
         wave = window_wave(
             self._viz_pcm,
             self._viz_rate,
             position,
             window_s=2048.0 / max(1, self._viz_rate),
-            points=2048,
-        )
-        bands = live_fft(
-            self._viz_pcm,
-            self._viz_rate,
-            position,
-            fft_size=2048,
-            bins=1024,
+            points=points,
         )
 
         self._visualizer.configure(
             mode,
             wave,
-            bands,
+            (),
             self.duration or 0.0,
             self._viz_overview,
         )
@@ -4866,7 +4816,7 @@ class MainWindow(QMainWindow):
             self.toast("Visualizer is for audio only (subtitles show for video)")
             return
         settings = self.settings_store.load()
-        mode = "off" if settings.visualizer != "off" else "spectrum"
+        mode = "off" if settings.visualizer != "off" else "waveform"
         self.settings_store.save(replace(settings, visualizer=mode))
         self._viz_mode = mode
         self._viz_btn.setProperty("on", "true" if mode != "off" else "false")
@@ -4944,31 +4894,23 @@ class MainWindow(QMainWindow):
                 buff += data
                 if len(buff) < 4096:
                     continue
-                # Throttle to a realtime cadence (~40 Hz): ffmpeg may decode
+                # Throttle to a realtime cadence (~30 Hz): ffmpeg may decode
                 # a fast source faster than realtime, which would flood the
                 # UI thread and make the visualization lag.
                 now = _time.perf_counter()
-                if now - last_emit < 0.024:
+                if now - last_emit < 0.033:
                     _time.sleep(0.004)
                     continue
                 last_emit = now
                 try:
-                    # Slide a 2048-sample window -> 1024 raw FFT bars.
+                    # Wave only: bound work to 128 visible points and avoid FFT.
                     buff = buff[-4096:]
                     samples = (np.frombuffer(buff, dtype="<i2")
                                .astype(np.float32) / 32768.0)
-                    windowed = samples * np.hanning(len(samples))
-                    spectrum = np.abs(np.fft.rfft(windowed))[1:1025]
-                    peak = float(spectrum.max()) if spectrum.size else 0.0
-                    if peak <= 1e-6:
-                        bands = tuple(0.0 for _ in spectrum)
-                    else:
-                        bands = tuple(float(max(0.0, min(1.0, value / peak)))
-                                      for value in spectrum)
-                    width = max(1, len(samples) // 2048)
+                    width = max(1, len(samples) // 128)
                     wave = tuple(float(samples[i])
-                                 for i in range(0, len(samples), width))[:2048]
-                    bridge.resultReady.emit(("live", bands, wave))
+                                 for i in range(0, len(samples), width))[:128]
+                    bridge.resultReady.emit(("live", wave))
                 except Exception:  # noqa: BLE001 - stream viz is optional
                     continue
         import threading
