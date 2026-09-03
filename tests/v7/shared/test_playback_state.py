@@ -3,7 +3,12 @@ import threading
 import pytest
 
 from v7.shared.core.errors import ErrorCode, StructuredError
-from v7.shared.playback import PlaybackOwnerError, PlaybackState, PlaybackStateMachine
+from v7.shared.core.identity import MediaIdentity
+from v7.shared.playback import (
+    PlaybackDescriptor, PlaybackDescriptorExpiredError, PlaybackOwnerError,
+    PlaybackState, PlaybackStateMachine,
+)
+from v7.shared.source_location import classify_source
 
 
 def test_open_ready_play_pause_resume_stop_sequence() -> None:
@@ -82,6 +87,30 @@ def test_owner_thread_is_enforced() -> None:
     thread.start()
     thread.join()
     assert isinstance(errors[0], PlaybackOwnerError)
+
+
+def test_playback_descriptor_is_generation_scoped_and_expiring() -> None:
+    descriptor = PlaybackDescriptor(
+        MediaIdentity("med_0123456789abcdef", "provider", "youtube:abc"),
+        classify_source("https://media.example/temporary?token=secret"),
+        7, expires_at_ms=2000, headers={"Authorization": "Bearer secret"},
+    )
+    descriptor.require_usable(7, now_ms=1999)
+    with pytest.raises(PlaybackDescriptorExpiredError):
+        descriptor.require_usable(6, now_ms=1000)
+    with pytest.raises(PlaybackDescriptorExpiredError):
+        descriptor.require_usable(7, now_ms=2000)
+    assert "Bearer secret" not in repr(descriptor)
+    assert "Authorization" not in repr(descriptor)
+
+
+def test_playback_descriptor_rejects_header_injection() -> None:
+    with pytest.raises(ValueError):
+        PlaybackDescriptor(
+            MediaIdentity("med_0123456789abcdef", "local", "abc"),
+            classify_source("/tmp/media.mp3"), 1,
+            headers={"X-Test": "ok\r\nInjected: yes"},
+        )
 
 
 def _capture(errors: list[Exception], callback) -> None:

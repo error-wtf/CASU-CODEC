@@ -4,9 +4,61 @@ from __future__ import annotations
 
 from enum import Enum
 import threading
+import time
 
 from .core.errors import StructuredError
+from .core.identity import MediaIdentity
 from .lifecycle import GenerationGate, OwnerClosedError
+from .source_location import SourceLocation
+
+
+class PlaybackDescriptorExpiredError(RuntimeError):
+    pass
+
+
+class PlaybackDescriptor:
+    """Transient backend input; deliberately not persistent media identity."""
+
+    __slots__ = ("identity", "location", "generation", "expires_at_ms", "headers")
+
+    def __init__(self, identity: MediaIdentity, location: SourceLocation, generation: int,
+                 *, expires_at_ms: int | None = None,
+                 headers: dict[str, str] | None = None) -> None:
+        if not isinstance(identity, MediaIdentity):
+            raise TypeError("identity must be MediaIdentity")
+        if not isinstance(location, SourceLocation):
+            raise TypeError("location must be SourceLocation")
+        if type(generation) is not int or generation < 0:
+            raise ValueError("generation must be non-negative")
+        if expires_at_ms is not None and (type(expires_at_ms) is not int or expires_at_ms < 0):
+            raise ValueError("expires_at_ms must be non-negative")
+        copied = dict(headers or {})
+        if len(copied) > 32 or any(
+            not isinstance(key, str) or not key or len(key) > 128
+            or not isinstance(value, str) or len(value) > 8192
+            or "\n" in key or "\r" in key or "\n" in value or "\r" in value
+            for key, value in copied.items()
+        ):
+            raise ValueError("invalid transport headers")
+        self.identity = identity
+        self.location = location
+        self.generation = generation
+        self.expires_at_ms = expires_at_ms
+        self.headers = copied
+
+    def require_usable(self, generation: int, *, now_ms: int | None = None) -> None:
+        if generation != self.generation:
+            raise PlaybackDescriptorExpiredError("descriptor belongs to an obsolete generation")
+        clock = int(time.time() * 1000) if now_ms is None else now_ms
+        if type(clock) is not int or clock < 0:
+            raise ValueError("now_ms must be non-negative")
+        if self.expires_at_ms is not None and clock >= self.expires_at_ms:
+            raise PlaybackDescriptorExpiredError("transport location has expired")
+
+    def __repr__(self) -> str:
+        return (f"PlaybackDescriptor(identity={self.identity!r}, location={self.location!r}, "
+                f"generation={self.generation}, expires_at_ms={self.expires_at_ms}, "
+                "headers=<redacted>)")
 
 
 class PlaybackState(str, Enum):
