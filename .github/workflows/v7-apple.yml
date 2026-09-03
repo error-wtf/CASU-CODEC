@@ -1,0 +1,73 @@
+name: V7 Apple build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [v7.0.0]
+
+jobs:
+  apple:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode and initialize Apple platforms
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          sudo xcodebuild -runFirstLaunch
+          sw_vers
+          uname -m
+          xcodebuild -version
+          xcrun clang --version
+          xcrun swift --version
+          xcrun simctl list runtimes
+      - name: Install build-only dependencies
+        run: |
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+          brew list ffmpeg >/dev/null 2>&1 || brew install ffmpeg
+          if [ ! -d /Applications/VLC.app ]; then brew install --cask vlc; fi
+      - name: Build and test MPCASU Qt for macOS
+        run: |
+          chmod +x apple/macos/build_mpcasu.sh
+          APPLE_OUTPUT_DIR="$PWD/dist/apple" apple/macos/build_mpcasu.sh
+      - name: Generate native iOS project
+        working-directory: apple/ios
+        run: xcodegen generate
+      - name: Select representative simulators
+        id: sims
+        run: |
+          set -euo pipefail
+          runtime="$(xcrun simctl list runtimes -j | jq -r '[.runtimes[] | select(.isAvailable and (.identifier | contains(".iOS-")))] | sort_by(.version | split(".") | map(tonumber)) | last.identifier')"
+          test -n "$runtime"; test "$runtime" != null
+          phone_type="$(xcrun simctl list devicetypes -j | jq -r '[.devicetypes[] | select(.name | startswith("iPhone"))] | last.identifier')"
+          tablet_type="$(xcrun simctl list devicetypes -j | jq -r '[.devicetypes[] | select(.name | startswith("iPad"))] | last.identifier')"
+          phone="$(xcrun simctl create MPCASU-V7-iPhone "$phone_type" "$runtime")"
+          tablet="$(xcrun simctl create MPCASU-V7-iPad "$tablet_type" "$runtime")"
+          echo "phone=$phone" >> "$GITHUB_OUTPUT"
+          echo "tablet=$tablet" >> "$GITHUB_OUTPUT"
+      - name: Build and test iPhone simulator
+        working-directory: apple/ios
+        run: |
+          xcrun simctl boot '${{ steps.sims.outputs.phone }}'
+          xcrun simctl bootstatus '${{ steps.sims.outputs.phone }}' -b
+          xcodebuild test -project MPCASU.xcodeproj -scheme MPCASU -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,id=${{ steps.sims.outputs.phone }}' -derivedDataPath ../../.v7-derived-data/iphone -resultBundlePath ../../dist/apple/ios-iphone.xcresult CODE_SIGNING_ALLOWED=NO
+          xcrun simctl shutdown '${{ steps.sims.outputs.phone }}'
+      - name: Build and test iPad simulator
+        working-directory: apple/ios
+        run: |
+          xcrun simctl boot '${{ steps.sims.outputs.tablet }}'
+          xcrun simctl bootstatus '${{ steps.sims.outputs.tablet }}' -b
+          xcodebuild test -project MPCASU.xcodeproj -scheme MPCASU -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,id=${{ steps.sims.outputs.tablet }}' -derivedDataPath ../../.v7-derived-data/ipad -resultBundlePath ../../dist/apple/ios-ipad.xcresult CODE_SIGNING_ALLOWED=NO
+          xcrun simctl shutdown '${{ steps.sims.outputs.tablet }}'
+      - name: Package simulator application
+        run: |
+          mkdir -p dist/apple
+          ditto -c -k --keepParent .v7-derived-data/iphone/Build/Products/Debug-iphonesimulator/MPCASU.app dist/apple/MPCASU-iOS-Simulator-7.0.0.zip
+          shasum -a 256 dist/apple/MPCASU-iOS-Simulator-7.0.0.zip > dist/apple/MPCASU-iOS-Simulator-7.0.0.zip.sha256
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v7-apple-build
+          path: dist/apple/
+          if-no-files-found: error
+
