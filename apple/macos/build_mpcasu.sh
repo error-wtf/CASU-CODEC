@@ -22,19 +22,38 @@ PY
 
 python -m pytest -q tests/v7/shared
 python -m PyInstaller --noconfirm --clean --windowed --name MPCASU \
-  --add-data 'assets:assets' mpcasu_player.py
+  --add-data 'assets:assets' mpcasu_qt/app.py
+
+# python-vlc is only bindings. Ship the real VLC runtime and plugins inside
+# MPCASU.app so playback never depends on /Applications/VLC.app.
+vlc_root=/Applications/VLC.app/Contents/MacOS
+test -f "$vlc_root/lib/libvlc.dylib"
+test -d "$vlc_root/plugins"
+mkdir -p dist/MPCASU.app/Contents/Frameworks/VLC
+ditto "$vlc_root/lib" dist/MPCASU.app/Contents/Frameworks/VLC/lib
+ditto "$vlc_root/plugins" dist/MPCASU.app/Contents/Frameworks/VLC/plugins
+codesign --force --deep --sign - dist/MPCASU.app
 codesign --verify --deep --strict --verbose=2 dist/MPCASU.app
-QT_QPA_PLATFORM=offscreen dist/MPCASU.app/Contents/MacOS/MPCASU \
+
+# Generate a tiny deterministic WAV and prove that the packaged application,
+# using only its embedded VLC runtime, advances playback time.
+smoke_wav="$OUT/macos-playback-smoke.wav"
+python - "$smoke_wav" <<'PY'
+import math, struct, sys, wave
+with wave.open(sys.argv[1], "wb") as output:
+    output.setnchannels(1); output.setsampwidth(2); output.setframerate(44100)
+    output.writeframes(b"".join(struct.pack("<h", int(7000 * math.sin(2 * math.pi * 440 * i / 44100))) for i in range(88200)))
+PY
+MPCASU_PACKAGED_PLAYBACK_SMOKE="$smoke_wav" \
+  dist/MPCASU.app/Contents/MacOS/MPCASU \
   >"$OUT/macos-launch.log" 2>&1 &
 app_pid=$!
-sleep 8
-if ! kill -0 "$app_pid" 2>/dev/null; then
+if ! wait "$app_pid"; then
   cat "$OUT/macos-launch.log"
   exit 1
 fi
-kill "$app_pid"
-wait "$app_pid" 2>/dev/null || true
-echo "MACOS_PACKAGED_APP_SMOKE=PASS"
+grep -q 'MACOS_PACKAGED_PLAYBACK_SMOKE=PASS' "$OUT/macos-launch.log"
+echo "MACOS_PACKAGED_QT_PLAYBACK_SMOKE=PASS"
 ditto -c -k --keepParent dist/MPCASU.app "$OUT/MPCASU-macOS-7.0.0.zip"
 shasum -a 256 "$OUT/MPCASU-macOS-7.0.0.zip" > "$OUT/MPCASU-macOS-7.0.0.zip.sha256"
 

@@ -314,6 +314,30 @@ def main() -> int:
     guard_timer.setInterval(2000)
     guard_timer.timeout.connect(_check_main_windows)
     guard_timer.start()
+
+    # Release-packaging probe: exercise the final frozen Qt application and
+    # its bundled decoder without adding a user-facing test mode.  The Apple
+    # packaging job supplies a generated WAV and requires observable clock
+    # advancement before accepting the DMG.
+    playback_smoke = os.environ.get("MPCASU_PACKAGED_PLAYBACK_SMOKE")
+    if playback_smoke:
+        smoke_path = Path(playback_smoke)
+        smoke_started_at = time.monotonic()
+
+        def _probe_packaged_playback() -> None:
+            if window.backend is not None and window.backend.position() > 0.05:
+                print("MACOS_PACKAGED_PLAYBACK_SMOKE=PASS", flush=True)
+                window.stop()
+                app.exit(0)
+                return
+            if time.monotonic() - smoke_started_at > 8.0:
+                print("MACOS_PACKAGED_PLAYBACK_SMOKE=FAIL", file=sys.stderr, flush=True)
+                app.exit(3)
+                return
+            QTimer.singleShot(100, _probe_packaged_playback)
+
+        QTimer.singleShot(250, lambda: window.play_selected(smoke_path))
+        QTimer.singleShot(500, _probe_packaged_playback)
     result = app.exec()
     _log(f"app.exec returned {result}")
 

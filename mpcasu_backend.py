@@ -123,7 +123,12 @@ class LibVLCBackend:
         if sys.platform.startswith("linux"):
             plugin_candidates.extend(("/usr/lib/x86_64-linux-gnu/vlc/plugins", "/usr/lib/vlc/plugins"))
         elif sys.platform == "darwin":
-            plugin_candidates.append("/Applications/VLC.app/Contents/MacOS/plugins")
+            executable_dir = Path(sys.executable).resolve().parent
+            bundled_vlc = executable_dir.parent / "Frameworks" / "VLC"
+            plugin_candidates.extend((
+                str(bundled_vlc / "plugins"),
+                "/Applications/VLC.app/Contents/MacOS/plugins",
+            ))
         plugin_path = next((candidate for candidate in plugin_candidates if os.path.isdir(candidate)), None)
         if plugin_path:
             os.environ.setdefault("VLC_PLUGIN_PATH", plugin_path)
@@ -289,7 +294,9 @@ class LibVLCBackend:
         if platform.startswith("win"):
             return ["libvlc.dll", "libvlc-5.dll"]
         if platform == "darwin":
-            return ["libvlc.dylib"]
+            executable_dir = Path(sys.executable).resolve().parent
+            bundled = executable_dir.parent / "Frameworks" / "VLC" / "lib" / "libvlc.dylib"
+            return [str(bundled), "libvlc.dylib"]
         discovered = ctypes.util.find_library("vlc")
         return list(dict.fromkeys(value for value in
                                   (discovered, "libvlc.so.5", "libvlc.so") if value))
