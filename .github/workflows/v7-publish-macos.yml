@@ -1,0 +1,36 @@
+name: Publish verified V7 macOS artifacts
+on:
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Retrieve validated build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download 34030324381 --repo "$GITHUB_REPOSITORY" --name v7-apple-build --dir apple
+      - name: Verify full codec package
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import zipfile
+          root = Path('apple')
+          with zipfile.ZipFile(root / 'MPCASU-macOS-7.0.0.zip') as archive:
+              names = archive.namelist()
+              assert any('MPCASU.app/Contents/MacOS/MPCASU' in n for n in names)
+              assert any('CASU-Converter.app/Contents/MacOS/CASU-Converter' in n for n in names)
+              assert any(n == 'casu' or n.endswith('/casu') for n in names)
+          assert (root / 'MPCASU-macOS-7.0.0.dmg').stat().st_size > 1000000
+          PY
+          cd apple
+          sha256sum -c MPCASU-macOS-7.0.0.zip.sha256 -c MPCASU-macOS-7.0.0.dmg.sha256 || {
+            # Build-host paths in the checksums are normalized by basename.
+            sed -E 's@  .*/@  @' MPCASU-macOS-7.0.0.zip.sha256 MPCASU-macOS-7.0.0.dmg.sha256 | sha256sum -c -
+          }
+      - name: Replace existing v7.0.0 macOS files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload v7.0.0 apple/MPCASU-macOS-7.0.0.zip apple/MPCASU-macOS-7.0.0.dmg --repo "$GITHUB_REPOSITORY" --clobber
