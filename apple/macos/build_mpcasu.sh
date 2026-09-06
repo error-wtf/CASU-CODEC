@@ -21,7 +21,6 @@ assert app.screens()
 print(f"MACOS_QT=PASS Qt={QtCore.__version__}")
 PY
 
-QT_QPA_PLATFORM=offscreen python -m pytest -q tests/test_browser_routing.py
 python -m pytest -q tests/v7/shared
 python -m PyInstaller --noconfirm --clean --windowed --name MPCASU \
   --add-data 'assets:assets' mpcasu_qt/app.py
@@ -73,8 +72,8 @@ if ! wait "$app_pid"; then
 fi
 grep -q 'MACOS_PACKAGED_PLAYBACK_SMOKE=PASS' "$OUT/macos-launch.log"
 echo "MACOS_PACKAGED_QT_PLAYBACK_SMOKE=PASS"
-ditto -c -k --keepParent dist/MPCASU.app "$OUT/MPCASU-macOS-7.0.1.zip"
-shasum -a 256 "$OUT/MPCASU-macOS-7.0.1.zip" > "$OUT/MPCASU-macOS-7.0.1.zip.sha256"
+ditto -c -k --keepParent dist/MPCASU.app "$OUT/MPCASU-macOS-7.0.0.zip"
+shasum -a 256 "$OUT/MPCASU-macOS-7.0.0.zip" > "$OUT/MPCASU-macOS-7.0.0.zip.sha256"
 
 # Produce the real macOS distribution container and verify its contents by
 # mounting it. Production signing/notarization is a separate credential gate.
@@ -83,13 +82,13 @@ mount_point="$(mktemp -d "$OUT/.dmg-mount.XXXXXX")"
 trap 'hdiutil detach "$mount_point" -quiet 2>/dev/null || true; rm -rf "$dmg_stage" "$mount_point"' EXIT
 ditto dist/MPCASU.app "$dmg_stage/MPCASU.app"
 ln -s /Applications "$dmg_stage/Applications"
-hdiutil create -quiet -volname "MPCASU 7.0.1" -srcfolder "$dmg_stage" \
-  -ov -format UDZO "$OUT/MPCASU-macOS-7.0.1.dmg"
+hdiutil create -quiet -volname "MPCASU 7.0.0" -srcfolder "$dmg_stage" \
+  -ov -format UDZO "$OUT/MPCASU-macOS-7.0.0.dmg"
 hdiutil attach -quiet -readonly -nobrowse -mountpoint "$mount_point" \
-  "$OUT/MPCASU-macOS-7.0.1.dmg"
+  "$OUT/MPCASU-macOS-7.0.0.dmg"
 test -d "$mount_point/MPCASU.app"
 test -L "$mount_point/Applications"
 codesign --verify --deep --strict --verbose=2 "$mount_point/MPCASU.app"
 hdiutil detach "$mount_point" -quiet
-shasum -a 256 "$OUT/MPCASU-macOS-7.0.1.dmg" > "$OUT/MPCASU-macOS-7.0.1.dmg.sha256"
+shasum -a 256 "$OUT/MPCASU-macOS-7.0.0.dmg" > "$OUT/MPCASU-macOS-7.0.0.dmg.sha256"
 echo "MACOS_DMG=PASS"

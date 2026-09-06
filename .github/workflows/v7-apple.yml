@@ -3,7 +3,7 @@ name: V7 Apple build
 on:
   workflow_dispatch:
   push:
-    branches: [v7.0.1]
+    branches: [v7.0.0]
 
 jobs:
   apple:
@@ -54,17 +54,17 @@ jobs:
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -archivePath ../../dist/apple/MPCASU-iOS-7.0.1.xcarchive \
+            -archivePath ../../dist/apple/MPCASU-iOS-7.0.0.xcarchive \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
-          app='../../dist/apple/MPCASU-iOS-7.0.1.xcarchive/Products/Applications/MPCASU.app'
+          app='../../dist/apple/MPCASU-iOS-7.0.0.xcarchive/Products/Applications/MPCASU.app'
           test -d "$app"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Info.plist")" = 7.0.1
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Info.plist")" = 7.0.0
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")" = org.casu.mpcasu
           file "$app/MPCASU" | grep -q arm64
-          ditto -c -k --keepParent "$app" ../../dist/apple/MPCASU-iOS-Device-Unsigned-7.0.1.zip
-          ditto -c -k --keepParent ../../dist/apple/MPCASU-iOS-7.0.1.xcarchive ../../dist/apple/MPCASU-iOS-Archive-7.0.1.zip
-          shasum -a 256 ../../dist/apple/MPCASU-iOS-Device-Unsigned-7.0.1.zip > ../../dist/apple/MPCASU-iOS-Device-Unsigned-7.0.1.zip.sha256
-          shasum -a 256 ../../dist/apple/MPCASU-iOS-Archive-7.0.1.zip > ../../dist/apple/MPCASU-iOS-Archive-7.0.1.zip.sha256
+          ditto -c -k --keepParent "$app" ../../dist/apple/MPCASU-iOS-Device-Unsigned-7.0.0.zip
+          ditto -c -k --keepParent ../../dist/apple/MPCASU-iOS-7.0.0.xcarchive ../../dist/apple/MPCASU-iOS-Archive-7.0.0.zip
+          shasum -a 256 ../../dist/apple/MPCASU-iOS-Device-Unsigned-7.0.0.zip > ../../dist/apple/MPCASU-iOS-Device-Unsigned-7.0.0.zip.sha256
+          shasum -a 256 ../../dist/apple/MPCASU-iOS-Archive-7.0.0.zip > ../../dist/apple/MPCASU-iOS-Archive-7.0.0.zip.sha256
       - name: Select representative simulators
         id: sims
         run: |
@@ -97,8 +97,8 @@ jobs:
       - name: Package simulator application
         run: |
           mkdir -p dist/apple
-          ditto -c -k --keepParent .v7-derived-data/iphone/Build/Products/Debug-iphonesimulator/MPCASU.app dist/apple/MPCASU-iOS-Simulator-7.0.1.zip
-          shasum -a 256 dist/apple/MPCASU-iOS-Simulator-7.0.1.zip > dist/apple/MPCASU-iOS-Simulator-7.0.1.zip.sha256
+          ditto -c -k --keepParent .v7-derived-data/iphone/Build/Products/Debug-iphonesimulator/MPCASU.app dist/apple/MPCASU-iOS-Simulator-7.0.0.zip
+          shasum -a 256 dist/apple/MPCASU-iOS-Simulator-7.0.0.zip > dist/apple/MPCASU-iOS-Simulator-7.0.0.zip.sha256
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -1677,10 +1677,6 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     }
 
     private void openProvider(String name, String url) {
-        if (ProviderBrowser.requiresExternal(url)) {
-            ProviderBrowser.open(this, url);
-            return;
-        }
         Intent intent = new Intent(this, ProviderActivity.class);
         intent.putExtra("name", name);
         intent.putExtra("url", url);
