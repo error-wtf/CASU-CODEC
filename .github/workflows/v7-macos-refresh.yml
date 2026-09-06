@@ -1,0 +1,45 @@
+name: V7 macOS refresh
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+jobs:
+  apple:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode and initialize Apple platforms
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          sudo xcodebuild -runFirstLaunch
+          sw_vers
+          uname -m
+          xcodebuild -version
+          xcrun clang --version
+          xcrun swift --version
+          xcrun simctl list runtimes
+      - name: Install build-only dependencies
+        run: |
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+          brew list ffmpeg >/dev/null 2>&1 || brew install ffmpeg
+          brew list dylibbundler >/dev/null 2>&1 || brew install dylibbundler
+          brew list python-tk@3.14 >/dev/null 2>&1 || brew install python-tk@3.14
+          if [ ! -d /Applications/VLC.app ]; then brew install --cask vlc; fi
+      - name: Build and test MPCASU Qt for macOS
+        run: |
+          chmod +x apple/macos/build_mpcasu.sh
+          APPLE_OUTPUT_DIR="$PWD/dist/apple" apple/macos/build_mpcasu.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v7-macos-refresh
+          path: |
+            dist/apple/*.dmg
+            dist/apple/*.zip
+          if-no-files-found: error
+      - name: Replace v7 macOS assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload v7.0.0 dist/apple/*.dmg dist/apple/*.zip --clobber

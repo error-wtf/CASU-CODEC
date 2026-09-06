@@ -2,7 +2,7 @@ name: V7 iOS package
 on:
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
   package:
     runs-on: macos-15
@@ -27,6 +27,12 @@ jobs:
           ditto "$app" ../../dist/ios/Payload/MPCASU.app
           cd ../../dist/ios
           ditto -c -k --keepParent Payload MPCASU-iOS-7.0.0.ipa
+      - name: Verify MP3 tags and artwork
+        working-directory: apple/ios
+        run: |
+          set -euo pipefail
+          device="$(xcrun simctl list devices available -j | jq -r '[.devices[][] | select(.name | startswith("iPhone"))] | last.udid')"
+          xcodebuild test -project MPCASU.xcodeproj -scheme MPCASU -destination "platform=iOS Simulator,id=$device" -only-testing:MPCASUTests/MediaMetadataTests CODE_SIGNING_ALLOWED=NO
       - uses: actions/upload-artifact@v4
         with:
           name: v7-ios-package
@@ -34,3 +40,7 @@ jobs:
             dist/ios/*.zip
             dist/ios/*.ipa
           if-no-files-found: error
+      - name: Replace v7 iOS assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload v7.0.0 dist/ios/*.zip dist/ios/*.ipa --clobber
