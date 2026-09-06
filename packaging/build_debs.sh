@@ -4,7 +4,7 @@
 set -euo pipefail
 export SOURCE_DATE_EPOCH=0
 root=$(cd "$(dirname "$0")/.." && pwd)
-version=7.0.0
+version=7.0.1
 out="$root/dist"
 mkdir -p "$out"
 stage_root=$(mktemp -d "${TMPDIR:-/tmp}/casu-debs.XXXXXX")
