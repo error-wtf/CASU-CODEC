@@ -521,3 +521,18 @@ def test_loose_file_play_continues_through_following_playlists(window, tmp_path)
     # Gruppen bleiben sichtbar.
     assert _items(window) == [str(plA.resolve()), str(x.resolve()),
                               str(y.resolve()), str(plB.resolve())]
+
+def test_imported_youtube_playlists_are_visible_groups(window, tmp_path, monkeypatch):
+    from casu.youtube_groups import YouTubePlaylistGroup
+    from casu.search import SearchResult
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    monkeypatch.setattr(window, "_play_playlist_full", lambda path: None)
+    first = SearchResult("Alpha", "https://www.youtube.com/watch?v=abcdefghijk", None, "", "youtube")
+    second = SearchResult("Beta", "https://www.youtube.com/watch?v=12345678901", None, "", "youtube")
+    window._on_queue_items_requested([
+        YouTubePlaylistGroup("https://www.youtube.com/playlist?list=PLone", "Mix One", [first, second]),
+        YouTubePlaylistGroup("https://www.youtube.com/playlist?list=PLtwo", "Mix Two", [first]),
+    ])
+    assert len(window.playlist_model.items) == 2
+    assert all(isinstance(item, Path) and item.suffix == ".m3u8" for item in window.playlist_model.items)
+    assert window._playback_sequence() == [first.url, second.url, first.url]

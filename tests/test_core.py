@@ -1017,7 +1017,9 @@ def test_backend_allows_async_start_grace_before_empty_eof_error():
 def test_libvlc_library_candidates_are_platform_independent():
     linux = LibVLCBackend.library_candidates("linux")
     assert "libvlc.so.5" in linux and "libvlc.so" in linux
-    assert LibVLCBackend.library_candidates("darwin") == ["libvlc.dylib"]
+    macos = LibVLCBackend.library_candidates("darwin")
+    assert macos[-1] == "libvlc.dylib"
+    assert macos[0].endswith("/Frameworks/VLC/lib/libvlc.dylib")
     assert LibVLCBackend.library_candidates("win32") == ["libvlc.dll", "libvlc-5.dll"]
 
 

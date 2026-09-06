@@ -40,11 +40,11 @@ final class YouTubeModel: ObservableObject {
                 if result.kind == .playlist {
                     let videos = try await YouTubeClient.playlist(result.id)
                     for video in videos {
-                        let url = try await YouTubeClient.resolve(video.id)
+                        let url = URL(string: "https://www.youtube.com/watch?v=" + video.id)!
                         player.append(title: video.title, url: url, playlistID: result.id, playlistTitle: result.title)
                     }
                 } else {
-                    let url = try await YouTubeClient.resolve(result.id)
+                    let url = URL(string: "https://www.youtube.com/watch?v=" + result.id)!
                     player.append(title: result.title, url: url, play: true)
                 }
             } catch { self.error = error.localizedDescription }
@@ -54,6 +54,18 @@ final class YouTubeModel: ObservableObject {
 }
 
 enum YouTubeClient {
+    static func videoID(_ url: URL) -> String? {
+        let host = url.host?.lowercased() ?? ""
+        let candidate: String?
+        if host == "youtu.be" { candidate = url.pathComponents.dropFirst().first }
+        else if host == "youtube.com" || host.hasSuffix(".youtube.com") {
+            if url.path.hasPrefix("/shorts/") || url.path.hasPrefix("/embed/") { candidate = url.lastPathComponent }
+            else { candidate = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "v" })?.value }
+        } else { return nil }
+        guard let id = candidate, id.range(of: "^[A-Za-z0-9_-]{11}$", options: .regularExpression) != nil else { return nil }
+        return id
+    }
+
     private static let apiKey = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
     private static let endpoint = URL(string: "https://www.youtube.com/youtubei/v1/")!
     private static let context: [String: Any] = ["client": ["clientName": "ANDROID_VR", "clientVersion": "1.60.19", "androidSdkVersion": 32]]

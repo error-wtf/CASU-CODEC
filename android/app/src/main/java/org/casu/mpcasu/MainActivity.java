@@ -2438,7 +2438,7 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                         for (YouTubeClient.Video v : videos) {
                             if (n >= 100) break;
                             try {
-                                String mediaUrl = YouTubeClient.resolveMediaUrl(v.id);
+                                String mediaUrl = "https://www.youtube.com/watch?v=" + v.id;
                                 MediaItem item = new MediaItem(mediaUrl,
                                         v.title != null && !v.title.isEmpty() ? v.title : "YouTube " + v.id,
                                         "youtube", "YT");
@@ -2452,7 +2452,7 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                     } else {
                         String id = YouTubeClient.extractVideoId(token);
                         if (id == null) continue;
-                        String mediaUrl = YouTubeClient.resolveMediaUrl(id);
+                        String mediaUrl = "https://www.youtube.com/watch?v=" + id;
                         MediaItem item = new MediaItem(mediaUrl, "YouTube " + id, "youtube", "YT");
                         item.sourceUrl = "https://www.youtube.com/watch?v=" + id;
                         toAdd.add(item);

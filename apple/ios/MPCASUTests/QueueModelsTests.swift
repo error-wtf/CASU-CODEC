@@ -95,3 +95,12 @@ final class PlaylistGroupTests: XCTestCase {
         XCTAssertTrue(PlaylistExportFormat.pls.render(restored.occurrences).contains("NumberOfEntries=3"))
     }
 }
+
+final class YouTubePlaylistURLTests: XCTestCase {
+    func testCanonicalPlaylistLinksResolveOnlyYouTubeVideos() {
+        XCTAssertEqual(YouTubeClient.videoID(URL(string: "https://www.youtube.com/watch?v=abcdefghijk")!), "abcdefghijk")
+        XCTAssertEqual(YouTubeClient.videoID(URL(string: "https://youtu.be/abcdefghijk")!), "abcdefghijk")
+        XCTAssertNil(YouTubeClient.videoID(URL(string: "https://example.com/watch?v=abcdefghijk")!))
+        XCTAssertNil(YouTubeClient.videoID(URL(string: "https://www.youtube.com/playlist?list=PL123")!))
+    }
+}

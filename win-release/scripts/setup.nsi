@@ -38,7 +38,7 @@ OutFile "${OUTPUT_FILE}"
 InstallDir "$PROGRAMFILES64\MPCASU"
 RequestExecutionLevel highest
 Unicode True
-SetCompressor /SOLID lzma
+SetCompressor zlib
 ; Use the CASU icon for the installer executable itself (Explorer/desktop).
 Icon "..\assets\casu-installer-icon.ico"
 UninstallIcon "..\assets\casu-installer-icon.ico"

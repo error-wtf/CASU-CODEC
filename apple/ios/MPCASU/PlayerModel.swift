@@ -118,9 +118,27 @@ final class PlayerModel: ObservableObject {
         persist()
     }
 
+    private var providerGeneration = 0
+
     func select(_ occurrence: QueueOccurrence) {
+        providerGeneration += 1
+        let generation = providerGeneration
         queue.currentOccurrenceID = occurrence.id
-        player.replaceCurrentItem(with: AVPlayerItem(url: occurrence.url))
+        if let videoID = YouTubeClient.videoID(occurrence.url) {
+            player.replaceCurrentItem(with: nil)
+            Task {
+                do {
+                    let resolved = try await YouTubeClient.resolve(videoID)
+                    guard providerGeneration == generation, queue.currentOccurrenceID == occurrence.id else { return }
+                    player.replaceCurrentItem(with: AVPlayerItem(url: resolved))
+                    if isPlaying { player.playImmediately(atRate: playbackRate) }
+                } catch {
+                    guard providerGeneration == generation else { return }
+                    isPlaying = false
+                    errorMessage = "YouTube: \(error.localizedDescription)"
+                }
+            }
+        } else { player.replaceCurrentItem(with: AVPlayerItem(url: occurrence.url)) }
         updateNowPlaying(occurrence)
         persist()
     }
@@ -134,6 +152,7 @@ final class PlayerModel: ObservableObject {
     }
 
     func stop() {
+        providerGeneration += 1
         player.pause()
         player.seek(to: .zero)
         isPlaying = false
@@ -145,6 +164,7 @@ final class PlayerModel: ObservableObject {
         let wasCurrent = occurrence.id == queue.currentOccurrenceID
         queue.occurrences.removeAll { $0.id == occurrence.id }
         if wasCurrent {
+            providerGeneration += 1
             player.pause(); player.replaceCurrentItem(with: nil); isPlaying = false
             queue.currentOccurrenceID = queue.occurrences.first?.id
         }

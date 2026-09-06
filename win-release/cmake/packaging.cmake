@@ -60,6 +60,10 @@ install(FILES "${CASU_THIRD_PARTY}/tools/ffmpeg.exe"
               "${CASU_THIRD_PARTY}/tools/yt-dlp.exe"
         DESTINATION tools COMPONENT tools)
 
+install(FILES "${CMAKE_CURRENT_LIST_DIR}/../../LICENSE"
+              "${CMAKE_CURRENT_LIST_DIR}/../../THIRD_PARTY_COMPONENTS.md"
+        DESTINATION . COMPONENT docs)
+
 # --- docs + licenses ------------------------------------------------------
 install(FILES "${CMAKE_CURRENT_LIST_DIR}/../README_WINDOWS.md"
         DESTINATION . COMPONENT docs)

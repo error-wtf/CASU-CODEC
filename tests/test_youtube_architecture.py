@@ -36,7 +36,8 @@ def mw(app):
 class _StubBackend:
     """Minimal LibVLCBackend stand-in so play_selected never touches libVLC."""
 
-    def __init__(self, handle):
+    def __init__(self, handle, *, runtime_options=()):
+        assert runtime_options == ()
         self.handle = handle
         self.on_event = None
 
