@@ -66,7 +66,6 @@ enum YouTubeClient {
         return id
     }
 
-    private static let apiKey = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
     private static let endpoint = URL(string: "https://www.youtube.com/youtubei/v1/")!
     private static let context: [String: Any] = ["client": ["clientName": "ANDROID_VR", "clientVersion": "1.60.19", "androidSdkVersion": 32]]
 
@@ -124,7 +123,7 @@ enum YouTubeClient {
 
     private static func request(_ method: String, body: [String: Any]) async throws -> [String: Any] {
         var components = URLComponents(url: endpoint.appendingPathComponent(method), resolvingAgainstBaseURL: false)!
-        components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+        components.queryItems = [URLQueryItem(name: "prettyPrint", value: "false")]
         var request = URLRequest(url: components.url!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
