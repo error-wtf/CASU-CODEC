@@ -21,6 +21,7 @@
 ; Output:           dist/MPCASU-Setup-7.0.0.exe
 
 !include "MUI2.nsh"
+!include "LogicLib.nsh"
 !include "FileFunc.nsh"
 !include "WinMessages.nsh"
 ; UserInfo plugin (GetAccountType) is used without its optional .nsh header.
@@ -359,6 +360,13 @@ Section "Install" SecMain
   ; the complete tree so apps find their Qt/VLC/tools/webview2 deps relative
   ; to the exe, exactly like the verified package layout.
   File /r "..\dist\_stage\MPCASU-Windows-x86_64\*.*"
+
+  ; Official Evergreen runtime installs in-place; WebView2 stays inside MPCASU.
+  DetailPrint "Installing Microsoft Edge WebView2 Runtime (Internet required if missing)..."
+  ExecWait '"$INSTDIR\tools\MicrosoftEdgeWebview2Setup.exe" /silent /install' $0
+  ${If} $0 != 0
+    DetailPrint "WebView2 setup returned $0. An existing runtime may already be installed."
+  ${EndIf}
 
   ; --- per-app shortcuts (each app shows its OWN icon, mirroring the Linux
   ;     desktop entries: mpcasu-player / casu-converter / web-casu) ---

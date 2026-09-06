@@ -80,9 +80,9 @@ final class PlayerModel: ObservableObject {
         }
     }
 
-    func append(title: String, url: URL, kind: MediaIdentity.Kind = .network, play: Bool = false) {
+    func append(title: String, url: URL, kind: MediaIdentity.Kind = .network, play: Bool = false, playlistID: String? = nil, playlistTitle: String? = nil) {
         let identity = MediaIdentity(kind: kind, canonicalKey: url.absoluteString)
-        let occurrence = QueueOccurrence(media: identity, title: title, url: url)
+        let occurrence = QueueOccurrence(media: identity, title: title, url: url, playlistID: playlistID, playlistTitle: playlistTitle)
         queue.occurrences.append(occurrence)
         if queue.currentOccurrenceID == nil || play { select(occurrence) }
         persist()
@@ -96,16 +96,26 @@ final class PlayerModel: ObservableObject {
         } catch { errorMessage = "Playlist import failed: \(error.localizedDescription)" }
     }
 
-    func exportPlaylist() throws -> URL {
+    func exportPlaylist(format: PlaylistExportFormat = .m3u) throws -> URL {
         let target = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("MPCASU-Queue.m3u")
-        var lines = ["#EXTM3U"]
-        for item in queue.occurrences {
-            lines.append("#EXTINF:-1,\(item.title.replacingOccurrences(of: "\n", with: " "))")
-            lines.append(item.url.absoluteString)
-        }
-        try (lines.joined(separator: "\n") + "\n").write(to: target, atomically: true, encoding: .utf8)
+            .appendingPathComponent("MPCASU-Queue.\(format.rawValue)")
+        try format.render(queue.occurrences).write(to: target, atomically: true, encoding: .utf8)
         return target
+    }
+
+    func moveGroups(from source: IndexSet, to destination: Int) {
+        var groups = QueueDisplayGroup.make(queue.occurrences)
+        groups.move(fromOffsets: source, toOffset: destination)
+        queue.occurrences = groups.flatMap(\.items)
+        persist()
+    }
+
+    func moveWithinGroup(_ group: QueueDisplayGroup, from source: IndexSet, to destination: Int) {
+        var children = group.items
+        children.move(fromOffsets: source, toOffset: destination)
+        guard let start = queue.occurrences.firstIndex(where: { $0.id == group.id }) else { return }
+        queue.occurrences.replaceSubrange(start..<(start + children.count), with: children)
+        persist()
     }
 
     func select(_ occurrence: QueueOccurrence) {

@@ -2411,9 +2411,10 @@ class SourcesView(QFrame):
         self._status.setText("Expanding YouTube into the queue…")
 
         def worker():
-            from casu.search import SearchError, expand_youtube_input
+            from casu.search import SearchError
+            from casu.youtube_groups import expand_queue_input
             try:
-                found = expand_youtube_input(text)
+                found = expand_queue_input(text)
             except SearchError as exc:
                 self._queue_bridge.errorReady.emit(str(exc))
             else:
@@ -2424,7 +2425,7 @@ class SourcesView(QFrame):
         self._searching = False
         self.queueItemsRequested.emit(list(found))
         self._status.setText(
-            f"{len(found)} video(s) added to the queue — playing now")
+            f"{len(found)} video(s)/playlist(s) added to the queue")
 
     def _expand_spotify_url(self, url: str):
         if self._searching:
@@ -2447,7 +2448,7 @@ class SourcesView(QFrame):
                 self._bridge.resultReady.emit(found)
         threading.Thread(target=worker, daemon=True).start()
 
-    def _expand_youtube_playlist(self, url: str):
+    def _expand_youtube_playlist(self, url: str, title: str = ""):
         if self._searching:
             return
         self._searching = True
@@ -2456,9 +2457,10 @@ class SourcesView(QFrame):
         self._status.setText("Expanding YouTube playlist…")
 
         def worker():
-            from casu.search import SearchError, search_youtube_playlist
+            from casu.search import SearchError
+            from casu.youtube_groups import expand_queue_input
             try:
-                found = search_youtube_playlist(url)
+                found = expand_queue_input(url, title=title)
             except SearchError as exc:
                 self._queue_bridge.errorReady.emit(str(exc))
             else:
@@ -2565,7 +2567,7 @@ class SourcesView(QFrame):
         if 0 <= row < len(self._results):
             item = self._results[row]
             if item.source == "youtube_playlist":
-                self._expand_youtube_playlist(item.url)
+                self._expand_youtube_playlist(item.url, item.title)
                 return
             if item.source == "handoff":
                 if not self._consent_given():
@@ -5004,41 +5006,42 @@ class MainWindow(QMainWindow):
                                                display_label=payload.title)
 
     def _on_queue_items_requested(self, found):
-        """Add several individual YouTube videos (expanded from playlists
-        and/or several pasted URLs) to the queue and start the first one.
-
-        Each video becomes its own queue entry, so shuffle/repeat and the
-        normal Next/Previous controls act per-video (Windows/Linux parity).
-        """
+        """Keep imported YouTube playlists as expandable, persistent queue rows."""
+        from casu.youtube_groups import YouTubePlaylistGroup, save_youtube_group
         if not found:
             return
-        urls: list[str] = []
-        labels: dict = {}
-        for item in found:
-            url = str(getattr(item, "url", "") or "").strip()
-            if not url:
-                continue
-            title = str(getattr(item, "title", "") or "").strip()
-            if title and title != url:
-                labels[url] = title
-            urls.append(url)
-        if not urls:
-            return
-        self._playlist_pane._display_titles.update(labels)
+        sources = []
+        labels = {}
         try:
-            self.playlist_model.add(urls)
+            for item in found:
+                if isinstance(item, YouTubePlaylistGroup):
+                    path = save_youtube_group(item)
+                    sources.append(path)
+                    labels[str(path)] = item.title
+                    labels.update({entry.url: entry.title for entry in item.items})
+                else:
+                    url = str(getattr(item, "url", "") or "").strip()
+                    if url:
+                        sources.append(url)
+                        labels[url] = getattr(item, "title", url)
+            if not sources:
+                return
+            self._playlist_pane._display_titles.update(labels)
+            self.playlist_model.add(sources)
             self._invalidate_play_seq()
             self._render_playlist()
-            first_row = self.playlist_model.index_of(urls[0])
+            first_row = self.playlist_model.index_of(sources[0])
             if first_row is not None:
                 self._playlist_pane.select_row(first_row)
-        except Exception:  # noqa: BLE001 - queue must never block playback
-            pass
-        first = urls[0]
-        self._show_player_page()
-        self._play_youtube(first, label=labels.get(first, first))
-        for url in urls:
-            self._tag_queue_title(url)
+        except (OSError, ValueError, PlaylistError) as exc:
+            self.toast(f"Could not add playlist: {exc}")
+            return
+        first = sources[0]
+        if isinstance(first, Path):
+            self._play_playlist_full(first)
+        else:
+            self._play_youtube(first, label=labels.get(first, first))
+        self.status(f"{len(sources)} video(s)/playlist(s) added to queue")
 
     def _queue_and_play(self, url: str, *, label: str = ""):
         """Add a YouTube source to the queue (with a display tag) and play it.
@@ -5756,12 +5759,12 @@ class MainWindow(QMainWindow):
         dialog.setOption(QFileDialog.DontUseNativeDialog, True)
         filters = [
             ("M3U playlist", "*.m3u", ".m3u"),
+            ("M3U8 playlist (UTF-8)", "*.m3u8", ".m3u8"),
             ("PLS playlist", "*.pls", ".pls"),
             ("XSPF playlist", "*.xspf", ".xspf"),
             ("MPCASU JSON", "*.json", ".json"),
         ]
-        for label, pattern, _suffix in filters:
-            dialog.setNameFilter(f"{label} ({pattern})")
+        dialog.setNameFilters([f"{label} ({pattern})" for label, pattern, _suffix in filters])
         dialog.selectNameFilter("M3U playlist (*.m3u)")
         if not dialog.exec():
             return

@@ -33,7 +33,8 @@ add_subdirectory(tests)             # casu_core_test, ...
 
 # Apps (Phase C)
 add_subdirectory(apps/casu-cli)     # casu_cli
-add_subdirectory(apps/mpcasu)       # MPCASU.exe
+set(CASU_PLAYER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/apps/mpcasu" CACHE PATH "MPCASU player application sources")
+add_subdirectory("${CASU_PLAYER_SOURCE_DIR}" apps/mpcasu)
 add_subdirectory(apps/converter)    # CASU-Converter.exe (Qt GUI)
 add_subdirectory(apps/web-backend)  # CASU-Web-Backend
 

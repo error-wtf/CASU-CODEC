@@ -41,7 +41,7 @@ final class YouTubeModel: ObservableObject {
                     let videos = try await YouTubeClient.playlist(result.id)
                     for video in videos {
                         let url = try await YouTubeClient.resolve(video.id)
-                        player.append(title: video.title, url: url)
+                        player.append(title: video.title, url: url, playlistID: result.id, playlistTitle: result.title)
                     }
                 } else {
                     let url = try await YouTubeClient.resolve(result.id)

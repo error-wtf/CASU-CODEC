@@ -39,6 +39,11 @@ if(EXISTS "${CASU_THIRD_PARTY}/webview2/x64/WebView2Loader.dll")
           DESTINATION . COMPONENT qt)
 endif()
 
+if(NOT EXISTS "${CASU_THIRD_PARTY}/webview2/MicrosoftEdgeWebview2Setup.exe")
+  message(FATAL_ERROR "Download the Microsoft WebView2 Evergreen bootstrapper to third_party/webview2/MicrosoftEdgeWebview2Setup.exe before packaging")
+endif()
+install(FILES "${CASU_THIRD_PARTY}/webview2/MicrosoftEdgeWebview2Setup.exe" DESTINATION tools COMPONENT tools)
+
 # --- libVLC ---------------------------------------------------------------
 # The DLLs live at the package root (Windows loads them next to the exe); the
 # plugin module tree stays in vlc/plugins and is found via VLC_PLUGIN_PATH
