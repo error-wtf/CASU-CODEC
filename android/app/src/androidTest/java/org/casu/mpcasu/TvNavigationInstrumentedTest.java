@@ -35,7 +35,9 @@ public class TvNavigationInstrumentedTest {
         try {
             instrumentation.waitForIdleSync();
             View tab=find(main.getWindow().getDecorView(),"IPTV");assertNotNull(tab);
-            instrumentation.runOnMainSync(()->assertTrue(tab.requestFocus()));
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN);
+            instrumentation.waitForIdleSync();
+            instrumentation.runOnMainSync(()->{assertTrue(tab.isFocusable());assertTrue(tab.requestFocus());});
             instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_CENTER);
             instrumentation.waitForIdleSync();
             java.lang.reflect.Field f=MainActivity.class.getDeclaredField("iptvView");f.setAccessible(true);
@@ -49,6 +51,12 @@ public class TvNavigationInstrumentedTest {
             View ring=(View)ringField.get(main);assertTrue(ring.isShown());
             java.lang.reflect.Field bounds=RemoteFocus.class.getDeclaredField("bounds");bounds.setAccessible(true);
             assertFalse(((android.graphics.Rect)bounds.get(ring)).isEmpty());
+            android.graphics.Bitmap screenshot = instrumentation.getUiAutomation().takeScreenshot();
+            if (screenshot != null) {
+                try (java.io.FileOutputStream out = new java.io.FileOutputStream(new java.io.File(context.getExternalFilesDir(null), "iptv-focus.png"))) {
+                    screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out);
+                }
+            }
             instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
             instrumentation.waitForIdleSync();assertFalse(iptv.isShown());assertFalse(main.isFinishing());
         } finally {instrumentation.runOnMainSync(main::finish);}
