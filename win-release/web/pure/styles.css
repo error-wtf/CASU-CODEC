@@ -139,3 +139,5 @@ body:has(.app-shell.embed-mode) {
     box-shadow: -24px 0 70px #000d;
   }
 }
+
+#epg-guide{grid-template-columns:1fr}.epg-source{flex-wrap:wrap;gap:8px}#epg-guide .epg-channel button{font-size:17px;text-align:left;width:100%}#iptv-filters{padding:8px}#iptv-filters[hidden]{display:none}

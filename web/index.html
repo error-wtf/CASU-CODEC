@@ -86,7 +86,7 @@
     <aside class="queue-panel">
       <header><div><strong>PLAYLIST</strong><small id="queue-summary">0 items</small></div><button id="add-more" title="Add more files">＋</button></header>
       <div class="queue-actions"><button id="queue-open" class="primary">Choose files</button><button id="queue-url">Add URL</button></div>
-      <ol id="queue" aria-label="Playlist"></ol>
+      <div id="iptv-filters" hidden><label>Channel group <select id="iptv-groups"><option value="">All groups</option></select></label></div><ol id="queue" aria-label="Playlist"></ol>
       <footer><button id="move-up" title="Move up">↑</button><button id="move-down" title="Move down">↓</button><button id="rename" title="Rename selected">✎</button><button id="remove" title="Remove selected">⌫</button><button id="save-pl" title="Save playlist as M3U">⤓</button></footer>
     </aside>
   </main>
@@ -104,6 +104,7 @@
     <form method="dialog">
       <header class="dialog-title"><div><h2>Live TV programme guide</h2><p>Current and upcoming XMLTV programmes</p></div><div><button id="epg-load" type="button">Load file</button><button value="cancel" aria-label="Close">×</button></div></header>
       <div class="epg-source"><input id="epg-url" type="url" placeholder="https://provider.example/guide.xml or channels.m3u"><button id="epg-fetch" type="button">Load URL</button></div>
+      <div class="epg-source"><input id="epg-search" type="search" placeholder="Search channels or groups" aria-label="Search channels"><select id="epg-groups" aria-label="Channel group"><option value="">All groups</option></select><span id="epg-count"></span><button type="button" id="epg-prev">Previous</button><button type="button" id="epg-next-page">Next</button></div>
       <div id="epg-guide" class="epg-guide"></div>
     </form>
   </dialog>

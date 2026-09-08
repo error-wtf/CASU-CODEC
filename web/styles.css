@@ -23,3 +23,5 @@
 .inline-rename{background:#080a0c;border:1px solid var(--red);color:#fff;border-radius:5px;padding:4px 6px;font:inherit;width:100%}
 .consent-box{border:1px solid var(--line);border-left:3px solid var(--red);background:#171b20;border-radius:7px;padding:12px;margin-bottom:10px}.consent-box p{margin:0 0 10px}
 [hidden]{display:none!important}
+
+#epg-guide{grid-template-columns:1fr}.epg-source{flex-wrap:wrap;gap:8px}#epg-guide .epg-channel button{font-size:17px;text-align:left;width:100%}#iptv-filters{padding:8px}#iptv-filters[hidden]{display:none}
