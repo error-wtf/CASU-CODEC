@@ -65,4 +65,13 @@ public class TvNavigationInstrumentedTest {
         PlaylistIO.Playlist p=PlaylistIO.load("https://example.org/list.m3u", source->"#EXTM3U\n#EXTINF:-1 group-title=\"News\",World\nhttps://example.org/live.m3u8\n");
         assertEquals("News",p.items.get(0).group);assertEquals("World",p.items.get(0).title);
     }
+    @Test public void legacyAndroidCanReadProgrammeTimes() {
+        // Exercises java.time on API 21/22, where the platform has no java.time.
+        java.util.List<EpgLoader.Programme> programmes = EpgLoader.parseXmltv(
+                "<programme channel=\"news\" start=\"20260909120000 +0000\" stop=\"20260909130000 +0000\"><title>News</title></programme>",
+                1788956100000L);
+        assertEquals(1, programmes.size());
+        assertEquals(3600000L, programmes.get(0).stopMs - programmes.get(0).startMs);
+        assertEquals("News", programmes.get(0).title);
+    }
 }

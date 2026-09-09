@@ -10,13 +10,14 @@ android {
 
     defaultConfig {
         applicationId = "org.casu.mpcasu"
-        minSdk = 24
+        // Android 5 / Fire OS 5, including 32-bit TV sticks.
+        minSdk = 21
         targetSdk = 34
-        versionCode = 7
+        versionCode = 70001
         versionName = "7.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
         }
         externalNativeBuild {
             cmake {
@@ -38,6 +39,8 @@ android {
 
     signingConfigs {
         create("release") {
+            enableV1Signing = true
+            enableV2Signing = true
             // Plain parser: java.util.Properties is unavailable in kts.
             val props = mutableMapOf<String, String>()
             val kf = rootProject.file("keystore/mpcasu-release.properties")
@@ -67,12 +70,14 @@ android {
     }
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     implementation("androidx.documentfile:documentfile:1.0.1")
     // libVLC: robust playback of ALL media types (radio/IP-TV/HLS/Streams/
     // playlists) — the parity engine used by the Linux/Windows builds.
