@@ -1,5 +1,7 @@
 # CASU & MPCASU — Segmented-State Media Codec, Player, Converter
 
+> **Version:** `7.8.0` — see [CHANGELOG.md](CHANGELOG.md) and [RELEASE_GATE_STATUS.json](RELEASE_GATE_STATUS.json).
+
 CASU (**C**odec for **A**ll **S**egmented **U**nits) is a standalone segmented
 media container family (CASUNAT1, CASUNAT2, MP5). MPCASU is the accompanying
 media player suite: a Qt desktop player, a local web player, a batch converter
@@ -53,10 +55,10 @@ source file is **not** required for native playback.
 ./packaging/build_debs.sh          # builds into dist/ (or use shipped DEBs)
 cd dist
 sha256sum -c SHA256SUMS
-sudo dpkg -i casu-codec_7.0.0_all.deb \
-             casu-converter_7.0.0_all.deb \
-             mpcasu_7.0.0_all.deb \
-             web-casu_7.0.0_all.deb
+sudo dpkg -i casu-codec_7.8.0_all.deb \
+             casu-converter_7.8.0_all.deb \
+             mpcasu_7.8.0_all.deb \
+             web-casu_7.8.0_all.deb
 sudo apt-get -f install            # only if dependencies are missing
 ```
 

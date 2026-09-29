@@ -3,6 +3,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+env:
+  PRODUCT_VERSION: "7.8.0"
+
 jobs:
   package:
     runs-on: macos-15
@@ -16,17 +19,17 @@ jobs:
           set -euo pipefail
           xcodegen generate
           mkdir -p ../../dist/ios
-          xcodebuild archive -project MPCASU.xcodeproj -scheme MPCASU -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -archivePath ../../dist/ios/MPCASU-iOS-7.0.0.xcarchive CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+          xcodebuild archive -project MPCASU.xcodeproj -scheme MPCASU -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -archivePath ../../dist/ios/MPCASU-iOS-${{ env.PRODUCT_VERSION }}.xcarchive CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
           xcodebuild build -project MPCASU.xcodeproj -scheme MPCASU -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath ../../.v7-ios-simulator CODE_SIGNING_ALLOWED=NO
-          app='../../dist/ios/MPCASU-iOS-7.0.0.xcarchive/Products/Applications/MPCASU.app'
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Info.plist")" = 7.0.0
-          ditto -c -k --keepParent "$app" ../../dist/ios/MPCASU-iOS-Device-Unsigned-7.0.0.zip
-          ditto -c -k --keepParent ../../dist/ios/MPCASU-iOS-7.0.0.xcarchive ../../dist/ios/MPCASU-iOS-Archive-7.0.0.zip
-          ditto -c -k --keepParent ../../.v7-ios-simulator/Build/Products/Debug-iphonesimulator/MPCASU.app ../../dist/ios/MPCASU-iOS-Simulator-7.0.0.zip
+          app='../../dist/ios/MPCASU-iOS-${{ env.PRODUCT_VERSION }}.xcarchive/Products/Applications/MPCASU.app'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Info.plist")" = ${{ env.PRODUCT_VERSION }}
+          ditto -c -k --keepParent "$app" ../../dist/ios/MPCASU-iOS-Device-Unsigned-${{ env.PRODUCT_VERSION }}.zip
+          ditto -c -k --keepParent ../../dist/ios/MPCASU-iOS-${{ env.PRODUCT_VERSION }}.xcarchive ../../dist/ios/MPCASU-iOS-Archive-${{ env.PRODUCT_VERSION }}.zip
+          ditto -c -k --keepParent ../../.v7-ios-simulator/Build/Products/Debug-iphonesimulator/MPCASU.app ../../dist/ios/MPCASU-iOS-Simulator-${{ env.PRODUCT_VERSION }}.zip
           mkdir -p ../../dist/ios/Payload
           ditto "$app" ../../dist/ios/Payload/MPCASU.app
           cd ../../dist/ios
-          ditto -c -k --keepParent Payload MPCASU-iOS-7.0.0.ipa
+          ditto -c -k --keepParent Payload MPCASU-iOS-${{ env.PRODUCT_VERSION }}.ipa
       - name: Verify MP3 tags and artwork
         working-directory: apple/ios
         run: |
@@ -43,4 +46,4 @@ jobs:
       - name: Replace v7 iOS assets
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload v7.0.0 dist/ios/*.zip dist/ios/*.ipa --clobber
+        run: gh release upload v${{ env.PRODUCT_VERSION }} dist/ios/*.zip dist/ios/*.ipa --clobber

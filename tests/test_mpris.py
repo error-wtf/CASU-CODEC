@@ -28,6 +28,7 @@ QW = pytest.importorskip("PySide6.QtWidgets")
 from PySide6.QtCore import QObject, QTimer  # noqa: E402
 
 import mpcasu_qt.main_window as mw  # noqa: E402
+from mpcasu_qt import mpris as mpris_module
 
 
 @pytest.fixture(scope="module")
@@ -87,8 +88,8 @@ class _StubBackend:
 @pytest.fixture()
 def player(qapp):
     window = _StubWindow()
-    adaptor = mw._MprisPlayer(window)
-    root = mw._MprisRoot(window)
+    adaptor = mpris_module._MprisPlayer(window)
+    root = mpris_module._MprisRoot(window)
     return window, root, adaptor
 
 
@@ -184,7 +185,7 @@ def test_notifier_sends_only_on_change(player):
             sent.append(dict(args[1]) if len(args) >= 2 else {})
             return True
 
-    notifier = mw._MprisNotifier(window, FakeBus(), adaptor, "svc")
+    notifier = mpris_module._MprisNotifier(window, FakeBus(), adaptor, "svc")
     notifier.refresh()          # initial full snapshot
     notifier.refresh()          # identical -> silence
     notifier.refresh()          # identical -> silence
@@ -204,7 +205,7 @@ def test_register_without_session_bus_is_none(qapp):
     # In the offscreen test environment there may or may not be a session
     # bus; either way registration must never raise. A real bus yields a
     # notifier, a missing bus yields None.
-    result = mw._register_mpris(_StubWindow())
+    result = mpris_module._register_mpris(_StubWindow())
     assert result is None or hasattr(result, "refresh")
 
 

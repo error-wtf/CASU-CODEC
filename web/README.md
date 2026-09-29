@@ -5,7 +5,7 @@ FFmpeg compatibility fallback:
 
 ```bash
 cd /path/to/Lino-Codec
-python mpcasu_web.py --port 8080
+python web_casu.py --port 8080
 ```
 
 Open `http://localhost:8080/web/`. The player supports local audio/video,

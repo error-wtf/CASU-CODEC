@@ -1213,8 +1213,26 @@ function setupHls(url, item) {
   state.hls = new Hls({ liveSyncDuration: (window.PUREWEB?.hls?.liveSyncDuration) || 6 });
   state.hls.loadSource(url);
   state.hls.attachMedia(media);
+  // v7.8: graduated recovery per hls.js guidance — network errors restart
+  // loading, media errors recover in place; only persistent failure falls
+  // back to destroy (previously any fatal error killed the stream at once).
+  state.hlsRecoveryAttempts = 0;
   state.hls.on(Hls.Events.ERROR, (_event, data) => {
-    if (data.fatal) { state.hls?.destroy(); state.hls = null; toast("HLS stream error: " + (data.details || data.type)); }
+    if (!data.fatal || !state.hls) return;
+    if (data.type === Hls.ErrorTypes.NETWORK_ERROR && state.hlsRecoveryAttempts < 3) {
+      state.hlsRecoveryAttempts += 1;
+      toast("HLS network error — retrying (" + state.hlsRecoveryAttempts + "/3)");
+      setTimeout(() => { try { state.hls?.startLoad(); } catch {} }, 1000 * state.hlsRecoveryAttempts);
+      return;
+    }
+    if (data.type === Hls.ErrorTypes.MEDIA_ERROR && state.hlsRecoveryAttempts < 3) {
+      state.hlsRecoveryAttempts += 1;
+      toast("HLS media error — recovering (" + state.hlsRecoveryAttempts + "/3)");
+      try { state.hls.recoverMediaError(); } catch {}
+      return;
+    }
+    state.hls.destroy(); state.hls = null;
+    toast("HLS stream error: " + (data.details || data.type));
   });
   return true;
 }
@@ -1752,3 +1770,46 @@ document.getElementById("epg-search").oninput=()=>{state.epgPage=0;renderEpgDial
 document.getElementById("epg-groups").onchange=()=>{state.epgPage=0;renderEpgDialog();};
 document.getElementById("epg-prev").onclick=()=>{state.epgPage=Math.max(0,(state.epgPage||0)-1);renderEpgDialog();};
 document.getElementById("epg-next-page").onclick=()=>{state.epgPage=(state.epgPage||0)+1;renderEpgDialog();};
+
+/* v7.8: fullscreen + orientation canvas sync */
+function syncCanvasSize(){const p=vizCanvas&&vizCanvas.parentElement;if(!p||!vizCanvas)return;
+  vizCanvas.width=p.clientWidth;vizCanvas.height=p.clientHeight}
+window.addEventListener("resize",syncCanvasSize);
+window.addEventListener("orientationchange",()=>setTimeout(syncCanvasSize,250));
+document.addEventListener("fullscreenchange",()=>{syncCanvasSize();
+  if(document.fullscreenElement){if(screen.orientation&&screen.orientation.lock)screen.orientation.lock("landscape").catch(()=>{})}
+  else{if(screen.orientation&&screen.orientation.unlock)screen.orientation.unlock().catch(()=>{})}});
+
+/* v7.8: Media Session API — OS lockscreen/media-key integration */
+(function(){
+  if (!("mediaSession" in navigator)) return;
+  function msMeta(){
+    const item = state.items[state.index];
+    if (!item) { navigator.mediaSession.metadata = null; return; }
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: item.title || itemLabel(item) || "MPCASU",
+        artist: item.artist || item.subtitle || "",
+        album: item.playlist || "MPCASU",
+        artwork: item.logo ? [{ src: item.logo }] : []
+      });
+    } catch {}
+  }
+  try {
+    navigator.mediaSession.setActionHandler("play", () => { if (media.paused) togglePlay(); });
+    navigator.mediaSession.setActionHandler("pause", () => { if (!media.paused) togglePlay(); });
+    navigator.mediaSession.setActionHandler("previoustrack", () => playIndex(Math.max(0, state.index - 1)));
+    navigator.mediaSession.setActionHandler("nexttrack", () => playIndex(Math.min(state.items.length - 1, state.index + 1)));
+    navigator.mediaSession.setActionHandler("seekto", (d) => {
+      if (d.seekTime != null && Number.isFinite(media.duration)) media.currentTime = d.seekTime;
+    });
+  } catch {}
+  setInterval(() => {
+    msMeta();
+    if (Number.isFinite(media.duration) && media.duration > 0) {
+      try { navigator.mediaSession.setPositionState({
+        duration: media.duration, playbackRate: media.playbackRate || 1,
+        position: Math.min(media.currentTime, media.duration) }); } catch {}
+    }
+  }, 5000);
+})();

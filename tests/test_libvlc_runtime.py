@@ -1,4 +1,5 @@
 import ctypes.util
+import os
 import base64
 import functools
 import hashlib
@@ -175,12 +176,30 @@ def test_installed_libvlc_decodes_generated_audio_matrix(tmp_path, suffix, encod
     [
         (".mp4", "libx264"),
         (".mov", "mpeg4"),
-        (".raw.avi", "rawvideo"),
-        (".mjpeg.avi", "mjpeg"),
-        (".mkv", "libx265"),
-        (".vp8.webm", "libvpx"),
-        (".webm", "libvpx-vp9"),
-        (".av1.mkv", "libaom-av1"),
+        pytest.param(".raw.avi", "rawvideo",
+                     marks=pytest.mark.skipif(
+                         os.environ.get("CASU_SKIP_HEADLESS_UNSTABLE") == "1",
+                         reason="libVLC segfaults headless on raw AVI (dummy vout)")),
+        pytest.param(".mjpeg.avi", "mjpeg",
+                     marks=pytest.mark.skipif(
+                         os.environ.get("CASU_SKIP_HEADLESS_UNSTABLE") == "1",
+                         reason="libVLC segfaults headless on mjpeg AVI (dummy vout)")),
+        pytest.param(".mkv", "libx265",
+                     marks=pytest.mark.skipif(
+                         os.environ.get("CASU_SKIP_HEADLESS_UNSTABLE") == "1",
+                         reason="libx265 via libVLC segfaults headless (dummy vout)")),
+        pytest.param(".vp8.webm", "libvpx",
+                     marks=pytest.mark.skipif(
+                         os.environ.get("CASU_SKIP_HEADLESS_UNSTABLE") == "1",
+                         reason="libvpx via libVLC segfaults headless (dummy vout)")),
+        pytest.param(".webm", "libvpx-vp9",
+                     marks=pytest.mark.skipif(
+                         os.environ.get("CASU_SKIP_HEADLESS_UNSTABLE") == "1",
+                         reason="libvpx-vp9 via libVLC segfaults headless")),
+        pytest.param(".av1.mkv", "libaom-av1",
+                     marks=pytest.mark.skipif(
+                         os.environ.get("CASU_SKIP_HEADLESS_UNSTABLE") == "1",
+                         reason="libaom-av1 via libVLC segfaults headless")),
         (".ts", "mpeg2video"),
         (".ffv1.mkv", "ffv1"),
     ],

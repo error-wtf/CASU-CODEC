@@ -104,7 +104,7 @@ const VIEWS = {
   streams: (item) => !item.file && !!(item.url) && !item.kind?.startsWith("casu")
       && item.kind !== "youtube" && item.kind !== "spotify",
   playlists: (item) => !!(item.epgId || item.group || item.logo),
-  iptv: (item) => !!item.epgId,
+  iptv: item => isIptvItem(item),
   youtube: (item) => item.kind === "youtube",
   spotify: (item) => item.kind === "spotify",
   casu: (item) => (item.kind || "").startsWith("casu"),
@@ -130,16 +130,28 @@ function setView(name) {
 // ---------------------------------------------------------------------------
 // queue rendering
 // ---------------------------------------------------------------------------
+
+function isIptvItem(item) { return !item.file && item.kind !== "youtube" && item.kind !== "spotify" && !!(item.epgId || item.group || item.logo || item.playlist); }
+function updateIptvGroups() {
+  const bar=document.getElementById("iptv-filters"),select=document.getElementById("iptv-groups");
+  bar.hidden=state.view!=="iptv";
+  const names=[...new Set(state.items.filter(isIptvItem).map(i=>i.group||"Ungrouped"))].sort();
+  const selected=select.value;
+  select.replaceChildren(new Option("All groups", ""),...names.map(g=>new Option(g,g)));
+  select.value=names.includes(selected)?selected:"";
+}
 function renderQueue() {
+  updateIptvGroups();
   const query = $("search").value.trim().toLowerCase();
   const viewFilter = VIEWS[state.view] || VIEWS.now;
   queueNode.replaceChildren();
   let shown = 0, lastPlaylist = null;
   state.items.forEach((item, index) => {
     if (!viewFilter(item)) return;
+    if(state.view==="iptv" && document.getElementById("iptv-groups").value && (item.group||"Ungrouped")!==document.getElementById("iptv-groups").value)return;
     if (query && !itemLabel(item).toLowerCase().includes(query)) return;
     shown++;
-    if (item.playlist && !query) {
+    if (item.playlist && !query && state.view !== "iptv") {
       if (lastPlaylist !== item.playlist) {
         lastPlaylist = item.playlist;
         const open = state.expanded.has(item.playlist);
@@ -868,29 +880,29 @@ function refreshEpg() {
     `LIVE · ${item.group || "STREAM"} · ${clockDate(guide.current.start)}–${clockDate(guide.current.stop)}`;
 }
 function renderEpgDialog() {
-  const root = $("epg-guide");
+  const root=document.getElementById("epg-guide"), query=document.getElementById("epg-search").value.trim().toLowerCase();
+  const select=document.getElementById("epg-groups"), selected=select.value;
+  const all=state.items.filter(isIptvItem),groups=[...new Set(all.map(i=>i.group||"Ungrouped"))].sort();
+  select.replaceChildren(new Option("All groups",""),...groups.map(g=>new Option(g,g)));
+  select.value=groups.includes(selected)?selected:"";
+  const matches=all.filter(i=>(!select.value||(i.group||"Ungrouped")===select.value)&&(!query||(itemLabel(i)+" "+(i.group||"")).toLowerCase().includes(query)));
+  const pages=Math.max(1,Math.ceil(matches.length/100));
+  state.epgPage=Math.min(state.epgPage||0,pages-1);
   root.replaceChildren();
-  for (const item of state.items.filter((entry) => entry.epgId)) {
-    const guide = epgFor(item);
-    const card = document.createElement("article");
-    card.className = "epg-channel";
-    card.tabIndex = 0;
-    card.onclick = () => playIndex(state.items.indexOf(item));
-    card.onkeydown = (event) => { if (event.key === "Enter") card.click(); };
-    const name = document.createElement("h3"), current = document.createElement("strong"),
-          next = document.createElement("span");
-    name.textContent = itemLabel(item);
-    current.textContent = guide.current ? `NOW · ${guide.current.title}` : "No current programme";
-    next.textContent = guide.next ? `NEXT · ${clockDate(guide.next.start)} · ${guide.next.title}` : "No following programme";
-    card.append(name, current, next);
-    root.append(card);
+  document.getElementById("epg-count").textContent=`${matches.length} channels · ${state.epgPage+1}/${pages}`;
+  document.getElementById("epg-prev").disabled=state.epgPage===0;
+  document.getElementById("epg-next-page").disabled=state.epgPage+1>=pages;
+  for(const item of matches.slice(state.epgPage*100,(state.epgPage+1)*100)) {
+    const guide=epgFor(item),card=document.createElement("article");card.className="epg-channel";
+    const play=document.createElement("button"),meta=document.createElement("span"),next=document.createElement("span");
+    play.type="button";play.textContent="▶ "+itemLabel(item);play.onclick=()=>playIndex(state.items.indexOf(item));
+    meta.textContent=(item.group||"Ungrouped")+(guide.current?` · NOW: ${guide.current.title}`:"");
+    next.textContent=guide.next?`NEXT: ${clockDate(guide.next.start)} · ${guide.next.title}`:"";
+    card.append(play,meta,next);root.append(card);
   }
-  if (!root.children.length) {
-    const empty = document.createElement("p");
-    empty.textContent = "Load an Extended M3U playlist with tvg-id values together with an XMLTV file.";
-    root.append(empty);
-  }
+  if(!matches.length){const empty=document.createElement("p");empty.textContent=all.length?"No matching channels":"Load an M3U channel playlist. XMLTV is optional.";root.append(empty);}
 }
+
 
 // ---------------------------------------------------------------------------
 // add files / URLs
@@ -1201,8 +1213,26 @@ function setupHls(url, item) {
   state.hls = new Hls({ liveSyncDuration: (window.PUREWEB?.hls?.liveSyncDuration) || 6 });
   state.hls.loadSource(url);
   state.hls.attachMedia(media);
+  // v7.8: graduated recovery per hls.js guidance — network errors restart
+  // loading, media errors recover in place; only persistent failure falls
+  // back to destroy (previously any fatal error killed the stream at once).
+  state.hlsRecoveryAttempts = 0;
   state.hls.on(Hls.Events.ERROR, (_event, data) => {
-    if (data.fatal) { state.hls?.destroy(); state.hls = null; toast("HLS stream error: " + (data.details || data.type)); }
+    if (!data.fatal || !state.hls) return;
+    if (data.type === Hls.ErrorTypes.NETWORK_ERROR && state.hlsRecoveryAttempts < 3) {
+      state.hlsRecoveryAttempts += 1;
+      toast("HLS network error — retrying (" + state.hlsRecoveryAttempts + "/3)");
+      setTimeout(() => { try { state.hls?.startLoad(); } catch {} }, 1000 * state.hlsRecoveryAttempts);
+      return;
+    }
+    if (data.type === Hls.ErrorTypes.MEDIA_ERROR && state.hlsRecoveryAttempts < 3) {
+      state.hlsRecoveryAttempts += 1;
+      toast("HLS media error — recovering (" + state.hlsRecoveryAttempts + "/3)");
+      try { state.hls.recoverMediaError(); } catch {}
+      return;
+    }
+    state.hls.destroy(); state.hls = null;
+    toast("HLS stream error: " + (data.details || data.type));
   });
   return true;
 }
@@ -1733,4 +1763,53 @@ async function preloadPlaylist() {
   // Like Webamp: the user clicks a station, which is the user gesture that
   // lets the AudioContext start, so streams actually produce sound.
   if (state.items.length) { state.selected = 0; renderQueue(); }
+})();
+
+document.getElementById("iptv-groups").onchange=renderQueue;
+document.getElementById("epg-search").oninput=()=>{state.epgPage=0;renderEpgDialog();};
+document.getElementById("epg-groups").onchange=()=>{state.epgPage=0;renderEpgDialog();};
+document.getElementById("epg-prev").onclick=()=>{state.epgPage=Math.max(0,(state.epgPage||0)-1);renderEpgDialog();};
+document.getElementById("epg-next-page").onclick=()=>{state.epgPage=(state.epgPage||0)+1;renderEpgDialog();};
+
+/* v7.8: fullscreen + orientation canvas sync */
+function syncCanvasSize(){const p=vizCanvas&&vizCanvas.parentElement;if(!p||!vizCanvas)return;
+  vizCanvas.width=p.clientWidth;vizCanvas.height=p.clientHeight}
+window.addEventListener("resize",syncCanvasSize);
+window.addEventListener("orientationchange",()=>setTimeout(syncCanvasSize,250));
+document.addEventListener("fullscreenchange",()=>{syncCanvasSize();
+  if(document.fullscreenElement){if(screen.orientation&&screen.orientation.lock)screen.orientation.lock("landscape").catch(()=>{})}
+  else{if(screen.orientation&&screen.orientation.unlock)screen.orientation.unlock().catch(()=>{})}});
+
+/* v7.8: Media Session API — OS lockscreen/media-key integration */
+(function(){
+  if (!("mediaSession" in navigator)) return;
+  function msMeta(){
+    const item = state.items[state.index];
+    if (!item) { navigator.mediaSession.metadata = null; return; }
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: item.title || itemLabel(item) || "MPCASU",
+        artist: item.artist || item.subtitle || "",
+        album: item.playlist || "MPCASU",
+        artwork: item.logo ? [{ src: item.logo }] : []
+      });
+    } catch {}
+  }
+  try {
+    navigator.mediaSession.setActionHandler("play", () => { if (media.paused) togglePlay(); });
+    navigator.mediaSession.setActionHandler("pause", () => { if (!media.paused) togglePlay(); });
+    navigator.mediaSession.setActionHandler("previoustrack", () => playIndex(Math.max(0, state.index - 1)));
+    navigator.mediaSession.setActionHandler("nexttrack", () => playIndex(Math.min(state.items.length - 1, state.index + 1)));
+    navigator.mediaSession.setActionHandler("seekto", (d) => {
+      if (d.seekTime != null && Number.isFinite(media.duration)) media.currentTime = d.seekTime;
+    });
+  } catch {}
+  setInterval(() => {
+    msMeta();
+    if (Number.isFinite(media.duration) && media.duration > 0) {
+      try { navigator.mediaSession.setPositionState({
+        duration: media.duration, playbackRate: media.playbackRate || 1,
+        position: Math.min(media.currentTime, media.duration) }); } catch {}
+    }
+  }, 5000);
 })();

@@ -988,7 +988,8 @@ class MPCASUPlayer(tk.Tk):
         view = getattr(self, "_queue_view", None)
         idx = (view[selected[0]]
                if view and selected[0] < len(view) else selected[0])
-        path = self.playlist[idx] if 0 <= idx < len(self.playlist) else None
+        items = self.playlist_model.items
+        path = items[idx] if 0 <= idx < len(items) else None
         menu = tk.Menu(self.root, tearoff=0, bg=PANEL, fg=TEXT,
                        activebackground=RED_DARK, activeforeground=TEXT,
                        relief="flat")
@@ -1075,8 +1076,9 @@ class MPCASUPlayer(tk.Tk):
     def remove_selected_queue(self, indices) -> None:
         if not indices:
             return
+        count = len(self.playlist_model)
         for idx in sorted(indices, reverse=True):
-            if 0 <= idx < len(self.playlist):
+            if 0 <= idx < count:
                 self.playlist_model.remove([idx])
         self._render_playlist()
 

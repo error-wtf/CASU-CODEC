@@ -173,6 +173,30 @@ def _audio_chunks(source: Path, stream_id: int, relative_index: int,
                "-f", "s16le", "-acodec", "pcm_s16le", "pipe:1"]
     errors = tempfile.TemporaryFile(mode="w+b")
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=errors)
+    # v7.8: coalesce decoder frames into >=1 s audio blocks — one chunk per
+    # ~1024-sample frame produced millions of chunks for long media (each
+    # with its own header + hash entry).
+    target_block_samples = max(1, sample_rate)  # ~1 second
+    pending_pts: int | None = None
+    pending_samples = 0
+    pending_pcm = bytearray()
+
+    def _flush_pending() -> Iterator[NativeChunk]:
+        nonlocal pending_pts, pending_samples, pending_pcm
+        if pending_samples <= 0:
+            return
+        payload = encode_audio_block(
+            pcm=bytes(pending_pcm), pts=int(pending_pts or 0),
+            time_base_num=time_base_num, time_base_den=time_base_den,
+            sample_rate=sample_rate, channels=channels,
+            channel_layout=stream.get("channel_layout"),
+            sample_format="s16le", sample_count=pending_samples,
+        )
+        yield NativeChunk(ChunkType.AUDIO_BLOCK, stream_id, int(pending_pts or 0), payload)
+        pending_pts = None
+        pending_samples = 0
+        pending_pcm = bytearray()
+
     try:
         assert process.stdout is not None
         for info in frames:
@@ -186,13 +210,13 @@ def _audio_chunks(source: Path, stream_id: int, relative_index: int,
             pcm = process.stdout.read(length)
             if len(pcm) != length:
                 raise NativeConversionError("audio decoder ended before a complete PCM block")
-            payload = encode_audio_block(
-                pcm=pcm, pts=int(pts), time_base_num=time_base_num,
-                time_base_den=time_base_den, sample_rate=sample_rate,
-                channels=channels, channel_layout=stream.get("channel_layout"),
-                sample_format="s16le", sample_count=samples,
-            )
-            yield NativeChunk(ChunkType.AUDIO_BLOCK, stream_id, int(pts), payload)
+            if pending_pts is None:
+                pending_pts = int(pts)
+            pending_pcm += pcm
+            pending_samples += samples
+            if pending_samples >= target_block_samples:
+                yield from _flush_pending()
+        yield from _flush_pending()
         if process.stdout.read(1):
             raise NativeConversionError("audio decoder produced more samples than its frame inventory")
     finally:

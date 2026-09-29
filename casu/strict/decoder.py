@@ -121,6 +121,33 @@ def _probe(path: Path, stream_index: int) -> tuple[_Format, int, int, list[dict]
     return fmt, num, den, frames, stream
 
 
+_FPS_MODE_ARGS_CACHE: list[str] | None = None
+
+
+def _fps_mode_args() -> list[str]:
+    """Frame-sync flag pair for this ffmpeg build (v7.8 compat).
+
+    ffmpeg 5.1+ removed `-vsync` in favour of `-fps_mode passthrough`;
+    older builds (and some distro forks) still require `-vsync 0`.
+    """
+    global _FPS_MODE_ARGS_CACHE
+    if _FPS_MODE_ARGS_CACHE is None:
+        try:
+            probe = subprocess.run(["ffmpeg", "-hide_banner", "-version"],
+                                   capture_output=True, text=True, timeout=10)
+            first_line = probe.stdout.splitlines()[0] if probe.stdout else ""
+            # "ffmpeg version n9.0.1-... Copyright ..." — the token right
+            # after "version" carries the number, never the line's tail.
+            tokens = first_line.split()
+            version_token = tokens[tokens.index("version") + 1].lstrip("n") if "version" in tokens else "0"
+            major = int(version_token.split(".")[0])
+        except Exception:  # noqa: BLE001 - fall back to the legacy flag
+            major = 4
+        _FPS_MODE_ARGS_CACHE = (["-fps_mode", "passthrough"] if major >= 5
+                                else ["-vsync", "0"])
+    return _FPS_MODE_ARGS_CACHE
+
+
 def _iter_ffmpeg_frames(path: str | Path, *, stream_index: int = 0,
                         max_frames: int | None = None) -> Iterator[StrictFrame]:
     """CLI fallback adapter used when the optional PyAV binding is absent."""
@@ -128,8 +155,10 @@ def _iter_ffmpeg_frames(path: str | Path, *, stream_index: int = 0,
     fmt, num, den, frame_info, stream = _probe(source, stream_index)
     if max_frames is not None and max_frames < 0:
         raise ValueError("max_frames must be non-negative")
+    # v7.8: ffmpeg 5.1+ removed -vsync in favour of -fps_mode; older builds
+    # still expect -vsync. Detect once per process.
     command = ["ffmpeg", "-v", "error", "-i", str(source), "-map", f"0:v:{stream_index}",
-               "-an", "-sn", "-dn", "-vsync", "0", "-f", "rawvideo",
+               "-an", "-sn", "-dn", *_fps_mode_args(), "-f", "rawvideo",
                "-pix_fmt", fmt.pixel_format, "pipe:1"]
     error_stream = tempfile.TemporaryFile(mode="w+b")
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=error_stream)

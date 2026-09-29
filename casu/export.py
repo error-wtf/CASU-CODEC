@@ -176,15 +176,20 @@ def _write_native_video(container, directory: Path, descriptor: dict,
         rgb = _burn_bitmap_subtitles(rgb, pts * num / den,
                                      bitmap_subtitles or [])
         height, width, _channels = rgb.shape
-        frame_name = f"{prefix}-frame-{index:09d}.ppm"
-        (directory / frame_name).write_bytes(
-            f"P6\n{width} {height}\n255\n".encode("ascii") + rgb.tobytes())
+        # v7.8: MJPEG frames instead of raw PPM — identical ffconcat pipeline,
+        # ~90 % less temporary disk (a 2-hour movie wrote gigabytes of PPM).
+        frame_name = f"{prefix}-frame-{index:09d}.jpg"
+        import io
+        from PIL import Image as _PILImage
+        buffer = io.BytesIO()
+        _PILImage.fromarray(rgb).save(buffer, format="JPEG", quality=95)
+        (directory / frame_name).write_bytes(buffer.getvalue())
         duration_pts = int(entry.get("duration_pts") or 0)
         duration = duration_pts * num / den
         lines.append(f"file '{frame_name}'")
         if duration > 0:
             lines.append(f"duration {duration:.12f}")
-    lines.append(f"file '{prefix}-frame-{len(timeline) - 1:09d}.ppm'")
+    lines.append(f"file '{prefix}-frame-{len(timeline) - 1:09d}.jpg'")
     concat.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return concat
 

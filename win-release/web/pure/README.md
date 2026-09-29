@@ -74,3 +74,12 @@ python3 -m http.server 8080 --directory pure-web-release
 
 YouTube playback needs a real `https` or `http` origin (the IFrame Player API
 requires an `origin` parameter) — it works over `http://127.0.0.1`.
+
+
+## hls.js
+
+The bundled `libs/hls.min.js` is **hls.js 1.5.17** (pinned, SRI-hashed in
+`index.html`). To upgrade: download the new release from
+https://github.com/video-dev/hls.js/releases, replace the file, recompute
+the SRI hash (`openssl dgst -sha384 -binary libs/hls.min.js | openssl base64 -A`)
+and update the `integrity=` attribute in `index.html`.

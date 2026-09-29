@@ -6,3 +6,6 @@ Options -Indexes
   Header set Pragma "no-cache"
   Header set Expires "0"
 </IfModule>
+# v7.8: lock down the pure player — scripts only from self, media from anywhere
+# (radio streams), YouTube embeds via the nocookie frame, no inline script.
+Header set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; media-src * blob:; img-src * data: blob:; frame-src https://www.youtube-nocookie.com https://www.youtube.com; connect-src *"

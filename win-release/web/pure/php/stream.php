@@ -52,5 +52,20 @@ if ($authority && in_array($authority, $allow, true)) {
 $ctx = stream_context_create(['http' => ['timeout' => 30, 'ignore_errors' => true]]);
 $fp = @fopen($url, 'rb', false, $ctx);
 if (!$fp) { http_response_code(502); exit('relay failed'); }
-while (!feof($fp)) { echo fread($fp, 65536); flush(); }
+// v7.8: bound the relay so a dead upstream cannot hold the PHP worker
+// forever — 10 s without data kills the stream, 8 h is the hard ceiling.
+stream_set_timeout($fp, 10);
+$relay_started = time();
+$max_relay_seconds = 8 * 3600;
+while (!feof($fp)) {
+    $chunk = fread($fp, 65536);
+    if ($chunk === false || $chunk === '') {
+        $meta = stream_get_meta_data($fp);
+        if (!empty($meta['timed_out'])) { break; } // upstream stalled
+        break;
+    }
+    echo $chunk;
+    flush();
+    if (time() - $relay_started > $max_relay_seconds) { break; }
+}
 fclose($fp);

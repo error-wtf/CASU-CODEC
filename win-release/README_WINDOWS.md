@@ -126,3 +126,22 @@ The pure web player is **not** ported — it is frozen and shipped as-is
    compare to reference → mark VERIFIED → next module.
 3. Never modify anything outside `win-release/`.
 4. Never claim PASS without runtime evidence.
+
+
+## third_party/ runtime bundle
+
+Der Windows-Build (CMake-MinGW) benötigt das gebündelte Runtime-Verzeichnis
+`win-release/third_party/` (gitignored, ~500 MB). Es enthält:
+
+- `qt/6.8.3/mingw_64/` — Qt 6.8.3 MinGW (Base + Declarative + WebEngine)
+- `vlc/` — libVLC 3.x inkl. `sdk/`-Header und plugins
+- `tools/ffmpeg.exe`, `tools/ffprobe.exe`, `tools/yt-dlp.exe`
+- `zstd/` — libzstd 1.5.7 (MinGW-Source-Build)
+
+Ohne dieses Verzeichnis schlägt `cmake --configure` mit
+`Could not find a package configuration file provided by "Qt6"` fehl —
+das ist erwartetetes Verhalten (kein System-Qt-Fallback, siehe
+`cmake/dependencies.cmake`).
+
+Download/Neuaufbau: `scripts/build-windows-release.sh` erwartet die
+Verzeichnisstruktur; Details stehen in `PREREQUISITES.md`.

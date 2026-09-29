@@ -5,6 +5,9 @@ on:
 
 permissions:
   contents: write
+env:
+  PRODUCT_VERSION: "7.8.0"
+
 jobs:
   apple:
     runs-on: macos-15
@@ -42,4 +45,4 @@ jobs:
       - name: Replace v7 macOS assets
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload v7.0.0 dist/apple/*.dmg dist/apple/*.zip --clobber
+        run: gh release upload v${{ env.PRODUCT_VERSION }} dist/apple/*.dmg dist/apple/*.zip --clobber

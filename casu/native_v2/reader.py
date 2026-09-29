@@ -108,6 +108,7 @@ class NativeV2Container:
     recovery_points: tuple[dict, ...] = ()
     chunk_hashes: tuple[tuple[int, str], ...] = ()
     limits: CasuLimits = field(default=DEFAULT_LIMITS, repr=False)
+    replay_cache: dict = field(default_factory=dict, repr=False, compare=False)
 
     def chunks_at_or_after(self, pts: int, stream_id: int | None = None):
         return tuple(chunk for chunk in self.chunks
@@ -192,12 +193,62 @@ class NativeV2Container:
                                   entry.key_state_offset, entry.first_update_offset)
 
     def reconstruct_video(self, stream_id: int, target_pts: int):
-        """Seek to a byte-indexed key state and apply dependencies through target."""
+        """Seek to a byte-indexed key state and apply dependencies through target.
+
+        v7.8: sequential playback reuses a persistent replay cache per stream —
+        chunks already applied at a previous, lower PTS are not re-read from
+        disk. Full reconstruction from the key state happens only on backward
+        seeks or after a container reload.
+        """
+        cached = self.replay_cache.get(stream_id)
+        if (cached is not None and cached["pts"] <= target_pts
+                and cached["next_offset"] is not None):
+            # Incremental path: apply only newly reached chunks.
+            cache: TileStateCache = cached["cache"]
+            offset = cached["next_offset"]
+            applied_any = False
+            while offset < self.path.stat().st_size:
+                chunk, following = self.read_chunk_at(offset)
+                if chunk.chunk_type in (ChunkType.SEEK_INDEX, ChunkType.INTEGRITY_TABLE,
+                                        ChunkType.END):
+                    cached["next_offset"] = None
+                    break
+                if chunk.stream_id == stream_id:
+                    if chunk.chunk_type == ChunkType.VIDEO_KEY_STATE:
+                        if chunk.pts > target_pts:
+                            cached["next_offset"] = offset
+                            break
+                        cache.apply_key_state(chunk.payload)
+                        cached["pts"] = chunk.pts
+                        cached["next_offset"] = following
+                        applied_any = True
+                    elif chunk.chunk_type == ChunkType.VIDEO_TILE_UPDATE:
+                        if chunk.pts > target_pts:
+                            cached["next_offset"] = offset
+                            break
+                        cache.apply_tile_update(chunk.payload)
+                        cached["pts"] = max(cached["pts"], chunk.pts)
+                        cached["next_offset"] = following
+                        applied_any = True
+                    else:
+                        cached["next_offset"] = following
+                else:
+                    cached["next_offset"] = following
+                offset = following
+            if applied_any or cached["cache"].frame is not None:
+                if cached["cache"].frame is None:
+                    raise NativeV2Error("video reconstruction produced no frame")
+                return cached["cache"].frame
+            # fall through to full rebuild when the cache produced nothing
+
+        # Full rebuild path (first frame or backward seek).
         plan = self.seek_video(stream_id, target_pts)
         cache = TileStateCache()
         offset = plan.key_state_offset
         first = True
         dependencies = 0
+        reached_pts = plan.key_state_pts
+        last_offset = None
         while offset < self.path.stat().st_size:
             chunk, following = self.read_chunk_at(offset)
             if chunk.stream_id == stream_id:
@@ -206,24 +257,38 @@ class NativeV2Container:
                         raise NativeV2Error("seek index does not reference its video key state")
                     cache.apply_key_state(chunk.payload)
                     first = False
+                    reached_pts = chunk.pts
                 elif chunk.chunk_type == ChunkType.VIDEO_KEY_STATE:
                     if chunk.pts > target_pts:
+                        last_offset = offset
                         break
                     cache.apply_key_state(chunk.payload)
+                    reached_pts = chunk.pts
                 elif chunk.chunk_type == ChunkType.VIDEO_TILE_UPDATE:
                     if chunk.pts > target_pts:
+                        last_offset = offset
                         break
                     dependencies += 1
                     if dependencies > self.limits.max_dependency_depth:
                         raise NativeV2Error(
                             "CASUNAT2 video dependency depth exceeds limit")
                     cache.apply_tile_update(chunk.payload)
+                    reached_pts = max(reached_pts, chunk.pts)
             if chunk.chunk_type in (ChunkType.SEEK_INDEX, ChunkType.INTEGRITY_TABLE,
                                     ChunkType.END):
+                last_offset = None
                 break
+            last_offset = following
             offset = following
         if cache.frame is None:
             raise NativeV2Error("video reconstruction produced no frame")
+        # Cache is valid only while playback moves forward from here; a later
+        # chunk outside the file (END reached) disables the incremental path.
+        self.replay_cache[stream_id] = {
+            "pts": reached_pts,
+            "next_offset": last_offset,
+            "cache": cache,
+        }
         return cache.frame
 
 

@@ -90,8 +90,10 @@ and containing directory, then atomically replaces the target. Source probes
 have monitored byte/time budgets and decoded frames have dimension/byte
 ceilings. The strengthened bounded 10,000-case parser campaign passes.
 Signatures, broader malformed/language/platform subtitle fixtures and broader
-platform/network stress remain open, so the product version stays
-`1.0.0rc8`.
+platform/network stress remain open (tracked in RELEASE_GATE_STATUS.json).
+Product and format versions are decoupled: the container stays revision 2 /
+CASU_FORMAT_VERSION 3.0.0; the current product version lives in
+RELEASE_GATE_STATUS.json and CHANGELOG.md.
 
 ## Commands
 

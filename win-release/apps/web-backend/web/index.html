@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#090b0d">
   <title>WEB CASU Player</title>
   <link rel="icon" type="image/png" href="../assets/web_casu_icon.png">
-  <link rel="stylesheet" href="styles.css?v=7.0.0-web1">
+  <link rel="stylesheet" href="styles.css?v=7.8.0-web1">
 </head>
 <body>
   <main class="app-shell" aria-label="MPCASU Web Player">
@@ -115,7 +115,17 @@
         <p>Legal notice — YouTube playback and search resolve stream URLs with yt-dlp (open source, GNU GPL). URLs are resolved temporarily, never stored or redistributed. Personal use only.</p>
         <button id="consent-accept" type="button" class="primary">Accept and enable yt-dlp features</button>
       </div>
-      <div class="epg-source"><input id="search-query" type="text" placeholder="Search term…" autocomplete="off"><button id="search-run" type="button">Search</button></div>
+      <div class="epg-source">
+        <label>Source
+          <select id="search-source">
+            <option value="youtube" selected>YouTube Videos</option>
+            <option value="youtube_playlist">YouTube Playlists</option>
+            <option value="spotify">Spotify</option>
+          </select>
+        </label>
+        <input id="search-query" type="text" placeholder="Search term…" autocomplete="off">
+        <button id="search-run" type="button">Search</button>
+      </div>
       <div id="search-results" class="epg-guide"></div>
     </form>
   </dialog>
@@ -130,7 +140,7 @@
     </form>
   </dialog>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script src="casu-native.js?v=7.0.0-web1" defer></script>
-  <script src="app.js?v=7.0.0-web1" defer></script>
+  <script src="casu-native.js?v=7.8.0-web1" defer></script>
+  <script src="app.js?v=7.8.0-web1" defer></script>
 </body>
 </html>

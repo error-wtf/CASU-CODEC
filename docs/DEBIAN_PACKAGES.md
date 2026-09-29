@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4 | SPDX-FileCopyrightText: 2026 Lino Casu -->
 # Debian packages
 
-Build the four coordinated `1.0.0-rc8` packages on Debian/Ubuntu:
+Build the four coordinated `7.8.0` packages on Debian/Ubuntu:
 
 ```bash
 ./packaging/build_debs.sh
@@ -10,10 +10,10 @@ Build the four coordinated `1.0.0-rc8` packages on Debian/Ubuntu:
 
 The result is:
 
-- `casu-codec_1.0.0-rc8_all.deb` — STRICT/CASUNAT2 code, CLI and docs;
-- `casu-converter_1.0.0-rc8_all.deb` — full Tk audio/video/CASU batch converter;
-- `mpcasu_1.0.0-rc8_all.deb` — MPCASU libVLC/native player interface;
-- `mpcasu-web_1.0.0-rc8_all.deb` — localhost-only browser player launcher.
+- `casu-codec_7.8.0_all.deb` — STRICT/CASUNAT2 code, CLI and docs;
+- `casu-converter_7.8.0_all.deb` — full Tk audio/video/CASU batch converter;
+- `mpcasu_7.8.0_all.deb` — MPCASU libVLC/native player interface;
+- `web-casu_7.8.0_all.deb` — localhost-only browser player launcher.
 
 The web launcher owns the executable/server while its exact-version
 `casu-codec` dependency owns the shared `web/` assets. This keeps the desktop,

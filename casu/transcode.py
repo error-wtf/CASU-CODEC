@@ -121,7 +121,8 @@ def build_transcode_command(source: str | Path, destination: str | Path, *,
                             preset: str = "balanced", video_codec: str = "auto",
                             audio_codec: str = "auto", subtitle_mode: str = "auto",
                             all_tracks: bool = True,
-                            preserve_metadata: bool = True) -> tuple[list[str], dict]:
+                            preserve_metadata: bool = True,
+                            loudness_normalize: bool = False) -> tuple[list[str], dict]:
     """Build one mapped FFmpeg command and return its verified source probe."""
     if preset not in MEDIA_PRESETS:
         raise MediaTranscodeError("unsupported media conversion preset")
@@ -200,6 +201,10 @@ def build_transcode_command(source: str | Path, destination: str | Path, *,
         command += ["-c:v", chosen_video] + _quality_options(chosen_video, preset)
     else: command += ["-vn"]
     if chosen_audio:
+        if loudness_normalize and chosen_audio != "copy":
+            # v7.8: EBU R128 loudness normalisation (two-pass quality via
+            # single-pass loudnorm I=-16 LRA=11 TP=-1.5 — streaming standard).
+            command += ["-af", "loudnorm=I=-16:LRA=11:TP=-1.5"]
         command += ["-c:a", chosen_audio] + _quality_options(chosen_audio, preset, audio=True)
         # The legacy FLV muxer only accepts a small fixed sample-rate set for
         # MP3. Normalize unusual source rates (for example 16 kHz speech) so
@@ -222,6 +227,7 @@ def transcode_media(source: str | Path, destination: str | Path, *,
                     preset: str = "balanced", video_codec: str = "auto",
                     audio_codec: str = "auto", subtitle_mode: str = "auto",
                     all_tracks: bool = True, preserve_metadata: bool = True,
+                    loudness_normalize: bool = False,
                     cancel: Any | None = None,
                     progress: Callable[[float], None] | None = None) -> dict:
     """Transcode without exposing a partial destination; verify before publish."""
@@ -240,7 +246,8 @@ def transcode_media(source: str | Path, destination: str | Path, *,
     command, source_probe = build_transcode_command(
         source_path, temporary, preset=preset, video_codec=video_codec,
         audio_codec=audio_codec, subtitle_mode=subtitle_mode,
-        all_tracks=all_tracks, preserve_metadata=preserve_metadata)
+        all_tracks=all_tracks, preserve_metadata=preserve_metadata,
+        loudness_normalize=loudness_normalize)
     duration = _duration_seconds(source_probe)
     if progress: progress(0.0)
     try:

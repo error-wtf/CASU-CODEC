@@ -496,11 +496,14 @@ def test_pipewire_device_inventory_is_bounded_and_filters_non_sinks(monkeypatch)
         {"type": "PipeWire:Interface:Node", "info": {"props": {
             "media.class": "Audio/Sink", "node.name": "alsa_output.usb"}}},
     ]
+    # v7.8: pipewire_audio_devices caches for 5 s — reset between scenarios.
+    monkeypatch.setattr(mpcasu_native_backend, "_PW_DEVICE_CACHE", None)
     monkeypatch.setattr(mpcasu_native_backend, "run_bounded",
                         lambda *_args, **_kwargs: json.dumps(payload).encode())
     devices = pipewire_audio_devices()
     assert [(item.identifier, item.label) for item in devices] == [
         ("default", "System Default"), ("alsa_output.usb", "USB DAC")]
+    monkeypatch.setattr(mpcasu_native_backend, "_PW_DEVICE_CACHE", None)
     monkeypatch.setattr(mpcasu_native_backend, "run_bounded",
                         lambda *_args, **_kwargs: (_ for _ in ()).throw(
                             mpcasu_native_backend.ProbeError("offline")))

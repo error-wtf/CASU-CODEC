@@ -6,6 +6,10 @@ cd "$ROOT"
 OUT="${APPLE_OUTPUT_DIR:-$ROOT/dist/apple}"
 mkdir -p "$OUT"
 
+# v7.8: Version zentral aus pyproject.toml lesen statt hartkodiert.
+MPCASU_VERSION="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])' 2>/dev/null || echo 7.8.0)"
+echo "Building MPCASU macOS ${MPCASU_VERSION}"
+
 python3 -m venv .venv-v7-macos
 source .venv-v7-macos/bin/activate
 python -m pip install --disable-pip-version-check -U pip wheel setuptools
@@ -24,6 +28,12 @@ PY
 python -m pytest -q tests/v7/shared tests/test_inapp_browser.py tests/test_youtube_playlist_groups.py
 python -m PyInstaller --noconfirm --clean --windowed --name MPCASU \
   --add-data 'assets:assets' mpcasu_qt/app.py
+
+# v7.8: PyInstaller schreibt CFBundleShortVersionString=0.0.0 — die echte
+# Version aus pyproject.toml einsetzen (ueberall sichtbar, auch "Info" im Finder).
+plutil -replace CFBundleShortVersionString -string "$MPCASU_VERSION" dist/MPCASU.app/Contents/Info.plist
+plutil -replace CFBundleVersion -string "$MPCASU_VERSION" dist/MPCASU.app/Contents/Info.plist
+plutil -replace CFBundleName -string "MPCASU" dist/MPCASU.app/Contents/Info.plist
 
 mkdir -p dist/MPCASU.app/Contents/Helpers dist/MPCASU.app/Contents/Frameworks/FFmpeg
 python -m PyInstaller --noconfirm --clean --onefile --name yt-dlp "$(command -v yt-dlp)"
@@ -97,9 +107,9 @@ mkdir -p "$OUT/codec-stage"
 ditto dist/MPCASU.app "$OUT/codec-stage/MPCASU.app"
 ditto dist/CASU-Converter.app "$OUT/codec-stage/CASU-Converter.app"
 cp dist/casu "$OUT/codec-stage/casu"
-ditto -c -k "$OUT/codec-stage" "$OUT/MPCASU-macOS-7.0.0.zip"
+ditto -c -k "$OUT/codec-stage" "$OUT/MPCASU-macOS-${MPCASU_VERSION}.zip"
 rm -rf "$OUT/codec-stage"
-shasum -a 256 "$OUT/MPCASU-macOS-7.0.0.zip" > "$OUT/MPCASU-macOS-7.0.0.zip.sha256"
+shasum -a 256 "$OUT/MPCASU-macOS-${MPCASU_VERSION}.zip" > "$OUT/MPCASU-macOS-${MPCASU_VERSION}.zip.sha256"
 
 # Produce the real macOS distribution container and verify its contents by
 # mounting it. Production signing/notarization is a separate credential gate.
@@ -110,13 +120,13 @@ ditto dist/MPCASU.app "$dmg_stage/MPCASU.app"
 ditto dist/CASU-Converter.app "$dmg_stage/CASU-Converter.app"
 cp dist/casu "$dmg_stage/casu"
 ln -s /Applications "$dmg_stage/Applications"
-hdiutil create -quiet -volname "MPCASU 7.0.0" -srcfolder "$dmg_stage" \
-  -ov -format UDZO "$OUT/MPCASU-macOS-7.0.0.dmg"
+hdiutil create -quiet -volname "MPCASU ${MPCASU_VERSION}" -srcfolder "$dmg_stage" \
+  -ov -format UDZO "$OUT/MPCASU-macOS-${MPCASU_VERSION}.dmg"
 hdiutil attach -quiet -readonly -nobrowse -mountpoint "$mount_point" \
-  "$OUT/MPCASU-macOS-7.0.0.dmg"
+  "$OUT/MPCASU-macOS-${MPCASU_VERSION}.dmg"
 test -d "$mount_point/MPCASU.app"
 test -L "$mount_point/Applications"
 codesign --verify --deep --strict --verbose=2 "$mount_point/MPCASU.app"
 hdiutil detach "$mount_point" -quiet
-shasum -a 256 "$OUT/MPCASU-macOS-7.0.0.dmg" > "$OUT/MPCASU-macOS-7.0.0.dmg.sha256"
+shasum -a 256 "$OUT/MPCASU-macOS-${MPCASU_VERSION}.dmg" > "$OUT/MPCASU-macOS-${MPCASU_VERSION}.dmg.sha256"
 echo "MACOS_DMG=PASS"
