@@ -20,7 +20,7 @@ from dataclasses import replace
 from mpcasu_qt.theme import PALETTE
 from mpcasu_qt.threads import _ThreadBridge
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QIcon, QImage, QPixmap
 from PySide6.QtWidgets import (
     QComboBox,

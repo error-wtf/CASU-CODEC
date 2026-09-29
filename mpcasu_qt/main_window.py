@@ -2890,7 +2890,7 @@ class MainWindow(QMainWindow):
 
         preamp_row = QHBoxLayout()
         preamp_row.addWidget(QLabel("Preamp (dB)"))
-        preamp_slider = QSlider(QtCore.Qt.Horizontal)
+        preamp_slider = QSlider(Qt.Horizontal)
         preamp_slider.setRange(-20, 20)
         preamp_slider.setValue(0)
         preamp_row.addWidget(preamp_slider, 1)

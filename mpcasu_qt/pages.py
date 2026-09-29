@@ -18,6 +18,8 @@ import re
 import shutil
 from pathlib import Path
 
+from dataclasses import replace
+
 from casu import __version__
 from casu.playlist import PlaylistError, load_playlist_file, playlist_names
 
