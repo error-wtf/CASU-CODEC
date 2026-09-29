@@ -18,6 +18,7 @@ import re
 import shutil
 from pathlib import Path
 
+from casu import __version__
 from casu.playlist import PlaylistError, load_playlist_file, playlist_names
 
 from PySide6.QtCore import Qt, Signal
@@ -959,7 +960,7 @@ class AboutPage(QFrame):
         sub.setAlignment(Qt.AlignCenter)
         layout.addWidget(sub)
         layout.addSpacing(12)
-        info = QLabel("Version 7.0.0\nMedia Player for CASU & Legacy Media\nIn-process playback · No external player")
+        info = QLabel(f"Version {__version__}\nMedia Player for CASU & Legacy Media\nIn-process playback · No external player")
         info.setObjectName("NowPlayingMeta")
         info.setAlignment(Qt.AlignCenter)
         layout.addWidget(info)

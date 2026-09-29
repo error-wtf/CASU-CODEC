@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import threading
 import urllib.parse
+from dataclasses import replace
 
 from mpcasu_qt.theme import PALETTE
 from mpcasu_qt.threads import _ThreadBridge
