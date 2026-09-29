@@ -13,8 +13,8 @@ android {
         // Android 5 / Fire OS 5, including 32-bit TV sticks.
         minSdk = 21
         targetSdk = 34
-        versionCode = 70001
-        versionName = "7.0.0"
+        versionCode = 70800
+        versionName = "7.8.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")

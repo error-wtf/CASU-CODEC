@@ -1,5 +1,5 @@
-468283ed965da56cd718ceb72afb55e40e8319a85972a255f38b7ec48ccf28fb  casu-codec_7.8.0_all.deb
-626c1762f23a49273a6fdd0594cfe3f68cb02a814ce09807db9543ceaa8b1c75  casu-converter_7.8.0_all.deb
-63d47e2d41ad06481adb2b22aaa9020edbc630c3869a1b04e49c7b496a54b2ab  mpcasu_7.8.0_all.deb
-62af2d3da33fd3c467a11e9e7a9edb1d27b8c3445c06f4d209e330ccef3674e7  web-casu_7.8.0_all.deb
-67486790103e3b1a2f8451472081ddec33e83f6a81007171d57980fb75d16706  MPCASU-7.8.0-debug.apk
+468283ed965da56cd718ceb72afb55e40e8319a85972a255f38b7ec48ccf28fb  dist/casu-codec_7.8.0_all.deb
+626c1762f23a49273a6fdd0594cfe3f68cb02a814ce09807db9543ceaa8b1c75  dist/casu-converter_7.8.0_all.deb
+63d47e2d41ad06481adb2b22aaa9020edbc630c3869a1b04e49c7b496a54b2ab  dist/mpcasu_7.8.0_all.deb
+62af2d3da33fd3c467a11e9e7a9edb1d27b8c3445c06f4d209e330ccef3674e7  dist/web-casu_7.8.0_all.deb
+cf6bf75039ba1f8d1994fd1516f194da420cd33d6d495d1b84ad4fee4a56701e  dist/MPCASU-7.8.0-debug.apk
