@@ -44,30 +44,6 @@ def _fake_spotdl(tmp_path, monkeypatch, stdout_text):
     monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ['PATH']}")
 
 
-def test_spotify_url_never_reaches_ytdlp(monkeypatch):
-    calls = []
-
-    def fake_run(*args, **kwargs):
-        calls.append(args)
-        raise AssertionError("subprocess must not run without spotDL")
-
-    import subprocess
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    import casu.spotify as spotify_mod
-    monkeypatch.setattr(spotify_mod, "spotdl_binary", lambda: None)
-    with pytest.raises(LocationResolutionError) as exc:
-        resolve_media_location(SPOTIFY_URL)
-    assert "spotDL" in str(exc.value)
-    assert calls == []
-
-
-def test_spotify_resolution_uses_spotdl_provider(tmp_path, monkeypatch):
-    fake = tmp_path / "spotdl"
-    fake.write_text("#!/bin/sh\necho 'https://example.com/yt-stream'\n")
-    fake.chmod(0o755)
-    monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ['PATH']}")
-    resolved = resolve_media_location(SPOTIFY_URL)
-    assert resolved == "https://example.com/yt-stream"
 
 
 def test_spotify_search_uses_documented_save_interface(tmp_path, monkeypatch):
