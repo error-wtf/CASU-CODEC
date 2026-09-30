@@ -208,12 +208,12 @@ HttpResponse BasicEndpointHandler::handle_resolve(const HttpRequestHead&,
         if (url.empty()) throw casu::JsonError("resolve request needs a url");
         std::string resolved;
         if (casu::network::is_spotify_url(url)) {
-            resolved = casu::network::resolve_spotify_url(
-                url, 60000, trim(body_string(body, "title")), trim(body_string(body, "artist")));
+            throw casu::JsonError(
+                "Spotify integration was removed from MPCASU — cannot resolve this URL");
         } else if (casu::network::is_youtube_url(url)) {
             resolved = casu::network::resolve_media_location(url);
         } else {
-            throw casu::JsonError("only YouTube and Spotify URLs can be resolved");
+            throw casu::JsonError("only YouTube URLs can be resolved");
         }
         return json_response(200, casu::dump_json(jobj({{"url", jstr(resolved)}})));
     } catch (const casu::network::NetworkError& e) {
@@ -238,21 +238,8 @@ HttpResponse BasicEndpointHandler::handle_search(const HttpRequestHead&,
             long v = static_cast<long>(lim->as_int());
             if (v >= 1 && v <= 25) limit = static_cast<int>(v);
         }
-        if (source == "spotify") {
-            auto found = casu::network::search_spotify(query, limit, 90000);
-            std::vector<casu::JsonValue> items;
-            for (const auto& r : found) {
-                casu::JsonValue dur = r.has_duration ? jnum(r.duration) : jnull();
-                items.push_back(jobj({
-                    {"title", jstr(r.title)},
-                    {"url", jstr(r.url)},
-                    {"duration", dur},
-                    {"uploader", jstr(r.artist.empty() ? "Spotify" : r.artist)},
-                    {"source", jstr("spotify")},
-                }));
-            }
-            return json_response(200, casu::dump_json(jobj({{"results", jarr(std::move(items))}})));
-        }
+        if (source == "spotify")
+            throw casu::JsonError("Spotify integration was removed from MPCASU");
         auto found = casu::network::YtDlp().search(query, limit, 30000);
         std::vector<casu::JsonValue> items;
         for (const auto& r : found) {
@@ -717,7 +704,6 @@ public:
             if (p == "/api/search") return handler->handle_search(head, from_qbytes(body));
             if (p == "/api/resolve") return handler->handle_resolve(head, from_qbytes(body));
             if (p == "/api/youtube-title") return handler->handle_youtube_title(head, from_qbytes(body));
-            if (p == "/api/spotify-metadata") return handler->handle_spotify_metadata(head, from_qbytes(body));
             if (p == "/api/catalog-url") return handler->handle_catalog_url(head, from_qbytes(body));
             if (p == "/api/transcode-url") return handler->handle_transcode_url(head, from_qbytes(body));
             return text_response(404, "not found");

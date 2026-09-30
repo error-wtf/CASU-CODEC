@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
 // CASU-Web-Backend — Windows-native web-casu loopback server (Phase C4).
 // Binds 127.0.0.1, registers the web-casu endpoint handler (version/resolve/
-// search/youtube-title/spotify-metadata/catalog-url/transcode/stream-proxy/
+// search/youtube-title/catalog-url/transcode/stream-proxy/
 // media), serves the unmodified web/ frontend from next to the exe and shuts
 // down cleanly on SIGINT/SIGTERM (stop server, temp-store cleanup).
 #include "casu/codec.hpp"

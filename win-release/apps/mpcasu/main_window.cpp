@@ -15,7 +15,6 @@
 #include "casu/media/thumbnail.hpp"
 #include "casu/native.hpp"
 #include "casu/network/http.hpp"
-#include "casu/network/spotify.hpp"
 #include "casu/network/url.hpp"
 #include "casu/network/ytdlp.hpp"
 #include "casu/web/webproviders.hpp"
@@ -117,7 +116,7 @@ bool is_casu_container(const QString& path) {
 }
 
 bool is_network_like(const QString& value) {
-    return value.contains("://") || value.startsWith("spotify:") || value.startsWith("ytdl:");
+    return value.contains("://") || value.startsWith("ytdl:");
 }
 
 QString default_output_dir() {
@@ -337,14 +336,6 @@ QIcon nav_icon(const QString& name, const QColor& color, const QColor& active,
                 << QPointF(c.x() - w * 0.12, r.bottom() - h * 0.28)
                 << QPointF(r.right() - w * 0.22, c.y());
             p.drawPolygon(tri);
-        } else if (name == QLatin1String("SPOTIFY")) {
-            p.drawEllipse(r);
-            const qreal insets[] = {0.22, 0.16, 0.10};
-            for (int i = 0; i < 3; ++i)
-                p.drawArc(QRectF(r.left() + w * insets[i],
-                                 r.top() + h * (0.3 + 0.22 * i),
-                                 w * (1 - 2 * insets[i]), h * 0.16),
-                          20 * 16, 140 * 16);
         } else if (name == QLatin1String("CASU FILES")) {
             QPolygonF outer, inner;
             outer << (c + QPointF(0, -h / 2)) << (c + QPointF(w / 2, 0))
@@ -361,15 +352,6 @@ QIcon nav_icon(const QString& name, const QColor& color, const QColor& active,
                  << QPointF(r.right() - 1, r.top() + 1)
                  << QPointF(r.right() - 1, r.top() + h * 0.45);
             p.drawPolyline(head);
-        } else if (name == QLatin1String("TIDAL")) {
-            for (int i = 0; i < 2; ++i) {
-                QPolygonF wave;
-                wave << QPointF(r.left(), r.top() + h * (0.2 + 0.3 * i))
-                     << QPointF(c.x(), r.top() + h * (0.05 + 0.3 * i))
-                     << QPointF(r.right(), r.top() + h * (0.2 + 0.3 * i))
-                     << QPointF(r.right(), r.top() + h * (0.5 + 0.3 * i));
-                p.drawPolyline(wave);
-            }
         } else if (name == QLatin1String("NETFLIX")) {
             p.drawLine(QPointF(r.left() + 2, r.top()),
                        QPointF(r.left() + 2, r.bottom()));
@@ -480,9 +462,7 @@ void MainWindow::build_sidebar() {
     add_section(QStringLiteral("CASU"));
     add_nav(QStringLiteral("CASU FILES"), QStringLiteral("◈"));
     add_section(QStringLiteral("WEB PLAYERS"));
-    add_nav(QStringLiteral("SPOTIFY"), QStringLiteral("♪"));
     add_nav(QStringLiteral("HEARTHIS"), QStringLiteral("↗"));
-    add_nav(QStringLiteral("TIDAL"), QStringLiteral("≋"));
     add_nav(QStringLiteral("NETFLIX"), QStringLiteral("▣"));
     add_nav(QStringLiteral("BROWSE"), QStringLiteral("◎"));
     add_section(QStringLiteral("SYSTEM"));
@@ -853,10 +833,7 @@ QString provider_status_text() {
     lines << QStringLiteral("yt-dlp (YouTube provider): %1").arg(
         has(QStringLiteral("yt-dlp")) ? QStringLiteral("✓") : QStringLiteral("✗ missing"));
     const bool has_deno = has(QStringLiteral("deno"));
-    lines << QStringLiteral("spotDL (Spotify provider): %1").arg(
-        has(QStringLiteral("spotdl")) ? QStringLiteral("✓")
-                                      : QStringLiteral("✗ not installed"));
-    lines << QStringLiteral("Deno (optional spotDL helper): %1").arg(
+    lines << QStringLiteral("Deno (optional helper): %1").arg(
         has_deno ? QStringLiteral("✓") : QStringLiteral("– optional"));
     return lines.join(QStringLiteral("\n"));
 }
@@ -1267,8 +1244,7 @@ void MainWindow::apply_queue_filter() {
                          : idx == 2 ? QStringLiteral("streams")
                          : idx == 3 ? QStringLiteral("playlists")
                          : idx == 4 ? QStringLiteral("casu")
-                         : idx == 5 ? QStringLiteral("youtube")
-                                    : QStringLiteral("spotify");
+                                    : QStringLiteral("youtube");
     const QString needle = queue_search_ ? queue_search_->text().toLower() : QString();
     int visible = 0;
     for (int i = 0; i < playlist_view_->topLevelItemCount(); ++i) {
@@ -1285,7 +1261,6 @@ void MainWindow::apply_queue_filter() {
                     (view == "files" && !is_url && !is_playlist) ||
                     (view == "casu" && (low.endsWith(".casu") || low.endsWith(".mp5"))) ||
                     (view == "youtube" && (low.contains("youtube.com") || low.contains("youtu.be"))) ||
-                    (view == "spotify" && low.contains("spotify.com")) ||
                     (view == "streams" && is_url && !is_playlist);
         if (show && !needle.isEmpty()) {
             show = item->text(0).toLower().contains(needle) ||
@@ -1308,7 +1283,6 @@ void MainWindow::set_queue_view_filter(const QString& view) {
     static const QStringList keys = {
         QStringLiteral("all"), QStringLiteral("local"), QStringLiteral("streams"),
         QStringLiteral("playlists"), QStringLiteral("casu"), QStringLiteral("youtube"),
-        QStringLiteral("spotify"),
     };
     const int idx = keys.indexOf(view.toLower());
     if (idx >= 0 && view_filter_->currentIndex() != idx) {
@@ -1341,7 +1315,7 @@ void MainWindow::build_playlist_pane() {
     view_filter_ = new QComboBox(header);
     view_filter_->setObjectName("IconButton");
     view_filter_->addItems({"All items", "Local files", "Streams / IPTV", "Playlists",
-                            "CASU", "YouTube", "Spotify"});
+                            "CASU", "YouTube"});
     connect(view_filter_, &QComboBox::currentIndexChanged,
             this, [this] { apply_queue_filter(); });
     header_layout->addWidget(view_filter_);
@@ -1878,8 +1852,8 @@ void MainWindow::build_settings_page() {
 
     add_section(QStringLiteral("LEGAL"));
     settings_consent_ = new QCheckBox(
-        QStringLiteral("I understand that YouTube uses yt-dlp and Spotify uses "
-                       "spotDL (personal use only)"),
+        QStringLiteral("I understand that YouTube uses yt-dlp "
+                       "(personal use only)"),
         content);
     settings_consent_->setChecked(app_settings_.player.ytdlp_consent);
     layout->addWidget(settings_consent_);
@@ -2227,9 +2201,7 @@ void MainWindow::build_youtube_page() {
     consent_layout->setSpacing(8);
     auto* notice = new QLabel(
         QStringLiteral("Legal notice — YouTube search/playback uses yt-dlp "
-                       "(GNU GPL); Spotify uses spotDL: Spotify metadata "
-                       "matched on YouTube (metadata → match → YouTube audio "
-                       "source). Stream URLs are resolved temporarily and "
+                       "(GNU GPL). Stream URLs are resolved temporarily and "
                        "never stored or redistributed. Personal use only."),
         yt_consent_frame_);
     notice->setObjectName("NowPlayingMeta");
@@ -2329,9 +2301,7 @@ void MainWindow::navigate(const QString& page) {
     else if (page == QStringLiteral("PLAYLISTS") ||
              page == QStringLiteral("CASU FILES")) {
         target = QStringLiteral("NOW PLAYING");
-    } else if (page == QStringLiteral("SPOTIFY") ||
-               page == QStringLiteral("HEARTHIS") ||
-               page == QStringLiteral("TIDAL") ||
+    } else if (page == QStringLiteral("HEARTHIS") ||
                page == QStringLiteral("NETFLIX") ||
                page == QStringLiteral("BROWSE")) {
         open_web_player(page.toLower());
@@ -2722,7 +2692,7 @@ void MainWindow::open_backend_and_play(const QString& source, const QString& tit
 }
 
 void MainWindow::open_network_source(const QString& source, const QString& title) {
-    // Provider URLs (Spotify/Hearthis/Tidal/Netflix) open the official web
+    // Provider URLs (Hearthis/Netflix) open the official web
     // player in the embedded browser — never linked out, never a second
     // player. Mirrors main_window.py _play_network_source.
     const std::string provider = casu::web::provider_for_url(source.toStdString());
@@ -4571,46 +4541,6 @@ void MainWindow::on_youtube_play() {
         }).detach();
         return;
     }
-    // Linux parity (_expand_spotify_url): Spotify URLs expand via spotDL
-    // metadata into playable result rows.
-    if (casu::network::is_spotify_url(input.toStdString())) {
-        youtube_status_->setText(QStringLiteral("Expanding Spotify playlist via spotDL…"));
-        // P0 thread-safety: QPointer guard — spotDL expansion runs up to 90 s.
-        QPointer<MainWindow> guard(this);
-        std::thread([guard, input] {
-            try {
-                const auto found =
-                    casu::network::expand_spotify(input.toStdString(), 100, 90000);
-                QMetaObject::invokeMethod(QCoreApplication::instance(),
-                                          [guard, found] {
-                    if (!guard) return;  // window destroyed while expanding
-                    guard->yt_results_->clear();
-                    for (const auto& r : found) {
-                        const QString label = QStringLiteral("%1 — %2")
-                                                  .arg(QString::fromStdString(r.title),
-                                                       QString::fromStdString(r.artist));
-                        auto* item = new QListWidgetItem(label, guard->yt_results_);
-                        item->setData(Qt::UserRole,
-                                      QString::fromStdString(r.url));
-                        item->setData(Qt::UserRole + 1,
-                                      QString::fromStdString(r.title));
-                        guard->yt_results_->addItem(item);
-                    }
-                    guard->youtube_status_->setText(
-                        QStringLiteral("Spotify expanded: %1 entries").arg(found.size()));
-                    guard->status(QStringLiteral("Added %1 Spotify entries").arg(found.size()));
-                }, Qt::QueuedConnection);
-            } catch (const std::exception& e) {
-                QMetaObject::invokeMethod(QCoreApplication::instance(),
-                                          [guard, e] {
-                    if (!guard) return;
-                    guard->youtube_status_->setText(QStringLiteral("Spotify expand failed: %1")
-                                                         .arg(QString::fromStdString(e.what())));
-                }, Qt::QueuedConnection);
-            }
-        }).detach();
-        return;
-    }
     if (is_url || QFileInfo::exists(input)) {
         if (casu::network::is_youtube_url(input.toStdString())) {
             // Linux parity: typed YouTube links enter the queue + resolve
@@ -4784,7 +4714,6 @@ QString MainWindow::queue_label_for(const QString& path) {
         text.startsWith(QStringLiteral("rtmp://")) ||
         text.startsWith(QStringLiteral("udp://")) ||
         text.startsWith(QStringLiteral("rtp://")) ||
-        text.startsWith(QStringLiteral("spotify:")) ||
         text.startsWith(QStringLiteral("ytdl:")))
         return text;
     auto it = tag_titles_.constFind(text);

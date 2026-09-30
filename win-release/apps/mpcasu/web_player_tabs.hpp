@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-CASU-AntiCapitalist-1.4
-// Tabbed embedded web-player views (Spotify/Hearthis/Tidal/Netflix/BROWSE).
+// Tabbed embedded web-player views (Hearthis/Netflix/BROWSE).
 // Exact port of mpcasu_qt/webplayers.py supporting Microsoft Edge WebView2
 // (with DRM/Widevine on Windows) and QtWebEngine (Chromium).
 #pragma once

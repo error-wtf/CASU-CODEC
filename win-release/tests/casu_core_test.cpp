@@ -400,8 +400,8 @@ int main() {
             } catch (const CasuError&) { threw = true; }
             check(threw, "MP5 corrupt payload rejected");
         }
-    }
 #endif  // CASU_HAVE_ZSTD
+    }
 
     // --- Sidecar resolve (WP-CORE-006) ---
     {

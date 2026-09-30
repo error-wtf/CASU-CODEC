@@ -12,6 +12,7 @@
 // The rest of the player functions have the same signature in 3.0 and 4.0.
 #pragma once
 #include <cstddef>
+#include <cstdint>
 
 #ifdef __cplusplus
 extern "C" {

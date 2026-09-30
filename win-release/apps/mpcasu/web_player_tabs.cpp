@@ -585,7 +585,7 @@ void WebPlayerTabs::open(const QString& provider, const QString& query,
         return;
     }
 
-    if (!entries_.contains(key)) key = QStringLiteral("spotify");
+    if (!entries_.contains(key)) key = QStringLiteral("hearthis");
     int index = 0;
     const auto specs = casu::web::web_players();
     for (std::size_t i = 0; i < specs.size(); ++i) {
