@@ -2,6 +2,12 @@
 // JNI bridge exposing the byte-parity casu_core to the Android app:
 // detectKind / verifyCasunat2 (full integrity walk) / extractPayload for
 // MP5 + CASUNAT1 sidecars.
+//
+// Symbol naming: JNI resolution requires Java_<pkg>_<Class>_<method> for the
+// DECLARING Java class. The declaring class is org.casu.mpcasu.CasuBridge
+// (CasuCore does not exist in Java), so every export below is
+// Java_org_casu_mpcasu_CasuBridge_* — matching CasuBridge.java, whose static
+// block loads libcasucore.so (CMake target "casucore") before first use.
 #include <jni.h>
 #include <filesystem>
 #include <fstream>
@@ -31,7 +37,7 @@ jstring to_jni(JNIEnv* env, const std::string& s) {
 }  // namespace
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_org_casu_mpcasu_CasuCore_detectKind(JNIEnv* env, jclass,
+Java_org_casu_mpcasu_CasuBridge_detectKind(JNIEnv* env, jclass,
                                         jstring path) {
     // A C++ exception must never escape across JNI: it would terminate the
     // whole app (uncaught casu::CasuError -> std::terminate -> SIGABRT).
@@ -53,7 +59,7 @@ Java_org_casu_mpcasu_CasuCore_detectKind(JNIEnv* env, jclass,
 // seek-index cross-checks). Returns the manifest JSON on success or throws
 // into Java via an error string prefixed "ERROR: ".
 extern "C" JNIEXPORT jstring JNICALL
-Java_org_casu_mpcasu_CasuCore_verifyCasunat2(JNIEnv* env, jclass,
+Java_org_casu_mpcasu_CasuBridge_verifyCasunat2(JNIEnv* env, jclass,
                                              jstring path) {
     try {
         const auto container = casu::casunat2::read_native_v2(to_std(env, path));
@@ -65,7 +71,7 @@ Java_org_casu_mpcasu_CasuCore_verifyCasunat2(JNIEnv* env, jclass,
 
 // Extract the playable payload of an MP5/CASUNAT1 container to cacheDir.
 extern "C" JNIEXPORT jstring JNICALL
-Java_org_casu_mpcasu_CasuCore_extractToCache(JNIEnv* env, jclass,
+Java_org_casu_mpcasu_CasuBridge_extractToCache(JNIEnv* env, jclass,
                                              jstring path,
                                              jstring cacheDir) {
     const std::string src = to_std(env, path);
@@ -145,7 +151,7 @@ bool append_pcm_s16le(const casu::natv2::AudioBlock& block, std::vector<uint8_t>
 // Android MediaPlayer can play CASU audio natively (the Linux reference
 // plays these containers through its own PCM sink).
 extern "C" JNIEXPORT jstring JNICALL
-Java_org_casu_mpcasu_CasuCore_extractCasunat2AudioWav(JNIEnv* env, jclass,
+Java_org_casu_mpcasu_CasuBridge_extractCasunat2AudioWav(JNIEnv* env, jclass,
                                                       jstring path,
                                                       jstring cacheDir) {
     const std::string src = to_std(env, path);

@@ -5,12 +5,16 @@
 
 #include <QFile>
 #include <QHostAddress>
+#include <QCoreApplication>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QPointer>
 #include <QRandomGenerator>
 #include <QTcpServer>
 #include <QTcpSocket>
+
+#include <thread>
 
 namespace mpcasu {
 
@@ -47,10 +51,16 @@ public:
         : proxy_(proxy), socket_(socket) {
         connect(socket_, &QTcpSocket::readyRead, this, &Connection::on_ready);
         connect(socket_, &QTcpSocket::disconnected, this, &Connection::cleanup);
+        // Event-driven backpressure for local-file serving: resume pumping
+        // once the socket buffer drains below the chunk watermark.
+        connect(socket_, &QTcpSocket::bytesWritten, this, [this](qint64) {
+            if (local_sending_ && remaining_ > 0) pump_local();
+        });
     }
 
 private:
     void cleanup() {
+        closing_ = true;  // queued refresh continuations must not touch socket_
         if (reply_) reply_->abort();
         if (file_ && file_->isOpen()) file_->close();
         socket_->deleteLater();
@@ -135,22 +145,30 @@ private:
         pump_local();
     }
 
+    // Event-driven chunked send: writes at most until the socket buffer
+    // exceeds 2×kChunk, then returns to the event loop and resumes from the
+    // bytesWritten signal. No waitForBytesWritten(), no recursion — the GUI
+    // thread stays responsive and the stack stays flat regardless of size.
     void pump_local() {
-        if (remaining_ <= 0) {
-            socket_->flush();
-            socket_->disconnectFromHost();
-            return;
+        while (remaining_ > 0) {
+            if (socket_->bytesToWrite() > 2 * kChunk) {
+                local_sending_ = true;  // resume from bytesWritten
+                return;
+            }
+            const qint64 n = qMin<qint64>(remaining_, kChunk);
+            const QByteArray chunk = file_->read(n);
+            if (chunk.isEmpty()) {  // read error / truncated file
+                local_sending_ = false;
+                socket_->flush();
+                socket_->disconnectFromHost();
+                return;
+            }
+            socket_->write(chunk);
+            remaining_ -= chunk.size();
         }
-        const qint64 n = qMin<qint64>(remaining_, kChunk);
-        QByteArray chunk = file_->read(n);
-        socket_->write(chunk);
-        remaining_ -= chunk.size();
-        if (socket_->bytesToWrite() > 2 * kChunk) {
-            disconnect(socket_, &QTcpSocket::readyRead, this, nullptr);
-            socket_->waitForBytesWritten(2000);
-            connect(socket_, &QTcpSocket::readyRead, this, &Connection::on_ready);
-        }
-        pump_local();
+        local_sending_ = false;
+        socket_->flush();
+        socket_->disconnectFromHost();
     }
 
     void serve_remote(const QByteArray& range_header, bool head) {
@@ -173,20 +191,45 @@ private:
             const int status = reply_->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
             if ((status == 403 || status == 410) && proxy_->refresh_ && !refreshed_) {
                 refreshed_ = true;
-                QString fresh;
-                try {
-                    fresh = proxy_->refresh_();
-                } catch (...) {
-                }
-                if (!fresh.isEmpty() && fresh.startsWith("http")) {
-                    proxy_->upstream_url_ = fresh;
-                    reply_->abort();
-                    reply_->deleteLater();
-                    reply_ = nullptr;
-                    headers_sent_ = false;
-                    serve_remote(range_header, head);
-                    return;
-                }
+                // Refresh (yt-dlp resolve, up to 45 s) runs on a worker thread
+                // so the GUI event loop never blocks (P1 freeze fix). The
+                // worker posts the continuation back; QPointer guards on both
+                // the Connection and the proxy make the queued callback a
+                // no-op if the client disconnected (or the proxy stopped and
+                // the YoutubeProxy object itself was destroyed) in the
+                // meantime — the proxy can die while Connections are still in
+                // their deleteLater round-trip.
+                QPointer<Connection> self(this);
+                QPointer<YoutubeProxy> proxy_guard(proxy_);
+                auto refresh = proxy_->refresh_;
+                reply_->abort();
+                reply_->deleteLater();
+                reply_ = nullptr;
+                std::thread([self, proxy_guard, refresh, range_header, head] {
+                    QString fresh;
+                    try {
+                        fresh = refresh();
+                    } catch (...) {
+                    }
+                    QMetaObject::invokeMethod(QCoreApplication::instance(),
+                                              [self, proxy_guard, fresh,
+                                               range_header, head] {
+                        if (!self || !proxy_guard) return;  // gone during refresh
+                        if (self->closing_ ||
+                            self->socket_->state() != QAbstractSocket::ConnectedState)
+                            return;  // client left while we re-resolved
+                        if (!fresh.isEmpty() && fresh.startsWith("http")) {
+                            proxy_guard->upstream_url_ = fresh;
+                            self->headers_sent_ = false;
+                            self->serve_remote(range_header, head);
+                            return;
+                        }
+                        // Refresh failed: report the upstream status to the
+                        // client instead of hanging silently.
+                        self->send_error(502, "upstream expired");
+                    }, Qt::QueuedConnection);
+                }).detach();
+                return;
             }
             // Send the response head as soon as we have one (readyRead may
             // already have pumped body bytes; only write the head once).
@@ -255,6 +298,8 @@ private:
     bool handled_ = false;
     bool headers_sent_ = false;
     bool refreshed_ = false;
+    bool local_sending_ = false;  // waiting for bytesWritten to resume pump_local
+    bool closing_ = false;        // set in cleanup(); socket_ about to die
     QFile* file_ = nullptr;
     qint64 remaining_ = 0;
     QNetworkReply* reply_ = nullptr;

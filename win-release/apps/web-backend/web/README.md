@@ -4,8 +4,11 @@ Start the loopback launcher so the web app can load assets and use its bounded
 FFmpeg compatibility fallback:
 
 ```bash
-cd /path/to/Lino-Codec
-python mpcasu_web.py --port 8080
+# Native launcher built from this tree (apps/web-backend → CASU-Web-Backend)
+CASU-Web-Backend --port 8080
+
+# …or the Python reference launcher from the repository root
+python web_casu.py --port 8080
 ```
 
 Open `http://localhost:8080/web/`. The player supports local audio/video,

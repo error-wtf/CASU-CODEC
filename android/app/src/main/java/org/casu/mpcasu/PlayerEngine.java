@@ -75,6 +75,7 @@ public final class PlayerEngine implements
     private boolean usingVlc;
 
     private android.view.Surface surface;   // kept across player recreation
+    private android.graphics.SurfaceTexture surfaceTexture; // TextureView backing
     private final List<MediaItem> items = new ArrayList<>();
     private int index = -1;
     private boolean prepared;
@@ -568,11 +569,14 @@ public final class PlayerEngine implements
         if ("casu".equals(kind) || "mp5".equals(kind)
                 || source.toLowerCase().endsWith(".casu")
                 || source.toLowerCase().endsWith(".mp5")) {
-            final String resolved = CasuBridge.extractToCache(source,
+            // JNI can throw UnsatisfiedLinkError (an Error, not Exception)
+            // when the native core is missing — never let it kill the app.
+            final String resolved = CasuBridge.extractToCacheSafe(source,
                     context.getCacheDir().getAbsolutePath());
-            if (resolved == null || resolved.startsWith("ERROR")) {
+            if (resolved == null) {
                 fireError("CASU-Container konnte nicht geöffnet werden"
-                        + (resolved != null ? ": " + resolved.substring(5) : ""));
+                        + (CasuBridge.isNativeAvailable()
+                        ? " (extract failed)" : " (native core missing)"));
                 return;
             }
             source = resolved;
@@ -650,16 +654,26 @@ public final class PlayerEngine implements
         if (vlc == null) return;
         try {
             IVLCVout vout = vlc.getVLCVout();
-            if (surface != null) {
-                // Bind the Surface from the UI (TextureView) so video renders.
-                vout.setVideoSurface(surface, null);
-                vout.attachViews();
-            } else {
-                vout.attachViews();
-            }
+            bindVoutSurface(vout);
         } catch (Exception e) {
             Log.i(TAG, "vout attach skipped: " + e.getMessage());
         }
+    }
+
+    /**
+     * v7.8.1 (bug 1c): bind the TextureView's SurfaceTexture directly —
+     * libVLC 3.x scales its vout from the texture's default buffer size.
+     * The old Surface-only binding never received a buffer size, rendering
+     * the video small in the top-left corner on FireTV. The UI sets the
+     * buffer size to the video geometry via setDefaultBufferSize(w, h).
+     */
+    private void bindVoutSurface(IVLCVout vout) {
+        if (surfaceTexture != null) {
+            vout.setVideoSurface(surfaceTexture);
+        } else if (surface != null) {
+            vout.setVideoSurface(surface, null);
+        }
+        vout.attachViews();
     }
 
     private void onVlcEvent(org.videolan.libvlc.MediaPlayer.Event event) {
@@ -774,19 +788,36 @@ public final class PlayerEngine implements
 
     /** Attach a video surface, kept referenced so every player instance is bound. */
     public void setSurface(android.view.Surface newSurface) {
+        // Preserve the last known SurfaceTexture unless the caller provides
+        // a new Surface wrapping a different one.
         this.surface = newSurface;
+        rebindSurface();
+    }
+
+    /** Attach surface + backing SurfaceTexture (TextureView path). The texture
+     *  is what drives libVLC's vout scaling, so it must be handed through. */
+    public void setSurface(android.view.Surface newSurface,
+                           android.graphics.SurfaceTexture newTexture) {
+        this.surface = newSurface;
+        this.surfaceTexture = newTexture;
+        rebindSurface();
+    }
+
+    /** Re-attach the current surface to the active backend (rotation/resize). */
+    private void rebindSurface() {
         if (usingVlc && vlc != null) {
             try {
                 IVLCVout vout = vlc.getVLCVout();
-                if (newSurface != null) {
-                    vout.setVideoSurface(newSurface, null);
-                    vout.attachViews();
+                if (surface != null || surfaceTexture != null) {
+                    // detach+attach cycle so VLC picks up the new geometry
+                    try { vout.detachViews(); } catch (Exception ignored) {}
+                    bindVoutSurface(vout);
                 } else {
                     vout.detachViews();
                 }
             } catch (Exception ignored) {}
         } else if (player != null) {
-            try { player.setSurface(newSurface); } catch (Exception ignored) {}
+            try { player.setSurface(surface); } catch (Exception ignored) {}
         }
     }
 
@@ -988,7 +1019,25 @@ public final class PlayerEngine implements
     }
 
     private void restore() {
-        // Product decision (user): the QUEUE STARTS EMPTY on a fresh app start.
+        // v7.8.1: the queue is restored from QueueStore (WITHOUT autoplay)
+        // so the resume feature has an index + position to continue from.
+        // Previously restore() was empty → index stayed -1 → maybeResume()
+        // in MainActivity could never fire ("Wiedergabe fortsetzen" was dead).
+        // Playback itself only starts when the user (or maybeResume) calls
+        // playIndex; a restored queue alone never makes noise.
+        try {
+            QueueStore.Saved saved = store.load();
+            if (saved == null || saved.items.isEmpty()) return;
+            items.addAll(saved.items);
+            index = Math.min(saved.index, items.size() - 1);
+            if (index < 0) index = items.isEmpty() ? -1 : 0;
+            shuffle = saved.shuffle;
+            repeat = saved.repeat;
+            // NOTE: no pausedByUser/pendingSeekMs here — maybeResume() reads
+            // saved.positionMs itself and passes it through playIndex().
+        } catch (Exception e) {
+            Log.i(TAG, "restore skipped: " + e.getMessage());
+        }
     }
 
     public QueueStore.Saved savedState() {

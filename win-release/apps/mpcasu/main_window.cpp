@@ -1927,7 +1927,22 @@ void MainWindow::build_epg_page() {
     auto* load_url_btn = new QPushButton(QStringLiteral("Load URL"), page);
     load_url_btn->setObjectName("IconButton");
     connect(load_url_btn, &QPushButton::clicked, this, [this] {
-        load_epg_source(epg_source_->text().trimmed());
+        const QString source = epg_source_->text().trimmed();
+        if (source.isEmpty()) {
+            epg_status_->setText(QStringLiteral("Please enter an IPTV playlist URL."));
+            return;
+        }
+        // Forward-merged from Casu-Player: parse/fetch inside load_epg_source
+        // can throw (CasuError/JsonError/NetworkError) — an exception escaping
+        // a Qt slot terminates the app, so wrap the call.
+        try {
+            load_epg_source(source);
+        } catch (const std::exception& e) {
+            epg_status_->setText(QStringLiteral("Load failed: %1")
+                                     .arg(QString::fromUtf8(e.what())));
+        } catch (...) {
+            epg_status_->setText(QStringLiteral("Load failed."));
+        }
     });
     source_row->addWidget(load_url_btn);
     outer->addLayout(source_row);
@@ -1968,12 +1983,26 @@ void MainWindow::on_epg_load() {
         this, QStringLiteral("Load playlist / guide"), QDir::homePath(),
         QStringLiteral("Playlists & guides (*.m3u *.m3u8 *.pls *.xspf *.wpl *.asx *.xml *.xmltv);;All files (*)"));
     if (file.isEmpty()) return;
-    load_epg_source(file);
+    // Forward-merged from Casu-Player: same exception guard as the URL path.
+    try {
+        load_epg_source(file);
+    } catch (const std::exception& e) {
+        epg_status_->setText(QStringLiteral("Load failed: %1")
+                                 .arg(QString::fromUtf8(e.what())));
+    } catch (...) {
+        epg_status_->setText(QStringLiteral("Load failed."));
+    }
 }
 
 void MainWindow::load_epg_source(const QString& source) {
-    if (source.isEmpty()) return;
-    const QString lower = source.toLower();
+    // Forward-merged from Casu-Player: trim input and require a non-empty
+    // source with a user-visible message instead of silently returning.
+    const QString cleaned = source.trimmed();
+    if (cleaned.isEmpty()) {
+        epg_status_->setText(QStringLiteral("Please enter an IPTV playlist URL."));
+        return;
+    }
+    const QString lower = cleaned.toLower();
     // XMLTV guide.
     if (lower.endsWith(QStringLiteral(".xml")) || lower.endsWith(QStringLiteral(".xmltv"))) {
         QByteArray data;
@@ -1981,7 +2010,7 @@ void MainWindow::load_epg_source(const QString& source) {
         if (lower.startsWith(QStringLiteral("http://")) ||
             lower.startsWith(QStringLiteral("https://"))) {
             const casu::network::HttpResponse res =
-                casu::network::HttpClient().get(source.toStdString(), 30000);
+                casu::network::HttpClient().get(cleaned.toStdString(), 30000);
             if (!res.error.empty()) {
                 epg_status_->setText(QStringLiteral("Guide fetch failed: %1")
                                          .arg(QString::fromStdString(res.error)));
@@ -1990,9 +2019,9 @@ void MainWindow::load_epg_source(const QString& source) {
             data = QByteArray(reinterpret_cast<const char*>(res.body.data()),
                               static_cast<int>(res.body.size()));
         } else {
-            QFile f(source);
+            QFile f(cleaned);
             if (!f.open(QIODevice::ReadOnly)) {
-                epg_status_->setText(QStringLiteral("Could not read %1").arg(source));
+                epg_status_->setText(QStringLiteral("Could not read %1").arg(cleaned));
                 return;
             }
             data = f.readAll();
@@ -2012,7 +2041,7 @@ void MainWindow::load_epg_source(const QString& source) {
     if (lower.startsWith(QStringLiteral("http://")) ||
         lower.startsWith(QStringLiteral("https://"))) {
         const casu::network::HttpResponse res =
-            casu::network::HttpClient().get(source.toStdString(), 30000);
+            casu::network::HttpClient().get(cleaned.toStdString(), 30000);
         if (!res.error.empty()) {
             epg_status_->setText(QStringLiteral("Fetch failed: %1").arg(QString::fromStdString(res.error)));
             return;
@@ -2026,14 +2055,14 @@ void MainWindow::load_epg_source(const QString& source) {
             return;
         }
     } else {
-        const QString parse_err = mpcasu::load_m3u_file(source, &catalog);
+        const QString parse_err = mpcasu::load_m3u_file(cleaned, &catalog);
         if (!parse_err.isEmpty()) {
             epg_status_->setText(QStringLiteral("EPG error: %1").arg(parse_err));
             return;
         }
     }
     if (catalog.channels.isEmpty()) {
-        epg_status_->setText(QStringLiteral("No channels found in %1").arg(source));
+        epg_status_->setText(QStringLiteral("No channels found in %1").arg(cleaned));
         return;
     }
     epg_ = catalog;
@@ -4405,7 +4434,12 @@ void MainWindow::load_cover_art(const QString& source) {
     if (source.isEmpty() || is_network_like(source)) return;
     if (!QFileInfo::exists(source)) return;
     const QString key = source;
-    std::thread([this, key] {
+    // P0 thread-safety: capture a QPointer guard instead of raw `this` —
+    // the window can be closed (and destroyed) while ffmpeg extracts the
+    // cover; the queued callback must not touch freed memory. Same proven
+    // pattern as open_network_source()/tag_queue_title()/thumbnails.
+    QPointer<MainWindow> guard(this);
+    std::thread([guard, key] {
         const QString tmp = QDir::tempPath() + QStringLiteral("/mpcasu_cover_") +
                             QString::number(QCoreApplication::applicationPid()) + QStringLiteral(".png");
         bool ok = casu::media::extract_cover(key.toStdString(), tmp.toStdString());
@@ -4433,13 +4467,15 @@ void MainWindow::load_cover_art(const QString& source) {
                 }
             }
         }
-        QMetaObject::invokeMethod(this, [this, key, tmp, ok] {
-            if (!ok || key != current_source_) return;
+        QMetaObject::invokeMethod(QCoreApplication::instance(),
+                                  [guard, key, tmp, ok] {
+            if (!guard) return;  // window destroyed while extracting
+            if (!ok || key != guard->current_source_) return;
             QPixmap pm;
             if (!pm.load(tmp)) return;
-            if (cover_pixmap_) { delete cover_pixmap_; cover_pixmap_ = nullptr; }
-            cover_pixmap_ = new QPixmap(pm);
-            if (visualizer_) static_cast<VisualizerWidget*>(visualizer_)->set_cover(cover_pixmap_);
+            if (guard->cover_pixmap_) { delete guard->cover_pixmap_; guard->cover_pixmap_ = nullptr; }
+            guard->cover_pixmap_ = new QPixmap(pm);
+            if (guard->visualizer_) static_cast<VisualizerWidget*>(guard->visualizer_)->set_cover(guard->cover_pixmap_);
             QFile::remove(tmp);
         }, Qt::QueuedConnection);
     }).detach();
@@ -4480,7 +4516,10 @@ void MainWindow::on_youtube_play() {
     if (!single_youtube_nolist && !multiTokens.isEmpty()) {
         youtube_status_->setText(QStringLiteral("Expanding YouTube into the queue…"));
         const QStringList frame = multiTokens;
-        std::thread([this, frame] {
+        // P0 thread-safety: QPointer guard — expand_playlist can run up to
+        // 60 s; the window may be gone when the queued callback fires.
+        QPointer<MainWindow> guard(this);
+        std::thread([guard, frame] {
             try {
                 QStringList urls;
                 for (const QString& token : frame) {
@@ -4508,21 +4547,25 @@ void MainWindow::on_youtube_play() {
                         urls.append(token);
                     }
                 }
-                QMetaObject::invokeMethod(this, [this, urls] {
+                QMetaObject::invokeMethod(QCoreApplication::instance(),
+                                          [guard, urls] {
+                    if (!guard) return;  // window destroyed while expanding
                     if (urls.isEmpty()) {
-                        youtube_status_->setText(
+                        guard->youtube_status_->setText(
                             QStringLiteral("No YouTube videos recognised."));
                         return;
                     }
-                    add_files(urls);
-                    youtube_status_->setText(
+                    guard->add_files(urls);
+                    guard->youtube_status_->setText(
                         QStringLiteral("Queued %1 videos/playlists").arg(urls.size()));
-                    status(QStringLiteral("Added %1 videos/playlists to the queue").arg(urls.size()));
+                    guard->status(QStringLiteral("Added %1 videos/playlists to the queue").arg(urls.size()));
                 }, Qt::QueuedConnection);
             } catch (const std::exception& e) {
-                QMetaObject::invokeMethod(this, [this, e] {
-                    youtube_status_->setText(QStringLiteral("YouTube expand failed: %1")
-                                                 .arg(QString::fromStdString(e.what())));
+                QMetaObject::invokeMethod(QCoreApplication::instance(),
+                                          [guard, e] {
+                    if (!guard) return;
+                    guard->youtube_status_->setText(QStringLiteral("YouTube expand failed: %1")
+                                                         .arg(QString::fromStdString(e.what())));
                 }, Qt::QueuedConnection);
             }
         }).detach();
@@ -4532,31 +4575,37 @@ void MainWindow::on_youtube_play() {
     // metadata into playable result rows.
     if (casu::network::is_spotify_url(input.toStdString())) {
         youtube_status_->setText(QStringLiteral("Expanding Spotify playlist via spotDL…"));
-        std::thread([this, input] {
+        // P0 thread-safety: QPointer guard — spotDL expansion runs up to 90 s.
+        QPointer<MainWindow> guard(this);
+        std::thread([guard, input] {
             try {
                 const auto found =
                     casu::network::expand_spotify(input.toStdString(), 100, 90000);
-                QMetaObject::invokeMethod(this, [this, found] {
-                    yt_results_->clear();
+                QMetaObject::invokeMethod(QCoreApplication::instance(),
+                                          [guard, found] {
+                    if (!guard) return;  // window destroyed while expanding
+                    guard->yt_results_->clear();
                     for (const auto& r : found) {
                         const QString label = QStringLiteral("%1 — %2")
                                                   .arg(QString::fromStdString(r.title),
                                                        QString::fromStdString(r.artist));
-                        auto* item = new QListWidgetItem(label, yt_results_);
+                        auto* item = new QListWidgetItem(label, guard->yt_results_);
                         item->setData(Qt::UserRole,
                                       QString::fromStdString(r.url));
                         item->setData(Qt::UserRole + 1,
                                       QString::fromStdString(r.title));
-                        yt_results_->addItem(item);
+                        guard->yt_results_->addItem(item);
                     }
-                    youtube_status_->setText(
+                    guard->youtube_status_->setText(
                         QStringLiteral("Spotify expanded: %1 entries").arg(found.size()));
-                    status(QStringLiteral("Added %1 Spotify entries").arg(found.size()));
+                    guard->status(QStringLiteral("Added %1 Spotify entries").arg(found.size()));
                 }, Qt::QueuedConnection);
             } catch (const std::exception& e) {
-                QMetaObject::invokeMethod(this, [this, e] {
-                    youtube_status_->setText(QStringLiteral("Spotify expand failed: %1")
-                                                 .arg(QString::fromStdString(e.what())));
+                QMetaObject::invokeMethod(QCoreApplication::instance(),
+                                          [guard, e] {
+                    if (!guard) return;
+                    guard->youtube_status_->setText(QStringLiteral("Spotify expand failed: %1")
+                                                         .arg(QString::fromStdString(e.what())));
                 }, Qt::QueuedConnection);
             }
         }).detach();
@@ -4581,12 +4630,18 @@ void MainWindow::on_youtube_play() {
     if (yt_searching_) return;
     yt_searching_ = true;
     youtube_status_->setText(QStringLiteral("Searching YouTube via yt-dlp…"));
-    std::thread([this, input] {
+    // P0 thread-safety: QPointer guard — yt-dlp search runs up to 45 s.
+    QPointer<MainWindow> guard(this);
+    std::thread([guard, input] {
         try {
             const auto found = casu::network::YtDlp().search(input.toStdString(), 12, 45000);
-            QMetaObject::invokeMethod(this, [this, found] {
-                yt_searching_ = false;
-                yt_results_->clear();
+            QMetaObject::invokeMethod(QCoreApplication::instance(),
+                                      [guard, found] {
+                if (!guard) {  // window destroyed during search
+                    return;
+                }
+                guard->yt_searching_ = false;
+                guard->yt_results_->clear();
                 for (const auto& r : found) {
                     const QString title = QString::fromStdString(r.title);
                     const QString uploader = QString::fromStdString(r.uploader);
@@ -4604,7 +4659,7 @@ void MainWindow::on_youtube_play() {
                     item->setData(Qt::UserRole, QString::fromStdString(r.url));
                     item->setData(Qt::UserRole + 1, title);
                     item->setSizeHint(QSize(0, 76));
-                    yt_results_->addItem(item);
+                    guard->yt_results_->addItem(item);
                 }
                 // Load thumbnails for YouTube results in background
                 struct ThumbJob { int row; std::string url; };
@@ -4614,7 +4669,9 @@ void MainWindow::on_youtube_play() {
                         thumbs.append({i, found[i].thumbnail});
                 }
                 if (!thumbs.isEmpty()) {
-                    auto* list = yt_results_;
+                    // P0: guard the list widget too — the thumbnail fetch can
+                    // outlive both the results list and the window.
+                    QPointer<QListWidget> list = guard->yt_results_;
                     std::thread([list, thumbs] {
                         for (const auto& job : thumbs) {
                             try {
@@ -4633,7 +4690,9 @@ void MainWindow::on_youtube_play() {
                                 if (px.loadFromData(data)) {
                                     QIcon icon(px.scaled(88, 50, Qt::KeepAspectRatioByExpanding,
                                                         Qt::SmoothTransformation));
-                                    QMetaObject::invokeMethod(list, [list, row = job.row, icon] {
+                                    QMetaObject::invokeMethod(QCoreApplication::instance(),
+                                                              [list, row = job.row, icon] {
+                                        if (!list) return;  // list destroyed during fetch
                                         if (auto* it = list->item(row))
                                             it->setIcon(icon);
                                     }, Qt::QueuedConnection);
@@ -4642,15 +4701,17 @@ void MainWindow::on_youtube_play() {
                         }
                     }).detach();
                 }
-                youtube_status_->setText(
+                guard->youtube_status_->setText(
                     found.empty() ? QStringLiteral("No results.")
                                   : QStringLiteral("Double-click a result to play it."));
             }, Qt::QueuedConnection);
         } catch (const std::exception& e) {
-            QMetaObject::invokeMethod(this, [this, e] {
-                yt_searching_ = false;
-                youtube_status_->setText(QStringLiteral("Search failed: %1")
-                                             .arg(QString::fromStdString(e.what())));
+            QMetaObject::invokeMethod(QCoreApplication::instance(),
+                                      [guard, e] {
+                if (!guard) return;
+                guard->yt_searching_ = false;
+                guard->youtube_status_->setText(QStringLiteral("Search failed: %1")
+                                                 .arg(QString::fromStdString(e.what())));
             }, Qt::QueuedConnection);
         }
     }).detach();

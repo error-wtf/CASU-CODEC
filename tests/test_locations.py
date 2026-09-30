@@ -25,7 +25,28 @@ def test_youtube_location_resolves_one_combined_http_stream(monkeypatch):
     assert resolve_media_location("https://youtu.be/abc") == "https://media.example/video.mp4"
     assert commands
     extractor = commands[0].index("--extractor-args")
-    assert commands[0][extractor + 1] == "youtube:player_client=android"
+    # v7.8.1: explicit fallback chain default -> android (yt-dlp rotates
+    # clients; android_vr CDN URLs are 403-rejected).
+    assert commands[0][extractor + 1] == "youtube:player_client=default,android"
+
+
+def test_youtube_location_falls_back_to_android_client(monkeypatch):
+    """When the primary client fails, the android client is tried before
+    giving up (single point of failure removed)."""
+    commands = []
+    def fake_run(*args, **kwargs):
+        commands.append(args[0])
+        if len(commands) == 1:
+            return subprocess.CompletedProcess(
+                args[0], 1, "", "ERROR: [youtube] abc: Video unavailable")
+        return subprocess.CompletedProcess(
+            args[0], 0, "https://media.example/video.mp4\n", "")
+    monkeypatch.setattr("casu.locations.shutil.which", lambda _name: "/usr/bin/yt-dlp")
+    monkeypatch.setattr("casu.locations.subprocess.run", fake_run)
+    assert resolve_media_location("https://youtu.be/abc") == "https://media.example/video.mp4"
+    assert len(commands) == 2
+    extractor = commands[1].index("--extractor-args")
+    assert commands[1][extractor + 1] == "youtube:player_client=android"
 
 
 def test_youtube_location_fails_without_resolver(monkeypatch):

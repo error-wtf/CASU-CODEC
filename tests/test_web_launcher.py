@@ -16,6 +16,7 @@ import pytest
 from web_casu import (MPCASUWebServer, TranscodeStore, WebPlayerError,
                         WebPlayerHandler, _redacted_location, main,
                         resolve_web_root)
+import web_casu
 from casu.native_v2 import convert_media_to_native_v2
 
 
@@ -72,7 +73,7 @@ def test_web_launcher_rejects_dns_rebinding_host_and_cross_origin_write():
         server.shutdown(); server.server_close(); thread.join(timeout=2)
 
 
-def test_web_launcher_proxies_bounded_http_epg_without_browser_cors(tmp_path):
+def test_web_launcher_proxies_bounded_http_epg_without_browser_cors(tmp_path, monkeypatch):
     guide = (b'<?xml version="1.0"?><tv><channel id="news">'
              b'<display-name>News</display-name></channel></tv>')
     (tmp_path / "guide.xml").write_bytes(guide)
@@ -91,13 +92,14 @@ def test_web_launcher_proxies_bounded_http_epg_without_browser_cors(tmp_path):
         source_url = (f"http://127.0.0.1:{source_server.server_address[1]}"
                       "/guide.xml")
         origin = f"http://127.0.0.1:{player_server.server_address[1]}"
+        # SSRF hardening (v7.8.1): loopback/private targets are refused first…
         request = urllib.request.Request(
             origin + "/api/catalog-url",
             data=json.dumps({"url": source_url}).encode(), method="POST",
             headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(request, timeout=5) as response:
-            assert response.headers["Content-Type"] == "application/octet-stream"
-            assert response.read() == guide
+        with pytest.raises(urllib.error.HTTPError) as rejected:
+            urllib.request.urlopen(request, timeout=5)
+        assert rejected.value.code == 400
         rejected = urllib.request.Request(
             origin + "/api/catalog-url",
             data=json.dumps({"url": "file:///etc/passwd"}).encode(),
@@ -105,6 +107,20 @@ def test_web_launcher_proxies_bounded_http_epg_without_browser_cors(tmp_path):
         with pytest.raises(urllib.error.HTTPError) as error:
             urllib.request.urlopen(rejected, timeout=5)
         assert error.value.code == 400
+        # …and with the guard explicitly lifted (test-only, same process so
+        # the monkeypatch reaches the handler thread) the proxy still frames
+        # and relays the catalog byte-for-byte without browser CORS.
+        real_fetch = web_casu.fetch_document
+        monkeypatch.setattr(web_casu, "fetch_document",
+                            lambda url, **kw: real_fetch(
+                                url, allow_private_target=True, **kw))
+        request = urllib.request.Request(
+            origin + "/api/catalog-url",
+            data=json.dumps({"url": source_url}).encode(), method="POST",
+            headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(request, timeout=5) as response:
+            assert response.headers["Content-Type"] == "application/octet-stream"
+            assert response.read() == guide
     finally:
         player_server.shutdown(); player_server.server_close()
         source_server.shutdown(); source_server.server_close()

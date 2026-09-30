@@ -321,10 +321,17 @@ HttpResponse BasicEndpointHandler::handle_catalog_url(const HttpRequestHead&,
         if (!body.is_object()) throw casu::JsonError("catalog URL request must be a JSON object");
         std::string url = trim(body_string(body, "url"));
         if (url.empty()) throw casu::JsonError("catalog URL request needs a url");
+        // SSRF guard (PHP catalog.php parity): private/loopback/link-local/
+        // reserved targets — literal or via DNS resolution — are refused
+        // before any request leaves the process.
+        if (!is_allowed_catalog_target(url)) {
+            return json_response(403, json_error("catalog target not allowed"));
+        }
         casu::network::HttpRequest req;
         req.url = url;
         req.user_agent = "MPCASU/3.0";
         req.timeout_ms = 20000;
+        req.max_redirects = 0;  // redirects re-validation is not per-hop; refuse
         casu::network::HttpResponse resp = casu::network::HttpClient().request(req);
         if (resp.status != 200) {
             throw casu::network::NetworkError("catalog fetch failed (HTTP " +

@@ -2,6 +2,7 @@ package org.casu.mpcasu;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Context;
 import android.graphics.Color;
 import android.net.Uri;
 import android.view.View;
@@ -43,7 +44,24 @@ public final class IptvView extends LinearLayout {
         fav.setOnClickListener(v->{onlyFavorites=!onlyFavorites;fav.setText(onlyFavorites?"★ Favoriten":"Alle Sender");filter();});
         tools.addView(file);tools.addView(url);tools.addView(fav);addView(tools);
         groups=new Spinner(activity);addView(groups);
-        search=new EditText(activity);search.setSingleLine(true);search.setTextColor(Color.WHITE);search.setHintTextColor(Color.LTGRAY);search.setHint("Sender oder Gruppe suchen…");addView(search);
+        search=new EditText(activity);search.setSingleLine(true);search.setTextColor(Color.WHITE);search.setHintTextColor(Color.LTGRAY);search.setHint("Sender oder Gruppe suchen…");
+        // v7.8.1 (bug 2 family): search action dismisses the keyboard.
+        search.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+                |android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI
+                |android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN);
+        search.setOnEditorActionListener((v,actionId,event)->{
+            if(actionId==android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+                    ||(event!=null&&event.getKeyCode()==android.view.KeyEvent.KEYCODE_ENTER
+                    &&event.getAction()==android.view.KeyEvent.ACTION_DOWN)){
+                search.clearFocus();
+                android.view.inputmethod.InputMethodManager imm=(android.view.inputmethod.InputMethodManager)
+                        activity.getSystemService(Context.INPUT_METHOD_SERVICE);
+                if(imm!=null) imm.hideSoftInputFromWindow(search.getWindowToken(),0);
+                return true;
+            }
+            return false;
+        });
+        addView(search);
         status=label("M3U-Datei oder Playlist-URL laden",14);addView(status);
         list=new ListView(activity);list.setId(View.generateViewId());list.setChoiceMode(ListView.CHOICE_MODE_SINGLE);
         list.setCacheColorHint(Color.TRANSPARENT);list.setSelector(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));

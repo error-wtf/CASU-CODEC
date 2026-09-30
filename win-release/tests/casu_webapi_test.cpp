@@ -167,6 +167,69 @@ int main() {
         open_https.allow_any_https = true;
         check(is_allowed_proxy_target("https://public.example.org/x", open_https),
               "allow_any_https open");
+        // v7.8.1: IPv6 gaps closed — ULA, link-local, IPv4-mapped and
+        // documentation ranges must be refused like their IPv4 counterparts.
+        check(!is_allowed_proxy_target("https://[fe80::1]/x", policy), "link-local v6 rejected");
+        check(!is_allowed_proxy_target("https://[fd12:3456::1]/x", policy), "ULA fd00::/8 rejected");
+        check(!is_allowed_proxy_target("https://[fc00::1]/x", policy), "ULA fc00::/7 rejected");
+        check(!is_allowed_proxy_target("https://[::ffff:127.0.0.1]/x", policy),
+              "IPv4-mapped loopback rejected");
+        check(!is_allowed_proxy_target("https://[::ffff:169.254.169.254]/x", policy),
+              "IPv4-mapped metadata rejected");
+        check(!is_allowed_proxy_target("https://[2001:db8::1]/x", policy),
+              "documentation range rejected");
+        check(!is_allowed_proxy_target("https://[ff02::1]/x", policy), "multicast v6 rejected");
+    }
+
+    // --- SSRF: literal-IP classifier + catalog-url guard (v7.8.1) ---
+    {
+        check(is_private_or_reserved_ip("127.0.0.1"), "v4 loopback private");
+        check(is_private_or_reserved_ip("10.1.2.3"), "v4 10/8 private");
+        check(is_private_or_reserved_ip("172.16.0.1"), "v4 172.16 private");
+        check(is_private_or_reserved_ip("172.31.255.255"), "v4 172.31 private");
+        check(!is_private_or_reserved_ip("172.32.0.1"), "v4 172.32 public");
+        check(is_private_or_reserved_ip("192.168.1.1"), "v4 192.168 private");
+        check(is_private_or_reserved_ip("169.254.169.254"), "v4 link-local metadata");
+        check(is_private_or_reserved_ip("0.0.0.0"), "v4 this-network");
+        check(is_private_or_reserved_ip("100.64.0.1"), "v4 CGNAT");
+        check(is_private_or_reserved_ip("192.0.2.1"), "v4 TEST-NET-1");
+        check(is_private_or_reserved_ip("240.0.0.1"), "v4 reserved");
+        check(is_private_or_reserved_ip("255.255.255.255"), "v4 broadcast");
+        check(!is_private_or_reserved_ip("93.184.216.34"), "v4 public allowed");
+        check(is_private_or_reserved_ip("::1"), "v6 loopback");
+        check(is_private_or_reserved_ip("::"), "v6 unspecified");
+        check(is_private_or_reserved_ip("[::1]"), "v6 bracketed loopback");
+        check(is_private_or_reserved_ip("fe80::1"), "v6 link-local");
+        check(is_private_or_reserved_ip("fc00::1"), "v6 ULA fc00");
+        check(is_private_or_reserved_ip("fd12:3456:789a::1"), "v6 ULA fd00");
+        check(is_private_or_reserved_ip("::ffff:127.0.0.1"), "v6 v4-mapped loopback");
+        check(is_private_or_reserved_ip("::ffff:169.254.169.254"), "v6 v4-mapped metadata");
+        check(is_private_or_reserved_ip("2001:db8::1"), "v6 documentation");
+        check(is_private_or_reserved_ip("ff02::1"), "v6 multicast");
+        check(!is_private_or_reserved_ip("2606:2800:220:1:248:1893:25c8:1946"), "v6 public allowed");
+        check(!is_private_or_reserved_ip("::ffff:93.184.216.34"), "v6 v4-mapped public allowed");
+        check(is_private_or_reserved_ip("999.1.1.1"), "v4 octet>255 rejected");
+        check(is_private_or_reserved_ip("1.2.3"), "v4 short rejected");
+        check(is_private_or_reserved_ip("::1::2"), "v6 double :: rejected");
+        check(is_private_or_reserved_ip(""), "empty rejected");
+
+        check(!is_allowed_catalog_target("http://127.0.0.1/x"), "catalog loopback rejected");
+        check(!is_allowed_catalog_target(
+                  "http://169.254.169.254/latest/meta-data/"),
+              "catalog cloud metadata rejected");
+        check(!is_allowed_catalog_target("http://10.0.0.5/cat.m3u"), "catalog private rejected");
+        check(!is_allowed_catalog_target("http://[::1]/x"), "catalog v6 loopback rejected");
+        check(!is_allowed_catalog_target("http://[fe80::1]/x"), "catalog v6 link-local rejected");
+        check(!is_allowed_catalog_target("http://[fd00::1]/x"), "catalog v6 ULA rejected");
+        check(!is_allowed_catalog_target("ftp://example.com/x"), "catalog non-http rejected");
+        check(!is_allowed_catalog_target(
+                  "http://user:pass@93.184.216.34/x"),
+              "catalog userinfo rejected");
+        check(!is_allowed_catalog_target("http://localhost/x"), "catalog localhost rejected");
+        check(is_allowed_catalog_target("http://93.184.216.34/playlist.m3u"),
+              "catalog public v4 allowed");
+        check(is_allowed_catalog_target("https://[2606:2800:220:1::1]/e.xml"),
+              "catalog public v6 allowed");
     }
 
     // --- TranscodeStore (WP-WEBAPI-003) ---

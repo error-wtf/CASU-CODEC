@@ -115,8 +115,13 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     private LinearLayout secondary;
     private LinearLayout recordRow;
     private LinearLayout volumeRow;
+    private LinearLayout transportRow;   // v7.8.1: moved into the TV overlay
+    private TextView subtitleView;       // v7.8.1: cached for the 200ms cue tick
     private int videoW;
     private int videoH;
+    private int aspectRetryCount;      // bounded 0x0-stage retries for applyVideoAspect
+    private boolean imeWasOpen;        // IME visibility flip detection (bug 2)
+    private int lastOrientation;       // orientation at last buildUi/rebuild
     private boolean immersiveActive;
     private boolean draggingSeek;
     private boolean videoActive;
@@ -148,7 +153,7 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     // engine + helpers
     private PlayerEngine engine;
     private Library library;
-    private SubtitleLoader subtitles;
+    private volatile SubtitleLoader subtitles; // set on a loader thread, read on UI
     private android.os.Handler ui;
     private Settings settings;
     private boolean recording;
@@ -277,10 +282,13 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             }
         }
 
-        // BUG 4+7 FIX: On cold start, delete stale queue.json so the queue
-        // starts EMPTY. Library content belongs in the LIBRARY tab, not
-        // preloaded into the queue from a previous session.
-        clearStaleQueue();
+        // BUG 4+7 FIX + v7.8.1 resume repair: the stale queue.json used to be
+        // deleted unconditionally on cold start, which also destroyed the
+        // RESUME feature (it needs the saved queue + index + position). Now
+        // the file is only cleared when the resume setting is OFF; with
+        // resume ON, PlayerEngine.restore() reloads the queue (paused) and
+        // maybeResume() continues at the saved position.
+        if (!settings.resume) clearStaleQueue();
 
         library = new Library(this);
 
@@ -290,8 +298,29 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         buildUi();
         setContentView(root);
         remoteFocus = RemoteFocus.install(this);
+        registerImeListener();
 
         handleIntent(getIntent());
+    }
+
+    /**
+     * v7.8.1 (bug 2): with adjustResize the window shrinks under the IME.
+     * Detect IME open/close flips and re-fit the video into the resized
+     * stage (applyVideoAspect is idempotent; the stage layout listener
+     * covers the geometry change itself). Re-registered after every
+     * onConfigurationChanged rebuild, which replaces the root view.
+     */
+    private void registerImeListener() {
+        root.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+            android.graphics.Rect frame = new android.graphics.Rect();
+            root.getWindowVisibleDisplayFrame(frame);
+            int imeHeight = root.getRootView().getHeight() - frame.bottom;
+            boolean imeOpen = imeHeight > root.getHeight() / 4;
+            if (imeOpen != imeWasOpen) {
+                imeWasOpen = imeOpen;
+                applyVideoAspect();
+            }
+        });
     }
 
     private void clearStaleQueue() {
@@ -342,14 +371,17 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     }
 
     /** Resume setting: continue the last item at its saved position. */
+    private boolean resumeAttempted;
+
     private void maybeResume() {
-        if (engine == null || !settings.resume || engine.isPlaying()
+        if (resumeAttempted || engine == null || !settings.resume || engine.isPlaying()
                 || engine.isPausedByUser() || engine.index() < 0
                 || engine.position() > 0) {
             return;
         }
         QueueStore.Saved saved = engine.savedState();
         if (saved != null && saved.positionMs > 0) {
+            resumeAttempted = true; // never fight a user action started meanwhile
             engine.playIndex(engine.index(), saved.positionMs);
         }
     }
@@ -381,6 +413,11 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     // ================================================================== UI BUILD
 
     @Override public void onBackPressed() {
+        if (activeTab == TAB_PLAY && isTransportOverlayVisible()) {
+            // v7.8.1: BACK first dismisses the TV transport overlay
+            toggleTransportOverlay();
+            return;
+        }
         if (activeTab != TAB_PLAY) { showTab(TAB_PLAY); bottomNav.getChildAt(TAB_PLAY).requestFocus(); return; }
         super.onBackPressed();
     }
@@ -391,8 +428,100 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     }
     @Override public boolean dispatchKeyEvent(android.view.KeyEvent event) {
         if (remoteFocus != null) remoteFocus.keyboard();
+        if (event.getAction() == android.view.KeyEvent.ACTION_DOWN
+                && event.getRepeatCount() == 0
+                && handleTvKey(event.getKeyCode())) {
+            return true;
+        }
         return super.dispatchKeyEvent(event);
     }
+
+    /**
+     * v7.8.1 (bug 1b): TV remote control in the PLAY tab. FireTV has no
+     * touch, so the transport overlay was unreachable and media keys did
+     * nothing in-app. DPAD_CENTER/UP/MENU reveal the overlay, transport
+     * keys act on the engine directly. Returns true when consumed.
+     */
+    private boolean handleTvKey(int keyCode) {
+        boolean playTab = activeTab == TAB_PLAY;
+        switch (keyCode) {
+            case android.view.KeyEvent.KEYCODE_DPAD_UP:
+                // only claim the key when no interactive view owns focus —
+                // otherwise this is normal D-pad navigation
+                return playTab && !isTransportOverlayVisible()
+                        && !focusOnInteractive() && showTransportOverlay();
+            case android.view.KeyEvent.KEYCODE_DPAD_CENTER:
+            case android.view.KeyEvent.KEYCODE_ENTER:
+                // first press reveals the overlay; once visible (or when an
+                // interactive control owns focus) the event flows normally
+                return playTab && !isTransportOverlayVisible()
+                        && !focusOnInteractive() && showTransportOverlay();
+            case android.view.KeyEvent.KEYCODE_MENU:
+                if (playTab) { toggleTransportOverlay(); return true; }
+                return false;
+            case android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+            case android.view.KeyEvent.KEYCODE_MEDIA_PLAY:
+            case android.view.KeyEvent.KEYCODE_MEDIA_PAUSE:
+                if (engine != null) { engine.playPause(); if (playTab) showTransportOverlay(); return true; }
+                return false;
+            case android.view.KeyEvent.KEYCODE_MEDIA_NEXT:
+                if (engine != null) { engine.next(); if (playTab) showTransportOverlay(); return true; }
+                return false;
+            case android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS:
+                if (engine != null) { engine.previous(); if (playTab) showTransportOverlay(); return true; }
+                return false;
+            default:
+                return false;
+        }
+    }
+
+    /** True when the current focus is a widget that handles D-pad itself. */
+    private boolean focusOnInteractive() {
+        View focus = getCurrentFocus();
+        return focus instanceof Button
+                || focus instanceof ImageButton
+                || focus instanceof SeekBar
+                || focus instanceof EditText
+                || focus instanceof ListView
+                || focus instanceof Spinner
+                || focus instanceof android.widget.CheckBox;
+    }
+
+    private boolean isTransportOverlayVisible() {
+        View bar = stage != null ? stage.findViewWithTag("transport-overlay") : null;
+        return bar != null && bar.getVisibility() == View.VISIBLE;
+    }
+
+    /** Reveals the overlay and arms the 4s auto-hide. */
+    private boolean showTransportOverlay() {
+        View bar = stage != null ? stage.findViewWithTag("transport-overlay") : null;
+        if (bar == null) return false;
+        if (bar.getVisibility() != View.VISIBLE) bar.setVisibility(View.VISIBLE);
+        armOverlayAutoHide();
+        return true;
+    }
+
+    private void toggleTransportOverlay() {
+        View bar = stage != null ? stage.findViewWithTag("transport-overlay") : null;
+        if (bar == null) return;
+        if (bar.getVisibility() == View.VISIBLE) {
+            bar.setVisibility(View.GONE);
+            ui.removeCallbacks(hideTransportOverlay);
+        } else {
+            showTransportOverlay();
+        }
+    }
+
+    /** v7.8.1: the overlay used to stay on screen forever once opened. */
+    private void armOverlayAutoHide() {
+        ui.removeCallbacks(hideTransportOverlay);
+        ui.postDelayed(hideTransportOverlay, 4000);
+    }
+
+    private final Runnable hideTransportOverlay = () -> {
+        View bar = stage != null ? stage.findViewWithTag("transport-overlay") : null;
+        if (bar != null && bar.getVisibility() == View.VISIBLE) bar.setVisibility(View.GONE);
+    };
 
     private void buildUi() {
         root = new FrameLayout(this);
@@ -488,12 +617,19 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         videoView.setSurfaceTextureListener(new android.view.TextureView.SurfaceTextureListener() {
             @Override public void onSurfaceTextureAvailable(android.graphics.SurfaceTexture surface,
                                                             int width, int height) {
-                if (engine != null) engine.setSurface(new Surface(surface));
+                // v7.8.1 (bug 1c): pass Surface AND SurfaceTexture through —
+                // libVLC scales its vout from the texture's buffer size.
+                if (engine != null) engine.setSurface(new Surface(surface), surface);
+                applyVideoBufferSize();
+                applyVideoAspect();
             }
             @Override public void onSurfaceTextureSizeChanged(android.graphics.SurfaceTexture surface,
                                                               int width, int height) {
-                // v7.8: rotation/resize must re-fit the video geometry
+                // v7.8: rotation/resize must re-fit the video geometry.
+                // v7.8.1: VLC 3 only learns the new geometry through a
+                // detach/attach cycle, so re-bind the surface as well.
                 applyVideoAspect();
+                if (engine != null) engine.setSurface(new Surface(surface), surface);
             }
             @Override public boolean onSurfaceTextureDestroyed(android.graphics.SurfaceTexture surface) {
                 if (engine != null) engine.setSurface(null);
@@ -576,10 +712,10 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         page.addView(times);
 
         // transport row
-        LinearLayout transport = new LinearLayout(this);
-        transport.setOrientation(LinearLayout.HORIZONTAL);
-        transport.setGravity(Gravity.CENTER);
-        transport.setPadding(0, dp(6), 0, dp(2));
+        transportRow = new LinearLayout(this);
+        transportRow.setOrientation(LinearLayout.HORIZONTAL);
+        transportRow.setGravity(Gravity.CENTER);
+        transportRow.setPadding(0, dp(6), 0, dp(2));
         Button prev = transportButton("⏮", 22, TEXT);
         prev.setOnClickListener(v -> { if (engine != null) engine.previous(); });
         playBtn = transportButton("▶", 30, ACCENT);
@@ -590,10 +726,10 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         LinearLayout.LayoutParams playParams = new LinearLayout.LayoutParams(dp(76), dp(76));
         playParams.setMargins(dp(18), 0, dp(18), 0);
         playBtn.setLayoutParams(playParams);
-        transport.addView(prev);
-        transport.addView(playBtn);
-        transport.addView(next);
-        page.addView(transport);
+        transportRow.addView(prev);
+        transportRow.addView(playBtn);
+        transportRow.addView(next);
+        page.addView(transportRow);
 
         // secondary row (compact: shuffle/repeat/A-B/snapshot/rate)
         secondary = new LinearLayout(this);
@@ -678,7 +814,7 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         // subtitle overlay lives on the stage
-        TextView subtitleView = new TextView(this);
+        subtitleView = new TextView(this);
         subtitleView.setTextColor(TEXT);
         subtitleView.setTextSize(15);
         subtitleView.setGravity(Gravity.CENTER);
@@ -696,19 +832,26 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         // full surface. TV overscan padding per Android TV guidelines.
         boolean landscape = getResources().getConfiguration().orientation
                 == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+        lastOrientation = getResources().getConfiguration().orientation;
         if (tvMode || landscape) {
             page.setPadding(0, 0, 0, 0);
             stageParams.bottomMargin = 0;
+            // v7.8.1 (bug 1a): the transport row (prev/play/next) used to
+            // stay BELOW the stage as a normal phone-stack row, keeping the
+            // vertical squeeze alive on TV. It now moves into the overlay
+            // together with the other control rows: page keeps only stage.
+            page.removeView(transportRow);
             // collect the control rows into one translucent overlay inside stage
             LinearLayout overlay = new LinearLayout(this);
             overlay.setOrientation(LinearLayout.VERTICAL);
             overlay.setPadding(dp(48) / 2, dp(27) / 2, dp(48) / 2, dp(27) / 2);
             overlay.setBackgroundColor(Color.argb(150, 8, 10, 13));
-            overlay.removeAllViews();
             overlay.addView(meta);
             overlay.addView(seekBar, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, dp(30)));
             overlay.addView(times);
+            overlay.addView(transportRow, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             overlay.addView(secondary);
             overlay.addView(recordRow);
             overlay.addView(volumeRow, new LinearLayout.LayoutParams(
@@ -731,15 +874,22 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             stage.addView(overlay, overlayParams);
             overlay.setVisibility(View.GONE);
             overlay.setTag("transport-overlay");
-            // tap on stage toggles the overlay; on TV any D-Pad key shows it
+            // tap on stage toggles the overlay; on TV the D-Pad handler in
+            // dispatchKeyEvent reveals it (bug 1b) — FireTV has no touch.
             stage.setOnClickListener(v -> {
-                View bar = stage.findViewWithTag("transport-overlay");
-                if (bar != null) {
-                    bar.setVisibility(bar.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
-                }
+                toggleTransportOverlay();
                 if (immersiveActive) applyImmersive(true); // re-arm hide timer
             });
         }
+        // v7.8.1 (bug 3): stage-layout-driven aspect fitting. Layout changes
+        // (first layout, IME resize, immersive toggle, rotation rebuild)
+        // re-run applyVideoAspect; the method itself is idempotent.
+        stage.addOnLayoutChangeListener((v, left, top, right, bottom,
+                                         oldLeft, oldTop, oldRight, oldBottom) -> {
+            if (right - left != oldRight - oldLeft || bottom - top != oldBottom - oldTop) {
+                applyVideoAspect();
+            }
+        });
 
         return page;
     }
@@ -881,6 +1031,22 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         queueSearch.setBackground(boxBackground());
         queueSearch.setPadding(dp(12), dp(8), dp(12), dp(8));
         queueSearch.setSingleLine(true);
+        // v7.8.1 (bug 2): DONE-style search action that actually dismisses
+        // the keyboard instead of leaving it over the queue.
+        queueSearch.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+                | android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI
+                | android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN);
+        queueSearch.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+                    || (event != null && event.getKeyCode() == android.view.KeyEvent.KEYCODE_ENTER
+                    && event.getAction() == android.view.KeyEvent.ACTION_DOWN)) {
+                queueSearch.clearFocus();
+                hideIme(queueSearch);
+                refreshQueueUi();
+                return true;
+            }
+            return false;
+        });
         queueSearch.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
             @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
@@ -1177,10 +1343,25 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         librarySearch.setBackground(boxBackground());
         librarySearch.setPadding(dp(12), dp(8), dp(12), dp(8));
         librarySearch.setSingleLine(true);
+        // v7.8.1 (bug 2): same DONE-style dismissal as the queue search.
+        librarySearch.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+                | android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI
+                | android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN);
+        librarySearch.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+                    || (event != null && event.getKeyCode() == android.view.KeyEvent.KEYCODE_ENTER
+                    && event.getAction() == android.view.KeyEvent.ACTION_DOWN)) {
+                librarySearch.clearFocus();
+                hideIme(librarySearch);
+                refreshLibrary();
+                return true;
+            }
+            return false;
+        });
         librarySearch.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
             @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
-            @Override public void afterTextChanged(Editable s) { refreshLibrary(); }
+            @Override public void afterTextChanged(Editable s) { scheduleLibraryRefresh(); }
         });
         LinearLayout searchRow = new LinearLayout(this);
         searchRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -1367,43 +1548,70 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         }, "mpcasu-library-queue").start();
     }
 
+    // v7.8.1 (P2): MediaStore queries and the recursive playlist scan ran
+    // synchronously on the UI thread (ANR risk on big libraries / TV).
+    // All library work now happens on a single background executor; results
+    // are marshalled back with ui.post. Search typing is debounced 250ms.
+    private final java.util.concurrent.ExecutorService libraryExecutor =
+            java.util.concurrent.Executors.newSingleThreadExecutor();
+    private int libraryRefreshSeq = 0;
+    private final Runnable libraryRefreshDebounce = this::refreshLibrary;
+
+    private void scheduleLibraryRefresh() {
+        ui.removeCallbacks(libraryRefreshDebounce);
+        ui.postDelayed(libraryRefreshDebounce, 250);
+    }
+
     private void refreshLibrary() {
-        ui.post(() -> {
-            if (library == null) return;
-            if ("playlists".equals(libraryMode)) {
+        if (library == null) return;
+        final int seq = ++libraryRefreshSeq;
+        // Read view state on the UI thread only (TextView is not thread-safe).
+        final String query = librarySearch != null ? librarySearch.getText().toString().trim() : "";
+        libraryExecutor.execute(() -> {
+            List<Library.Track> tracks;
+            List<String> groups = new ArrayList<>();
+            boolean grouping = false;
+            final String mode = libraryMode;
+            final String selection = libraryGroupSelection;
+            if ("playlists".equals(mode)) {
                 scanPlaylists();
-                return;
+                return; // scanPlaylists posts its own UI update
             }
-            String query = librarySearch != null ? librarySearch.getText().toString().trim() : "";
             if (isLibraryGroupingMode()) {
+                grouping = true;
                 List<Library.Track> allAudio = library.query("", true, false);
-                if (libraryGroupSelection == null) {
-                    libraryGroups = Library.groups(allAudio, libraryMode, query);
+                if (selection == null) {
+                    groups = Library.groups(allAudio, mode, query);
                     List<Library.Track> groupRows = new ArrayList<>();
                     long id = -1;
-                    for (String group : libraryGroups) {
-                        int count = Library.tracksInGroup(allAudio, libraryMode, group).size();
-                        groupRows.add(new Library.Track(id--, "library-group://" + libraryMode,
+                    for (String group : groups) {
+                        int count = Library.tracksInGroup(allAudio, mode, group).size();
+                        groupRows.add(new Library.Track(id--, "library-group://" + mode,
                                 group, count + (count == 1 ? " track" : " tracks"),
-                                libraryMode.substring(0, libraryMode.length() - 1), "", 0, false));
+                                mode.substring(0, mode.length() - 1), "", 0, false));
                     }
-                    libraryTracks = groupRows;
+                    tracks = groupRows;
                 } else {
-                    libraryGroups.clear();
-                    libraryTracks = Library.tracksInGroup(allAudio, libraryMode, libraryGroupSelection);
+                    tracks = Library.tracksInGroup(allAudio, mode, selection);
                 }
+            } else {
+                boolean includeAudio = !"video-only".equals(mode);
+                boolean includeVideo = !"artists".equals(mode) && !"albums".equals(mode);
+                tracks = library.query(query, includeAudio, includeVideo);
+                if ("favorites".equals(mode)) {
+                    tracks = library.filterFavorites(tracks);
+                }
+            }
+            final List<Library.Track> finalTracks = tracks;
+            final List<String> finalGroups = groups;
+            final boolean finalGrouping = grouping;
+            ui.post(() -> {
+                if (seq != libraryRefreshSeq || isDestroyed()) return;
+                libraryGroups = finalGrouping && selection == null
+                        ? finalGroups : new ArrayList<>();
+                libraryTracks = finalTracks;
                 if (libraryAdapter != null) libraryAdapter.notifyDataSetChanged();
-                return;
-            }
-            libraryGroups.clear();
-            boolean includeAudio = !"video-only".equals(libraryMode);
-            boolean includeVideo = !"artists".equals(libraryMode) && !"albums".equals(libraryMode);
-            List<Library.Track> tracks = library.query(query, includeAudio, includeVideo);
-            if ("favorites".equals(libraryMode)) {
-                tracks = library.filterFavorites(tracks);
-            }
-            libraryTracks = tracks;
-            if (libraryAdapter != null) libraryAdapter.notifyDataSetChanged();
+            });
         });
     }
 
@@ -1415,7 +1623,9 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     private final java.util.Map<String, String> playlistFiles = new java.util.LinkedHashMap<>();
 
     private void scanPlaylists() {
-        playlistFiles.clear();
+        // Runs on libraryExecutor (v7.8.1): the recursive directory walk over
+        // external storage took seconds on TV devices → ANR when triggered
+        // from the UI thread. Results are posted back to the UI thread.
         String[] exts = {".m3u", ".m3u8", ".pls", ".xspf", ".jspf", ".json", ".wpl", ".asx", ".wmx", ".wvx", ".rmp", ".ram", ".cue"};
         java.util.Set<String> found = new java.util.LinkedHashSet<>();
         java.io.File extDir = android.os.Environment.getExternalStorageDirectory();
@@ -1425,23 +1635,30 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         java.io.File dlDir2 = android.os.Environment.getExternalStoragePublicDirectory(
                 android.os.Environment.DIRECTORY_DOWNLOADS);
         if (dlDir2 != null) scanPlaylistsInDir(dlDir2, exts, found);
+        final java.util.Map<String, String> files = new java.util.LinkedHashMap<>();
         for (String path : found) {
             java.io.File f = new java.io.File(path);
             String base = f.getName().replaceFirst("\\.[^.]+$", "");
             String label = base;
             int counter = 2;
-            while (playlistFiles.containsKey(label)) label = base + " (" + counter++ + ")";
-            playlistFiles.put(label, path);
+            while (files.containsKey(label)) label = base + " (" + counter++ + ")";
+            files.put(label, path);
         }
-        libraryTracks.clear();
+        final List<Library.Track> rows = new ArrayList<>();
         int idx = 0;
-        for (java.util.Map.Entry<String, String> e : playlistFiles.entrySet()) {
+        for (java.util.Map.Entry<String, String> e : files.entrySet()) {
             String parentName = new java.io.File(e.getValue()).getParentFile() != null
                     ? new java.io.File(e.getValue()).getParentFile().getName() : "";
-            libraryTracks.add(new Library.Track(idx++, e.getValue(), "≡ " + e.getKey(),
+            rows.add(new Library.Track(idx++, e.getValue(), "≡ " + e.getKey(),
                     parentName, "Playlist", "", 0, false));
         }
-        if (libraryAdapter != null) libraryAdapter.notifyDataSetChanged();
+        ui.post(() -> {
+            if (isDestroyed()) return;
+            playlistFiles.clear();
+            playlistFiles.putAll(files);
+            libraryTracks = rows;
+            if (libraryAdapter != null) libraryAdapter.notifyDataSetChanged();
+        });
     }
 
     private void scanPlaylistsInDir(java.io.File dir, String[] exts, java.util.Set<String> found) {
@@ -2047,6 +2264,13 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
 
     @Override public void onItemChanged(MediaItem item, int index) {
         ui.post(() -> {
+            // v7.8.1 (bug 3.1): stale video geometry must never leak into the
+            // next item — reset and let onVideoSizeChanged/onTracksReady
+            // re-populate for the new track.
+            videoW = 0;
+            videoH = 0;
+            videoActive = false;
+            aspectRetryCount = 0;
             String nextUri = item == null ? "" : item.url;
             String nextTags = item == null ? "" : (String.valueOf(item.title) + "\n"
                     + String.valueOf(item.artist) + "\n" + String.valueOf(item.badge));
@@ -2075,6 +2299,17 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                 seekBar.setProgress((int) positionMs);
             }
             updateTimeLabels(positionMs, durationMs);
+            // v7.8.1 (P2): live subtitle rendering — the loader existed but no
+            // caller ever pulled cues, so subtitles never showed.
+            if (subtitles != null && subtitleView != null) {
+                String cue = subtitles.cueAt(positionMs);
+                CharSequence current = subtitleView.getText();
+                if (cue != null) {
+                    if (!cue.contentEquals(current)) subtitleView.setText(cue);
+                } else if (current != null && current.length() > 0) {
+                    subtitleView.setText("");
+                }
+            }
         });
     }
 
@@ -2093,6 +2328,10 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             boolean video = engine.videoWidth() > 0 && engine.videoHeight() > 0;
             videoActive = video;
             updateStageFor(engine.current());
+            // v7.8.1 (bug 3.5): tracks ready is the reliable point where the
+            // engine knows its geometry — fit even if no separate size event
+            // arrives (MediaPlayer backend fires onInfo early/stale).
+            if (video) applyVideoAspect();
             attachVisualizer();
             applyVolume();
         });
@@ -2103,7 +2342,10 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             if (width > 0 && height > 0) {
                 videoW = width;
                 videoH = height;
+                aspectRetryCount = 0;
                 videoActive = true;
+                // v7.8.1: buffer size FIRST (VLC scales from it), then fit.
+                applyVideoBufferSize();
                 applyVideoAspect();
                 updateStageFor(engine.current());
             }
@@ -2111,23 +2353,65 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
     }
 
     /**
-     * v7.8: fit the TextureView to the video aspect ratio, centred in the
-     * stage. Previously the view stayed MATCH_PARENT and the MediaPlayer
-     * backend stretched frames to the surface (VLC letterboxed instead —
-     * inconsistent geometry per backend).
+     * v7.8.1: fit the TextureView to the video aspect ratio, centred in the
+     * stage. Rework of the v7.8 version which had five defects:
+     *  (1) stale cached videoW/H leaked across track changes (now reset in
+     *      onItemChanged and re-read from the engine),
+     *  (2) a 0×0 stage silently dropped the sizing forever (now retried via
+     *      postDelayed and retriggered by the stage layout listener),
+     *  (3) the SurfaceTexture buffer size was never set, so both backends
+     *      rendered into undersized buffers (see applyVideoBufferSize),
+     *  (4) no re-apply on stage resize without a texture event (layout
+     *      listener added in buildPlayView, immersive toggle re-applies),
+     *  (5) updateStageFor only called it while video==true with stale dims.
      */
     private void applyVideoAspect() {
-        if (videoW == 0 || videoH == 0 || stage == null || videoView == null) return;
-        stage.post(() -> {
-            int sw = stage.getWidth();
-            int sh = stage.getHeight();
-            if (sw == 0 || sh == 0) return;
-            float scale = Math.min((float) sw / videoW, (float) sh / videoH);
-            int w = Math.round(videoW * scale);
-            int h = Math.round(videoH * scale);
-            FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(w, h, Gravity.CENTER);
-            videoView.setLayoutParams(p);
-        });
+        if (stage == null || videoView == null) return;
+        // Pull LIVE geometry from the engine instead of trusting the cached
+        // fields — a fresh VLC Vout event may already know the new size.
+        if (engine != null) {
+            int ew = engine.videoWidth();
+            int eh = engine.videoHeight();
+            if (ew > 0 && eh > 0) {
+                videoW = ew;
+                videoH = eh;
+            }
+        }
+        if (videoW == 0 || videoH == 0) return;
+        int sw = stage.getWidth();
+        int sh = stage.getHeight();
+        if (sw == 0 || sh == 0) {
+            // Stage not laid out yet: bounded retry (the layout listener
+            // catches the normal case; this covers event-before-layout).
+            if (aspectRetryCount < 8) {
+                aspectRetryCount++;
+                stage.postDelayed(this::applyVideoAspect, 50);
+            }
+            return;
+        }
+        aspectRetryCount = 0;
+        float scale = Math.min((float) sw / videoW, (float) sh / videoH);
+        int w = Math.round(videoW * scale);
+        int h = Math.round(videoH * scale);
+        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(w, h, Gravity.CENTER);
+        videoView.setLayoutParams(p);
+        applyVideoBufferSize();
+    }
+
+    /**
+     * v7.8.1 (bug 1c/3.3): the SurfaceTexture's default buffer size decides
+     * how much pixels MediaPlayer AND libVLC render into. Without this the
+     * buffers stay small and the video appears tiny / blurry / top-left.
+     */
+    private void applyVideoBufferSize() {
+        if (videoView == null || videoW <= 0 || videoH <= 0) return;
+        android.graphics.SurfaceTexture texture = videoView.getSurfaceTexture();
+        if (texture != null) {
+            try {
+                texture.setDefaultBufferSize(Math.max(1, videoW), Math.max(1, videoH));
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     /** v7.8: immersive fullscreen while a video is playing (TV + landscape). */
@@ -2143,6 +2427,10 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
                 : View.SYSTEM_UI_FLAG_VISIBLE);
+        // v7.8.1 (bug 3.4): toggling system chrome changes the stage size
+        // without a SurfaceTexture event — re-fit the video after the
+        // relayout settles.
+        if (stage != null) stage.post(this::applyVideoAspect);
     }
 
     private void updateTimeLabels(long positionMs, long durationMs) {
@@ -2174,7 +2462,9 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
         boolean landscape = getResources().getConfiguration().orientation
                 == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
         applyImmersive(video && (tvMode || landscape));
-        if (video) applyVideoAspect();
+        // v7.8.1 (bug 3.5): always re-fit when the video view is (becoming)
+        // visible — not only while video==true with possibly stale dims.
+        if (videoView.getVisibility() == View.VISIBLE) applyVideoAspect();
     }
 
     private void attachVisualizer() {
@@ -2210,12 +2500,12 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
 
     private void loadSubtitleFor(MediaItem item) {
         subtitles = null;
-        TextView subtitleView = content.findViewWithTag("subtitle");
         if (subtitleView != null) subtitleView.setText("");
         if (item == null || item.subtitle == null || item.subtitle.isEmpty()) return;
+        final String source = item.subtitle;
         new Thread(() -> {
             try {
-                SubtitleLoader loaded = SubtitleLoader.load(item.subtitle);
+                SubtitleLoader loaded = SubtitleLoader.load(source);
                 subtitles = loaded;
                 ui.post(() -> toast("Untertitel geladen · " + loaded.count() + " cues"));
             } catch (Exception e) {
@@ -2549,7 +2839,13 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
             info.append("Video: ").append(engine.videoWidth()).append("×")
                 .append(engine.videoHeight()).append('\n');
             if (item.url.toLowerCase().endsWith(".casu")) {
-                String verify = CasuBridge.verifyCasunat2(item.url);
+                // JNI may be unavailable: guard instead of crashing the app.
+                String verify;
+                try {
+                    verify = CasuBridge.verifyCasunat2(item.url);
+                } catch (Throwable t) {
+                    verify = "ERROR: " + t;
+                }
                 info.append("CASU: ").append(verify.startsWith("ERROR")
                         ? verify : "Manifest verifiziert ✓");
             }
@@ -2996,6 +3292,41 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
 
     // ================================================================== lifecycle
 
+    /**
+     * v7.8.1 (P0): the manifest declares orientation|screenSize|… configChanges
+     * but onConfigurationChanged was never implemented, so after a rotation
+     * the activity kept its start-time layout — a portrait phone stack after
+     * rotating to landscape, no TV overlay. Rebuild the UI while preserving
+     * engine/queue state (the engine lives in PlaybackService, untouched).
+     */
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        if (newConfig.orientation == lastOrientation) return;
+        lastOrientation = newConfig.orientation;
+        if (root == null) return;
+        int tab = activeTab;
+        boolean multi = multiSelectMode;
+        // keep the known geometry across the rebuild (onItemChanged below
+        // resets videoW/H as a stale-dims guard — restore them after)
+        int keepW = videoW, keepH = videoH;
+        buildUi();
+        setContentView(root);
+        registerImeListener();
+        showTab(tab);
+        multiSelectMode = multi;
+        // Re-bind the surface created by the NEW TextureView; the engine
+        // keeps its queue/index — only the view hierarchy was replaced.
+        onStateChanged(engine != null && engine.isPlaying());
+        if (engine != null) onItemChanged(engine.current(), engine.index());
+        if (keepW > 0 && keepH > 0) {
+            videoW = keepW;
+            videoH = keepH;
+            videoActive = true;
+            updateStageFor(engine != null ? engine.current() : null);
+        }
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
@@ -3020,6 +3351,24 @@ public class MainActivity extends Activity implements PlayerEngine.Listener {
 
     private void toast(String text) {
         Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
+    }
+
+    /** v7.8.1 (bug 2): dismiss the soft keyboard for a finished search. */
+    private void hideIme(View view) {
+        android.view.inputmethod.InputMethodManager imm =
+                (android.view.inputmethod.InputMethodManager)
+                        getSystemService(INPUT_METHOD_SERVICE);
+        if (imm != null && view != null) {
+            imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        ui.removeCallbacks(hideTransportOverlay);
+        ui.removeCallbacks(libraryRefreshDebounce);
+        libraryExecutor.shutdownNow();
     }
 
     private Bitmap drawFallbackIcon(String name, int color) {
