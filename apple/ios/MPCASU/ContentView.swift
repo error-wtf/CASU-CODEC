@@ -169,7 +169,7 @@ struct ContentView: View {
                 }
                 if !youtubeConsent {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("YouTube-Suche nutzt die \u00f6ffentliche Innertube-API. Nur f\u00fcr private Nutzung.")
+                        Text("YouTube-Suche nutzt die öffentliche Innertube-API. Nur für private Nutzung.")
                             .font(.caption).foregroundStyle(.secondary)
                         Toggle("YouTube aktivieren (nur privat)", isOn: $youtubeConsent)
                     }
