@@ -28,7 +28,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3 xvfb
+            libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3 xvfb ffmpeg
       - name: Run non-media test suite
         env:
           QT_QPA_PLATFORM: offscreen

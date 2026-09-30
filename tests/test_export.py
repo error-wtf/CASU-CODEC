@@ -87,6 +87,7 @@ def test_export_casunat1_verifies_and_transcodes_payload(tmp_path):
     assert output.stat().st_size > 100
 
 
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="FFmpeg unavailable")
 def test_export_rejects_non_casu_input(tmp_path):
     source = tmp_path / "source.mp3"
     source.write_bytes(b"not media")

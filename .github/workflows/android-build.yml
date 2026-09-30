@@ -21,9 +21,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - uses: android-actions/setup-android@v3
       - name: Accept SDK component licenses
-        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+        run: |
+          # ubuntu-latest ships the Android SDK; accept all licenses up front
+          # (setup-android@v3 dies on the interactive XR-preview prompt).
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
       - name: Assemble debug APK
         working-directory: android
         env:
