@@ -51,7 +51,10 @@ bool parse_ipv4(const std::string& s, uint32_t* out) {
         if (v < 0 || v > 255) return false;
         value = (value << 8) | static_cast<uint32_t>(v);
         ++octets;
-        if (dot == std::string::npos) break;
+        if (dot == std::string::npos) {
+            start = s.size();
+            break;
+        }
         start = dot + 1;
     }
     if (octets != 4 || start != s.size()) return false;  // trailing junk

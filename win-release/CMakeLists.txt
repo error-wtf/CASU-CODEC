@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
-project(casu_codec_windows LANGUAGES CXX)
+# Single source of truth: version from pyproject.toml (same as the Linux/Android builds).
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/../pyproject.toml" _CASU_PROJECT_VERSION_LINE REGEX "^version")
+string(REGEX REPLACE "^version[ ]*=[ ]*\"([^\"]+)\"" "\\1" CASU_APP_VERSION "${_CASU_PROJECT_VERSION_LINE}")
+project(casu_codec_windows LANGUAGES CXX VERSION ${CASU_APP_VERSION})
 enable_testing()
 
 # Cross toolchain for Windows x86_64.
@@ -15,6 +18,8 @@ endif()
 
 # STEP-002: bundled runtime dependencies (Qt6-MinGW, libVLC, helpers) and the
 # self-contained CPack zip layout.
+add_compile_definitions(CASU_APP_VERSION_STRING="${CASU_APP_VERSION}")
+
 include(cmake/dependencies.cmake)
 
 # Shared libraries (added step-by-step during the port; each own CMakeLists)

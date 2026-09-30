@@ -112,6 +112,9 @@ if(CMAKE_CROSSCOMPILING)
       "${QT_BIN_DIR}/libwinpthread-1.dll"
       "${QT_BIN_DIR}/libssl-3-x64.dll"
       "${QT_BIN_DIR}/libcrypto-3-x64.dll"
+      "${QT_BIN_DIR}/Qt6Svg.dll"
+      "${QT_BIN_DIR}/Qt6OpenGL.dll"
+      "${QT_BIN_DIR}/Qt6Network.dll"
       $<TARGET_FILE_DIR:casu_mpcasu>
     COMMAND_EXPAND_LISTS)
 
